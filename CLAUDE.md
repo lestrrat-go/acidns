@@ -44,6 +44,36 @@ acidns/                root: top-level convenience re-exports only, no logic
 - Compression pointer loops: detect via offset-set or hop counter; reject malformed input with typed error.
 - Test data: capture real `dig +qr` packets as hex fixtures under `testdata/`.
 
+## Dispatching on rdata type — DO NOT type-switch on the interface
+
+`rdata.A` and `rdata.AAAA` have identical method sets (`Type()`, `Pack()`, `Addr()`); `rdata.SVCB` is a structural superset of `rdata.CNAME` (both expose `Target()`). Go interface satisfaction is structural, so:
+
+- A `*svcb` value satisfies `rdata.CNAME` and will match a `case rdata.CNAME:` arm BEFORE a `case rdata.SVCB:` arm in a type switch.
+- An `aaaaData` value satisfies `rdata.A` and vice versa; whichever arm appears first wins.
+
+**Rule:** dispatch on `rec.Type()` (or `rd.Type()`) and then assert to the concrete interface — NEVER `switch rd := rec.RData().(type)`.
+
+```go
+// good
+switch rec.Type() {
+case rrtype.A:
+    addr := rec.RData().(rdata.A).Addr()
+case rrtype.AAAA:
+    addr := rec.RData().(rdata.AAAA).Addr()
+case rrtype.SVCB, rrtype.HTTPS:
+    s := rec.RData().(rdata.SVCB)
+    ...
+}
+
+// bad — picks the wrong case for AAAA / SVCB
+switch rd := rec.RData().(type) {
+case rdata.A: ...
+case rdata.CNAME: ...   // also matches SVCB
+}
+```
+
+This rule applies to all rdata interface dispatch. If a future call-site needs the same logic, add the dispatch helper to the package that owns it rather than duplicating the type switch.
+
 ## Pre-flight for any task in this repo
 
 - Read `~/.claude/docs/go.md` before writing Go.
