@@ -12,12 +12,14 @@ import (
 	"context"
 	"crypto/rand"
 	"encoding/binary"
+	"time"
 
 	"github.com/lestrrat-go/acidns/dnsclient/transport"
 	"github.com/lestrrat-go/acidns/dnsmsg"
 	"github.com/lestrrat-go/acidns/dnsmsg/rdata"
 	"github.com/lestrrat-go/acidns/dnsmsg/rrtype"
 	"github.com/lestrrat-go/acidns/dnsname"
+	"github.com/lestrrat-go/acidns/tsig"
 )
 
 // Builder constructs an UPDATE message piece-by-piece.
@@ -118,6 +120,26 @@ func (b *Builder) Send(ctx context.Context, ex transport.Exchanger) (dnsmsg.Mess
 		return nil, err
 	}
 	return ex.Exchange(ctx, m)
+}
+
+// SignedWire returns the TSIG-signed wire-format bytes of the update,
+// implementing RFC 3007's "Secure DNS Dynamic Update" client side. The
+// caller is responsible for shipping the bytes — either by writing them
+// to a UDP/TCP socket directly or by feeding them to a custom transport
+// that bypasses Exchanger's automatic Marshal step.
+//
+// fudge is the clock-skew window the server is allowed for the
+// timestamp; 5 minutes is conventional.
+func (b *Builder) SignedWire(key tsig.Key, now time.Time, fudge time.Duration) ([]byte, error) {
+	m, err := b.Build()
+	if err != nil {
+		return nil, err
+	}
+	wire, err := dnsmsg.Marshal(m)
+	if err != nil {
+		return nil, err
+	}
+	return tsig.Sign(wire, key, now, fudge)
 }
 
 func randomID() (uint16, error) {
