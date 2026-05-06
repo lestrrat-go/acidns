@@ -1,0 +1,180 @@
+package dnsmsg
+
+import (
+	"encoding/binary"
+	"fmt"
+
+	"github.com/lestrrat-go/acidns/dnsmsg/internal/wire"
+)
+
+// EDNS is the extension mechanism payload (RFC 6891) carried as the OPT
+// pseudo-RR in the additional section. It surfaces the negotiated UDP
+// payload size, version, extended RCODE, the DNSSEC OK flag, and any
+// per-exchange options.
+type EDNS interface {
+	UDPSize() uint16
+	ExtendedRCODE() uint8
+	Version() uint8
+	DO() bool
+	Options() []EDNSOption
+}
+
+// EDNSOption is a single OPT RDATA option (code + data).
+type EDNSOption interface {
+	Code() uint16
+	Data() []byte
+}
+
+type ednsOption struct {
+	code uint16
+	data []byte
+}
+
+func (o ednsOption) Code() uint16 { return o.code }
+func (o ednsOption) Data() []byte { return o.data }
+
+// NewEDNSOption returns an EDNS option. data is copied so the caller may
+// reuse the slice.
+func NewEDNSOption(code uint16, data []byte) (EDNSOption, error) {
+	if len(data) > 0xffff {
+		return nil, fmt.Errorf("%w: option data exceeds 65535 bytes", ErrInvalidMessage)
+	}
+	cp := make([]byte, len(data))
+	copy(cp, data)
+	return ednsOption{code: code, data: cp}, nil
+}
+
+type edns struct {
+	udpSize  uint16
+	extRCODE uint8
+	version  uint8
+	do       bool
+	opts     []EDNSOption
+}
+
+func (e *edns) UDPSize() uint16       { return e.udpSize }
+func (e *edns) ExtendedRCODE() uint8  { return e.extRCODE }
+func (e *edns) Version() uint8        { return e.version }
+func (e *edns) DO() bool              { return e.do }
+func (e *edns) Options() []EDNSOption { return e.opts }
+
+// EDNSBuilder constructs an EDNS payload.
+type EDNSBuilder interface {
+	UDPSize(uint16) EDNSBuilder
+	ExtendedRCODE(uint8) EDNSBuilder
+	Version(uint8) EDNSBuilder
+	DO(bool) EDNSBuilder
+	Option(EDNSOption) EDNSBuilder
+	Build() EDNS
+}
+
+type ednsBuilder struct{ e edns }
+
+// NewEDNSBuilder returns a fresh EDNSBuilder with sensible defaults
+// (UDPSize=1232 — the IETF DNS Flag Day 2020 recommendation).
+func NewEDNSBuilder() EDNSBuilder { return &ednsBuilder{e: edns{udpSize: 1232}} }
+
+func (b *ednsBuilder) UDPSize(v uint16) EDNSBuilder      { b.e.udpSize = v; return b }
+func (b *ednsBuilder) ExtendedRCODE(v uint8) EDNSBuilder { b.e.extRCODE = v; return b }
+func (b *ednsBuilder) Version(v uint8) EDNSBuilder       { b.e.version = v; return b }
+func (b *ednsBuilder) DO(v bool) EDNSBuilder             { b.e.do = v; return b }
+func (b *ednsBuilder) Option(o EDNSOption) EDNSBuilder   { b.e.opts = append(b.e.opts, o); return b }
+func (b *ednsBuilder) Build() EDNS {
+	cp := b.e
+	cp.opts = append([]EDNSOption(nil), b.e.opts...)
+	return &cp
+}
+
+// optTypeWire is the OPT pseudo-RR type code (RFC 6891 §6.1.2).
+const optTypeWire uint16 = 41
+
+func packOPT(p *wire.Packer, e EDNS) error {
+	// NAME: root.
+	p.Uint8(0)
+	// TYPE: OPT.
+	p.Uint16(optTypeWire)
+	// CLASS: requestor's UDP payload size.
+	p.Uint16(e.UDPSize())
+	// TTL: extRCODE | version | DO | reserved
+	ttl := uint32(e.ExtendedRCODE())<<24 | uint32(e.Version())<<16
+	if e.DO() {
+		ttl |= 1 << 15
+	}
+	p.Uint32(ttl)
+
+	// RDLENGTH placeholder + options
+	rdlenAt := p.Len()
+	p.Uint16(0)
+	start := p.Len()
+	for _, o := range e.Options() {
+		p.Uint16(o.Code())
+		p.Uint16(uint16(len(o.Data())))
+		p.Raw(o.Data())
+	}
+	end := p.Len()
+	rdlen := end - start
+	if rdlen > 0xffff {
+		return fmt.Errorf("%w: OPT rdata exceeds 65535 bytes", ErrInvalidMessage)
+	}
+	buf := p.Bytes()
+	binary.BigEndian.PutUint16(buf[rdlenAt:], uint16(rdlen))
+	return nil
+}
+
+// unpackOPT decodes an already-positioned OPT pseudo-RR. It expects the
+// unpacker to be at the start of a record whose type is OPT, and consumes
+// the whole record.
+func unpackOPT(u *wire.Unpacker) (EDNS, error) {
+	// NAME (must be root, but we don't enforce — just consume).
+	if _, err := u.Name(); err != nil {
+		return nil, err
+	}
+	t, err := u.Uint16()
+	if err != nil {
+		return nil, err
+	}
+	if t != optTypeWire {
+		return nil, fmt.Errorf("%w: expected OPT, got type %d", ErrInvalidMessage, t)
+	}
+	udpSize, err := u.Uint16()
+	if err != nil {
+		return nil, err
+	}
+	ttl, err := u.Uint32()
+	if err != nil {
+		return nil, err
+	}
+	rdlen, err := u.Uint16()
+	if err != nil {
+		return nil, err
+	}
+	if u.Remaining() < int(rdlen) {
+		return nil, fmt.Errorf("%w: OPT rdata truncated", ErrInvalidMessage)
+	}
+	end := u.Off() + int(rdlen)
+
+	e := &edns{
+		udpSize:  udpSize,
+		extRCODE: uint8(ttl >> 24),
+		version:  uint8(ttl >> 16),
+		do:       ttl&(1<<15) != 0,
+	}
+	for u.Off() < end {
+		code, err := u.Uint16()
+		if err != nil {
+			return nil, err
+		}
+		l, err := u.Uint16()
+		if err != nil {
+			return nil, err
+		}
+		data, err := u.Bytes(int(l))
+		if err != nil {
+			return nil, err
+		}
+		cp := make([]byte, len(data))
+		copy(cp, data)
+		e.opts = append(e.opts, ednsOption{code: code, data: cp})
+	}
+	return e, nil
+}
