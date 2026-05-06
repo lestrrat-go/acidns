@@ -24,6 +24,16 @@ type RData interface {
 	Pack(p *wire.Packer)
 }
 
+// Pack returns the wire-format bytes of r's payload (rdata only — no
+// length prefix). Names in compressible positions are emitted with the
+// internal codec's default policy; for canonicalisation purposes (e.g.
+// DNSSEC), use a higher-level helper that walks each known type.
+func Pack(r RData) []byte {
+	p := wire.NewPacker(nil)
+	r.Pack(p)
+	return p.Bytes()
+}
+
 // Unpack reads rdlen bytes of rdata of type t from u and returns a typed
 // RData value. Unknown types are returned as Unknown.
 func Unpack(t rrtype.Type, u *wire.Unpacker, rdlen int) (RData, error) {
