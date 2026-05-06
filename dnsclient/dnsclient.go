@@ -214,13 +214,42 @@ func (r *resolver) Resolve(ctx context.Context, name dnsname.Name, t rrtype.Type
 		question = q0[0]
 	}
 
-	matched := make([]dnsmsg.Record, 0, len(resp.Answers()))
-	for _, rec := range resp.Answers() {
-		if rec.Type() == t && rec.Name().Equal(name) {
-			matched = append(matched, rec)
+	matched := matchAnswers(resp.Answers(), name, t)
+	return &answer{q: question, records: matched, raw: resp}, nil
+}
+
+// matchAnswers walks any CNAME chain starting at qname, then collects every
+// answer record of qtype whose owner is the final target. CNAMEs in the
+// chain are NOT included — Records() is the typed result, the raw
+// response (including CNAMEs) remains accessible via Answer.Raw().
+func matchAnswers(answers []dnsmsg.Record, qname dnsname.Name, qtype rrtype.Type) []dnsmsg.Record {
+	const maxHops = 8
+	target := qname
+	if qtype != rrtype.CNAME {
+		for hop := 0; hop < maxHops; hop++ {
+			var next dnsname.Name
+			found := false
+			for _, rec := range answers {
+				if rec.Type() != rrtype.CNAME || !rec.Name().Equal(target) {
+					continue
+				}
+				next = rec.RData().(rdata.CNAME).Target()
+				found = true
+				break
+			}
+			if !found {
+				break
+			}
+			target = next
 		}
 	}
-	return &answer{q: question, records: matched, raw: resp}, nil
+	out := make([]dnsmsg.Record, 0, len(answers))
+	for _, rec := range answers {
+		if rec.Type() == qtype && rec.Name().Equal(target) {
+			out = append(out, rec)
+		}
+	}
+	return out
 }
 
 func (r *resolver) LookupHost(ctx context.Context, host string) ([]netip.Addr, error) {
