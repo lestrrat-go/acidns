@@ -1,0 +1,41 @@
+package doq_test
+
+import (
+	"context"
+	"testing"
+	"time"
+
+	"github.com/lestrrat-go/acidns/dnsclient/transport"
+	"github.com/lestrrat-go/acidns/dnsclient/transport/doq"
+	"github.com/lestrrat-go/acidns/dnsmsg"
+	"github.com/lestrrat-go/acidns/dnsmsg/rrtype"
+	"github.com/lestrrat-go/acidns/dnsname"
+	"github.com/stretchr/testify/require"
+)
+
+func TestDoQStream(t *testing.T) {
+	t.Parallel()
+	addr, cfg := startDoQ(t)
+	ex, err := doq.New(addr,
+		doq.WithTLSConfig(cfg),
+		doq.WithTimeout(2*time.Second),
+		doq.WithServerName("127.0.0.1"),
+	)
+	require.NoError(t, err)
+
+	q, _ := dnsmsg.NewBuilder().
+		ID(0xa1b2).
+		Question(dnsmsg.NewQuestion(dnsname.MustParse("example.com"), rrtype.A)).
+		Build()
+
+	se, ok := ex.(transport.StreamExchanger)
+	require.True(t, ok)
+	ctx, cancel := context.WithTimeout(t.Context(), 5*time.Second)
+	defer cancel()
+	stream, err := se.Stream(ctx, q)
+	require.NoError(t, err)
+	defer stream.Close()
+	resp, err := stream.Next(ctx)
+	require.NoError(t, err)
+	require.Equal(t, q.ID(), resp.ID())
+}
