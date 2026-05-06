@@ -33,6 +33,8 @@ const (
 	NSEC3      Type = 50
 	NSEC3PARAM Type = 51
 	TLSA       Type = 52
+	SMIMEA     Type = 53
+	CSYNC      Type = 62
 	SVCB       Type = 64
 	HTTPS      Type = 65
 	SPF        Type = 99
@@ -46,8 +48,9 @@ var typeNames = map[Type]string{
 	A: "A", NS: "NS", CNAME: "CNAME", SOA: "SOA", PTR: "PTR", HINFO: "HINFO",
 	MX: "MX", TXT: "TXT", AAAA: "AAAA", SRV: "SRV", NAPTR: "NAPTR", OPT: "OPT",
 	DS: "DS", SSHFP: "SSHFP", RRSIG: "RRSIG", NSEC: "NSEC", DNSKEY: "DNSKEY",
-	NSEC3: "NSEC3", NSEC3PARAM: "NSEC3PARAM", TLSA: "TLSA", SVCB: "SVCB",
-	HTTPS: "HTTPS", SPF: "SPF", CAA: "CAA", ANY: "ANY", AXFR: "AXFR", IXFR: "IXFR",
+	NSEC3: "NSEC3", NSEC3PARAM: "NSEC3PARAM", TLSA: "TLSA", SMIMEA: "SMIMEA",
+	CSYNC: "CSYNC", SVCB: "SVCB", HTTPS: "HTTPS", SPF: "SPF", CAA: "CAA",
+	ANY: "ANY", AXFR: "AXFR", IXFR: "IXFR",
 }
 
 var typeByName = func() map[string]Type {

@@ -89,6 +89,20 @@ func unpackTyped(t rrtype.Type, u *wire.Unpacker, rdlen int) (RData, error) {
 		return unpackNSEC(u, rdlen)
 	case rrtype.NSEC3:
 		return unpackNSEC3(u, rdlen)
+	case rrtype.NSEC3PARAM:
+		return unpackNSEC3PARAM(u)
+	case rrtype.SRV:
+		return unpackSRV(u)
+	case rrtype.NAPTR:
+		return unpackNAPTR(u)
+	case rrtype.SSHFP:
+		return unpackSSHFP(u, rdlen)
+	case rrtype.TLSA:
+		return unpackTLSA(u, rdlen)
+	case rrtype.SMIMEA:
+		return unpackSMIMEA(u, rdlen)
+	case rrtype.CSYNC:
+		return unpackCSYNC(u, rdlen)
 	default:
 		b, err := u.Bytes(rdlen)
 		if err != nil {
