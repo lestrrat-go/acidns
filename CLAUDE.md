@@ -55,7 +55,8 @@ acidns/                root: top-level convenience re-exports only, no logic
   cmd/
     acidig/            dig-style CLI
     acidns-server/     authoritative / recursive / hybrid daemon
-  examples/lookup/     minimal SDK usage example
+  examples/            runnable Example_<area>_<op> tests, one file per example
+    lookup/            minimal SDK usage example (binary)
 ```
 
 ## Supported RFCs

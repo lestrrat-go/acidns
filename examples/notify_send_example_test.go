@@ -1,0 +1,76 @@
+package examples_test
+
+import (
+	"context"
+	"fmt"
+	"net/netip"
+	"strings"
+	"sync/atomic"
+	"time"
+
+	"github.com/lestrrat-go/acidns/dnsclient/notify"
+	"github.com/lestrrat-go/acidns/dnsclient/transport/udp"
+	"github.com/lestrrat-go/acidns/dnsmsg"
+	"github.com/lestrrat-go/acidns/dnsname"
+	"github.com/lestrrat-go/acidns/dnsserver"
+	"github.com/lestrrat-go/acidns/dnsserver/authoritative"
+	"github.com/lestrrat-go/acidns/dnszone"
+)
+
+func Example_notify_send() {
+	// Run an authoritative server with a NotifyHandler. The handler fires
+	// after the server has ACKed the NOTIFY (per RFC 1996), so a real
+	// secondary would schedule an IXFR/AXFR fetch from inside this callback.
+	var fired atomic.Int32
+
+	z, _ := dnszone.Parse(strings.NewReader(`$ORIGIN example.com.
+$TTL 60
+@   IN  SOA  ns1.example.com. hm.example.com. ( 1 2 3 4 5 )
+@   IN  NS   ns1.example.com.
+ns1 IN  A    192.0.2.10
+`))
+	h, err := authoritative.New(
+		authoritative.WithZone(z),
+		authoritative.WithNotifyHandler(func(_ dnsmsg.Question, _ dnsserver.ResponseWriter) {
+			fired.Add(1)
+		}),
+	)
+	if err != nil {
+		fmt.Println("auth:", err)
+		return
+	}
+	srv, err := dnsserver.ListenUDP(netip.MustParseAddrPort("127.0.0.1:0"), h)
+	if err != nil {
+		fmt.Println("listen:", err)
+		return
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	go func() { _ = srv.Serve(ctx) }()
+
+	// Send a NOTIFY using the dnsclient/notify helper.
+	ex, err := udp.New(srv.Addr())
+	if err != nil {
+		fmt.Println("dial:", err)
+		return
+	}
+	resp, err := notify.Send(ctx, ex, dnsname.MustParse("example.com"))
+	if err != nil {
+		fmt.Println("send:", err)
+		return
+	}
+	fmt.Println("rcode:", resp.Flags().RCODE())
+	fmt.Println("authoritative:", resp.Flags().Authoritative())
+
+	// Wait briefly for the handler to fire.
+	deadline := time.Now().Add(time.Second)
+	for fired.Load() == 0 && time.Now().Before(deadline) {
+		time.Sleep(5 * time.Millisecond)
+	}
+	fmt.Println("handler fired:", fired.Load())
+
+	// OUTPUT:
+	// rcode: NOERROR
+	// authoritative: true
+	// handler fired: 1
+}
