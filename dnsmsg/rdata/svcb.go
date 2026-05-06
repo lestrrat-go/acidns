@@ -60,6 +60,9 @@ type SVCB interface {
 	Port() (uint16, bool)
 	IPv4Hints() []netip.Addr
 	IPv6Hints() []netip.Addr
+	// DOHPath returns the DoH URI template (RFC 9461 §5) when the
+	// SvcParamDOHPath key is present.
+	DOHPath() (string, bool)
 }
 
 type svcb struct {
@@ -109,6 +112,65 @@ func (s *svcb) IPv4Hints() []netip.Addr {
 
 func (s *svcb) IPv6Hints() []netip.Addr {
 	return decodeAddrHint(s.params, SvcParamIPv6Hint, 16)
+}
+
+func (s *svcb) DOHPath() (string, bool) {
+	for _, p := range s.params {
+		if p.Key() == SvcParamDOHPath {
+			return string(p.Value()), true
+		}
+	}
+	return "", false
+}
+
+// NewSvcParamALPN builds an ALPN SvcParam (RFC 9460 §7.1).
+func NewSvcParamALPN(alpns ...string) (SVCBParam, error) {
+	var buf []byte
+	for i, a := range alpns {
+		if len(a) == 0 || len(a) > 255 {
+			return nil, fmt.Errorf("%w: ALPN[%d] length %d not in [1,255]", ErrInvalidRData, i, len(a))
+		}
+		buf = append(buf, byte(len(a)))
+		buf = append(buf, a...)
+	}
+	return svcbParam{key: SvcParamALPN, data: buf}, nil
+}
+
+// NewSvcParamPort builds a Port SvcParam (RFC 9460 §7.2).
+func NewSvcParamPort(port uint16) SVCBParam {
+	return svcbParam{key: SvcParamPort, data: []byte{byte(port >> 8), byte(port)}}
+}
+
+// NewSvcParamIPv4Hint builds an ipv4hint SvcParam (RFC 9460 §7.3).
+func NewSvcParamIPv4Hint(addrs ...netip.Addr) (SVCBParam, error) {
+	buf := make([]byte, 0, 4*len(addrs))
+	for i, a := range addrs {
+		if !a.Is4() {
+			return nil, fmt.Errorf("%w: ipv4hint[%d] is not IPv4", ErrInvalidRData, i)
+		}
+		b := a.As4()
+		buf = append(buf, b[:]...)
+	}
+	return svcbParam{key: SvcParamIPv4Hint, data: buf}, nil
+}
+
+// NewSvcParamIPv6Hint builds an ipv6hint SvcParam (RFC 9460 §7.4).
+func NewSvcParamIPv6Hint(addrs ...netip.Addr) (SVCBParam, error) {
+	buf := make([]byte, 0, 16*len(addrs))
+	for i, a := range addrs {
+		if !a.Is6() {
+			return nil, fmt.Errorf("%w: ipv6hint[%d] is not IPv6", ErrInvalidRData, i)
+		}
+		b := a.As16()
+		buf = append(buf, b[:]...)
+	}
+	return svcbParam{key: SvcParamIPv6Hint, data: buf}, nil
+}
+
+// NewSvcParamDOHPath builds a dohpath SvcParam (RFC 9461 §5). The path is
+// a URI template per RFC 6570.
+func NewSvcParamDOHPath(template string) SVCBParam {
+	return svcbParam{key: SvcParamDOHPath, data: []byte(template)}
 }
 
 func decodeAddrHint(params []SVCBParam, key SvcParamKey, sz int) []netip.Addr {
