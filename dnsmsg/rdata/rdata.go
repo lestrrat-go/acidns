@@ -35,10 +35,15 @@ func Pack(r RData) []byte {
 }
 
 // Unpack reads rdlen bytes of rdata of type t from u and returns a typed
-// RData value. Unknown types are returned as Unknown.
+// RData value. Unknown types are returned as Unknown. An rdlen of 0 (used
+// by RFC 2136 UPDATE messages to delete an RRset and by some prerequisite
+// records) yields an Unknown of type t with no payload, regardless of t.
 func Unpack(t rrtype.Type, u *wire.Unpacker, rdlen int) (RData, error) {
 	if rdlen < 0 || u.Remaining() < rdlen {
 		return nil, fmt.Errorf("%w: rdlen %d exceeds remaining %d", ErrInvalidRData, rdlen, u.Remaining())
+	}
+	if rdlen == 0 {
+		return &unknown{typ: t, data: nil}, nil
 	}
 	end := u.Off() + rdlen
 
