@@ -25,6 +25,35 @@ type EDNSOption interface {
 	Data() []byte
 }
 
+// EDNS option codes (IANA registry, partial — most-commonly used here).
+const (
+	EDNSOptionLLQ          uint16 = 1  // RFC 8764
+	EDNSOptionUL           uint16 = 2  // update lease
+	EDNSOptionNSID         uint16 = 3  // RFC 5001
+	EDNSOptionDAU          uint16 = 5  // RFC 6975 §3 — DNSSEC Algorithm Understood
+	EDNSOptionDHU          uint16 = 6  // RFC 6975 §3 — DS Hash Understood
+	EDNSOptionN3U          uint16 = 7  // RFC 6975 §3 — NSEC3 Hash Understood
+	EDNSOptionClientSubnet uint16 = 8  // RFC 7871
+	EDNSOptionExpire       uint16 = 9  // RFC 7314
+	EDNSOptionCookie       uint16 = 10 // RFC 7873
+	EDNSOptionTCPKeepalive uint16 = 11 // RFC 7828
+	EDNSOptionPadding      uint16 = 12 // RFC 7830
+	EDNSOptionExtendedDNS  uint16 = 15 // RFC 8914 — Extended DNS Errors
+)
+
+// NewAlgorithmUnderstood builds an EDNS option for one of the RFC 6975
+// signalling codes (DAU/DHU/N3U). The data carries the list of
+// algorithm code points the requester can validate, in order.
+func NewAlgorithmUnderstood(code uint16, algorithms ...uint8) (EDNSOption, error) {
+	switch code {
+	case EDNSOptionDAU, EDNSOptionDHU, EDNSOptionN3U:
+	default:
+		return nil, fmt.Errorf("%w: code %d is not DAU/DHU/N3U", ErrInvalidMessage, code)
+	}
+	data := append([]byte(nil), algorithms...)
+	return ednsOption{code: code, data: data}, nil
+}
+
 type ednsOption struct {
 	code uint16
 	data []byte
