@@ -1,0 +1,158 @@
+// Package doq implements DNS over Dedicated QUIC connections (RFC 9250).
+//
+// Each Exchange opens a fresh QUIC connection, opens one bidirectional
+// stream, sends a length-prefixed query (RFC 9250 §4.2.1 — same wire
+// framing as TCP), reads a length-prefixed response, then closes the
+// stream and connection. Connection reuse and stream multiplexing are out
+// of scope for this primitive transport.
+package doq
+
+import (
+	"context"
+	"crypto/tls"
+	"encoding/binary"
+	"fmt"
+	"io"
+	"net/netip"
+	"time"
+
+	"github.com/quic-go/quic-go"
+
+	"github.com/lestrrat-go/acidns/dnsclient/transport"
+	"github.com/lestrrat-go/acidns/dnsmsg"
+)
+
+// alpn is the ALPN identifier registered for DoQ.
+const alpn = "doq"
+
+// Option configures a DoQ Exchanger.
+type Option interface{ applyDoQ(*config) }
+
+type optionFunc func(*config)
+
+func (f optionFunc) applyDoQ(c *config) { f(c) }
+
+type config struct {
+	timeout    time.Duration
+	tlsConfig  *tls.Config
+	serverName string
+}
+
+// WithTimeout sets a per-exchange timeout used when ctx has no deadline.
+func WithTimeout(d time.Duration) Option {
+	return optionFunc(func(c *config) { c.timeout = d })
+}
+
+// WithTLSConfig overrides the default TLS configuration. The "doq" ALPN
+// is added automatically if absent.
+func WithTLSConfig(tc *tls.Config) Option {
+	return optionFunc(func(c *config) { c.tlsConfig = tc.Clone() })
+}
+
+// WithServerName overrides SNI / certificate verification name.
+func WithServerName(name string) Option {
+	return optionFunc(func(c *config) { c.serverName = name })
+}
+
+type exchanger struct {
+	addr      netip.AddrPort
+	timeout   time.Duration
+	tlsConfig *tls.Config
+}
+
+// New returns an Exchanger that talks DoQ to addr.
+func New(addr netip.AddrPort, opts ...Option) (transport.Exchanger, error) {
+	if !addr.IsValid() {
+		return nil, fmt.Errorf("doq: invalid server address")
+	}
+	c := config{timeout: 10 * time.Second}
+	for _, o := range opts {
+		o.applyDoQ(&c)
+	}
+
+	var tcfg *tls.Config
+	if c.tlsConfig != nil {
+		tcfg = c.tlsConfig.Clone()
+	} else {
+		tcfg = &tls.Config{MinVersion: tls.VersionTLS13}
+	}
+	if !containsALPN(tcfg.NextProtos, alpn) {
+		tcfg.NextProtos = append(tcfg.NextProtos, alpn)
+	}
+	if c.serverName != "" {
+		tcfg.ServerName = c.serverName
+	} else if tcfg.ServerName == "" {
+		tcfg.ServerName = addr.Addr().String()
+	}
+
+	return &exchanger{addr: addr, timeout: c.timeout, tlsConfig: tcfg}, nil
+}
+
+func containsALPN(list []string, want string) bool {
+	for _, p := range list {
+		if p == want {
+			return true
+		}
+	}
+	return false
+}
+
+func (e *exchanger) Exchange(ctx context.Context, q dnsmsg.Message) (dnsmsg.Message, error) {
+	wire, err := dnsmsg.Marshal(q)
+	if err != nil {
+		return nil, fmt.Errorf("doq: marshal: %w", err)
+	}
+
+	if _, ok := ctx.Deadline(); !ok && e.timeout > 0 {
+		var cancel context.CancelFunc
+		ctx, cancel = context.WithTimeout(ctx, e.timeout)
+		defer cancel()
+	}
+
+	conn, err := quic.DialAddr(ctx, e.addr.String(), e.tlsConfig, &quic.Config{
+		MaxIdleTimeout: 30 * time.Second,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("doq: dial %s: %w", e.addr, err)
+	}
+	defer conn.CloseWithError(0, "")
+
+	stream, err := conn.OpenStreamSync(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("doq: open stream: %w", err)
+	}
+
+	var hdr [2]byte
+	binary.BigEndian.PutUint16(hdr[:], uint16(len(wire)))
+	if _, err := stream.Write(hdr[:]); err != nil {
+		return nil, fmt.Errorf("doq: write length: %w", err)
+	}
+	if _, err := stream.Write(wire); err != nil {
+		return nil, fmt.Errorf("doq: write body: %w", err)
+	}
+	// RFC 9250 §4.2: client MUST send the FIN after the query body.
+	if err := stream.Close(); err != nil {
+		return nil, fmt.Errorf("doq: close write side: %w", err)
+	}
+
+	if _, err := io.ReadFull(stream, hdr[:]); err != nil {
+		return nil, fmt.Errorf("doq: read length: %w", err)
+	}
+	respLen := binary.BigEndian.Uint16(hdr[:])
+	body := make([]byte, respLen)
+	if _, err := io.ReadFull(stream, body); err != nil {
+		return nil, fmt.Errorf("doq: read body: %w", err)
+	}
+
+	resp, err := dnsmsg.Unmarshal(body)
+	if err != nil {
+		return nil, fmt.Errorf("doq: unmarshal: %w", err)
+	}
+	// RFC 9250 §4.2.1: query MUST set ID=0; response MUST set ID=0.
+	// Many real-world servers echo the requested ID instead of mandating
+	// zero. Validate either form.
+	if resp.ID() != q.ID() && resp.ID() != 0 {
+		return nil, fmt.Errorf("doq: id mismatch: got %#x", resp.ID())
+	}
+	return resp, nil
+}
