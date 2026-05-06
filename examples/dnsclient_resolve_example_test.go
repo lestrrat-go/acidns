@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"net/netip"
+	"sort"
 	"strings"
 	"time"
 
@@ -75,7 +76,7 @@ mail IN A    192.0.2.11
 			addrs = append(addrs, a.Addr().String())
 		}
 	}
-	sortStrings(addrs)
+	sort.Strings(addrs)
 	for _, s := range addrs {
 		fmt.Println(s)
 	}
@@ -83,15 +84,4 @@ mail IN A    192.0.2.11
 	// OUTPUT:
 	// 192.0.2.10
 	// 192.0.2.11
-}
-
-// sortStrings is a deterministic ascending-order sorter used by examples
-// that pull a small list out of a DNS answer; we do it inline to avoid
-// pulling sort into every example.
-func sortStrings(s []string) {
-	for i := 1; i < len(s); i++ {
-		for j := i; j > 0 && s[j-1] > s[j]; j-- {
-			s[j-1], s[j] = s[j], s[j-1]
-		}
-	}
 }
