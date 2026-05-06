@@ -95,6 +95,50 @@ func unpackTyped(t rrtype.Type, u *wire.Unpacker, rdlen int) (RData, error) {
 		return unpackSRV(u)
 	case rrtype.NAPTR:
 		return unpackNAPTR(u)
+	case rrtype.RP:
+		return unpackRP(u)
+	case rrtype.AFSDB:
+		return unpackAFSDB(u)
+	case rrtype.X25:
+		return unpackX25(u)
+	case rrtype.ISDN:
+		return unpackISDN(u, rdlen)
+	case rrtype.RT:
+		return unpackRT(u)
+	case rrtype.NSAP:
+		return unpackNSAP(u, rdlen)
+	case rrtype.NSAPPTR:
+		return unpackNSAPPTR(u)
+	case rrtype.LOC:
+		return unpackLOC(u, rdlen)
+	case rrtype.APL:
+		return unpackAPL(u, rdlen)
+	case rrtype.IPSECKEY:
+		return unpackIPSECKEY(u, rdlen)
+	case rrtype.DHCID:
+		return unpackDHCID(u, rdlen)
+	case rrtype.HIP:
+		return unpackHIP(u, rdlen)
+	case rrtype.NID:
+		return unpackNID(u)
+	case rrtype.L32:
+		return unpackL32(u)
+	case rrtype.L64:
+		return unpackL64(u)
+	case rrtype.LP:
+		return unpackLP(u)
+	case rrtype.EUI48:
+		return unpackEUI48(u, rdlen)
+	case rrtype.EUI64:
+		return unpackEUI64(u, rdlen)
+	case rrtype.URI:
+		return unpackURI(u, rdlen)
+	case rrtype.ZONEMD:
+		return unpackZONEMD(u, rdlen)
+	case rrtype.RESINFO:
+		return unpackRESINFO(u, rdlen)
+	case rrtype.SPF:
+		return unpackSPF(u, rdlen)
 	case rrtype.SSHFP:
 		return unpackSSHFP(u, rdlen)
 	case rrtype.TLSA:
