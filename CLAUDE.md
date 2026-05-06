@@ -55,39 +55,74 @@ acidns/                root: top-level convenience re-exports only, no logic
 
 ## Supported RFCs
 
-Verification status: **Implemented** (with tests), **Partial** (subset documented inline), **Out of scope** (mentioned for context, not in the codebase).
+Status legend: **Implemented** = working code with tests; **Partial** = documented subset; **Followed** = behavioural conformance, no specific code; **Out of scope** = explicitly not addressed in this version.
+
+### Basic operations
 
 | RFC | Title | Status |
 |-----|-------|--------|
 | 1034 | Domain Names — Concepts and Facilities | Implemented (authoritative §4.3.2 lookup algorithm) |
 | 1035 | Domain Names — Implementation and Specification | Implemented (wire format, name compression §4.1.4, master files §5, TCP framing §4.2.2) |
 | 1982 | Serial Number Arithmetic | Implemented (used by IXFR comparison) |
-| 1995 | Incremental Zone Transfer (IXFR) | Implemented client; server falls back to AXFR per §3 |
-| 2136 | Dynamic Updates in the Domain Name System | Implemented (UPDATE opcode, prerequisites, add/delete RRset, delete record) |
 | 2308 | Negative Caching of DNS Queries | Implemented (recursive cache caps at SOA MINIMUM per §5) |
-| 3110 | RSA SIG/KEY Resource Records | Implemented (RSA pubkey wire format used by DNSSEC) |
+| 2782 | Service Location (SRV) | Implemented (typed `rdata.SRV`) |
 | 3596 | DNS Extensions to Support IPv6 | Implemented (AAAA records) |
 | 3597 | Handling of Unknown DNS RR Types | Implemented (TYPEnnn parsing, generic `\#` writer form) |
+| 4592 | Role of the Wildcard Label in the DNS | Implemented (authoritative wildcard synthesis with closest-encloser semantics) |
+| 6761 | Special-Use Domain Names | Implemented (`dnsclient/specialuse`: localhost / invalid / test / onion / alt; `local` deferred to mDNS) |
+| 6762 | Multicast DNS (mDNS) | Implemented (browse + parse via `mdns/`; service publication is out of scope) |
+| 6763 | DNS-Based Service Discovery (DNS-SD) | Implemented (`mdns.Browse` returns Service entries with SRV/TXT/A/AAAA merged) |
+| 6891 | Extension Mechanisms for DNS (EDNS(0)) | Implemented (OPT pseudo-RR, UDP size, DO bit, extended RCODE) |
+| 7766 | DNS Transport over TCP | Partial (server-side multi-query per connection + idle timeout; no client-side keepalive) |
+| 8499 | DNS Terminology | Followed (no master/slave terminology in code or docs — primary/secondary throughout) |
+| ANAME draft (`draft-ietf-dnsop-aname`) | Address-specific aliases | Out of scope (still a draft; no IANA RR type assignment) |
+
+### Update operations
+
+| RFC | Title | Status |
+|-----|-------|--------|
+| 1995 | Incremental Zone Transfer (IXFR) | Implemented client; server falls back to AXFR per §3 |
+| 2136 | Dynamic Updates in the Domain Name System | Implemented (UPDATE opcode, prerequisites, add/delete RRset, delete record) |
+| 5936 | DNS Zone Transfer Protocol (AXFR) | Implemented (single-message AXFR, server + client) |
+| 7477 | Child-to-Parent Synchronization (CSYNC) | Implemented (typed `rdata.CSYNC`) |
+
+### Secure DNS operations
+
+| RFC | Title | Status |
+|-----|-------|--------|
+| 2931 | DNS Request and Transaction Signatures (SIG(0)) | Implemented (sign + verify in `sig0/` for RSASHA256, RSASHA512, ECDSAP256, ECDSAP384, Ed25519) |
+| 3007 | Secure Domain Name System Dynamic Update | Implemented (`dnsupdate.Builder.SignedWire` produces TSIG-signed UPDATE wire bytes) |
+| 3110 | RSA SIG/KEY Resource Records | Implemented (RSA pubkey wire format) |
 | 4034 | Resource Records for the DNS Security Extensions | Implemented (DNSKEY, RRSIG, NSEC; canonical form §6) |
 | 4035 | Protocol Modifications for DNSSEC | Partial (verification primitives only — no chain-of-trust walker, no NSEC/NSEC3 negative-proof validation) |
 | 4509 | Use of SHA-256 in DNSSEC Delegation Signer | Implemented (DS digest type 2) |
-| 4592 | Role of the Wildcard Label in the DNS | Implemented (authoritative wildcard synthesis with closest-encloser semantics) |
-| 5155 | DNSSEC Hashed Authenticated Denial of Existence | Partial (NSEC3 type encode/decode; validator does not yet consume) |
+| 5155 | DNSSEC Hashed Authenticated Denial of Existence | Partial (NSEC3 + NSEC3PARAM encode/decode; validator does not yet consume) |
 | 5702 | RSA/SHA-2 in DNSSEC | Implemented (RSASHA256, RSASHA512) |
-| 5936 | DNS Zone Transfer Protocol (AXFR) | Implemented (single-message AXFR, server + client) |
-| 6605 | Elliptic Curve Digital Signature Algorithm (DSA) for DNSSEC | Implemented (ECDSAP256SHA256, ECDSAP384SHA384) |
-| 6891 | Extension Mechanisms for DNS (EDNS(0)) | Implemented (OPT pseudo-RR, UDP size, DO bit, extended RCODE) |
-| 7766 | DNS Transport over TCP | Partial (server-side multi-query per connection + idle timeout; no client-side keepalive) |
+| 6605 | Elliptic Curve DSA for DNSSEC | Implemented (ECDSAP256SHA256, ECDSAP384SHA384) |
+| 6698 | DNS-Based Authentication of Named Entities (DANE) — TLSA | Implemented (typed `rdata.TLSA` with usage / selector / matching enums) |
+| 6840 | Clarifications and Implementation Notes for DNSSEC | Followed (canonical-form rules per §6 implemented; algorithm requirements per §5 followed) |
+| 6844 | DNS Certification Authority Authorization (legacy) | Implemented (succeeded by RFC 8659; same wire format) |
+| 6944 | DNSKEY Algorithm Implementation Status | Followed (modern algorithms — RSASHA256, ECDSAP256, ECDSAP384, Ed25519 — implemented; legacy algorithms and SHA-1 only where required by other RFCs) |
+| 6975 | Signaling Cryptographic Algorithm Understanding | Implemented (`NewAlgorithmUnderstood` for DAU/DHU/N3U EDNS options) |
 | 7858 | DNS over Transport Layer Security (DoT) | Implemented |
-| 8080 | Edwards-Curve DSA for DNSSEC | Implemented (Ed25519; Ed448 not yet) |
+| 8080 | Edwards-Curve DSA for DNSSEC | Implemented (Ed25519; Ed448 not yet — IANA-listed but rare) |
+| 8162 | Using Secure DNS to Associate Certificates with Domain Names for S/MIME | Implemented (typed `rdata.SMIMEA`) |
 | 8484 | DNS Queries over HTTPS (DoH) | Implemented (POST + GET) |
-| 8624 | DNSSEC Algorithm Implementation Requirements | Followed (modern algorithms covered; SHA-1 supported only where required) |
+| 8624 | DNSSEC Algorithm Implementation Requirements | Followed |
 | 8659 | DNS Certification Authority Authorization (CAA) | Implemented |
-| 8945 | Secret Key Transaction Authentication for DNS (TSIG) | Implemented (hmac-sha1/256/384/512; not yet auto-wired into AXFR/IXFR/UPDATE clients) |
+| 8945 | Secret Key Transaction Authentication for DNS (TSIG) | Implemented (hmac-sha1/256/384/512; bridge into UPDATE via `dnsupdate.SignedWire`) |
 | 9250 | DNS over Dedicated QUIC Connections (DoQ) | Implemented |
-| 9460 | Service Binding (SVCB) and HTTPS Resource Records | Implemented (with typed accessors for ALPN, port, IPv4/IPv6 hints) |
+| 9460 | Service Binding (SVCB) and HTTPS Resource Records | Implemented (typed accessors for ALPN, port, IPv4/IPv6 hints) |
 
-Out of scope for the current toolkit: RFC 7873 DNS cookies, RFC 7816 QNAME minimisation, RFC 8198 aggressive NSEC caching, RFC 9156 (revised QNAME minimisation), DNS-SD (RFC 6763), mDNS (RFC 6762).
+### Out of scope
+
+| RFC | Title | Reason |
+|-----|-------|--------|
+| 6762 publishing | Service announcement (mDNS) | Browse-only for now; announcer requires interface enumeration + cache-flush handling not yet built |
+| 7816 / 9156 | QNAME Minimisation | Recursive resolver is straight-walk for now |
+| 7873 | DNS Cookies | EDNS option code reserved (`EDNSOptionCookie`) but no cookie state machine |
+| 8198 | Aggressive NSEC Caching | Builds on full NSEC validation, not yet present |
+| 8914 | Extended DNS Errors | Option code reserved (`EDNSOptionExtendedDNS`) but server doesn't yet emit |
 
 ## Go conventions (in addition to ~/.claude/docs/go.md)
 
