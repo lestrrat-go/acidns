@@ -47,7 +47,8 @@ type optionFunc func(*config)
 func (f optionFunc) applyAuth(c *config) { f(c) }
 
 type config struct {
-	zones []dnszone.Zone
+	zones         []dnszone.Zone
+	notifyHandler NotifyHandler
 }
 
 // WithZone adds z to the server's zones.
@@ -56,8 +57,9 @@ func WithZone(z dnszone.Zone) Option {
 }
 
 type authoritative struct {
-	mu    sync.RWMutex
-	zones map[string]*zoneIndex
+	mu            sync.RWMutex
+	zones         map[string]*zoneIndex
+	notifyHandler NotifyHandler
 }
 
 // zoneIndex is the per-zone lookup-friendly form of a Zone.
@@ -75,6 +77,7 @@ func New(opts ...Option) (Authoritative, error) {
 	for _, o := range opts {
 		o.applyAuth(c)
 	}
+	a.notifyHandler = c.notifyHandler
 	for _, z := range c.zones {
 		if err := a.AddZone(z); err != nil {
 			return nil, err
@@ -134,6 +137,10 @@ func (a *authoritative) Zones() []dnsname.Name {
 func (a *authoritative) ServeDNS(ctx context.Context, w dnsserver.ResponseWriter, q dnsmsg.Message) {
 	if q.Flags().Opcode() == dnsmsg.OpcodeUpdate {
 		a.serveUpdate(w, q)
+		return
+	}
+	if q.Flags().Opcode() == dnsmsg.OpcodeNotify {
+		a.serveNotify(w, q)
 		return
 	}
 	if len(q.Questions()) == 1 {
