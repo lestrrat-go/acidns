@@ -14,6 +14,7 @@ import (
 	"errors"
 	"fmt"
 	"net/netip"
+	"strings"
 	"sync"
 	"time"
 
@@ -82,6 +83,9 @@ type config struct {
 	disableEDNS bool
 	attempts    int
 	perAttempt  time.Duration
+	searchList  []dnsname.Name
+	ndots       int
+	ndotsSet    bool
 	systemErr   error
 }
 
@@ -128,8 +132,9 @@ func WithPerAttemptTimeout(d time.Duration) Option {
 }
 
 // WithSystemResolvers loads /etc/resolv.conf and uses its nameservers,
-// equivalent to WithServers(...) sourced from the system file. Returns an
-// error from New if no nameserver entries are found.
+// search list, and ndots, equivalent to WithServers + WithSearchList +
+// WithNdots sourced from the system file. Returns an error from New if no
+// nameserver entries are found.
 func WithSystemResolvers() Option {
 	return optionFunc(func(c *config) {
 		cfg, err := resolvconf.Load("")
@@ -142,7 +147,22 @@ func WithSystemResolvers() Option {
 			return
 		}
 		c.servers = append(c.servers[:0], cfg.Nameservers...)
+		c.searchList = append(c.searchList[:0], cfg.Search...)
+		c.ndots = cfg.Ndots
+		c.ndotsSet = true
 	})
+}
+
+// WithSearchList sets the suffixes appended to short names by LookupHost.
+// Names with a trailing dot bypass the search list.
+func WithSearchList(suffixes ...dnsname.Name) Option {
+	return optionFunc(func(c *config) { c.searchList = append(c.searchList[:0], suffixes...) })
+}
+
+// WithNdots sets the threshold of dots above which a name is tried in
+// absolute form before applying the search list. Defaults to 1.
+func WithNdots(n int) Option {
+	return optionFunc(func(c *config) { c.ndots = n; c.ndotsSet = true })
 }
 
 type resolver struct {
@@ -150,6 +170,8 @@ type resolver struct {
 	ednsUDP     uint16
 	ednsDO      bool
 	disableEDNS bool
+	searchList  []dnsname.Name
+	ndots       int
 }
 
 // New returns a Resolver. Exactly one of WithExchanger or WithServers must
@@ -177,11 +199,17 @@ func New(opts ...Option) (Resolver, error) {
 		}
 		ex = built
 	}
+	ndots := 1
+	if c.ndotsSet {
+		ndots = c.ndots
+	}
 	return &resolver{
 		exchanger:   ex,
 		ednsUDP:     c.ednsUDP,
 		ednsDO:      c.ednsDO,
 		disableEDNS: c.disableEDNS,
+		searchList:  append([]dnsname.Name(nil), c.searchList...),
+		ndots:       ndots,
 	}, nil
 }
 
@@ -253,11 +281,57 @@ func matchAnswers(answers []dnsmsg.Record, qname dnsname.Name, qtype rrtype.Type
 }
 
 func (r *resolver) LookupHost(ctx context.Context, host string) ([]netip.Addr, error) {
-	name, err := dnsname.Parse(host)
+	candidates, err := r.candidateNames(host)
 	if err != nil {
 		return nil, err
 	}
+	var firstErr error
+	for _, name := range candidates {
+		addrs, err := r.lookupHostAbsolute(ctx, name)
+		if err != nil {
+			if firstErr == nil {
+				firstErr = err
+			}
+			continue
+		}
+		if len(addrs) > 0 {
+			return addrs, nil
+		}
+	}
+	if firstErr != nil {
+		return nil, firstErr
+	}
+	return nil, nil
+}
 
+// candidateNames builds the ordered list of FQDNs to attempt for a
+// LookupHost call, applying the search list and ndots threshold.
+func (r *resolver) candidateNames(host string) ([]dnsname.Name, error) {
+	absolute := strings.HasSuffix(host, ".")
+	base, err := dnsname.Parse(host)
+	if err != nil {
+		return nil, err
+	}
+	if absolute || len(r.searchList) == 0 {
+		return []dnsname.Name{base}, nil
+	}
+	dots := strings.Count(strings.TrimSuffix(host, "."), ".")
+	suffixed := make([]dnsname.Name, 0, len(r.searchList))
+	for _, s := range r.searchList {
+		full := host + "." + s.String()
+		n, err := dnsname.Parse(full)
+		if err != nil {
+			continue
+		}
+		suffixed = append(suffixed, n)
+	}
+	if dots >= r.ndots {
+		return append([]dnsname.Name{base}, suffixed...), nil
+	}
+	return append(suffixed, base), nil
+}
+
+func (r *resolver) lookupHostAbsolute(ctx context.Context, name dnsname.Name) ([]netip.Addr, error) {
 	type result struct {
 		addrs []netip.Addr
 		err   error
@@ -275,9 +349,6 @@ func (r *resolver) LookupHost(ctx context.Context, host string) ([]netip.Addr, e
 		}
 		out := make([]netip.Addr, 0, len(ans.Records()))
 		for _, rec := range ans.Records() {
-			// Switch on Type() — rdata.A and rdata.AAAA have identical
-			// method sets, so a Go type switch on the interface would
-			// pick the wrong case for AAAA records.
 			switch rec.Type() {
 			case rrtype.A:
 				out = append(out, rec.RData().(rdata.A).Addr())
