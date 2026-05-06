@@ -62,9 +62,10 @@ type authoritative struct {
 
 // zoneIndex is the per-zone lookup-friendly form of a Zone.
 type zoneIndex struct {
-	origin dnsname.Name
-	soaRec dnsmsg.Record
-	byName map[string][]dnsmsg.Record // key = canonical wire of name
+	origin     dnsname.Name
+	soaRec     dnsmsg.Record
+	byName     map[string][]dnsmsg.Record // key = canonical wire of name
+	namesExist map[string]struct{}        // names with records, plus empty non-terminals
 }
 
 // New returns a new Authoritative.
@@ -89,13 +90,29 @@ func (a *authoritative) AddZone(z dnszone.Zone) error {
 	}
 	_ = soa // SOA captured via record
 	idx := &zoneIndex{
-		origin: z.Origin(),
-		soaRec: soaRec,
-		byName: make(map[string][]dnsmsg.Record),
+		origin:     z.Origin(),
+		soaRec:     soaRec,
+		byName:     make(map[string][]dnsmsg.Record),
+		namesExist: make(map[string]struct{}),
 	}
 	for _, rec := range z.Records() {
 		k := nameKey(rec.Name())
 		idx.byName[k] = append(idx.byName[k], rec)
+		// Mark the name and every ancestor up to (and including) the zone
+		// origin as existing — empty non-terminals must register so that
+		// wildcard synthesis stops at the closest encloser.
+		cur := rec.Name()
+		for {
+			idx.namesExist[nameKey(cur)] = struct{}{}
+			if cur.Equal(idx.origin) {
+				break
+			}
+			parent, ok := cur.Parent()
+			if !ok {
+				break
+			}
+			cur = parent
+		}
 	}
 	a.mu.Lock()
 	a.zones[nameKey(z.Origin())] = idx
@@ -115,8 +132,51 @@ func (a *authoritative) Zones() []dnsname.Name {
 
 // ServeDNS implements dnsserver.Handler.
 func (a *authoritative) ServeDNS(ctx context.Context, w dnsserver.ResponseWriter, q dnsmsg.Message) {
+	if len(q.Questions()) == 1 && q.Questions()[0].Type() == rrtype.AXFR {
+		a.serveAXFR(w, q)
+		return
+	}
 	resp := a.answer(q)
 	_ = w.WriteMsg(resp)
+}
+
+// serveAXFR implements RFC 5936 single-message AXFR. The full zone fits in
+// one DNS message for our intended scale; multi-message streaming can be
+// added later by emitting multiple WriteMsg calls.
+func (a *authoritative) serveAXFR(w dnsserver.ResponseWriter, q dnsmsg.Message) {
+	question := q.Questions()[0]
+	b := dnsmsg.NewBuilder().
+		ID(q.ID()).
+		Response(true).
+		RecursionDesired(q.Flags().RecursionDesired()).
+		Question(question)
+
+	// AXFR over UDP is not allowed.
+	if w.Network() != "tcp" {
+		_ = w.WriteMsg(mustBuild(b.RCODE(dnsmsg.RCODERefused)))
+		return
+	}
+
+	zone := a.findZone(question.Name())
+	if zone == nil {
+		_ = w.WriteMsg(mustBuild(b.RCODE(dnsmsg.RCODERefused)))
+		return
+	}
+	if !zone.origin.Equal(question.Name()) {
+		// AXFR target must equal a zone's apex.
+		_ = w.WriteMsg(mustBuild(b.RCODE(dnsmsg.RCODENotAuth)))
+		return
+	}
+
+	b = b.Authoritative(true).Answer(zone.soaRec)
+	for _, rec := range zone.allRecordsOrdered() {
+		if rec.Type() == rrtype.SOA {
+			continue // skip the apex SOA (added at the boundaries)
+		}
+		b = b.Answer(rec)
+	}
+	b = b.Answer(zone.soaRec)
+	_ = w.WriteMsg(mustBuild(b))
 }
 
 func (a *authoritative) answer(q dnsmsg.Message) dnsmsg.Message {
@@ -135,17 +195,20 @@ func (a *authoritative) answer(q dnsmsg.Message) dnsmsg.Message {
 	if zone == nil {
 		return mustBuild(b.RCODE(dnsmsg.RCODERefused))
 	}
-	b = b.Authoritative(true)
 
-	answers, authority, rcode := zone.lookup(question.Name(), question.Type())
-	for _, r := range answers {
+	res := zone.lookup(question.Name(), question.Type())
+	b = b.Authoritative(res.aa)
+	for _, r := range res.answer {
 		b = b.Answer(r)
 	}
-	for _, r := range authority {
+	for _, r := range res.authority {
 		b = b.Authority(r)
 	}
-	if rcode != dnsmsg.RCODENoError {
-		b = b.RCODE(rcode)
+	for _, r := range res.additional {
+		b = b.Additional(r)
+	}
+	if res.rcode != dnsmsg.RCODENoError {
+		b = b.RCODE(res.rcode)
 	}
 	return mustBuild(b)
 }
@@ -178,56 +241,215 @@ func (a *authoritative) findZone(name dnsname.Name) *zoneIndex {
 	}
 }
 
-// lookup applies the simplified RFC 1034 §4.3.2 algorithm for a single QNAME
-// and QTYPE within this zone, returning the answer records, the authority
-// records (SOA on negative responses), and the RCODE.
-func (z *zoneIndex) lookup(qname dnsname.Name, qtype rrtype.Type) (answer, authority []dnsmsg.Record, rcode dnsmsg.RCODE) {
+// lookupResult captures everything needed to populate a response section.
+type lookupResult struct {
+	answer     []dnsmsg.Record
+	authority  []dnsmsg.Record
+	additional []dnsmsg.Record
+	rcode      dnsmsg.RCODE
+	aa         bool // false for downward referrals
+}
+
+// lookup applies the simplified RFC 1034 §4.3.2 algorithm (with RFC 4592
+// wildcard synthesis and downward delegation detection) for a single QNAME
+// and QTYPE within this zone.
+func (z *zoneIndex) lookup(qname dnsname.Name, qtype rrtype.Type) lookupResult {
+	if dp, nsRecs := z.findDelegation(qname); len(nsRecs) > 0 {
+		_ = dp
+		return lookupResult{
+			authority:  nsRecs,
+			additional: z.collectGlue(nsRecs),
+			rcode:      dnsmsg.RCODENoError,
+			aa:         false,
+		}
+	}
+	res := lookupResult{aa: true}
+	res.answer, res.authority, res.rcode = z.lookupAuthoritative(qname, qtype)
+	return res
+}
+
+func (z *zoneIndex) lookupAuthoritative(qname dnsname.Name, qtype rrtype.Type) (answer, authority []dnsmsg.Record, rcode dnsmsg.RCODE) {
 	current := qname
 	for chain := 0; chain < maxCNAMEChain; chain++ {
-		recs, exists := z.byName[nameKey(current)]
-		if !exists {
-			if chain == 0 {
-				return nil, []dnsmsg.Record{z.soaRec}, dnsmsg.RCODENXDomain
-			}
-			// CNAME pointed to a name not in zone — return what we have.
-			return answer, nil, dnsmsg.RCODENoError
-		}
-		// Match QTYPE first.
-		var matched []dnsmsg.Record
-		for _, r := range recs {
-			if r.Type() == qtype {
-				matched = append(matched, r)
-			}
-		}
-		if len(matched) > 0 {
-			answer = append(answer, matched...)
-			return answer, nil, dnsmsg.RCODENoError
-		}
-		// No exact match; if there's a CNAME, follow it.
-		if qtype != rrtype.CNAME {
-			var cname rdata.CNAME
-			var cnameRR dnsmsg.Record
-			for _, r := range recs {
-				if r.Type() == rrtype.CNAME {
-					cname = r.RData().(rdata.CNAME)
-					cnameRR = r
-					break
+		recs, hasRecs := z.byName[nameKey(current)]
+		if hasRecs {
+			ans, follow, done := z.matchRRSet(recs, qtype)
+			if done {
+				if len(ans) > 0 {
+					answer = append(answer, ans...)
+					return answer, nil, dnsmsg.RCODENoError
 				}
+				// NODATA at this name.
+				if chain == 0 {
+					return nil, []dnsmsg.Record{z.soaRec}, dnsmsg.RCODENoError
+				}
+				return answer, nil, dnsmsg.RCODENoError
 			}
-			if cname != nil {
-				answer = append(answer, cnameRR)
-				current = cname.Target()
+			// CNAME chase
+			answer = append(answer, ans...)
+			current = follow
+			continue
+		}
+
+		if _, exists := z.namesExist[nameKey(current)]; exists {
+			// Empty non-terminal — NODATA per RFC 8020.
+			if chain == 0 {
+				return nil, []dnsmsg.Record{z.soaRec}, dnsmsg.RCODENoError
+			}
+			return answer, nil, dnsmsg.RCODENoError
+		}
+
+		// Try wildcard synthesis (RFC 4592).
+		if encloser, ok := z.closestEncloser(current); ok {
+			if wcRecs, found := z.byName[wildcardKey(encloser)]; found {
+				ans, follow, done := z.matchRRSet(wcRecs, qtype)
+				// Owner of synthesised RR = QNAME, not *.encloser.
+				ans = rewriteOwners(ans, current)
+				if done {
+					if len(ans) > 0 {
+						answer = append(answer, ans...)
+						return answer, nil, dnsmsg.RCODENoError
+					}
+					if chain == 0 {
+						return nil, []dnsmsg.Record{z.soaRec}, dnsmsg.RCODENoError
+					}
+					return answer, nil, dnsmsg.RCODENoError
+				}
+				answer = append(answer, ans...)
+				current = follow
 				continue
 			}
 		}
-		// Name exists but no answers of the requested type → NODATA.
+
+		// No exact, no empty non-terminal, no wildcard → NXDOMAIN.
 		if chain == 0 {
-			return nil, []dnsmsg.Record{z.soaRec}, dnsmsg.RCODENoError
+			return nil, []dnsmsg.Record{z.soaRec}, dnsmsg.RCODENXDomain
 		}
 		return answer, nil, dnsmsg.RCODENoError
 	}
-	// CNAME chain exceeded.
 	return answer, nil, dnsmsg.RCODEServFail
+}
+
+// matchRRSet returns:
+//   - ans: the records from recs that satisfy qtype (or the CNAME hop);
+//   - follow: a CNAME target if a chase should continue, else zero value;
+//   - done: true when the lookup is complete (whether successfully or NODATA).
+func (z *zoneIndex) matchRRSet(recs []dnsmsg.Record, qtype rrtype.Type) (ans []dnsmsg.Record, follow dnsname.Name, done bool) {
+	var matched []dnsmsg.Record
+	for _, r := range recs {
+		if r.Type() == qtype {
+			matched = append(matched, r)
+		}
+	}
+	if len(matched) > 0 {
+		return matched, dnsname.Name{}, true
+	}
+	if qtype != rrtype.CNAME {
+		for _, r := range recs {
+			if r.Type() == rrtype.CNAME {
+				return []dnsmsg.Record{r}, r.RData().(rdata.CNAME).Target(), false
+			}
+		}
+	}
+	return nil, dnsname.Name{}, true
+}
+
+// closestEncloser walks up from name (exclusive) and returns the deepest
+// existing ancestor in the zone.
+func (z *zoneIndex) closestEncloser(name dnsname.Name) (dnsname.Name, bool) {
+	cur, ok := name.Parent()
+	if !ok {
+		return dnsname.Name{}, false
+	}
+	for {
+		if _, ok := z.namesExist[nameKey(cur)]; ok {
+			return cur, true
+		}
+		next, ok := cur.Parent()
+		if !ok {
+			return dnsname.Name{}, false
+		}
+		cur = next
+	}
+}
+
+func wildcardKey(encloser dnsname.Name) string {
+	if encloser.IsRoot() {
+		// "*."
+		n, _ := dnsname.FromLabels("*")
+		return nameKey(n)
+	}
+	// Build *.encloser by walking encloser's labels.
+	var labels []string
+	labels = append(labels, "*")
+	for l := range encloser.Labels() {
+		labels = append(labels, string(l))
+	}
+	n, err := dnsname.FromLabels(labels...)
+	if err != nil {
+		return ""
+	}
+	return nameKey(n)
+}
+
+func rewriteOwners(recs []dnsmsg.Record, owner dnsname.Name) []dnsmsg.Record {
+	if len(recs) == 0 {
+		return recs
+	}
+	out := make([]dnsmsg.Record, len(recs))
+	for i, r := range recs {
+		out[i] = dnsmsg.NewRecordClass(owner, r.Class(), r.TTL(), r.RData())
+	}
+	return out
+}
+
+// findDelegation walks from qname up toward the zone apex, returning the
+// deepest ancestor (excluding the zone origin) that has NS records — the
+// delegation point. Returns the empty name and nil if QNAME does not
+// cross a delegation.
+func (z *zoneIndex) findDelegation(qname dnsname.Name) (dnsname.Name, []dnsmsg.Record) {
+	cur := qname
+	for {
+		if cur.Equal(z.origin) {
+			return dnsname.Name{}, nil
+		}
+		if recs, ok := z.byName[nameKey(cur)]; ok {
+			var ns []dnsmsg.Record
+			for _, r := range recs {
+				if r.Type() == rrtype.NS {
+					ns = append(ns, r)
+				}
+			}
+			if len(ns) > 0 {
+				return cur, ns
+			}
+		}
+		parent, ok := cur.Parent()
+		if !ok {
+			return dnsname.Name{}, nil
+		}
+		cur = parent
+	}
+}
+
+// collectGlue returns A/AAAA records owned by NS targets that the zone
+// itself contains. Out-of-bailiwick targets are silently skipped — the
+// recursing resolver is expected to look those up directly.
+func (z *zoneIndex) collectGlue(nsRecs []dnsmsg.Record) []dnsmsg.Record {
+	var glue []dnsmsg.Record
+	for _, ns := range nsRecs {
+		target := ns.RData().(rdata.NS).NSDName()
+		recs, ok := z.byName[nameKey(target)]
+		if !ok {
+			continue
+		}
+		for _, r := range recs {
+			if r.Type() == rrtype.A || r.Type() == rrtype.AAAA {
+				glue = append(glue, r)
+			}
+		}
+	}
+	return glue
 }
 
 // nameKey returns a comparable canonical key for a name. It uses the wire
@@ -235,4 +457,14 @@ func (z *zoneIndex) lookup(qname dnsname.Name, qtype rrtype.Type) (answer, autho
 // included), wrapped in a string for use as a map key.
 func nameKey(n dnsname.Name) string {
 	return string(n.AppendWire(nil))
+}
+
+// allRecordsOrdered returns every record in the zone. Order is unspecified
+// (Go map iteration); callers needing deterministic output sort externally.
+func (z *zoneIndex) allRecordsOrdered() []dnsmsg.Record {
+	var out []dnsmsg.Record
+	for _, rs := range z.byName {
+		out = append(out, rs...)
+	}
+	return out
 }

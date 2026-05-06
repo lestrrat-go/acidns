@@ -41,11 +41,20 @@ func newAuth(t *testing.T) authoritative.Authoritative {
 }
 
 // inProcWriter is a minimal ResponseWriter that captures the response.
-type inProcWriter struct{ resp dnsmsg.Message }
+type inProcWriter struct {
+	resp    dnsmsg.Message
+	network string
+}
 
 func (w *inProcWriter) WriteMsg(m dnsmsg.Message) error { w.resp = m; return nil }
 func (w *inProcWriter) RemoteAddr() netip.AddrPort      { return netip.AddrPort{} }
 func (w *inProcWriter) LocalAddr() netip.AddrPort       { return netip.AddrPort{} }
+func (w *inProcWriter) Network() string {
+	if w.network == "" {
+		return "tcp"
+	}
+	return w.network
+}
 
 func ask(t *testing.T, a dnsserver.Handler, name string, rt rrtype.Type) dnsmsg.Message {
 	t.Helper()
