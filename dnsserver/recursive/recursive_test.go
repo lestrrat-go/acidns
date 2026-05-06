@@ -168,4 +168,27 @@ ns1 IN  A    192.0.2.10
 	entry, err := r.Resolve(ctx, dnsname.MustParse("nope.example.com"), rrtype.A)
 	require.NoError(t, err)
 	require.Equal(t, dnsmsg.RCODENXDomain, entry.RCODE)
+	// SOA MINIMUM is 5s, the smallest cap so negative TTL must be ≤ 5s.
+	require.LessOrEqual(t, time.Until(entry.ExpiresAt), 5*time.Second+time.Second)
+}
+
+func TestNODATACachedRespectsSOAMinimum(t *testing.T) {
+	t.Parallel()
+	addr := startAuth(t, `$ORIGIN example.com.
+$TTL 600
+@    IN SOA ns. hm. ( 1 2 3 4 7 )
+@    IN NS  ns1.example.com.
+ns1  IN A   192.0.2.10
+www  IN A   192.0.2.20
+`)
+	r := recursive.New(recursive.WithRoots(addr))
+	ctx, cancel := context.WithTimeout(t.Context(), 5*time.Second)
+	defer cancel()
+	// www has A but not AAAA — NODATA. SOA MINIMUM=7s caps the negative
+	// cache TTL even though everything else (TTL=600) is much higher.
+	entry, err := r.Resolve(ctx, dnsname.MustParse("www.example.com"), rrtype.AAAA)
+	require.NoError(t, err)
+	require.Equal(t, dnsmsg.RCODENoError, entry.RCODE)
+	require.Equal(t, 0, len(entry.Answer))
+	require.LessOrEqual(t, time.Until(entry.ExpiresAt), 8*time.Second)
 }

@@ -333,6 +333,15 @@ func hasAnswerFor(resp dnsmsg.Message, name dnsname.Name, t rrtype.Type) bool {
 
 func entryFromResponse(resp dnsmsg.Message) Entry {
 	ttl := minTTL(60*time.Second, resp.Answers(), resp.Authorities())
+	// RFC 2308 §5: negative responses (NXDOMAIN or NODATA — i.e. NOERROR
+	// with no answers) are cached for at most the SOA MINIMUM field and the
+	// SOA's own TTL, whichever is smaller. The SOA appears in the
+	// authority section of the negative response.
+	if len(resp.Answers()) == 0 {
+		if neg := negativeCacheTTL(resp.Authorities()); neg > 0 && neg < ttl {
+			ttl = neg
+		}
+	}
 	return Entry{
 		Answer:     append([]dnsmsg.Record(nil), resp.Answers()...),
 		Authority:  append([]dnsmsg.Record(nil), resp.Authorities()...),
@@ -341,6 +350,26 @@ func entryFromResponse(resp dnsmsg.Message) Entry {
 		AA:         resp.Flags().Authoritative(),
 		ExpiresAt:  time.Now().Add(ttl),
 	}
+}
+
+// negativeCacheTTL implements RFC 2308 §5: returns the smaller of the SOA
+// rdata's MINIMUM field and the SOA RR's TTL, or 0 if no SOA is present.
+func negativeCacheTTL(authority []dnsmsg.Record) time.Duration {
+	for _, r := range authority {
+		if r.Type() != rrtype.SOA {
+			continue
+		}
+		soa, ok := r.RData().(rdata.SOA)
+		if !ok {
+			continue
+		}
+		min := soa.Minimum()
+		if r.TTL() < min {
+			return r.TTL()
+		}
+		return min
+	}
+	return 0
 }
 
 func randomID() (uint16, error) {
