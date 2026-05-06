@@ -132,9 +132,17 @@ func (a *authoritative) Zones() []dnsname.Name {
 
 // ServeDNS implements dnsserver.Handler.
 func (a *authoritative) ServeDNS(ctx context.Context, w dnsserver.ResponseWriter, q dnsmsg.Message) {
-	if len(q.Questions()) == 1 && q.Questions()[0].Type() == rrtype.AXFR {
-		a.serveAXFR(w, q)
-		return
+	if len(q.Questions()) == 1 {
+		switch q.Questions()[0].Type() {
+		case rrtype.AXFR:
+			a.serveAXFR(w, q)
+			return
+		case rrtype.IXFR:
+			// RFC 1995 §3: a server lacking a journal MAY answer IXFR
+			// with an AXFR-format response.
+			a.serveAXFR(w, q)
+			return
+		}
 	}
 	resp := a.answer(q)
 	_ = w.WriteMsg(resp)
