@@ -19,6 +19,7 @@ import (
 	"time"
 
 	"github.com/lestrrat-go/acidns/dnsclient/resolvconf"
+	"github.com/lestrrat-go/acidns/dnsclient/specialuse"
 	"github.com/lestrrat-go/acidns/dnsclient/transport"
 	"github.com/lestrrat-go/acidns/dnsclient/transport/tcp"
 	"github.com/lestrrat-go/acidns/dnsclient/transport/udp"
@@ -76,17 +77,18 @@ type optionFunc func(*config)
 func (f optionFunc) applyResolver(c *config) { f(c) }
 
 type config struct {
-	exchanger   transport.Exchanger
-	servers     []netip.AddrPort
-	ednsUDP     uint16
-	ednsDO      bool
-	disableEDNS bool
-	attempts    int
-	perAttempt  time.Duration
-	searchList  []dnsname.Name
-	ndots       int
-	ndotsSet    bool
-	systemErr   error
+	exchanger        transport.Exchanger
+	servers          []netip.AddrPort
+	ednsUDP          uint16
+	ednsDO           bool
+	disableEDNS      bool
+	attempts         int
+	perAttempt       time.Duration
+	searchList       []dnsname.Name
+	ndots            int
+	ndotsSet         bool
+	disableSpecialUse bool
+	systemErr        error
 }
 
 // WithExchanger pins the Resolver to a specific transport. Mutually
@@ -153,6 +155,14 @@ func WithSystemResolvers() Option {
 	})
 }
 
+// WithoutSpecialUse disables the RFC 6761 short-circuits applied to
+// names like localhost., *.invalid., and *.onion. — useful for tooling
+// that needs to interrogate a DNS server about how it handles those
+// names rather than having the resolver answer locally.
+func WithoutSpecialUse() Option {
+	return optionFunc(func(c *config) { c.disableSpecialUse = true })
+}
+
 // WithSearchList sets the suffixes appended to short names by LookupHost.
 // Names with a trailing dot bypass the search list.
 func WithSearchList(suffixes ...dnsname.Name) Option {
@@ -166,12 +176,13 @@ func WithNdots(n int) Option {
 }
 
 type resolver struct {
-	exchanger   transport.Exchanger
-	ednsUDP     uint16
-	ednsDO      bool
-	disableEDNS bool
-	searchList  []dnsname.Name
-	ndots       int
+	exchanger         transport.Exchanger
+	ednsUDP           uint16
+	ednsDO            bool
+	disableEDNS       bool
+	searchList        []dnsname.Name
+	ndots             int
+	disableSpecialUse bool
 }
 
 // New returns a Resolver. Exactly one of WithExchanger or WithServers must
@@ -204,16 +215,22 @@ func New(opts ...Option) (Resolver, error) {
 		ndots = c.ndots
 	}
 	return &resolver{
-		exchanger:   ex,
-		ednsUDP:     c.ednsUDP,
-		ednsDO:      c.ednsDO,
-		disableEDNS: c.disableEDNS,
-		searchList:  append([]dnsname.Name(nil), c.searchList...),
-		ndots:       ndots,
+		exchanger:         ex,
+		ednsUDP:           c.ednsUDP,
+		ednsDO:            c.ednsDO,
+		disableEDNS:       c.disableEDNS,
+		searchList:        append([]dnsname.Name(nil), c.searchList...),
+		ndots:             ndots,
+		disableSpecialUse: c.disableSpecialUse,
 	}, nil
 }
 
 func (r *resolver) Resolve(ctx context.Context, name dnsname.Name, t rrtype.Type) (Answer, error) {
+	if !r.disableSpecialUse {
+		if ans, ok := r.specialUseAnswer(name, t); ok {
+			return ans, nil
+		}
+	}
 	id, err := randomID()
 	if err != nil {
 		return nil, err
@@ -244,6 +261,52 @@ func (r *resolver) Resolve(ctx context.Context, name dnsname.Name, t rrtype.Type
 
 	matched := matchAnswers(resp.Answers(), name, t)
 	return &answer{q: question, records: matched, raw: resp}, nil
+}
+
+// specialUseAnswer applies the RFC 6761 short-circuit. It returns
+// (answer, true) when the resolver should NOT issue a network query.
+func (r *resolver) specialUseAnswer(name dnsname.Name, t rrtype.Type) (Answer, bool) {
+	switch specialuse.For(name) {
+	case specialuse.SynthLocalhost:
+		records := make([]dnsmsg.Record, 0, 1)
+		for _, addr := range specialuse.LoopbackForType(t) {
+			var rd rdata.RData
+			switch t {
+			case rrtype.A:
+				rd = rdata.NewA(addr)
+			case rrtype.AAAA:
+				rd = rdata.NewAAAA(addr)
+			}
+			if rd != nil {
+				records = append(records,
+					dnsmsg.NewRecord(name, 0, rd))
+			}
+		}
+		raw := synthMessage(name, t, records, dnsmsg.RCODENoError)
+		return &answer{q: dnsmsg.NewQuestion(name, t), records: records, raw: raw}, true
+	case specialuse.Refuse, specialuse.Local:
+		raw := synthMessage(name, t, nil, dnsmsg.RCODENXDomain)
+		return &answer{q: dnsmsg.NewQuestion(name, t), raw: raw}, true
+	default:
+		return nil, false
+	}
+}
+
+func synthMessage(name dnsname.Name, t rrtype.Type, records []dnsmsg.Record, rcode dnsmsg.RCODE) dnsmsg.Message {
+	b := dnsmsg.NewBuilder().
+		ID(0).
+		Response(true).
+		RecursionDesired(true).
+		RecursionAvailable(true).
+		Question(dnsmsg.NewQuestion(name, t))
+	if rcode != dnsmsg.RCODENoError {
+		b = b.RCODE(rcode)
+	}
+	for _, rec := range records {
+		b = b.Answer(rec)
+	}
+	m, _ := b.Build()
+	return m
 }
 
 // matchAnswers walks any CNAME chain starting at qname, then collects every
