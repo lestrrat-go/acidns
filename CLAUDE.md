@@ -32,10 +32,14 @@ acidns/                root: top-level convenience re-exports only, no logic
     internal/wire/     low-level packer/unpacker (compression, bounds)
   dnsname/             domain name type + parsing/encoding
   dnssec/              DNSSEC verification primitives (KeyTag, Verify, VerifyDS)
+    validator/         chain-of-trust validator scaffold + NTAStore (RFC 4035)
   dnszone/             RFC 1035 §5 master-file parser + writer
+  dso/                 DNS Stateful Operations TLV codec (RFC 8490)
   tsig/                RFC 8945 transaction signature
   dnsclient/           client-facing API (Resolver, Answer, options)
+    amt/               RFC 8777 AMT relay discovery
     axfr/              AXFR client
+    ddr/               RFC 9462 Discovery of Designated Resolvers
     ixfr/              IXFR client (incremental + AXFR-fallback)
     dnsupdate/         RFC 2136 client builder
     resolvconf/        /etc/resolv.conf parser
@@ -44,6 +48,7 @@ acidns/                root: top-level convenience re-exports only, no logic
       internal/streamframe/
   dnsserver/           Handler / ResponseWriter framework
     authoritative/     master-file-backed authoritative server
+    chaos/             RFC 4892 id.server / hostname.bind handler
     recursive/         iterative recursive resolver + cache
     acl/               source-based ACL middleware
     ratelimit/         per-source token-bucket middleware
@@ -63,18 +68,48 @@ Status legend: **Implemented** = working code with tests; **Partial** = document
 |-----|-------|--------|
 | 1034 | Domain Names — Concepts and Facilities | Implemented (authoritative §4.3.2 lookup algorithm) |
 | 1035 | Domain Names — Implementation and Specification | Implemented (wire format, name compression §4.1.4, master files §5, TCP framing §4.2.2) |
+| 1183 | Deprecated RR types | Implemented (typed `rdata.RP`/`AFSDB`/`X25`/`ISDN`/`RT`) |
+| 1348 / 1706 | NSAP / NSAP-PTR | Implemented (typed `rdata.NSAP`, `rdata.NSAPPTR`) |
+| 1876 | LOC record | Implemented (typed `rdata.LOC`) |
 | 1982 | Serial Number Arithmetic | Implemented (used by IXFR comparison) |
+| 2181 | Clarifications to the DNS Specification | Implemented (`dnsmsg.RRset` + `GroupRecords` with min-TTL harmonisation per §5.2) |
 | 2308 | Negative Caching of DNS Queries | Implemented (recursive cache caps at SOA MINIMUM per §5) |
 | 2782 | Service Location (SRV) | Implemented (typed `rdata.SRV`) |
+| 2915 / 3401–3403 | NAPTR | Implemented (typed `rdata.NAPTR`) |
+| 2929 / 6895 | DNS IANA Considerations | Followed (procedural — type/class registries respected) |
+| 3123 | APL record | Implemented (typed `rdata.APL` with negate flag + IPv4/IPv6 prefix items) |
 | 3596 | DNS Extensions to Support IPv6 | Implemented (AAAA records) |
 | 3597 | Handling of Unknown DNS RR Types | Implemented (TYPEnnn parsing, generic `\#` writer form) |
+| 4025 | IPSECKEY | Implemented (typed `rdata.IPSECKEY` with all gateway types) |
+| 4255 | SSHFP | Implemented (typed `rdata.SSHFP`) |
+| 4343 | Case insensitivity | Followed (names canonicalised to lowercase wire form) |
+| 4408 | SPF record | Implemented (typed `rdata.SPF` — wire format identical to TXT) |
 | 4592 | Role of the Wildcard Label in the DNS | Implemented (authoritative wildcard synthesis with closest-encloser semantics) |
+| 4701 | DHCID | Implemented (typed `rdata.DHCID`) |
+| 4892 | id.server / hostname.bind | Implemented (`dnsserver/chaos` handler answers CHAOS-class TXT) |
+| 5205 | HIP record | Implemented (typed `rdata.HIP`) |
+| 6742 | ILNP DNS resource records | Implemented (typed `rdata.NID`/`L32`/`L64`/`LP`) |
 | 6761 | Special-Use Domain Names | Implemented (`dnsclient/specialuse`: localhost / invalid / test / onion / alt; `local` deferred to mDNS) |
 | 6762 | Multicast DNS (mDNS) | Implemented (browse + parse via `mdns/`; service publication is out of scope) |
 | 6763 | DNS-Based Service Discovery (DNS-SD) | Implemented (`mdns.Browse` returns Service entries with SRV/TXT/A/AAAA merged) |
 | 6891 | Extension Mechanisms for DNS (EDNS(0)) | Implemented (OPT pseudo-RR, UDP size, DO bit, extended RCODE) |
+| 7043 | EUI48 / EUI64 | Implemented (typed `rdata.EUI48`, `rdata.EUI64`) |
+| 7314 | EDNS EXPIRE option | Implemented (typed `dnsmsg.NewEDNSExpire` + parser) |
+| 7553 | URI record | Implemented (typed `rdata.URI`) |
 | 7766 | DNS Transport over TCP | Partial (server-side multi-query per connection + idle timeout; no client-side keepalive) |
+| 7828 | edns-tcp-keepalive | Implemented (typed `dnsmsg.NewTCPKeepalive` + parser) |
+| 7871 | EDNS Client Subnet | Implemented (typed `dnsmsg.NewClientSubnet` + parser, IPv4/IPv6) |
+| 7873 | DNS Cookies | Implemented (typed `dnsmsg.NewClientCookie` / `NewClientServerCookie`; full client/server state machine still TODO) |
+| 8490 | DNS Stateful Operations | Partial (TLV codec + KeepAlive/RetryDelay/EncryptionPadding TLVs in `dso/`; no transport binding yet) |
 | 8499 | DNS Terminology | Followed (no master/slave terminology in code or docs — primary/secondary throughout) |
+| 8777 | DNS Reverse IP AMT Discovery | Implemented (`dnsclient/amt.Discover` — SRV `_amt._udp.<domain>` lookup, RFC 2782 ranking) |
+| 8914 | Extended DNS Errors | Implemented (typed `dnsmsg.NewExtendedError` + parser, full info-code constants) |
+| 8976 | ZONEMD | Implemented (typed `rdata.ZONEMD`) |
+| 9461 | SVCB Mapping for DNS Servers | Implemented (`SvcParamDOHPath` + typed `SVCB.DOHPath()` accessor) |
+| 9462 | Discovery of Designated Resolvers | Implemented (`dnsclient/ddr.Discover` returns ranked DoT/DoH/DoQ Endpoints) |
+| 9567 | DNS Error Reporting | Implemented (Report-Channel EDNS option 18 + `BuildErrorReportName` synthetic-name helper) |
+| 9606 | DNS Resolver Information (RESINFO) | Implemented (typed `rdata.RESINFO`) |
+| 9660 | DNS Zone Version Option | Implemented (`dnsmsg.NewZoneVersionQuery`/`NewZoneVersionSOASerial`) |
 | ANAME draft (`draft-ietf-dnsop-aname`) | Address-specific aliases | Out of scope (still a draft; no IANA RR type assignment) |
 
 ### Update operations
@@ -94,11 +129,12 @@ Status legend: **Implemented** = working code with tests; **Partial** = document
 
 | RFC | Title | Status |
 |-----|-------|--------|
+| 2537 / 3110 | RSAMD5 / RSA SIG/KEY Resource Records | Implemented (algorithm constants; RSAMD5 deprecated per RFC 8624 — recognised in registry, not used for new signatures) |
 | 2931 | DNS Request and Transaction Signatures (SIG(0)) | Implemented (sign + verify in `sig0/` for RSASHA256, RSASHA512, ECDSAP256, ECDSAP384, Ed25519) |
 | 3007 | Secure Domain Name System Dynamic Update | Implemented (`dnsupdate.Builder.SignedWire` produces TSIG-signed UPDATE wire bytes) |
-| 3110 | RSA SIG/KEY Resource Records | Implemented (RSA pubkey wire format) |
+| 3445 | Limiting the Scope of (DNS)KEY | Followed (DNSKEY flag constants `DNSKEYFlagZone`/`Revoke`/`SEP` reflect the post-3445 narrowed scope) |
 | 4034 | Resource Records for the DNS Security Extensions | Implemented (DNSKEY, RRSIG, NSEC; canonical form §6) |
-| 4035 | Protocol Modifications for DNSSEC | Partial (verification primitives only — no chain-of-trust walker, no NSEC/NSEC3 negative-proof validation) |
+| 4035 | Protocol Modifications for DNSSEC | Partial (verification primitives + framework `dnssec/validator` with NTA store, BogusPolicy, ValidateRRset/VerifyDelegation; recursive chain walker still TODO) |
 | 4509 | Use of SHA-256 in DNSSEC Delegation Signer | Implemented (DS digest type 2) |
 | 5155 | DNSSEC Hashed Authenticated Denial of Existence | Partial (NSEC3 + NSEC3PARAM encode/decode; validator does not yet consume) |
 | 5702 | RSA/SHA-2 in DNSSEC | Implemented (RSASHA256, RSASHA512) |
@@ -109,14 +145,15 @@ Status legend: **Implemented** = working code with tests; **Partial** = document
 | 6944 | DNSKEY Algorithm Implementation Status | Followed (modern algorithms — RSASHA256, ECDSAP256, ECDSAP384, Ed25519 — implemented; legacy algorithms and SHA-1 only where required by other RFCs) |
 | 6975 | Signaling Cryptographic Algorithm Understanding | Implemented (`NewAlgorithmUnderstood` for DAU/DHU/N3U EDNS options) |
 | 7858 | DNS over Transport Layer Security (DoT) | Implemented |
-| 8080 | Edwards-Curve DSA for DNSSEC | Implemented (Ed25519; Ed448 not yet — IANA-listed but rare) |
+| 8080 | Edwards-Curve DSA for DNSSEC | Implemented (Ed25519; Ed448 algorithm constant present, signing/verification not wired) |
 | 8162 | Using Secure DNS to Associate Certificates with Domain Names for S/MIME | Implemented (typed `rdata.SMIMEA`) |
 | 8484 | DNS Queries over HTTPS (DoH) | Implemented (POST + GET) |
 | 8624 | DNSSEC Algorithm Implementation Requirements | Followed |
 | 8659 | DNS Certification Authority Authorization (CAA) | Implemented |
 | 8945 | Secret Key Transaction Authentication for DNS (TSIG) | Implemented (hmac-sha1/256/384/512; bridge into UPDATE via `dnsupdate.SignedWire`) |
 | 9250 | DNS over Dedicated QUIC Connections (DoQ) | Implemented |
-| 9460 | Service Binding (SVCB) and HTTPS Resource Records | Implemented (typed accessors for ALPN, port, IPv4/IPv6 hints) |
+| 9460 | Service Binding (SVCB) and HTTPS Resource Records | Implemented (typed accessors for ALPN, port, IPv4/IPv6 hints, dohpath) |
+| Compact Denial draft (`draft-ietf-dnsop-compact-denial-of-existence`) | Compact Denial of Existence | Partial (NXNAME pseudo-type + `validator.IsCompactNXDOMAIN` classifier; full validator integration awaits NSEC/NSEC3 walker) |
 | DNSCrypt v2 (non-IETF) | Trusted DNS Queries | Implemented (`dnscrypt/`: cert parse + verify, X25519 + XChaCha20-Poly1305 encrypt/decrypt, transport.Exchanger) |
 
 ### Out of scope
@@ -125,9 +162,7 @@ Status legend: **Implemented** = working code with tests; **Partial** = document
 |-----|-------|--------|
 | 6762 publishing | Service announcement (mDNS) | Browse-only for now; announcer requires interface enumeration + cache-flush handling not yet built |
 | 7816 / 9156 | QNAME Minimisation | Recursive resolver is straight-walk for now |
-| 7873 | DNS Cookies | EDNS option code reserved (`EDNSOptionCookie`) but no cookie state machine |
 | 8198 | Aggressive NSEC Caching | Builds on full NSEC validation, not yet present |
-| 8914 | Extended DNS Errors | Option code reserved (`EDNSOptionExtendedDNS`) but server doesn't yet emit |
 
 ## Go conventions (in addition to ~/.claude/docs/go.md)
 
