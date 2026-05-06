@@ -14,7 +14,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestSignedWire(t *testing.T) {
+func TestSignedUpdate(t *testing.T) {
 	t.Parallel()
 
 	secret := make([]byte, 32)
@@ -30,16 +30,19 @@ func TestSignedWire(t *testing.T) {
 		rdata.NewA(netip.MustParseAddr("198.51.100.5")))
 
 	now := time.Now().Truncate(time.Second)
-	signed, err := dnsupdate.NewBuilder(dnsname.MustParse("example.com")).
+	msg, err := dnsupdate.NewBuilder(dnsname.MustParse("example.com")).
 		AddRRset(rec).
-		SignedWire(key, now, 5*time.Minute)
+		Build()
+	require.NoError(t, err)
+
+	signed, err := tsig.SignMessage(msg, key, now, 5*time.Minute)
 	require.NoError(t, err)
 
 	body, _, err := tsig.Verify(signed, key, now, 5*time.Minute)
 	require.NoError(t, err)
 
-	m, err := dnsmsg.Unmarshal(body)
+	verified, err := dnsmsg.Unmarshal(body)
 	require.NoError(t, err)
-	require.Equal(t, dnsmsg.OpcodeUpdate, m.Flags().Opcode())
-	require.Equal(t, 1, len(m.Authorities())) // the add-RRset
+	require.Equal(t, dnsmsg.OpcodeUpdate, verified.Flags().Opcode())
+	require.Equal(t, 1, len(verified.Authorities())) // the add-RRset
 }

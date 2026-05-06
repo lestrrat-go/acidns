@@ -2,9 +2,11 @@
 //
 // A primary nameserver sends NOTIFY messages to its secondaries when a
 // zone changes; the secondaries respond with a simple ACK and may then
-// fetch the new zone via AXFR or IXFR. This package provides Send for
-// the primary, and a SOA-bearing variant SendWithSOA that includes the
-// new SOA in the answer section as RFC 1996 §3.7 permits.
+// fetch the new zone via AXFR or IXFR.
+//
+// The caller chooses the transport — typically UDP, but TCP / DoT / DoQ
+// are equally valid since NOTIFY is a single-message exchange that fits
+// the transport.Exchanger contract.
 package notify
 
 import (
@@ -12,11 +14,9 @@ import (
 	"crypto/rand"
 	"encoding/binary"
 	"fmt"
-	"net/netip"
 	"time"
 
 	"github.com/lestrrat-go/acidns/dnsclient/transport"
-	"github.com/lestrrat-go/acidns/dnsclient/transport/udp"
 	"github.com/lestrrat-go/acidns/dnsmsg"
 	"github.com/lestrrat-go/acidns/dnsmsg/rdata"
 	"github.com/lestrrat-go/acidns/dnsmsg/rrtype"
@@ -36,6 +36,7 @@ type config struct {
 }
 
 // WithTimeout sets the per-secondary timeout when ctx has no deadline.
+// Defaults to 5 seconds.
 func WithTimeout(d time.Duration) Option {
 	return optionFunc(func(c *config) { c.timeout = d })
 }
@@ -47,8 +48,8 @@ func WithSOA(soa rdata.SOA) Option {
 	return optionFunc(func(c *config) { c.soa = soa })
 }
 
-// Send sends a NOTIFY for zone to one secondary and waits for the ACK.
-func Send(ctx context.Context, secondary netip.AddrPort, zone dnsname.Name, opts ...Option) (dnsmsg.Message, error) {
+// Send transmits a NOTIFY for zone over ex and waits for the ACK.
+func Send(ctx context.Context, ex transport.Exchanger, zone dnsname.Name, opts ...Option) (dnsmsg.Message, error) {
 	c := config{timeout: 5 * time.Second}
 	for _, o := range opts {
 		o.applyNotify(&c)
@@ -75,38 +76,49 @@ func Send(ctx context.Context, secondary netip.AddrPort, zone dnsname.Name, opts
 		ctx, cancel = context.WithTimeout(ctx, c.timeout)
 		defer cancel()
 	}
-	ex, err := udp.New(secondary)
-	if err != nil {
-		return nil, err
-	}
 	return ex.Exchange(ctx, q)
 }
 
-// Broadcast sends NOTIFY in parallel to many secondaries and returns a
-// per-secondary result map. Errors do not abort the broadcast.
-func Broadcast(ctx context.Context, secondaries []netip.AddrPort, zone dnsname.Name, opts ...Option) map[netip.AddrPort]error {
-	results := make(map[netip.AddrPort]error, len(secondaries))
-	type r struct {
-		addr netip.AddrPort
-		err  error
-	}
-	ch := make(chan r, len(secondaries))
-	for _, s := range secondaries {
-		go func(addr netip.AddrPort) {
-			_, err := Send(ctx, addr, zone, opts...)
-			ch <- r{addr: addr, err: err}
-		}(s)
-	}
-	for range secondaries {
-		got := <-ch
-		results[got.addr] = got.err
-	}
-	return results
+// Result captures one secondary's response from Broadcast.
+type Result interface {
+	Exchanger() transport.Exchanger
+	Response() dnsmsg.Message
+	Err() error
 }
 
-// Suppress unused-import warning when building without callers using the
-// transport package directly.
-var _ transport.Exchanger
+type result struct {
+	ex   transport.Exchanger
+	resp dnsmsg.Message
+	err  error
+}
+
+func (r result) Exchanger() transport.Exchanger { return r.ex }
+func (r result) Response() dnsmsg.Message       { return r.resp }
+func (r result) Err() error                     { return r.err }
+
+// Broadcast sends NOTIFY in parallel to many secondaries and returns one
+// Result per exchanger, in the order supplied. Errors on individual
+// secondaries do not abort the broadcast.
+func Broadcast(ctx context.Context, exs []transport.Exchanger, zone dnsname.Name, opts ...Option) []Result {
+	out := make([]Result, len(exs))
+	type slot struct {
+		idx  int
+		resp dnsmsg.Message
+		err  error
+	}
+	ch := make(chan slot, len(exs))
+	for i, ex := range exs {
+		go func(i int, ex transport.Exchanger) {
+			resp, err := Send(ctx, ex, zone, opts...)
+			ch <- slot{idx: i, resp: resp, err: err}
+		}(i, ex)
+	}
+	for range exs {
+		s := <-ch
+		out[s.idx] = result{ex: exs[s.idx], resp: s.resp, err: s.err}
+	}
+	return out
+}
 
 func randomID() (uint16, error) {
 	var b [2]byte

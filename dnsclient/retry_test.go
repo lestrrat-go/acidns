@@ -26,7 +26,7 @@ func TestFalloverProgressesOnError(t *testing.T) {
 	r, err := dnsclient.New(dnsclient.WithServers(bad, good))
 	require.NoError(t, err)
 
-	addrs, err := r.LookupHost(t.Context(), "example.com")
+	addrs, err := dnsclient.LookupHost(t.Context(), r, "example.com")
 	require.NoError(t, err)
 	require.Equal(t, 1, len(addrs))
 	require.Equal(t, "198.51.100.7", addrs[0].String())
@@ -43,7 +43,7 @@ func TestPerAttemptTimeoutDoesNotCancelOuter(t *testing.T) {
 	)
 	require.NoError(t, err)
 
-	addrs, err := r.LookupHost(t.Context(), "example.com")
+	addrs, err := dnsclient.LookupHost(t.Context(), r, "example.com")
 	require.NoError(t, err)
 	require.Equal(t, "198.51.100.8", addrs[0].String())
 }
@@ -62,7 +62,7 @@ func TestRetryRespectsContext(t *testing.T) {
 
 	ctx, cancel := context.WithTimeout(t.Context(), 100*time.Millisecond)
 	defer cancel()
-	_, err = r.LookupHost(ctx, "example.com")
+	_, err = dnsclient.LookupHost(ctx, r, "example.com")
 	require.Error(t, err)
 	// Either deadline exceeded or a wrapped variant — accept any non-nil.
 	require.True(t, ctx.Err() != nil || errors.Is(err, context.DeadlineExceeded) || err != nil)

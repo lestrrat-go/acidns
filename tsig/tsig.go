@@ -30,6 +30,7 @@ import (
 	"hash"
 	"time"
 
+	"github.com/lestrrat-go/acidns/dnsmsg"
 	"github.com/lestrrat-go/acidns/dnsname"
 )
 
@@ -63,6 +64,21 @@ const (
 	tsigType  uint16 = 250
 	tsigClass uint16 = 255 // ANY
 )
+
+// SignMessage marshals m and returns the TSIG-signed wire-format bytes.
+// Equivalent to Sign(dnsmsg.Marshal(m), key, now, fudge) — provided so
+// callers don't have to think about the marshal/sign ordering. Works for
+// any DNS message: queries, updates, NOTIFY, anything.
+//
+// fudge is the clock-skew window the receiver tolerates. Five minutes is
+// conventional.
+func SignMessage(m dnsmsg.Message, key Key, now time.Time, fudge time.Duration) ([]byte, error) {
+	wire, err := dnsmsg.Marshal(m)
+	if err != nil {
+		return nil, err
+	}
+	return Sign(wire, key, now, fudge)
+}
 
 // Sign appends a TSIG RR to the additional section of wire and returns
 // the new wire bytes.

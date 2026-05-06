@@ -51,9 +51,11 @@ func TestUpdateAddRRset(t *testing.T) {
 
 	ex, err := udp.New(addr)
 	require.NoError(t, err)
-	resp, err := dnsupdate.NewBuilder(dnsname.MustParse("example.com")).
+	msg, err := dnsupdate.NewBuilder(dnsname.MustParse("example.com")).
 		AddRRset(new).
-		Send(t.Context(), ex)
+		Build()
+	require.NoError(t, err)
+	resp, err := ex.Exchange(t.Context(), msg)
 	require.NoError(t, err)
 	require.Equal(t, dnsmsg.RCODENoError, resp.Flags().RCODE())
 
@@ -75,9 +77,11 @@ func TestUpdateDeleteRRset(t *testing.T) {
 
 	ex, err := udp.New(addr)
 	require.NoError(t, err)
-	resp, err := dnsupdate.NewBuilder(dnsname.MustParse("example.com")).
+	msg, err := dnsupdate.NewBuilder(dnsname.MustParse("example.com")).
 		DeleteRRset(dnsname.MustParse("www.example.com"), rrtype.A).
-		Send(t.Context(), ex)
+		Build()
+	require.NoError(t, err)
+	resp, err := ex.Exchange(t.Context(), msg)
 	require.NoError(t, err)
 	require.Equal(t, dnsmsg.RCODENoError, resp.Flags().RCODE())
 
@@ -97,11 +101,13 @@ func TestUpdatePrereqRRsetExistsFails(t *testing.T) {
 
 	ex, err := udp.New(addr)
 	require.NoError(t, err)
-	resp, err := dnsupdate.NewBuilder(dnsname.MustParse("example.com")).
+	msg, err := dnsupdate.NewBuilder(dnsname.MustParse("example.com")).
 		PrereqRRsetExists(dnsname.MustParse("nope.example.com"), rrtype.A).
 		AddRRset(dnsmsg.NewRecord(dnsname.MustParse("blog.example.com"), 60*time.Second,
 			rdata.NewA(netip.MustParseAddr("198.51.100.7")))).
-		Send(t.Context(), ex)
+		Build()
+	require.NoError(t, err)
+	resp, err := ex.Exchange(t.Context(), msg)
 	require.NoError(t, err)
 	require.Equal(t, dnsmsg.RCODENXRRSet, resp.Flags().RCODE())
 }
@@ -112,11 +118,13 @@ func TestUpdatePrereqRRsetAbsentSucceeds(t *testing.T) {
 
 	ex, err := udp.New(addr)
 	require.NoError(t, err)
-	resp, err := dnsupdate.NewBuilder(dnsname.MustParse("example.com")).
+	msg, err := dnsupdate.NewBuilder(dnsname.MustParse("example.com")).
 		PrereqRRsetAbsent(dnsname.MustParse("blog.example.com"), rrtype.A).
 		AddRRset(dnsmsg.NewRecord(dnsname.MustParse("blog.example.com"), 60*time.Second,
 			rdata.NewA(netip.MustParseAddr("198.51.100.8")))).
-		Send(t.Context(), ex)
+		Build()
+	require.NoError(t, err)
+	resp, err := ex.Exchange(t.Context(), msg)
 	require.NoError(t, err)
 	require.Equal(t, dnsmsg.RCODENoError, resp.Flags().RCODE())
 }
@@ -126,10 +134,12 @@ func TestUpdateOutOfZoneRefused(t *testing.T) {
 	_, addr := startUpdatable(t)
 	ex, err := udp.New(addr)
 	require.NoError(t, err)
-	resp, err := dnsupdate.NewBuilder(dnsname.MustParse("example.org")).
+	msg, err := dnsupdate.NewBuilder(dnsname.MustParse("example.org")).
 		AddRRset(dnsmsg.NewRecord(dnsname.MustParse("a.example.org"), 60*time.Second,
 			rdata.NewA(netip.MustParseAddr("198.51.100.9")))).
-		Send(t.Context(), ex)
+		Build()
+	require.NoError(t, err)
+	resp, err := ex.Exchange(t.Context(), msg)
 	require.NoError(t, err)
 	require.Equal(t, dnsmsg.RCODENotAuth, resp.Flags().RCODE())
 }

@@ -47,9 +47,11 @@ func TestSpecialUseInvalid(t *testing.T) {
 	t.Parallel()
 	r, err := dnsclient.New(dnsclient.WithExchanger(failExchanger{t}))
 	require.NoError(t, err)
-	ans, err := r.Resolve(t.Context(), dnsname.MustParse("nope.invalid"), rrtype.A)
-	require.NoError(t, err)
-	require.Equal(t, dnsmsg.RCODENXDomain, ans.RCODE())
+	_, err = r.Resolve(t.Context(), dnsname.MustParse("nope.invalid"), rrtype.A)
+	require.ErrorIs(t, err, dnsclient.ErrNXDOMAIN)
+	var rerr *dnsclient.RCodeError
+	require.ErrorAs(t, err, &rerr)
+	require.Equal(t, dnsmsg.RCODENXDomain, rerr.Answer.RCODE())
 }
 
 // recordingExchanger captures the most recent question so tests can assert
@@ -73,12 +75,12 @@ func TestSpecialUseDisabled(t *testing.T) {
 	rec := &recordingExchanger{}
 	r, err := dnsclient.New(
 		dnsclient.WithExchanger(rec),
-		dnsclient.WithoutSpecialUse(),
+		dnsclient.WithSpecialUse(false),
 	)
 	require.NoError(t, err)
 	ans, err := r.Resolve(t.Context(), dnsname.MustParse("anything.localhost"), rrtype.A)
 	require.NoError(t, err)
-	require.True(t, rec.called, "with WithoutSpecialUse the network must be used")
+	require.True(t, rec.called, "with WithSpecialUse(false) the network must be used")
 	require.Equal(t, 1, len(ans.Records()))
 	require.Equal(t, "192.0.2.1", ans.Records()[0].RData().(rdata.A).Addr().String())
 }

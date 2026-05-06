@@ -2,12 +2,16 @@ package axfr_test
 
 import (
 	"context"
+	"io"
 	"net/netip"
 	"strings"
 	"testing"
 	"time"
 
 	"github.com/lestrrat-go/acidns/dnsclient/axfr"
+	"github.com/lestrrat-go/acidns/dnsclient/transport"
+	"github.com/lestrrat-go/acidns/dnsclient/transport/tcp"
+	"github.com/lestrrat-go/acidns/dnsmsg"
 	"github.com/lestrrat-go/acidns/dnsmsg/rrtype"
 	"github.com/lestrrat-go/acidns/dnsname"
 	"github.com/lestrrat-go/acidns/dnsserver"
@@ -28,6 +32,15 @@ mail IN A    192.0.2.3
 mail IN MX   10 mail.example.com.
 `
 
+func newStreamEx(t *testing.T, addr netip.AddrPort) transport.StreamExchanger {
+	t.Helper()
+	ex, err := tcp.New(addr)
+	require.NoError(t, err)
+	sx, ok := ex.(transport.StreamExchanger)
+	require.True(t, ok, "tcp must implement StreamExchanger")
+	return sx
+}
+
 func TestTransferRoundTrip(t *testing.T) {
 	t.Parallel()
 
@@ -44,15 +57,24 @@ func TestTransferRoundTrip(t *testing.T) {
 
 	xferCtx, xcancel := context.WithTimeout(t.Context(), 5*time.Second)
 	defer xcancel()
-	records, err := axfr.Transfer(xferCtx, srv.Addr(), dnsname.MustParse("example.com"))
+	xfer, err := axfr.Start(xferCtx, newStreamEx(t, srv.Addr()), dnsname.MustParse("example.com"))
 	require.NoError(t, err)
+	defer xfer.Close()
+
+	var records []dnsmsg.Record
+	for {
+		ev, err := xfer.Next(xferCtx)
+		if err == io.EOF {
+			break
+		}
+		require.NoError(t, err)
+		records = append(records, ev.Record())
+	}
 	require.GreaterOrEqual(t, len(records), 3)
 
-	// First and last must be SOA.
 	require.Equal(t, rrtype.SOA, records[0].Type())
 	require.Equal(t, rrtype.SOA, records[len(records)-1].Type())
 
-	// Body should contain at least one A and the MX.
 	var hasA, hasMX bool
 	for _, r := range records[1 : len(records)-1] {
 		switch r.Type() {
@@ -77,6 +99,12 @@ func TestTransferRefusedOutOfZone(t *testing.T) {
 	t.Cleanup(cancel)
 	go func() { _ = srv.Serve(ctx) }()
 
-	_, err = axfr.Transfer(t.Context(), srv.Addr(), dnsname.MustParse("example.org"))
+	xfer, err := axfr.Start(t.Context(), newStreamEx(t, srv.Addr()), dnsname.MustParse("example.org"))
+	if err == nil {
+		// Some servers send a single SERVFAIL/REFUSED message — the recReader
+		// surfaces that as an error on the first Next call.
+		defer xfer.Close()
+		_, err = xfer.Next(t.Context())
+	}
 	require.Error(t, err)
 }

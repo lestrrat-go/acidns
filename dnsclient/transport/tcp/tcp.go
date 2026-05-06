@@ -61,3 +61,19 @@ func (e *exchanger) Exchange(ctx context.Context, q dnsmsg.Message) (dnsmsg.Mess
 	}
 	return streamframe.Exchange(ctx, conn, q, e.timeout)
 }
+
+// Stream sends q over a fresh TCP connection and returns a MessageStream
+// from which the caller pulls responses. The stream MUST be closed by the
+// caller to release the connection.
+func (e *exchanger) Stream(ctx context.Context, q dnsmsg.Message) (transport.MessageStream, error) {
+	var d net.Dialer
+	conn, err := d.DialContext(ctx, "tcp", e.addr.String())
+	if err != nil {
+		return nil, fmt.Errorf("tcp: dial %s: %w", e.addr, err)
+	}
+	s, err := streamframe.NewConnStream(ctx, conn, q, e.timeout)
+	if err != nil {
+		return nil, fmt.Errorf("tcp: %w", err)
+	}
+	return s, nil
+}

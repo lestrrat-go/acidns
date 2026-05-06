@@ -38,7 +38,7 @@ func main() {
 	defer cancel()
 
 	if *rrType == "" {
-		addrs, err := r.LookupHost(ctx, host)
+		addrs, err := dnsclient.LookupHost(ctx, r, host)
 		check(err)
 		for _, a := range addrs {
 			fmt.Println(a)

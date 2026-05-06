@@ -1,0 +1,121 @@
+package dnsclient
+
+import (
+	"context"
+	"net/netip"
+	"strings"
+	"sync"
+
+	"github.com/lestrrat-go/acidns/dnsmsg/rdata"
+	"github.com/lestrrat-go/acidns/dnsmsg/rrtype"
+	"github.com/lestrrat-go/acidns/dnsname"
+)
+
+// LookupHost dispatches A and AAAA queries for host concurrently and returns
+// every address either query produced. If r satisfies SearchLister, the host
+// string is expanded against the search list using its Ndots threshold;
+// trailing-dot names bypass expansion.
+//
+// A non-NoError RCODE on any individual sub-query is treated as a soft fail:
+// LookupHost continues to the next candidate name. Only when no candidate
+// produces addresses does the most recent error surface to the caller.
+func LookupHost(ctx context.Context, r Resolver, host string) ([]netip.Addr, error) {
+	candidates, err := candidateNames(r, host)
+	if err != nil {
+		return nil, err
+	}
+	var firstErr error
+	for _, name := range candidates {
+		addrs, err := lookupHostAbsolute(ctx, r, name)
+		if err != nil {
+			if firstErr == nil {
+				firstErr = err
+			}
+			continue
+		}
+		if len(addrs) > 0 {
+			return addrs, nil
+		}
+	}
+	if firstErr != nil {
+		return nil, firstErr
+	}
+	return nil, nil
+}
+
+// candidateNames builds the ordered list of FQDNs to attempt for a LookupHost
+// call. When r does not satisfy SearchLister (or the search list is empty),
+// only the parsed host is returned.
+func candidateNames(r Resolver, host string) ([]dnsname.Name, error) {
+	absolute := strings.HasSuffix(host, ".")
+	base, err := dnsname.Parse(host)
+	if err != nil {
+		return nil, err
+	}
+	sl, ok := r.(SearchLister)
+	if absolute || !ok || len(sl.SearchList()) == 0 {
+		return []dnsname.Name{base}, nil
+	}
+	dots := strings.Count(strings.TrimSuffix(host, "."), ".")
+	list := sl.SearchList()
+	suffixed := make([]dnsname.Name, 0, len(list))
+	for _, s := range list {
+		n, err := dnsname.Parse(host + "." + s.String())
+		if err != nil {
+			continue
+		}
+		suffixed = append(suffixed, n)
+	}
+	if dots >= sl.Ndots() {
+		return append([]dnsname.Name{base}, suffixed...), nil
+	}
+	return append(suffixed, base), nil
+}
+
+func lookupHostAbsolute(ctx context.Context, r Resolver, name dnsname.Name) ([]netip.Addr, error) {
+	type result struct {
+		addrs []netip.Addr
+		err   error
+	}
+	ch := make(chan result, 2)
+	var wg sync.WaitGroup
+	wg.Add(2)
+
+	dispatch := func(t rrtype.Type) {
+		defer wg.Done()
+		ans, err := r.Resolve(ctx, name, t)
+		if err != nil {
+			ch <- result{err: err}
+			return
+		}
+		out := make([]netip.Addr, 0, len(ans.Records()))
+		for _, rec := range ans.Records() {
+			switch rec.Type() {
+			case rrtype.A:
+				out = append(out, rec.RData().(rdata.A).Addr())
+			case rrtype.AAAA:
+				out = append(out, rec.RData().(rdata.AAAA).Addr())
+			}
+		}
+		ch <- result{addrs: out}
+	}
+	go dispatch(rrtype.A)
+	go dispatch(rrtype.AAAA)
+	wg.Wait()
+	close(ch)
+
+	var addrs []netip.Addr
+	var firstErr error
+	for got := range ch {
+		if got.err != nil && firstErr == nil {
+			firstErr = got.err
+			continue
+		}
+		addrs = append(addrs, got.addrs...)
+	}
+	if len(addrs) == 0 && firstErr != nil {
+		return nil, firstErr
+	}
+	return addrs, nil
+}
+

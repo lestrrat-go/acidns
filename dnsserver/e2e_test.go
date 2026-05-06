@@ -70,7 +70,7 @@ func TestE2EAuthoritativeOverUDPAndTCP(t *testing.T) {
 	defer cancel()
 
 	t.Run("LookupHost www", func(t *testing.T) {
-		addrs, err := r.LookupHost(ctx, "www.example.com")
+		addrs, err := dnsclient.LookupHost(ctx, r, "www.example.com")
 		require.NoError(t, err)
 		got := make([]string, len(addrs))
 		for i, a := range addrs {
@@ -93,10 +93,11 @@ func TestE2EAuthoritativeOverUDPAndTCP(t *testing.T) {
 	})
 
 	t.Run("NXDOMAIN", func(t *testing.T) {
-		ans, err := r.Resolve(ctx, dnsname.MustParse("nope.example.com"), rrtype.A)
-		require.NoError(t, err)
-		require.Equal(t, dnsmsg.RCODENXDomain, ans.RCODE())
-		require.Equal(t, 1, len(ans.Raw().Authorities()))
+		_, err := r.Resolve(ctx, dnsname.MustParse("nope.example.com"), rrtype.A)
+		require.ErrorIs(t, err, dnsclient.ErrNXDOMAIN)
+		var rerr *dnsclient.RCodeError
+		require.ErrorAs(t, err, &rerr)
+		require.Equal(t, 1, len(rerr.Answer.Raw().Authorities()))
 	})
 
 	t.Run("NODATA", func(t *testing.T) {
@@ -118,8 +119,7 @@ func TestE2EAuthoritativeOverUDPAndTCP(t *testing.T) {
 	})
 
 	t.Run("REFUSED out-of-zone", func(t *testing.T) {
-		ans, err := r.Resolve(ctx, dnsname.MustParse("example.org"), rrtype.A)
-		require.NoError(t, err)
-		require.Equal(t, dnsmsg.RCODERefused, ans.RCODE())
+		_, err := r.Resolve(ctx, dnsname.MustParse("example.org"), rrtype.A)
+		require.ErrorIs(t, err, dnsclient.ErrRefused)
 	})
 }

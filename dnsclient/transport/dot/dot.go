@@ -92,3 +92,19 @@ func (e *exchanger) Exchange(ctx context.Context, q dnsmsg.Message) (dnsmsg.Mess
 	}
 	return streamframe.Exchange(ctx, conn, q, e.timeout)
 }
+
+// Stream sends q over a fresh TLS connection and returns a MessageStream
+// from which the caller pulls responses. Implements XoT (RFC 9103) when
+// q is an AXFR/IXFR query.
+func (e *exchanger) Stream(ctx context.Context, q dnsmsg.Message) (transport.MessageStream, error) {
+	d := tls.Dialer{Config: e.tlsConfig, NetDialer: &net.Dialer{}}
+	conn, err := d.DialContext(ctx, "tcp", e.addr.String())
+	if err != nil {
+		return nil, fmt.Errorf("dot: dial %s: %w", e.addr, err)
+	}
+	s, err := streamframe.NewConnStream(ctx, conn, q, e.timeout)
+	if err != nil {
+		return nil, fmt.Errorf("dot: %w", err)
+	}
+	return s, nil
+}

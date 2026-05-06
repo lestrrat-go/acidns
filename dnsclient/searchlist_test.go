@@ -84,7 +84,7 @@ func TestSearchListSuffixed(t *testing.T) {
 	)
 	require.NoError(t, err)
 
-	addrs, err := r.LookupHost(t.Context(), "host")
+	addrs, err := dnsclient.LookupHost(t.Context(), r, "host")
 	require.NoError(t, err)
 	require.Equal(t, 1, len(addrs))
 	require.Equal(t, "192.0.2.1", addrs[0].String())
@@ -107,7 +107,7 @@ func TestSearchListAbsoluteSkipsSearch(t *testing.T) {
 	)
 	require.NoError(t, err)
 
-	addrs, err := r.LookupHost(t.Context(), "host.")
+	addrs, err := dnsclient.LookupHost(t.Context(), r, "host.")
 	require.NoError(t, err)
 	require.Equal(t, 1, len(addrs))
 
@@ -130,7 +130,7 @@ func TestSearchListNdotsAbsoluteFirst(t *testing.T) {
 	)
 	require.NoError(t, err)
 
-	addrs, err := r.LookupHost(t.Context(), "a.b.c")
+	addrs, err := dnsclient.LookupHost(t.Context(), r, "a.b.c")
 	require.NoError(t, err)
 	require.Equal(t, 1, len(addrs))
 
@@ -162,6 +162,6 @@ func TestSearchListUnused(t *testing.T) {
 	r, err := dnsclient.New(dnsclient.WithExchanger(ex))
 	require.NoError(t, err)
 
-	_, err = r.LookupHost(context.WithValue(t.Context(), struct{}{}, 1), "host.")
+	_, err = dnsclient.LookupHost(context.WithValue(t.Context(), struct{}{}, 1), r, "host.")
 	require.NoError(t, err)
 }

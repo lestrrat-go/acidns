@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/lestrrat-go/acidns/dnsclient/notify"
+	"github.com/lestrrat-go/acidns/dnsclient/transport/udp"
 	"github.com/lestrrat-go/acidns/dnsmsg"
 	"github.com/lestrrat-go/acidns/dnsname"
 	"github.com/lestrrat-go/acidns/dnsserver"
@@ -49,7 +50,9 @@ func TestSendNotifyAcks(t *testing.T) {
 		fired.Add(1)
 	})
 
-	resp, err := notify.Send(t.Context(), addr, dnsname.MustParse("example.com"))
+	ex, err := udp.New(addr)
+	require.NoError(t, err)
+	resp, err := notify.Send(t.Context(), ex, dnsname.MustParse("example.com"))
 	require.NoError(t, err)
 	require.Equal(t, dnsmsg.OpcodeNotify, resp.Flags().Opcode())
 	require.True(t, resp.Flags().Response())
@@ -63,7 +66,9 @@ func TestSendNotifyAcks(t *testing.T) {
 func TestNotifyForUnservedZoneNotAuth(t *testing.T) {
 	t.Parallel()
 	addr := startSecondary(t, nil)
-	resp, err := notify.Send(t.Context(), addr, dnsname.MustParse("example.org"))
+	ex, err := udp.New(addr)
+	require.NoError(t, err)
+	resp, err := notify.Send(t.Context(), ex, dnsname.MustParse("example.org"))
 	require.NoError(t, err)
 	require.Equal(t, dnsmsg.RCODENotAuth, resp.Flags().RCODE())
 }

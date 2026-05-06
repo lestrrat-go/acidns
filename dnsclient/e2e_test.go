@@ -30,7 +30,7 @@ func TestE2ELiveResolver(t *testing.T) {
 	defer cancel()
 
 	t.Run("UDP LookupHost example.com", func(t *testing.T) {
-		addrs, err := r.LookupHost(ctx, "example.com")
+		addrs, err := dnsclient.LookupHost(ctx, r, "example.com")
 		require.NoError(t, err)
 		require.NotEmpty(t, addrs)
 		t.Logf("example.com -> %v", addrs)
@@ -49,7 +49,7 @@ func TestE2ELiveResolver(t *testing.T) {
 		require.NoError(t, err)
 		rd, err := dnsclient.New(dnsclient.WithExchanger(ex))
 		require.NoError(t, err)
-		addrs, err := rd.LookupHost(ctx, "example.com")
+		addrs, err := dnsclient.LookupHost(ctx, rd, "example.com")
 		require.NoError(t, err)
 		require.NotEmpty(t, addrs)
 		t.Logf("DoT example.com -> %v", addrs)
@@ -60,7 +60,7 @@ func TestE2ELiveResolver(t *testing.T) {
 		require.NoError(t, err)
 		rh, err := dnsclient.New(dnsclient.WithExchanger(ex))
 		require.NoError(t, err)
-		addrs, err := rh.LookupHost(ctx, "example.com")
+		addrs, err := dnsclient.LookupHost(ctx, rh, "example.com")
 		require.NoError(t, err)
 		require.NotEmpty(t, addrs)
 		t.Logf("DoH example.com -> %v", addrs)

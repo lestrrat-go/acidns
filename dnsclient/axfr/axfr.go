@@ -1,10 +1,12 @@
-// Package axfr implements RFC 5936 zone transfer over TCP from the
-// client side.
+// Package axfr implements RFC 5936 zone transfer over a stream transport.
 //
-// The transfer terminates on the second occurrence of the zone's SOA RR,
-// supporting both single-message and streamed responses. Out-of-scope for
-// this version: IXFR (RFC 1995), TSIG-authenticated transfers, and EDNS0
-// chained transfers.
+// Start sends the AXFR query and returns a Transfer iterator. The caller
+// pulls RecordEvents with Next until io.EOF — the leading and trailing
+// SOA are emitted along with the body — and MUST Close the iterator to
+// release the underlying stream.
+//
+// Streaming protocol details (single-message vs. chunked, compression
+// pointer continuity) are handled by the underlying transport.
 package axfr
 
 import (
@@ -14,20 +16,34 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"net"
-	"net/netip"
 	"time"
 
+	"github.com/lestrrat-go/acidns/dnsclient/transport"
 	"github.com/lestrrat-go/acidns/dnsmsg"
+	"github.com/lestrrat-go/acidns/dnsmsg/rdata"
 	"github.com/lestrrat-go/acidns/dnsmsg/rrtype"
 	"github.com/lestrrat-go/acidns/dnsname"
 )
 
-// ErrNoSOA is returned when the server's response stream contains no SOA
-// record, which is malformed per RFC 5936 §2.2.
-var ErrNoSOA = errors.New("axfr: response missing SOA")
+// Transfer is the iterator returned by Start.
+type Transfer interface {
+	NewSOA() rdata.SOA
+	Next(ctx context.Context) (RecordEvent, error)
+	Close() error
+}
 
-// Option configures a transfer.
+// RecordEvent carries a single record from the transfer.
+type RecordEvent interface {
+	isAXFREvent()
+	Record() dnsmsg.Record
+}
+
+type recordEvent struct{ rec dnsmsg.Record }
+
+func (recordEvent) isAXFREvent()            {}
+func (e recordEvent) Record() dnsmsg.Record { return e.rec }
+
+// Option configures a Start call.
 type Option interface{ applyAXFR(*config) }
 
 type optionFunc func(*config)
@@ -38,43 +54,20 @@ type config struct {
 	timeout time.Duration
 }
 
-// WithTimeout sets the overall timeout when the caller's context has no
-// deadline. Defaults to 30 seconds (zone transfers are bigger than ordinary
-// queries).
+// WithTimeout sets the per-stream-message read timeout used when ctx has
+// no deadline. Defaults to 30 seconds.
 func WithTimeout(d time.Duration) Option {
 	return optionFunc(func(c *config) { c.timeout = d })
 }
 
-// Transfer performs a single AXFR against server for zone and returns every
-// record in the zone, in the order the server emitted them. The leading
-// SOA appears first and the trailing SOA appears last.
-func Transfer(ctx context.Context, server netip.AddrPort, zone dnsname.Name, opts ...Option) ([]dnsmsg.Record, error) {
+// Start sends an AXFR query for zone over ex and returns a Transfer
+// iterator positioned just past the leading SOA.
+func Start(ctx context.Context, ex transport.StreamExchanger, zone dnsname.Name, opts ...Option) (Transfer, error) {
 	c := config{timeout: 30 * time.Second}
 	for _, o := range opts {
 		o.applyAXFR(&c)
 	}
-
-	var d net.Dialer
-	conn, err := d.DialContext(ctx, "tcp", server.String())
-	if err != nil {
-		return nil, fmt.Errorf("axfr: dial %s: %w", server, err)
-	}
-	defer conn.Close()
-
-	if dl, ok := ctx.Deadline(); ok {
-		_ = conn.SetDeadline(dl)
-	} else if c.timeout > 0 {
-		_ = conn.SetDeadline(time.Now().Add(c.timeout))
-	}
-	stop := make(chan struct{})
-	defer close(stop)
-	go func() {
-		select {
-		case <-ctx.Done():
-			_ = conn.SetDeadline(time.Now())
-		case <-stop:
-		}
-	}()
+	_ = c // reserved
 
 	id, err := randomID()
 	if err != nil {
@@ -87,73 +80,107 @@ func Transfer(ctx context.Context, server netip.AddrPort, zone dnsname.Name, opt
 	if err != nil {
 		return nil, err
 	}
-	wire, err := dnsmsg.Marshal(q)
+	stream, err := ex.Stream(ctx, q)
 	if err != nil {
+		return nil, fmt.Errorf("axfr: open stream: %w", err)
+	}
+	t := &transfer{stream: stream, reader: &recReader{stream: stream}}
+	if err := t.init(ctx); err != nil {
+		_ = stream.Close()
 		return nil, err
 	}
-	if err := writeMessage(conn, wire); err != nil {
-		return nil, err
-	}
-
-	var records []dnsmsg.Record
-	soas := 0
-	for soas < 2 {
-		body, err := readMessage(conn)
-		if err != nil {
-			return nil, err
-		}
-		resp, err := dnsmsg.Unmarshal(body)
-		if err != nil {
-			return nil, fmt.Errorf("axfr: parse: %w", err)
-		}
-		if resp.ID() != q.ID() {
-			return nil, fmt.Errorf("axfr: id mismatch")
-		}
-		if resp.Flags().RCODE() != dnsmsg.RCODENoError {
-			return nil, fmt.Errorf("axfr: %s", resp.Flags().RCODE())
-		}
-		for _, rec := range resp.Answers() {
-			records = append(records, rec)
-			if rec.Type() == rrtype.SOA {
-				soas++
-				if soas == 2 {
-					return records, nil
-				}
-			}
-		}
-	}
-	if soas == 0 {
-		return nil, ErrNoSOA
-	}
-	return records, nil
+	return t, nil
 }
 
-func writeMessage(w io.Writer, body []byte) error {
-	if len(body) > 0xffff {
-		return fmt.Errorf("axfr: query too large")
+type transfer struct {
+	stream transport.MessageStream
+	reader *recReader
+
+	newSOA           rdata.SOA
+	emittedFirstSOA  bool
+	done             bool
+}
+
+func (t *transfer) NewSOA() rdata.SOA { return t.newSOA }
+func (t *transfer) Close() error      { return t.stream.Close() }
+
+func (t *transfer) init(ctx context.Context) error {
+	rec, err := t.reader.Read(ctx)
+	if err == io.EOF {
+		return errors.New("axfr: empty response")
 	}
-	var hdr [2]byte
-	binary.BigEndian.PutUint16(hdr[:], uint16(len(body)))
-	if _, err := w.Write(hdr[:]); err != nil {
-		return fmt.Errorf("axfr: write length: %w", err)
+	if err != nil {
+		return err
 	}
-	if _, err := w.Write(body); err != nil {
-		return fmt.Errorf("axfr: write body: %w", err)
+	if rec.Type() != rrtype.SOA {
+		return errors.New("axfr: stream must begin with SOA")
 	}
+	t.newSOA = rec.RData().(rdata.SOA)
+	t.reader.Push(rec)
 	return nil
 }
 
-func readMessage(r io.Reader) ([]byte, error) {
-	var hdr [2]byte
-	if _, err := io.ReadFull(r, hdr[:]); err != nil {
-		return nil, fmt.Errorf("axfr: read length: %w", err)
+func (t *transfer) Next(ctx context.Context) (RecordEvent, error) {
+	if t.done {
+		return nil, io.EOF
 	}
-	n := binary.BigEndian.Uint16(hdr[:])
-	body := make([]byte, n)
-	if _, err := io.ReadFull(r, body); err != nil {
-		return nil, fmt.Errorf("axfr: read body: %w", err)
+	rec, err := t.reader.Read(ctx)
+	if err != nil {
+		return nil, err
 	}
-	return body, nil
+	if rec.Type() == rrtype.SOA && rec.RData().(rdata.SOA).Serial() == t.newSOA.Serial() {
+		if !t.emittedFirstSOA {
+			t.emittedFirstSOA = true
+		} else {
+			t.done = true
+		}
+	}
+	return recordEvent{rec: rec}, nil
+}
+
+// recReader pulls records from successive stream messages with a small
+// pushback queue.
+type recReader struct {
+	stream   transport.MessageStream
+	curMsg   dnsmsg.Message
+	curIdx   int
+	pushback []dnsmsg.Record
+	msgEOF   bool
+}
+
+func (rr *recReader) Read(ctx context.Context) (dnsmsg.Record, error) {
+	if len(rr.pushback) > 0 {
+		rec := rr.pushback[0]
+		rr.pushback = rr.pushback[1:]
+		return rec, nil
+	}
+	for {
+		if rr.curMsg != nil && rr.curIdx < len(rr.curMsg.Answers()) {
+			rec := rr.curMsg.Answers()[rr.curIdx]
+			rr.curIdx++
+			return rec, nil
+		}
+		if rr.msgEOF {
+			return nil, io.EOF
+		}
+		msg, err := rr.stream.Next(ctx)
+		if err != nil {
+			if err == io.EOF {
+				rr.msgEOF = true
+				return nil, io.EOF
+			}
+			return nil, err
+		}
+		if rcode := msg.Flags().RCODE(); rcode != dnsmsg.RCODENoError {
+			return nil, fmt.Errorf("axfr: %s", rcode)
+		}
+		rr.curMsg = msg
+		rr.curIdx = 0
+	}
+}
+
+func (rr *recReader) Push(rec dnsmsg.Record) {
+	rr.pushback = append(rr.pushback, rec)
 }
 
 func randomID() (uint16, error) {

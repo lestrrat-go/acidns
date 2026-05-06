@@ -2,12 +2,15 @@ package ixfr_test
 
 import (
 	"context"
+	"io"
 	"net/netip"
 	"strings"
 	"testing"
 	"time"
 
 	"github.com/lestrrat-go/acidns/dnsclient/ixfr"
+	"github.com/lestrrat-go/acidns/dnsclient/transport"
+	"github.com/lestrrat-go/acidns/dnsclient/transport/tcp"
 	"github.com/lestrrat-go/acidns/dnsmsg/rdata"
 	"github.com/lestrrat-go/acidns/dnsname"
 	"github.com/lestrrat-go/acidns/dnsserver"
@@ -47,9 +50,29 @@ func TestTransferAXFRFallback(t *testing.T) {
 
 	xferCtx, xcancel := context.WithTimeout(t.Context(), 5*time.Second)
 	defer xcancel()
-	res, err := ixfr.Transfer(xferCtx, srv.Addr(), dnsname.MustParse("example.com"), clientSOA)
+
+	ex, err := tcp.New(srv.Addr())
 	require.NoError(t, err)
-	require.Equal(t, ixfr.KindAXFRFallback, res.Kind)
-	require.GreaterOrEqual(t, len(res.Records), 4)
-	require.Equal(t, uint32(100), res.NewSOA.Serial())
+	sx, ok := ex.(transport.StreamExchanger)
+	require.True(t, ok, "tcp exchanger must implement StreamExchanger")
+
+	xfer, err := ixfr.Start(xferCtx, sx, dnsname.MustParse("example.com"), clientSOA)
+	require.NoError(t, err)
+	defer xfer.Close()
+
+	require.Equal(t, ixfr.KindAXFRFallback, xfer.Kind())
+	require.Equal(t, uint32(100), xfer.NewSOA().Serial())
+
+	count := 0
+	for {
+		ev, err := xfer.Next(xferCtx)
+		if err == io.EOF {
+			break
+		}
+		require.NoError(t, err)
+		_, ok := ev.(ixfr.RecordEvent)
+		require.True(t, ok, "AXFR-fallback events must be RecordEvent")
+		count++
+	}
+	require.GreaterOrEqual(t, count, 4)
 }

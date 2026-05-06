@@ -102,7 +102,7 @@ func TestLookupHost(t *testing.T) {
 	)
 	r := newResolver(t, addr)
 
-	addrs, err := r.LookupHost(t.Context(), "example.com")
+	addrs, err := dnsclient.LookupHost(t.Context(), r, "example.com")
 	require.NoError(t, err)
 	require.Equal(t, 3, len(addrs))
 
@@ -122,7 +122,7 @@ func TestLookupHostV4Only(t *testing.T) {
 	)
 	r := newResolver(t, addr)
 
-	addrs, err := r.LookupHost(t.Context(), "example.com")
+	addrs, err := dnsclient.LookupHost(t.Context(), r, "example.com")
 	require.NoError(t, err)
 	require.Equal(t, 1, len(addrs))
 	require.Equal(t, "203.0.113.1", addrs[0].String())
@@ -139,7 +139,7 @@ func TestNewWithServers(t *testing.T) {
 	addr := startServer(t, []netip.Addr{netip.MustParseAddr("203.0.113.1")}, nil)
 	r, err := dnsclient.New(dnsclient.WithServers(addr))
 	require.NoError(t, err)
-	addrs, err := r.LookupHost(t.Context(), "example.com")
+	addrs, err := dnsclient.LookupHost(t.Context(), r, "example.com")
 	require.NoError(t, err)
 	require.Equal(t, 1, len(addrs))
 }

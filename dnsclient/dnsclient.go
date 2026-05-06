@@ -14,8 +14,6 @@ import (
 	"errors"
 	"fmt"
 	"net/netip"
-	"strings"
-	"sync"
 	"time"
 
 	"github.com/lestrrat-go/acidns/dnsclient/resolvconf"
@@ -33,17 +31,28 @@ import (
 // transport or server list was provided.
 var ErrNoResolver = errors.New("dnsclient: no exchanger or servers configured")
 
-// Resolver performs DNS queries on behalf of an application. Each method
-// returns typed results; the underlying wire-format response is also
-// reachable via Answer.Raw for callers that need access to raw RDATA.
+// Resolver performs DNS queries on behalf of an application. Resolve is the
+// single primitive — typed convenience helpers (LookupHost, ResolveAs[T],
+// Extract[T], ...) live as package-level functions that wrap a Resolver.
+//
+// Implementations are free to satisfy additional capability interfaces such
+// as SearchLister; helpers type-assert for those capabilities and fall back
+// gracefully when they are absent.
 type Resolver interface {
-	// Resolve performs a single recursive query and returns the matched
-	// records along with the raw response.
+	// Resolve performs a single query and returns the matched records along
+	// with the raw response. A non-NoError RCODE is returned as a typed
+	// *RCodeError carrying the response; the matched record list is empty
+	// in that case.
 	Resolve(ctx context.Context, name dnsname.Name, t rrtype.Type) (Answer, error)
+}
 
-	// LookupHost dispatches A and AAAA queries for host concurrently and
-	// returns every address either query produced.
-	LookupHost(ctx context.Context, host string) ([]netip.Addr, error)
+// SearchLister is an optional capability satisfied by resolver impls that
+// know about a search list and an ndots threshold. Helpers like LookupHost
+// type-assert against this to expand short names; resolvers without this
+// capability skip the expansion step.
+type SearchLister interface {
+	SearchList() []dnsname.Name
+	Ndots() int
 }
 
 // Answer is the typed result of a Resolve call.
@@ -109,15 +118,17 @@ func WithEDNSUDPSize(n uint16) Option {
 	return optionFunc(func(c *config) { c.ednsUDP = n })
 }
 
-// WithDNSSECOK sets the DO bit in OPT, requesting DNSSEC RRs in responses.
-func WithDNSSECOK(v bool) Option {
+// WithDNSSEC toggles the DO bit in OPT. When true (default false), DNSSEC
+// RRs are requested in responses.
+func WithDNSSEC(v bool) Option {
 	return optionFunc(func(c *config) { c.ednsDO = v })
 }
 
-// WithoutEDNS disables OPT in outgoing queries. Use only when targeting
-// servers known to misbehave on EDNS.
-func WithoutEDNS() Option {
-	return optionFunc(func(c *config) { c.disableEDNS = true })
+// WithEDNS toggles inclusion of the OPT pseudo-RR in outgoing queries.
+// Default is true — pass false only when targeting servers known to
+// misbehave on EDNS.
+func WithEDNS(v bool) Option {
+	return optionFunc(func(c *config) { c.disableEDNS = !v })
 }
 
 // WithAttempts sets how many times each server is retried before failover
@@ -155,12 +166,12 @@ func WithSystemResolvers() Option {
 	})
 }
 
-// WithoutSpecialUse disables the RFC 6761 short-circuits applied to
-// names like localhost., *.invalid., and *.onion. — useful for tooling
-// that needs to interrogate a DNS server about how it handles those
+// WithSpecialUse toggles the RFC 6761 short-circuits applied to names like
+// localhost., *.invalid., and *.onion. Default is true — pass false for
+// tooling that needs to interrogate a DNS server about how it handles those
 // names rather than having the resolver answer locally.
-func WithoutSpecialUse() Option {
-	return optionFunc(func(c *config) { c.disableSpecialUse = true })
+func WithSpecialUse(v bool) Option {
+	return optionFunc(func(c *config) { c.disableSpecialUse = !v })
 }
 
 // WithSearchList sets the suffixes appended to short names by LookupHost.
@@ -228,7 +239,7 @@ func New(opts ...Option) (Resolver, error) {
 func (r *resolver) Resolve(ctx context.Context, name dnsname.Name, t rrtype.Type) (Answer, error) {
 	if !r.disableSpecialUse {
 		if ans, ok := r.specialUseAnswer(name, t); ok {
-			return ans, nil
+			return wrapRCode(ans)
 		}
 	}
 	id, err := randomID()
@@ -260,7 +271,16 @@ func (r *resolver) Resolve(ctx context.Context, name dnsname.Name, t rrtype.Type
 	}
 
 	matched := matchAnswers(resp.Answers(), name, t)
-	return &answer{q: question, records: matched, raw: resp}, nil
+	return wrapRCode(&answer{q: question, records: matched, raw: resp})
+}
+
+// wrapRCode converts an Answer with a non-NoError RCODE into an RCodeError
+// carrying that answer. NoError responses are returned (Answer, nil).
+func wrapRCode(ans Answer) (Answer, error) {
+	if rcode := ans.RCODE(); rcode != dnsmsg.RCODENoError {
+		return nil, &RCodeError{Code: rcode, Answer: ans}
+	}
+	return ans, nil
 }
 
 // specialUseAnswer applies the RFC 6761 short-circuit. It returns
@@ -343,103 +363,13 @@ func matchAnswers(answers []dnsmsg.Record, qname dnsname.Name, qtype rrtype.Type
 	return out
 }
 
-func (r *resolver) LookupHost(ctx context.Context, host string) ([]netip.Addr, error) {
-	candidates, err := r.candidateNames(host)
-	if err != nil {
-		return nil, err
-	}
-	var firstErr error
-	for _, name := range candidates {
-		addrs, err := r.lookupHostAbsolute(ctx, name)
-		if err != nil {
-			if firstErr == nil {
-				firstErr = err
-			}
-			continue
-		}
-		if len(addrs) > 0 {
-			return addrs, nil
-		}
-	}
-	if firstErr != nil {
-		return nil, firstErr
-	}
-	return nil, nil
-}
+// SearchList satisfies SearchLister so package-level helpers (LookupHost,
+// future search-list-aware lookups) can expand short names against the
+// resolver's configured suffixes.
+func (r *resolver) SearchList() []dnsname.Name { return r.searchList }
 
-// candidateNames builds the ordered list of FQDNs to attempt for a
-// LookupHost call, applying the search list and ndots threshold.
-func (r *resolver) candidateNames(host string) ([]dnsname.Name, error) {
-	absolute := strings.HasSuffix(host, ".")
-	base, err := dnsname.Parse(host)
-	if err != nil {
-		return nil, err
-	}
-	if absolute || len(r.searchList) == 0 {
-		return []dnsname.Name{base}, nil
-	}
-	dots := strings.Count(strings.TrimSuffix(host, "."), ".")
-	suffixed := make([]dnsname.Name, 0, len(r.searchList))
-	for _, s := range r.searchList {
-		full := host + "." + s.String()
-		n, err := dnsname.Parse(full)
-		if err != nil {
-			continue
-		}
-		suffixed = append(suffixed, n)
-	}
-	if dots >= r.ndots {
-		return append([]dnsname.Name{base}, suffixed...), nil
-	}
-	return append(suffixed, base), nil
-}
-
-func (r *resolver) lookupHostAbsolute(ctx context.Context, name dnsname.Name) ([]netip.Addr, error) {
-	type result struct {
-		addrs []netip.Addr
-		err   error
-	}
-	ch := make(chan result, 2)
-	var wg sync.WaitGroup
-	wg.Add(2)
-
-	dispatch := func(t rrtype.Type) {
-		defer wg.Done()
-		ans, err := r.Resolve(ctx, name, t)
-		if err != nil {
-			ch <- result{err: err}
-			return
-		}
-		out := make([]netip.Addr, 0, len(ans.Records()))
-		for _, rec := range ans.Records() {
-			switch rec.Type() {
-			case rrtype.A:
-				out = append(out, rec.RData().(rdata.A).Addr())
-			case rrtype.AAAA:
-				out = append(out, rec.RData().(rdata.AAAA).Addr())
-			}
-		}
-		ch <- result{addrs: out}
-	}
-	go dispatch(rrtype.A)
-	go dispatch(rrtype.AAAA)
-	wg.Wait()
-	close(ch)
-
-	var addrs []netip.Addr
-	var firstErr error
-	for r := range ch {
-		if r.err != nil && firstErr == nil {
-			firstErr = r.err
-			continue
-		}
-		addrs = append(addrs, r.addrs...)
-	}
-	if len(addrs) == 0 && firstErr != nil {
-		return nil, firstErr
-	}
-	return addrs, nil
-}
+// Ndots satisfies SearchLister.
+func (r *resolver) Ndots() int { return r.ndots }
 
 func randomID() (uint16, error) {
 	var b [2]byte
@@ -462,21 +392,14 @@ func buildFallover(servers []netip.AddrPort, attempts int, perAttempt time.Durat
 		}
 		var ex transport.Exchanger = &tcFallback{primary: uex, fallback: tex}
 		if attempts > 1 || perAttempt > 0 {
-			ex = &retryExchanger{inner: ex, attempts: maxInt(attempts, 1), perAttempt: perAttempt}
+			ex = &retryExchanger{inner: ex, attempts: max(attempts, 1), perAttempt: perAttempt}
 		}
 		exs = append(exs, ex)
 	}
 	if len(exs) == 1 {
 		return exs[0], nil
 	}
-	return &fallover{exs: exs}, nil
-}
-
-func maxInt(a, b int) int {
-	if a > b {
-		return a
-	}
-	return b
+	return &failover{exs: exs}, nil
 }
 
 // retryExchanger retries a wrapped Exchanger up to attempts times, with an
@@ -510,9 +433,9 @@ func (r *retryExchanger) Exchange(ctx context.Context, q dnsmsg.Message) (dnsmsg
 	return nil, lastErr
 }
 
-type fallover struct{ exs []transport.Exchanger }
+type failover struct{ exs []transport.Exchanger }
 
-func (f *fallover) Exchange(ctx context.Context, q dnsmsg.Message) (dnsmsg.Message, error) {
+func (f *failover) Exchange(ctx context.Context, q dnsmsg.Message) (dnsmsg.Message, error) {
 	var lastErr error
 	for _, ex := range f.exs {
 		resp, err := ex.Exchange(ctx, q)
@@ -525,13 +448,6 @@ func (f *fallover) Exchange(ctx context.Context, q dnsmsg.Message) (dnsmsg.Messa
 		}
 	}
 	return nil, lastErr
-}
-
-// WrapWithTCFallback returns an Exchanger that sends queries through
-// primary, and retries via fallback whenever the response has the TC bit
-// set. Useful for composing custom transport stacks.
-func WrapWithTCFallback(primary, fallback transport.Exchanger) transport.Exchanger {
-	return &tcFallback{primary: primary, fallback: fallback}
 }
 
 // tcFallback wraps a primary (typically UDP) exchanger with a fallback

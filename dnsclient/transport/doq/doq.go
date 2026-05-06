@@ -14,11 +14,13 @@ import (
 	"fmt"
 	"io"
 	"net/netip"
+	"sync"
 	"time"
 
 	"github.com/quic-go/quic-go"
 
 	"github.com/lestrrat-go/acidns/dnsclient/transport"
+	"github.com/lestrrat-go/acidns/dnsclient/transport/internal/streamframe"
 	"github.com/lestrrat-go/acidns/dnsmsg"
 )
 
@@ -155,4 +157,83 @@ func (e *exchanger) Exchange(ctx context.Context, q dnsmsg.Message) (dnsmsg.Mess
 		return nil, fmt.Errorf("doq: id mismatch: got %#x", resp.ID())
 	}
 	return resp, nil
+}
+
+// Stream sends q on a fresh QUIC stream and returns a MessageStream from
+// which the caller pulls responses. Implements XFR-over-QUIC (RFC 9103
+// §4.4): one query, then a stream of responses on the same QUIC stream
+// until the server FINs the read side.
+func (e *exchanger) Stream(ctx context.Context, q dnsmsg.Message) (transport.MessageStream, error) {
+	dialCtx := ctx
+	if _, ok := ctx.Deadline(); !ok && e.timeout > 0 {
+		var cancel context.CancelFunc
+		dialCtx, cancel = context.WithTimeout(ctx, e.timeout)
+		defer cancel()
+	}
+	conn, err := quic.DialAddr(dialCtx, e.addr.String(), e.tlsConfig, &quic.Config{
+		MaxIdleTimeout: 30 * time.Second,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("doq: dial %s: %w", e.addr, err)
+	}
+	stream, err := conn.OpenStreamSync(dialCtx)
+	if err != nil {
+		_ = conn.CloseWithError(0, "")
+		return nil, fmt.Errorf("doq: open stream: %w", err)
+	}
+	if err := streamframe.WriteFrame(stream, q); err != nil {
+		_ = conn.CloseWithError(0, "")
+		return nil, fmt.Errorf("doq: %w", err)
+	}
+	// RFC 9250 §4.2: client MUST send the FIN after the query body. The
+	// server then writes responses on the same stream until it FINs.
+	if err := stream.Close(); err != nil {
+		_ = conn.CloseWithError(0, "")
+		return nil, fmt.Errorf("doq: close write side: %w", err)
+	}
+	return &doqStream{conn: conn, stream: stream, expectID: q.ID()}, nil
+}
+
+// doqStream wraps a single QUIC stream that has had a query written to it.
+// Next reads response frames; Close cancels read on the stream and closes
+// the parent connection.
+type doqStream struct {
+	conn      *quic.Conn
+	stream    *quic.Stream
+	expectID  uint16
+	closeOnce sync.Once
+}
+
+func (s *doqStream) Next(ctx context.Context) (dnsmsg.Message, error) {
+	if dl, ok := ctx.Deadline(); ok {
+		_ = s.stream.SetReadDeadline(dl)
+	}
+	stop := make(chan struct{})
+	defer close(stop)
+	go func() {
+		select {
+		case <-ctx.Done():
+			_ = s.stream.SetReadDeadline(time.Now())
+		case <-stop:
+		}
+	}()
+	m, err := streamframe.ReadFrame(s.stream)
+	if err != nil {
+		if cerr := ctx.Err(); cerr != nil {
+			return nil, cerr
+		}
+		return nil, err
+	}
+	if m.ID() != s.expectID && m.ID() != 0 {
+		return nil, fmt.Errorf("doq: id mismatch: got %#x", m.ID())
+	}
+	return m, nil
+}
+
+func (s *doqStream) Close() error {
+	s.closeOnce.Do(func() {
+		s.stream.CancelRead(0)
+		_ = s.conn.CloseWithError(0, "")
+	})
+	return nil
 }
