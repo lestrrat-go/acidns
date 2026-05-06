@@ -143,6 +143,7 @@ type udpResponseWriter struct {
 
 func (w *udpResponseWriter) RemoteAddr() netip.AddrPort { return w.dst }
 func (w *udpResponseWriter) LocalAddr() netip.AddrPort  { return w.local }
+func (w *udpResponseWriter) Network() string            { return "udp" }
 
 func (w *udpResponseWriter) WriteMsg(m dnsmsg.Message) error {
 	if w.wrote {

@@ -143,6 +143,7 @@ type tcpResponseWriter struct {
 
 func (w *tcpResponseWriter) RemoteAddr() netip.AddrPort { return w.remote }
 func (w *tcpResponseWriter) LocalAddr() netip.AddrPort  { return w.local }
+func (w *tcpResponseWriter) Network() string            { return "tcp" }
 
 func (w *tcpResponseWriter) WriteMsg(m dnsmsg.Message) error {
 	wire, err := dnsmsg.Marshal(m)

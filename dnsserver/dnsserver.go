@@ -38,10 +38,14 @@ func (f HandlerFunc) ServeDNS(ctx context.Context, w ResponseWriter, q dnsmsg.Me
 // response would exceed the negotiated payload size, the writer rebuilds
 // the message with the TC bit set and an empty body). Handlers SHOULD NOT
 // hold a ResponseWriter past the call to ServeDNS.
+//
+// Network reports the underlying transport ("udp", "tcp", "dot", "doh") so
+// handlers can refuse stream-only operations (e.g. AXFR) over datagrams.
 type ResponseWriter interface {
 	WriteMsg(m dnsmsg.Message) error
 	RemoteAddr() netip.AddrPort
 	LocalAddr() netip.AddrPort
+	Network() string
 }
 
 // Server is a bound, ready-to-serve DNS listener. Serve blocks until the
