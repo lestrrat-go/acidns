@@ -32,16 +32,16 @@ func main() {
 }
 
 type opts struct {
-	server   string
-	port     int
-	rrType   string
-	useTCP   bool
-	useDoT   bool
-	dohURL   string
-	short    bool
-	timeout  time.Duration
-	tlsName  string
-	useSys   bool
+	server  string
+	port    int
+	rrType  string
+	useTCP  bool
+	useDoT  bool
+	dohURL  string
+	short   bool
+	timeout time.Duration
+	tlsName string
+	useSys  bool
 }
 
 func run(argv []string) error {

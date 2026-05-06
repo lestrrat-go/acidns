@@ -48,7 +48,7 @@ type bufWriter struct {
 
 func newBufWriter(w io.Writer) *bufWriter { return &bufWriter{w: w} }
 
-func (b *bufWriter) Write(p []byte) (int, error)  { b.buf = append(b.buf, p...); return len(p), nil }
+func (b *bufWriter) Write(p []byte) (int, error) { b.buf = append(b.buf, p...); return len(p), nil }
 func (b *bufWriter) WriteString(s string) (int, error) {
 	b.buf = append(b.buf, s...)
 	return len(s), nil

@@ -54,10 +54,10 @@ type Diff struct {
 
 // Result captures the parsed IXFR outcome.
 type Result struct {
-	Kind     Kind
-	Records  []dnsmsg.Record // full zone in AXFR-fallback mode
-	Diffs    []Diff          // incremental mode
-	NewSOA   rdata.SOA       // the latest SOA from the server
+	Kind    Kind
+	Records []dnsmsg.Record // full zone in AXFR-fallback mode
+	Diffs   []Diff          // incremental mode
+	NewSOA  rdata.SOA       // the latest SOA from the server
 }
 
 // Option configures a transfer.
