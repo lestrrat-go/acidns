@@ -12,16 +12,29 @@ import (
 
 // DNSSECAlgorithm enumerates the values from the IANA DNSSEC Algorithm
 // Numbers registry (RFC 8624 §3.1).
+//
+// Algorithms 1, 3, 5, 6, 7 are listed for completeness only. Per RFC 8624
+// they are MUST NOT for signing; verification of legacy zones may still
+// require recognising them. Library verification primitives only support
+// the modern algorithms (RSASHA256, RSASHA512, ECDSAP256, ECDSAP384,
+// Ed25519); attempts to verify with a deprecated algorithm return
+// ErrUnsupportedAlgorithm.
 type DNSSECAlgorithm uint8
 
 const (
-	AlgRSASHA1         DNSSECAlgorithm = 5
-	AlgRSASHA256       DNSSECAlgorithm = 8
-	AlgRSASHA512       DNSSECAlgorithm = 10
-	AlgECDSAP256SHA256 DNSSECAlgorithm = 13
-	AlgECDSAP384SHA384 DNSSECAlgorithm = 14
-	AlgED25519         DNSSECAlgorithm = 15
-	AlgED448           DNSSECAlgorithm = 16
+	AlgRSAMD5            DNSSECAlgorithm = 1  // RFC 2537 / 3110 — deprecated
+	AlgDH                DNSSECAlgorithm = 2  // RFC 2539 — deprecated
+	AlgDSA               DNSSECAlgorithm = 3  // RFC 2536 — deprecated
+	AlgRSASHA1           DNSSECAlgorithm = 5  // RFC 3110 — discouraged
+	AlgDSANSEC3SHA1      DNSSECAlgorithm = 6  // RFC 5155 — deprecated
+	AlgRSASHA1NSEC3SHA1  DNSSECAlgorithm = 7  // RFC 5155 — discouraged
+	AlgRSASHA256         DNSSECAlgorithm = 8  // RFC 5702
+	AlgRSASHA512         DNSSECAlgorithm = 10 // RFC 5702
+	AlgECCGOST           DNSSECAlgorithm = 12 // RFC 5933 — deprecated
+	AlgECDSAP256SHA256   DNSSECAlgorithm = 13 // RFC 6605
+	AlgECDSAP384SHA384   DNSSECAlgorithm = 14 // RFC 6605
+	AlgED25519           DNSSECAlgorithm = 15 // RFC 8080
+	AlgED448             DNSSECAlgorithm = 16 // RFC 8080
 )
 
 // DSDigestType enumerates the digest types of a DS RR (RFC 4509, RFC 6605).
@@ -31,6 +44,20 @@ const (
 	DigestSHA1   DSDigestType = 1
 	DigestSHA256 DSDigestType = 2
 	DigestSHA384 DSDigestType = 4
+)
+
+// DNSKEY flag bit positions (RFC 4034 §2.1.1, post-RFC 3445 simplification
+// where the historical KEY flag space was narrowed to DNS zone signing
+// usage). Use these masks against the value returned by DNSKEY.Flags.
+const (
+	// DNSKEYFlagZone marks a key as a zone key (bit 7 in network byte
+	// order — the high bit of the second flag byte).
+	DNSKEYFlagZone uint16 = 0x0100
+	// DNSKEYFlagRevoke marks a key as revoked (RFC 5011 §2.1).
+	DNSKEYFlagRevoke uint16 = 0x0080
+	// DNSKEYFlagSEP marks a key as a Secure Entry Point (RFC 4034 §2.1.1
+	// + RFC 3757). Conventionally set on KSKs.
+	DNSKEYFlagSEP uint16 = 0x0001
 )
 
 // DNSKEY is the DNSSEC public key rdata (RFC 4034 §2).
