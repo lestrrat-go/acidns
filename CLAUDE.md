@@ -82,9 +82,13 @@ Status legend: **Implemented** = working code with tests; **Partial** = document
 | RFC | Title | Status |
 |-----|-------|--------|
 | 1995 | Incremental Zone Transfer (IXFR) | Implemented client; server falls back to AXFR per §3 |
+| 1996 | A Mechanism for Prompt Notification of Zone Changes | Implemented (`dnsclient/notify`; authoritative server ACKs and fires an optional `NotifyHandler`) |
 | 2136 | Dynamic Updates in the Domain Name System | Implemented (UPDATE opcode, prerequisites, add/delete RRset, delete record) |
+| 2317 | Classless IN-ADDR.ARPA Delegation | Implemented (helper `dnszone/classless.BuildDelegationCNAMEs`) |
 | 5936 | DNS Zone Transfer Protocol (AXFR) | Implemented (single-message AXFR, server + client) |
 | 7477 | Child-to-Parent Synchronization (CSYNC) | Implemented (typed `rdata.CSYNC`) |
+| 8764 | Apple's DNS Long-Lived Queries Protocol | Partial (`NewLLQ` builds the EDNS option for setup/refresh/event; full state machine not yet wired) |
+| Update Lease (`draft-sekar-dns-ul`) | DNS Update Leases | Implemented (`NewUpdateLease` builds the UL EDNS option) |
 
 ### Secure DNS operations
 
@@ -113,6 +117,7 @@ Status legend: **Implemented** = working code with tests; **Partial** = document
 | 8945 | Secret Key Transaction Authentication for DNS (TSIG) | Implemented (hmac-sha1/256/384/512; bridge into UPDATE via `dnsupdate.SignedWire`) |
 | 9250 | DNS over Dedicated QUIC Connections (DoQ) | Implemented |
 | 9460 | Service Binding (SVCB) and HTTPS Resource Records | Implemented (typed accessors for ALPN, port, IPv4/IPv6 hints) |
+| DNSCrypt v2 (non-IETF) | Trusted DNS Queries | Implemented (`dnscrypt/`: cert parse + verify, X25519 + XChaCha20-Poly1305 encrypt/decrypt, transport.Exchanger) |
 
 ### Out of scope
 
