@@ -164,7 +164,7 @@ Status legend: **Implemented** = working code with tests; **Partial** = document
 | 3007 | Secure Domain Name System Dynamic Update | Implemented (`dnsupdate.Builder.SignedWire` produces TSIG-signed UPDATE wire bytes) |
 | 3445 | Limiting the Scope of (DNS)KEY | Followed (DNSKEY flag constants `DNSKEYFlagZone`/`Revoke`/`SEP` reflect the post-3445 narrowed scope) |
 | 4034 | Resource Records for the DNS Security Extensions | Implemented (DNSKEY, RRSIG, NSEC; canonical form §6) |
-| 4035 | Protocol Modifications for DNSSEC | Partial (verification primitives + framework `dnssec/validator` with NTA store, BogusPolicy, ValidateRRset/VerifyDelegation; recursive chain walker still TODO) |
+| 4035 | Protocol Modifications for DNSSEC | Partial (verification primitives + framework `dnssec/validator` with NTA store, BogusPolicy, ValidateRRset/VerifyDelegation, chain Walker with iterative DS-probing, RFC 6840 §5.11 algorithm-rollover check, NSEC denial of existence; NSEC3 walker integration still TODO) |
 | 4509 | Use of SHA-256 in DNSSEC Delegation Signer | Implemented (DS digest type 2) |
 | 5155 | DNSSEC Hashed Authenticated Denial of Existence | Partial (NSEC3 + NSEC3PARAM encode/decode; validator does not yet consume) |
 | 5702 | RSA/SHA-2 in DNSSEC | Implemented (RSASHA256, RSASHA512) |
