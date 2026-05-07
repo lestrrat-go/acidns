@@ -4,7 +4,7 @@
 // Queries that exceed their bucket are by default refused with RCODE
 // REFUSED; an option permits silent dropping instead, which more closely
 // matches the behaviour of operational resolvers under stress.
-package ratelimit
+package acidns
 
 import (
 	"context"
@@ -12,18 +12,17 @@ import (
 	"sync"
 	"time"
 
-	"github.com/lestrrat-go/acidns/dnsserver"
 	"github.com/lestrrat-go/acidns/wire"
 )
 
-// Option configures the limiter.
-type Option interface{ applyRL(*config) }
+// RateLimitOption configures the limiter.
+type RateLimitOption interface{ applyRateLimit(*rateLimitConfig) }
 
-type optionFunc func(*config)
+type rateLimitOptionFunc func(*rateLimitConfig)
 
-func (f optionFunc) applyRL(c *config) { f(c) }
+func (f rateLimitOptionFunc) applyRateLimit(c *rateLimitConfig) { f(c) }
 
-type config struct {
+type rateLimitConfig struct {
 	qps    float64
 	burst  int
 	drop   bool
@@ -31,22 +30,24 @@ type config struct {
 	prefix int // CIDR mask applied before keying (e.g. 24 → group v4 by /24)
 }
 
-// WithQPS sets the average queries-per-second rate per source. Defaults to
+// WithRateLimitQPS sets the average queries-per-second rate per source. Defaults to
 // 10 qps.
-func WithQPS(qps float64) Option { return optionFunc(func(c *config) { c.qps = qps }) }
+func WithRateLimitQPS(qps float64) RateLimitOption {
+	return rateLimitOptionFunc(func(c *rateLimitConfig) { c.qps = qps })
+}
 
-// WithBurst sets how many tokens a fresh source begins with. Defaults to
-// 20 — twice WithQPS by convention.
-func WithBurst(n int) Option { return optionFunc(func(c *config) { c.burst = n }) }
+// WithRateLimitBurst sets how many tokens a fresh source begins with. Defaults to
+// 20 — twice WithRateLimitQPS by convention.
+func WithRateLimitBurst(n int) RateLimitOption { return rateLimitOptionFunc(func(c *rateLimitConfig) { c.burst = n }) }
 
-// WithDrop silences over-budget queries instead of returning REFUSED.
-func WithDrop() Option { return optionFunc(func(c *config) { c.drop = true }) }
+// WithRateLimitDrop silences over-budget queries instead of returning REFUSED.
+func WithRateLimitDrop() RateLimitOption { return rateLimitOptionFunc(func(c *rateLimitConfig) { c.drop = true }) }
 
-// WithGroupPrefix coalesces sources by the given CIDR mask before keying
+// WithRateLimitGroupPrefix coalesces sources by the given CIDR mask before keying
 // the bucket — useful so a single misbehaving /24 isn't permitted to
 // multiply a budget by 256.
-func WithGroupPrefix(maskBits int) Option {
-	return optionFunc(func(c *config) { c.prefix = maskBits })
+func WithRateLimitGroupPrefix(maskBits int) RateLimitOption {
+	return rateLimitOptionFunc(func(c *rateLimitConfig) { c.prefix = maskBits })
 }
 
 type bucket struct {
@@ -55,7 +56,7 @@ type bucket struct {
 }
 
 type limiter struct {
-	inner   dnsserver.Handler
+	inner   Handler
 	qps     float64
 	burst   float64
 	drop    bool
@@ -66,10 +67,10 @@ type limiter struct {
 
 // New returns a Handler that applies the configured rate limit before
 // delegating to inner.
-func New(inner dnsserver.Handler, opts ...Option) dnsserver.Handler {
-	c := config{qps: 10, burst: 20}
+func NewRateLimit(inner Handler, opts ...RateLimitOption) Handler {
+	c := rateLimitConfig{qps: 10, burst: 20}
 	for _, o := range opts {
-		o.applyRL(&c)
+		o.applyRateLimit(&c)
 	}
 	return &limiter{
 		inner:   inner,
@@ -81,7 +82,7 @@ func New(inner dnsserver.Handler, opts ...Option) dnsserver.Handler {
 	}
 }
 
-func (l *limiter) ServeDNS(ctx context.Context, w dnsserver.ResponseWriter, q wire.Message) {
+func (l *limiter) ServeDNS(ctx context.Context, w ResponseWriter, q wire.Message) {
 	if !l.allow(w.RemoteAddr().Addr()) {
 		if l.drop {
 			return
@@ -126,7 +127,7 @@ func (l *limiter) key(src netip.Addr) string {
 	return src.String()
 }
 
-func (l *limiter) refuse(w dnsserver.ResponseWriter, q wire.Message) {
+func (l *limiter) refuse(w ResponseWriter, q wire.Message) {
 	b := wire.NewBuilder().
 		ID(q.ID()).
 		Response(true).

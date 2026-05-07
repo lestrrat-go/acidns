@@ -6,7 +6,7 @@
 // recursion, caching, or rate limiting. Those live in sub-packages
 // (dnsserver/authoritative, dnsserver/recursive, dnsserver/cache, ...) that
 // implement Handler and may be composed via standard middleware patterns.
-package dnsserver
+package acidns
 
 import (
 	"context"

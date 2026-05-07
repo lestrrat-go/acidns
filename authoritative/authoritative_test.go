@@ -6,8 +6,8 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/lestrrat-go/acidns"
 	"github.com/lestrrat-go/acidns/authoritative"
-	"github.com/lestrrat-go/acidns/dnsserver"
 	"github.com/lestrrat-go/acidns/wire"
 	"github.com/lestrrat-go/acidns/wire/rdata"
 	"github.com/lestrrat-go/acidns/wire/rrtype"
@@ -55,7 +55,7 @@ func (w *inProcWriter) Network() string {
 	return w.network
 }
 
-func ask(t *testing.T, a dnsserver.Handler, name string, rt rrtype.Type) wire.Message {
+func ask(t *testing.T, a acidns.Handler, name string, rt rrtype.Type) wire.Message {
 	t.Helper()
 	q, err := wire.NewBuilder().
 		ID(1).

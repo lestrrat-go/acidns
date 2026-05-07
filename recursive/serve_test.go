@@ -8,7 +8,6 @@ import (
 	"time"
 
 	"github.com/lestrrat-go/acidns"
-	"github.com/lestrrat-go/acidns/dnsserver"
 	"github.com/lestrrat-go/acidns/recursive"
 	"github.com/lestrrat-go/acidns/wire"
 	"github.com/lestrrat-go/acidns/wire/rrtype"
@@ -31,7 +30,7 @@ www IN  A    192.0.2.42
 		recursive.WithCache(cache),
 		recursive.WithMaxIterations(50),
 	)
-	srv, err := dnsserver.ListenUDP(netip.MustParseAddrPort("127.0.0.1:0"), r)
+	srv, err := acidns.ListenUDP(netip.MustParseAddrPort("127.0.0.1:0"), r)
 	require.NoError(t, err)
 	ctx, cancel := context.WithCancel(t.Context())
 	t.Cleanup(cancel)
@@ -58,7 +57,7 @@ www IN  A    192.0.2.42
 func TestServeDNSFormErrOnEmptyQuestion(t *testing.T) {
 	t.Parallel()
 	r := recursive.New(recursive.WithRoots(netip.MustParseAddrPort("127.0.0.1:65535")))
-	srv, err := dnsserver.ListenUDP(netip.MustParseAddrPort("127.0.0.1:0"), r)
+	srv, err := acidns.ListenUDP(netip.MustParseAddrPort("127.0.0.1:0"), r)
 	require.NoError(t, err)
 	ctx, cancel := context.WithCancel(t.Context())
 	t.Cleanup(cancel)
@@ -82,7 +81,7 @@ func TestServeDNSServFailOnUnreachable(t *testing.T) {
 		recursive.WithRoots(netip.MustParseAddrPort("127.0.0.1:1")),
 		recursive.WithMaxIterations(1),
 	)
-	srv, err := dnsserver.ListenUDP(netip.MustParseAddrPort("127.0.0.1:0"), r)
+	srv, err := acidns.ListenUDP(netip.MustParseAddrPort("127.0.0.1:0"), r)
 	require.NoError(t, err)
 	ctx, cancel := context.WithCancel(t.Context())
 	t.Cleanup(cancel)

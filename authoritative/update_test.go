@@ -9,7 +9,6 @@ import (
 
 	"github.com/lestrrat-go/acidns"
 	"github.com/lestrrat-go/acidns/authoritative"
-	"github.com/lestrrat-go/acidns/dnsserver"
 	"github.com/lestrrat-go/acidns/update"
 	"github.com/lestrrat-go/acidns/wire"
 	"github.com/lestrrat-go/acidns/wire/rdata"
@@ -32,7 +31,7 @@ func startUpdatable(t *testing.T) (authoritative.Authoritative, netip.AddrPort) 
 	require.NoError(t, err)
 	a, err := authoritative.New(authoritative.WithZone(z))
 	require.NoError(t, err)
-	srv, err := dnsserver.ListenUDP(netip.MustParseAddrPort("127.0.0.1:0"), a)
+	srv, err := acidns.ListenUDP(netip.MustParseAddrPort("127.0.0.1:0"), a)
 	require.NoError(t, err)
 	ctx, cancel := context.WithCancel(t.Context())
 	t.Cleanup(cancel)

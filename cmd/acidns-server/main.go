@@ -14,8 +14,8 @@ import (
 	"strings"
 	"syscall"
 
+	"github.com/lestrrat-go/acidns"
 	"github.com/lestrrat-go/acidns/authoritative"
-	"github.com/lestrrat-go/acidns/dnsserver"
 	"github.com/lestrrat-go/acidns/recursive"
 	"github.com/lestrrat-go/acidns/wire"
 	"github.com/lestrrat-go/acidns/zonefile"
@@ -71,11 +71,11 @@ func run(argv []string) error {
 		return err
 	}
 
-	udpSrv, err := dnsserver.ListenUDP(addr, handler)
+	udpSrv, err := acidns.ListenUDP(addr, handler)
 	if err != nil {
 		return err
 	}
-	tcpSrv, err := dnsserver.ListenTCP(addr, handler)
+	tcpSrv, err := acidns.ListenTCP(addr, handler)
 	if err != nil {
 		return err
 	}
@@ -98,7 +98,7 @@ func run(argv []string) error {
 	return nil
 }
 
-func buildHandler(o opts) (dnsserver.Handler, error) {
+func buildHandler(o opts) (acidns.Handler, error) {
 	switch o.mode {
 	case "authoritative":
 		return buildAuthoritative(o.zoneFiles)
@@ -119,7 +119,7 @@ func buildHandler(o opts) (dnsserver.Handler, error) {
 	}
 }
 
-func buildAuthoritative(files []string) (dnsserver.Handler, error) {
+func buildAuthoritative(files []string) (acidns.Handler, error) {
 	if len(files) == 0 {
 		return nil, fmt.Errorf("authoritative mode requires -zones")
 	}
@@ -139,7 +139,7 @@ func buildAuthoritative(files []string) (dnsserver.Handler, error) {
 	return authoritative.New(opts...)
 }
 
-func buildRecursive(roots []string) (dnsserver.Handler, error) {
+func buildRecursive(roots []string) (acidns.Handler, error) {
 	var addrs []netip.AddrPort
 	for _, r := range roots {
 		ap, err := netip.ParseAddrPort(r)
@@ -157,10 +157,10 @@ func buildRecursive(roots []string) (dnsserver.Handler, error) {
 // hybrid serves authoritative answers for owned zones and falls through to
 // the recursive resolver for everything else.
 type hybrid struct {
-	auth, rec dnsserver.Handler
+	auth, rec acidns.Handler
 }
 
-func (h hybrid) ServeDNS(ctx context.Context, w dnsserver.ResponseWriter, q wire.Message) {
+func (h hybrid) ServeDNS(ctx context.Context, w acidns.ResponseWriter, q wire.Message) {
 	rec := &peekingWriter{ResponseWriter: w}
 	h.auth.ServeDNS(ctx, rec, q)
 	if rec.captured == nil {
@@ -176,7 +176,7 @@ func (h hybrid) ServeDNS(ctx context.Context, w dnsserver.ResponseWriter, q wire
 }
 
 type peekingWriter struct {
-	dnsserver.ResponseWriter
+	acidns.ResponseWriter
 	captured wire.Message
 }
 

@@ -1,4 +1,4 @@
-package dnsserver
+package acidns
 
 import (
 	"context"
@@ -15,28 +15,28 @@ import (
 )
 
 // TCPOption configures a TCP server.
-type TCPOption interface{ applyTCPServer(*tcpConfig) }
+type TCPListenerOption interface{ applyTCPServer(*tcpListenerConfig) }
 
-type tcpOptionFunc func(*tcpConfig)
+type tcpListenerOptionFunc func(*tcpListenerConfig)
 
-func (f tcpOptionFunc) applyTCPServer(c *tcpConfig) { f(c) }
+func (f tcpListenerOptionFunc) applyTCPServer(c *tcpListenerConfig) { f(c) }
 
-type tcpConfig struct {
+type tcpListenerConfig struct {
 	idleTimeout time.Duration
 }
 
 // WithTCPIdleTimeout sets how long an idle connection is kept open between
 // queries. RFC 7766 §6.5 recommends a few seconds; the default is 10s.
 // A non-positive value disables the idle timeout.
-func WithTCPIdleTimeout(d time.Duration) TCPOption {
-	return tcpOptionFunc(func(c *tcpConfig) { c.idleTimeout = d })
+func WithTCPIdleTimeout(d time.Duration) TCPListenerOption {
+	return tcpListenerOptionFunc(func(c *tcpListenerConfig) { c.idleTimeout = d })
 }
 
-type tcpServer struct {
+type tcpListener struct {
 	ln      net.Listener
 	addr    netip.AddrPort
 	handler Handler
-	cfg     tcpConfig
+	cfg     tcpListenerConfig
 	wg      sync.WaitGroup
 }
 
@@ -44,11 +44,11 @@ type tcpServer struct {
 // connection is dispatched to a goroutine that loops reading
 // length-prefixed queries (RFC 1035 §4.2.2) and writing length-prefixed
 // responses (RFC 7766).
-func ListenTCP(addr netip.AddrPort, h Handler, opts ...TCPOption) (Server, error) {
+func ListenTCP(addr netip.AddrPort, h Handler, opts ...TCPListenerOption) (Server, error) {
 	if h == nil {
 		return nil, fmt.Errorf("dnsserver: handler is nil")
 	}
-	cfg := tcpConfig{idleTimeout: 10 * time.Second}
+	cfg := tcpListenerConfig{idleTimeout: 10 * time.Second}
 	for _, o := range opts {
 		o.applyTCPServer(&cfg)
 	}
@@ -57,7 +57,7 @@ func ListenTCP(addr netip.AddrPort, h Handler, opts ...TCPOption) (Server, error
 		return nil, fmt.Errorf("dnsserver: tcp listen %s: %w", addr, err)
 	}
 	la := ln.Addr().(*net.TCPAddr)
-	return &tcpServer{
+	return &tcpListener{
 		ln:      ln,
 		addr:    netip.AddrPortFrom(la.AddrPort().Addr(), uint16(la.Port)),
 		handler: h,
@@ -65,9 +65,9 @@ func ListenTCP(addr netip.AddrPort, h Handler, opts ...TCPOption) (Server, error
 	}, nil
 }
 
-func (s *tcpServer) Addr() netip.AddrPort { return s.addr }
+func (s *tcpListener) Addr() netip.AddrPort { return s.addr }
 
-func (s *tcpServer) Serve(ctx context.Context) error {
+func (s *tcpListener) Serve(ctx context.Context) error {
 	stop := make(chan struct{})
 	defer close(stop)
 	go func() {
@@ -95,7 +95,7 @@ func (s *tcpServer) Serve(ctx context.Context) error {
 	}
 }
 
-func (s *tcpServer) serveConn(ctx context.Context, conn net.Conn) {
+func (s *tcpListener) serveConn(ctx context.Context, conn net.Conn) {
 	defer conn.Close()
 
 	// Cancel pending I/O when the server context is cancelled.

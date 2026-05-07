@@ -20,9 +20,9 @@ import (
 // UDPExchangerOption configures a UDP Exchanger.
 type UDPExchangerOption interface{ applyUDPExchanger(*udpExchangerConfig) }
 
-type udpOptionFunc func(*udpExchangerConfig)
+type udpExchangerOptionFunc func(*udpExchangerConfig)
 
-func (f udpOptionFunc) applyUDPExchanger(c *udpExchangerConfig) { f(c) }
+func (f udpExchangerOptionFunc) applyUDPExchanger(c *udpExchangerConfig) { f(c) }
 
 type udpExchangerConfig struct {
 	timeout    time.Duration
@@ -32,13 +32,13 @@ type udpExchangerConfig struct {
 // WithUDPTimeout sets a per-exchange timeout that takes effect when the caller
 // supplies a context without its own deadline. Defaults to 5 seconds.
 func WithUDPTimeout(d time.Duration) UDPExchangerOption {
-	return udpOptionFunc(func(c *udpExchangerConfig) { c.timeout = d })
+	return udpExchangerOptionFunc(func(c *udpExchangerConfig) { c.timeout = d })
 }
 
 // WithUDPReadBufferSize sets the size of the UDP read buffer in bytes. Defaults
 // to 4096, which fits a typical EDNS-extended response.
 func WithUDPReadBufferSize(n int) UDPExchangerOption {
-	return udpOptionFunc(func(c *udpExchangerConfig) { c.bufferSize = n })
+	return udpExchangerOptionFunc(func(c *udpExchangerConfig) { c.bufferSize = n })
 }
 
 type udpExchanger struct {

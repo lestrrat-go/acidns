@@ -14,7 +14,7 @@ import (
 	"fmt"
 	"sync"
 
-	"github.com/lestrrat-go/acidns/dnsserver"
+	"github.com/lestrrat-go/acidns"
 	"github.com/lestrrat-go/acidns/wire"
 	"github.com/lestrrat-go/acidns/wire/rdata"
 	"github.com/lestrrat-go/acidns/wire/rrtype"
@@ -31,9 +31,9 @@ var ErrNoSOA = errors.New("authoritative: zone has no SOA")
 const maxCNAMEChain = 8
 
 // Authoritative is the public face of the authoritative server. It both
-// implements dnsserver.Handler and exposes zone management methods.
+// implements acidns.Handler and exposes zone management methods.
 type Authoritative interface {
-	dnsserver.Handler
+	acidns.Handler
 	AddZone(z zonefile.Zone) error
 	Zones() []wire.Name
 }
@@ -132,8 +132,8 @@ func (a *authoritative) Zones() []wire.Name {
 	return out
 }
 
-// ServeDNS implements dnsserver.Handler.
-func (a *authoritative) ServeDNS(ctx context.Context, w dnsserver.ResponseWriter, q wire.Message) {
+// ServeDNS implements acidns.Handler.
+func (a *authoritative) ServeDNS(ctx context.Context, w acidns.ResponseWriter, q wire.Message) {
 	if q.Flags().Opcode() == wire.OpcodeUpdate {
 		a.serveUpdate(w, q)
 		return
@@ -161,7 +161,7 @@ func (a *authoritative) ServeDNS(ctx context.Context, w dnsserver.ResponseWriter
 // serveAXFR implements RFC 5936 single-message AXFR. The full zone fits in
 // one DNS message for our intended scale; multi-message streaming can be
 // added later by emitting multiple WriteMsg calls.
-func (a *authoritative) serveAXFR(w dnsserver.ResponseWriter, q wire.Message) {
+func (a *authoritative) serveAXFR(w acidns.ResponseWriter, q wire.Message) {
 	question := q.Questions()[0]
 	b := wire.NewBuilder().
 		ID(q.ID()).

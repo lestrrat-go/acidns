@@ -21,9 +21,9 @@ import (
 // TCPExchangerOption configures a TCP Exchanger.
 type TCPExchangerOption interface{ applyTCPExchanger(*tcpExchangerConfig) }
 
-type tcpOptionFunc func(*tcpExchangerConfig)
+type tcpExchangerOptionFunc func(*tcpExchangerConfig)
 
-func (f tcpOptionFunc) applyTCPExchanger(c *tcpExchangerConfig) { f(c) }
+func (f tcpExchangerOptionFunc) applyTCPExchanger(c *tcpExchangerConfig) { f(c) }
 
 type tcpExchangerConfig struct {
 	timeout time.Duration
@@ -32,7 +32,7 @@ type tcpExchangerConfig struct {
 // WithTCPTimeout sets a per-exchange timeout used when the caller's context
 // has no deadline. Defaults to 5 seconds.
 func WithTCPTimeout(d time.Duration) TCPExchangerOption {
-	return tcpOptionFunc(func(c *tcpExchangerConfig) { c.timeout = d })
+	return tcpExchangerOptionFunc(func(c *tcpExchangerConfig) { c.timeout = d })
 }
 
 type tcpExchanger struct {

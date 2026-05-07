@@ -5,8 +5,8 @@ import (
 	"net/netip"
 	"testing"
 
+	"github.com/lestrrat-go/acidns"
 	"github.com/lestrrat-go/acidns/chaos"
-	"github.com/lestrrat-go/acidns/dnsserver"
 	"github.com/lestrrat-go/acidns/wire"
 	"github.com/lestrrat-go/acidns/wire/rdata"
 	"github.com/lestrrat-go/acidns/wire/rrtype"
@@ -70,7 +70,7 @@ func TestChaosVersion(t *testing.T) {
 func TestChaosDelegatesOnNonChaos(t *testing.T) {
 	t.Parallel()
 	delegated := false
-	next := dnsserver.HandlerFunc(func(_ context.Context, w dnsserver.ResponseWriter, q wire.Message) {
+	next := acidns.HandlerFunc(func(_ context.Context, w acidns.ResponseWriter, q wire.Message) {
 		delegated = true
 		resp, _ := wire.NewBuilder().ID(q.ID()).Response(true).Build()
 		_ = w.WriteMsg(resp)

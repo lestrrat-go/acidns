@@ -7,9 +7,9 @@ import (
 	"strings"
 	"time"
 
+	"github.com/lestrrat-go/acidns"
 	"github.com/lestrrat-go/acidns/authoritative"
 	"github.com/lestrrat-go/acidns/dnsclient"
-	"github.com/lestrrat-go/acidns/dnsserver"
 	"github.com/lestrrat-go/acidns/wire"
 	"github.com/lestrrat-go/acidns/wire/rdata"
 	"github.com/lestrrat-go/acidns/wire/rrtype"
@@ -17,7 +17,7 @@ import (
 )
 
 func Example_dnsserver_authoritative() {
-	// authoritative.New + dnsserver.ListenUDP boot a serving authoritative
+	// authoritative.New + acidns.ListenUDP boot a serving authoritative
 	// nameserver in-process. Useful for tests and toy deployments.
 	z, _ := zonefile.Parse(strings.NewReader(`$ORIGIN example.com.
 $TTL 60
@@ -31,7 +31,7 @@ www IN  A    192.0.2.42
 		fmt.Println("authoritative:", err)
 		return
 	}
-	srv, err := dnsserver.ListenUDP(netip.MustParseAddrPort("127.0.0.1:0"), h)
+	srv, err := acidns.ListenUDP(netip.MustParseAddrPort("127.0.0.1:0"), h)
 	if err != nil {
 		fmt.Println("listen:", err)
 		return

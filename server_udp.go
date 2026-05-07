@@ -1,4 +1,4 @@
-package dnsserver
+package acidns
 
 import (
 	"context"
@@ -12,46 +12,46 @@ import (
 )
 
 // UDPOption configures a UDP server.
-type UDPOption interface{ applyUDPServer(*udpConfig) }
+type UDPListenerOption interface{ applyUDPServer(*udpListenerConfig) }
 
-type udpOptionFunc func(*udpConfig)
+type udpListenerOptionFunc func(*udpListenerConfig)
 
-func (f udpOptionFunc) applyUDPServer(c *udpConfig) { f(c) }
+func (f udpListenerOptionFunc) applyUDPServer(c *udpListenerConfig) { f(c) }
 
-type udpConfig struct {
+type udpListenerConfig struct {
 	bufferSize     int
 	maxResponseLen int
 }
 
 // WithUDPReadBuffer sets the size of the read buffer per packet.
 // Defaults to 4096, large enough for an EDNS-extended request.
-func WithUDPReadBuffer(n int) UDPOption {
-	return udpOptionFunc(func(c *udpConfig) { c.bufferSize = n })
+func WithUDPReadBuffer(n int) UDPListenerOption {
+	return udpListenerOptionFunc(func(c *udpListenerConfig) { c.bufferSize = n })
 }
 
 // WithUDPMaxResponse sets the absolute upper bound on response size before
 // truncation, regardless of any EDNS payload size advertised by the client.
 // Defaults to 4096.
-func WithUDPMaxResponse(n int) UDPOption {
-	return udpOptionFunc(func(c *udpConfig) { c.maxResponseLen = n })
+func WithUDPMaxResponse(n int) UDPListenerOption {
+	return udpListenerOptionFunc(func(c *udpListenerConfig) { c.maxResponseLen = n })
 }
 
-type udpServer struct {
+type udpListener struct {
 	pc      net.PacketConn
 	addr    netip.AddrPort
 	handler Handler
-	cfg     udpConfig
+	cfg     udpListenerConfig
 	wg      sync.WaitGroup
 }
 
 // ListenUDP binds a UDP socket on addr and returns a Server that dispatches
 // each received packet to h. addr.Port may be 0 to ask the kernel for an
 // ephemeral port; the actual address is reported by Server.Addr.
-func ListenUDP(addr netip.AddrPort, h Handler, opts ...UDPOption) (Server, error) {
+func ListenUDP(addr netip.AddrPort, h Handler, opts ...UDPListenerOption) (Server, error) {
 	if h == nil {
 		return nil, fmt.Errorf("dnsserver: handler is nil")
 	}
-	cfg := udpConfig{bufferSize: 4096, maxResponseLen: 4096}
+	cfg := udpListenerConfig{bufferSize: 4096, maxResponseLen: 4096}
 	for _, o := range opts {
 		o.applyUDPServer(&cfg)
 	}
@@ -61,7 +61,7 @@ func ListenUDP(addr netip.AddrPort, h Handler, opts ...UDPOption) (Server, error
 		return nil, fmt.Errorf("dnsserver: udp listen %s: %w", addr, err)
 	}
 	la := pc.LocalAddr().(*net.UDPAddr)
-	return &udpServer{
+	return &udpListener{
 		pc:      pc,
 		addr:    netip.AddrPortFrom(la.AddrPort().Addr(), uint16(la.Port)),
 		handler: h,
@@ -69,9 +69,9 @@ func ListenUDP(addr netip.AddrPort, h Handler, opts ...UDPOption) (Server, error
 	}, nil
 }
 
-func (s *udpServer) Addr() netip.AddrPort { return s.addr }
+func (s *udpListener) Addr() netip.AddrPort { return s.addr }
 
-func (s *udpServer) Serve(ctx context.Context) error {
+func (s *udpListener) Serve(ctx context.Context) error {
 	stop := make(chan struct{})
 	defer close(stop)
 	go func() {
@@ -108,7 +108,7 @@ func (s *udpServer) Serve(ctx context.Context) error {
 	}
 }
 
-func (s *udpServer) handlePacket(ctx context.Context, body []byte, src netip.AddrPort) {
+func (s *udpListener) handlePacket(ctx context.Context, body []byte, src netip.AddrPort) {
 	q, err := wire.Unmarshal(body)
 	if err != nil {
 		return // malformed → drop silently

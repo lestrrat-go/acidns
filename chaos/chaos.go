@@ -15,7 +15,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/lestrrat-go/acidns/dnsserver"
+	"github.com/lestrrat-go/acidns"
 	"github.com/lestrrat-go/acidns/wire"
 	"github.com/lestrrat-go/acidns/wire/rdata"
 	"github.com/lestrrat-go/acidns/wire/rrtype"
@@ -33,7 +33,7 @@ func (f optionFunc) apply(c *config) { f(c) }
 type config struct {
 	id      string
 	version string
-	next    dnsserver.Handler
+	next    acidns.Handler
 }
 
 // WithIdentifier sets the response for id.server. and hostname.bind.
@@ -51,12 +51,12 @@ func WithVersion(version string) Option {
 // WithNext sets the Handler to delegate to when the query is not a CHAOS
 // identity query handled by this Handler. Without WithNext, non-matching
 // queries receive a REFUSED response so this handler can stand alone.
-func WithNext(h dnsserver.Handler) Option {
+func WithNext(h acidns.Handler) Option {
 	return optionFunc(func(c *config) { c.next = h })
 }
 
 // New returns a Handler that answers CHAOS identity queries.
-func New(opts ...Option) dnsserver.Handler {
+func New(opts ...Option) acidns.Handler {
 	c := config{}
 	for _, o := range opts {
 		o.apply(&c)
@@ -66,7 +66,7 @@ func New(opts ...Option) dnsserver.Handler {
 
 type handler struct{ cfg config }
 
-func (h *handler) ServeDNS(ctx context.Context, w dnsserver.ResponseWriter, q wire.Message) {
+func (h *handler) ServeDNS(ctx context.Context, w acidns.ResponseWriter, q wire.Message) {
 	if len(q.Questions()) != 1 {
 		h.delegateOrRefuse(ctx, w, q)
 		return
@@ -118,7 +118,7 @@ func (h *handler) lookup(n wire.Name) (string, bool) {
 	return "", false
 }
 
-func (h *handler) delegateOrRefuse(ctx context.Context, w dnsserver.ResponseWriter, q wire.Message) {
+func (h *handler) delegateOrRefuse(ctx context.Context, w acidns.ResponseWriter, q wire.Message) {
 	if h.cfg.next != nil {
 		h.cfg.next.ServeDNS(ctx, w, q)
 		return
@@ -126,7 +126,7 @@ func (h *handler) delegateOrRefuse(ctx context.Context, w dnsserver.ResponseWrit
 	_ = writeRefused(w, q)
 }
 
-func writeRefused(w dnsserver.ResponseWriter, q wire.Message) error {
+func writeRefused(w acidns.ResponseWriter, q wire.Message) error {
 	b := wire.NewBuilder().ID(q.ID()).Response(true).RCODE(wire.RCODERefused)
 	for _, qq := range q.Questions() {
 		b = b.Question(qq)

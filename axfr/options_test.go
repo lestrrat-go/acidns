@@ -8,9 +8,9 @@ import (
 	"testing"
 	"time"
 
+	"github.com/lestrrat-go/acidns"
 	"github.com/lestrrat-go/acidns/authoritative"
 	"github.com/lestrrat-go/acidns/axfr"
-	"github.com/lestrrat-go/acidns/dnsserver"
 	"github.com/lestrrat-go/acidns/wire"
 	"github.com/lestrrat-go/acidns/wire/rrtype"
 	"github.com/lestrrat-go/acidns/zonefile"
@@ -23,7 +23,7 @@ func TestStartWithTimeoutAndNewSOA(t *testing.T) {
 	require.NoError(t, err)
 	h, err := authoritative.New(authoritative.WithZone(z))
 	require.NoError(t, err)
-	srv, err := dnsserver.ListenTCP(netip.MustParseAddrPort("127.0.0.1:0"), h)
+	srv, err := acidns.ListenTCP(netip.MustParseAddrPort("127.0.0.1:0"), h)
 	require.NoError(t, err)
 	ctx, cancel := context.WithCancel(t.Context())
 	t.Cleanup(cancel)

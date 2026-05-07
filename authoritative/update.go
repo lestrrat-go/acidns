@@ -3,7 +3,7 @@ package authoritative
 import (
 	"bytes"
 
-	"github.com/lestrrat-go/acidns/dnsserver"
+	"github.com/lestrrat-go/acidns"
 	"github.com/lestrrat-go/acidns/wire"
 	"github.com/lestrrat-go/acidns/wire/rdata"
 	"github.com/lestrrat-go/acidns/wire/rrtype"
@@ -13,7 +13,7 @@ import (
 // zone. The server is permissive: any caller able to send to the listener
 // is granted update authority. Production deployments should layer a
 // TSIG-aware ACL middleware in front of this handler.
-func (a *authoritative) serveUpdate(w dnsserver.ResponseWriter, q wire.Message) {
+func (a *authoritative) serveUpdate(w acidns.ResponseWriter, q wire.Message) {
 	b := wire.NewBuilder().
 		ID(q.ID()).
 		Response(true).

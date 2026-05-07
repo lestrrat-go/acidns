@@ -3,60 +3,59 @@
 //
 // Apply on top of any Handler:
 //
-//	srv, _ := dnsserver.ListenUDP(addr, acl.New(inner,
-//	    acl.WithAllow(netip.MustParsePrefix("10.0.0.0/8")),
+//	srv, _ := acidns.ListenUDP(addr, acidns.NewACL(inner,
+//	    acl.WithACLAllow(netip.MustParsePrefix("10.0.0.0/8")),
 //	))
-package acl
+package acidns
 
 import (
 	"context"
 	"net/netip"
 
-	"github.com/lestrrat-go/acidns/dnsserver"
 	"github.com/lestrrat-go/acidns/wire"
 )
 
-// Option configures the ACL.
-type Option interface{ applyACL(*config) }
+// ACLOption configures the ACL.
+type ACLOption interface{ applyACL(*aclConfig) }
 
-type optionFunc func(*config)
+type aclOptionFunc func(*aclConfig)
 
-func (f optionFunc) applyACL(c *config) { f(c) }
+func (f aclOptionFunc) applyACL(c *aclConfig) { f(c) }
 
-type config struct {
+type aclConfig struct {
 	allow []netip.Prefix
 	deny  []netip.Prefix
 }
 
-// WithAllow sets the explicit allow list. If non-empty, queries from any
+// WithACLAllow sets the explicit allow list. If non-empty, queries from any
 // other source are refused.
-func WithAllow(prefixes ...netip.Prefix) Option {
-	return optionFunc(func(c *config) { c.allow = append(c.allow, prefixes...) })
+func WithACLAllow(prefixes ...netip.Prefix) ACLOption {
+	return aclOptionFunc(func(c *aclConfig) { c.allow = append(c.allow, prefixes...) })
 }
 
-// WithDeny adds prefixes that are unconditionally refused. Deny is
+// WithACLDeny adds prefixes that are unconditionally refused. Deny is
 // evaluated before allow.
-func WithDeny(prefixes ...netip.Prefix) Option {
-	return optionFunc(func(c *config) { c.deny = append(c.deny, prefixes...) })
+func WithACLDeny(prefixes ...netip.Prefix) ACLOption {
+	return aclOptionFunc(func(c *aclConfig) { c.deny = append(c.deny, prefixes...) })
 }
 
 type acl struct {
-	inner dnsserver.Handler
+	inner Handler
 	allow []netip.Prefix
 	deny  []netip.Prefix
 }
 
 // New returns a Handler that applies the configured ACL before delegating
 // to inner.
-func New(inner dnsserver.Handler, opts ...Option) dnsserver.Handler {
-	c := &config{}
+func NewACL(inner Handler, opts ...ACLOption) Handler {
+	c := &aclConfig{}
 	for _, o := range opts {
 		o.applyACL(c)
 	}
 	return &acl{inner: inner, allow: c.allow, deny: c.deny}
 }
 
-func (a *acl) ServeDNS(ctx context.Context, w dnsserver.ResponseWriter, q wire.Message) {
+func (a *acl) ServeDNS(ctx context.Context, w ResponseWriter, q wire.Message) {
 	src := w.RemoteAddr().Addr()
 	if !a.permit(src) {
 		a.refuse(w, q)
@@ -82,7 +81,7 @@ func (a *acl) permit(src netip.Addr) bool {
 	return false
 }
 
-func (a *acl) refuse(w dnsserver.ResponseWriter, q wire.Message) {
+func (a *acl) refuse(w ResponseWriter, q wire.Message) {
 	b := wire.NewBuilder().
 		ID(q.ID()).
 		Response(true).

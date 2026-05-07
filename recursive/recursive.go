@@ -18,7 +18,6 @@ import (
 	"time"
 
 	"github.com/lestrrat-go/acidns"
-	"github.com/lestrrat-go/acidns/dnsserver"
 	"github.com/lestrrat-go/acidns/wire"
 	"github.com/lestrrat-go/acidns/wire/rdata"
 	"github.com/lestrrat-go/acidns/wire/rrtype"
@@ -29,11 +28,11 @@ import (
 var ErrIterationLimit = errors.New("recursive: iteration limit reached")
 
 // Recursive is the public face of the resolver. It implements
-// dnsserver.Handler so it can be plugged into ListenUDP / ListenTCP
+// acidns.Handler so it can be plugged into ListenUDP / ListenTCP
 // directly, and exposes Resolve for direct use from another handler or
 // from tests.
 type Recursive interface {
-	dnsserver.Handler
+	acidns.Handler
 	Resolve(ctx context.Context, name wire.Name, t rrtype.Type) (Entry, error)
 }
 
@@ -139,8 +138,8 @@ func (defaultDialer) Exchange(ctx context.Context, server netip.AddrPort, q wire
 	return resp, nil
 }
 
-// ServeDNS implements dnsserver.Handler.
-func (r *recursive) ServeDNS(ctx context.Context, w dnsserver.ResponseWriter, q wire.Message) {
+// ServeDNS implements acidns.Handler.
+func (r *recursive) ServeDNS(ctx context.Context, w acidns.ResponseWriter, q wire.Message) {
 	b := wire.NewBuilder().
 		ID(q.ID()).
 		Response(true).

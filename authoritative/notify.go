@@ -1,7 +1,7 @@
 package authoritative
 
 import (
-	"github.com/lestrrat-go/acidns/dnsserver"
+	"github.com/lestrrat-go/acidns"
 	"github.com/lestrrat-go/acidns/wire"
 )
 
@@ -9,7 +9,7 @@ import (
 // that this server holds. The default behaviour is to ACK the NOTIFY
 // without further action; a non-nil handler is run after the ACK is
 // queued (the response is sent regardless of whether the handler errs).
-type NotifyHandler func(zone wire.Question, src dnsserver.ResponseWriter)
+type NotifyHandler func(zone wire.Question, src acidns.ResponseWriter)
 
 // WithNotifyHandler installs a callback that fires when an inbound
 // NOTIFY arrives. Use this on a secondary to schedule an IXFR/AXFR
@@ -20,7 +20,7 @@ func WithNotifyHandler(h NotifyHandler) Option {
 
 // serveNotify acknowledges a NOTIFY for a zone the server hosts. NOTIFY
 // queries from peers about zones we don't hold receive REFUSED.
-func (a *authoritative) serveNotify(w dnsserver.ResponseWriter, q wire.Message) {
+func (a *authoritative) serveNotify(w acidns.ResponseWriter, q wire.Message) {
 	b := wire.NewBuilder().
 		ID(q.ID()).
 		Response(true).

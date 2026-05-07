@@ -7,8 +7,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/lestrrat-go/acidns"
 	"github.com/lestrrat-go/acidns/authoritative"
-	"github.com/lestrrat-go/acidns/dnsserver"
 	"github.com/lestrrat-go/acidns/recursive"
 	"github.com/lestrrat-go/acidns/wire"
 	"github.com/lestrrat-go/acidns/wire/rdata"
@@ -26,7 +26,7 @@ func startAuth(t *testing.T, zoneText string) netip.AddrPort {
 	require.NoError(t, err)
 	h, err := authoritative.New(authoritative.WithZone(z))
 	require.NoError(t, err)
-	srv, err := dnsserver.ListenUDP(netip.MustParseAddrPort("127.0.0.1:0"), h)
+	srv, err := acidns.ListenUDP(netip.MustParseAddrPort("127.0.0.1:0"), h)
 	require.NoError(t, err)
 	ctx, cancel := context.WithCancel(t.Context())
 	t.Cleanup(cancel)
@@ -78,7 +78,7 @@ www IN  A    192.0.2.55
 
 	// Root handler: a small in-process Handler that returns a fixed
 	// referral pointing at ns1.example.com with 127.0.0.1 as glue.
-	rootHandler := dnsserver.HandlerFunc(func(_ context.Context, w dnsserver.ResponseWriter, q wire.Message) {
+	rootHandler := acidns.HandlerFunc(func(_ context.Context, w acidns.ResponseWriter, q wire.Message) {
 		question := q.Questions()[0]
 		ns := wire.NewRecord(wire.MustParseName("example.com"), 60*time.Second,
 			rdata.NewNS(wire.MustParseName("ns1.example.com")))
@@ -93,7 +93,7 @@ www IN  A    192.0.2.55
 			Build()
 		_ = w.WriteMsg(resp)
 	})
-	rootSrv, err := dnsserver.ListenUDP(netip.MustParseAddrPort("127.0.0.1:0"), rootHandler)
+	rootSrv, err := acidns.ListenUDP(netip.MustParseAddrPort("127.0.0.1:0"), rootHandler)
 	require.NoError(t, err)
 	rctx, rcancel := context.WithCancel(t.Context())
 	t.Cleanup(rcancel)

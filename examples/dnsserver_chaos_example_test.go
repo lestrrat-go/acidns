@@ -8,7 +8,6 @@ import (
 
 	"github.com/lestrrat-go/acidns"
 	"github.com/lestrrat-go/acidns/chaos"
-	"github.com/lestrrat-go/acidns/dnsserver"
 	"github.com/lestrrat-go/acidns/wire"
 	"github.com/lestrrat-go/acidns/wire/rdata"
 	"github.com/lestrrat-go/acidns/wire/rrtype"
@@ -22,7 +21,7 @@ func Example_dnsserver_chaos() {
 		chaos.WithIdentifier("ns1.example.net"),
 		chaos.WithVersion("acidns/dev"),
 	)
-	srv, err := dnsserver.ListenUDP(netip.MustParseAddrPort("127.0.0.1:0"), h)
+	srv, err := acidns.ListenUDP(netip.MustParseAddrPort("127.0.0.1:0"), h)
 	if err != nil {
 		fmt.Println("listen:", err)
 		return

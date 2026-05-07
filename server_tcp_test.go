@@ -1,4 +1,4 @@
-package dnsserver_test
+package acidns_test
 
 import (
 	"context"
@@ -7,16 +7,15 @@ import (
 	"time"
 
 	"github.com/lestrrat-go/acidns"
-	"github.com/lestrrat-go/acidns/dnsserver"
 	"github.com/lestrrat-go/acidns/wire"
 	"github.com/lestrrat-go/acidns/wire/rdata"
 	"github.com/lestrrat-go/acidns/wire/rrtype"
 	"github.com/stretchr/testify/require"
 )
 
-func startTCP(t *testing.T, h dnsserver.Handler, opts ...dnsserver.TCPOption) dnsserver.Server {
+func startTCP(t *testing.T, h acidns.Handler, opts ...acidns.TCPListenerOption) acidns.Server {
 	t.Helper()
-	srv, err := dnsserver.ListenTCP(netip.MustParseAddrPort("127.0.0.1:0"), h, opts...)
+	srv, err := acidns.ListenTCP(netip.MustParseAddrPort("127.0.0.1:0"), h, opts...)
 	require.NoError(t, err)
 	ctx, cancel := context.WithCancel(t.Context())
 	go func() { _ = srv.Serve(ctx) }()
@@ -27,7 +26,7 @@ func startTCP(t *testing.T, h dnsserver.Handler, opts ...dnsserver.TCPOption) dn
 func TestTCPServerEcho(t *testing.T) {
 	t.Parallel()
 
-	h := dnsserver.HandlerFunc(func(_ context.Context, w dnsserver.ResponseWriter, q wire.Message) {
+	h := acidns.HandlerFunc(func(_ context.Context, w acidns.ResponseWriter, q wire.Message) {
 		ans := wire.NewRecord(q.Questions()[0].Name(), time.Minute,
 			rdata.NewA(netip.MustParseAddr("203.0.113.88")))
 		resp, _ := wire.NewBuilder().
@@ -50,8 +49,8 @@ func TestTCPServerEcho(t *testing.T) {
 
 func TestTCPServerShutdown(t *testing.T) {
 	t.Parallel()
-	srv, err := dnsserver.ListenTCP(netip.MustParseAddrPort("127.0.0.1:0"),
-		dnsserver.HandlerFunc(func(_ context.Context, _ dnsserver.ResponseWriter, _ wire.Message) {}))
+	srv, err := acidns.ListenTCP(netip.MustParseAddrPort("127.0.0.1:0"),
+		acidns.HandlerFunc(func(_ context.Context, _ acidns.ResponseWriter, _ wire.Message) {}))
 	require.NoError(t, err)
 
 	ctx, cancel := context.WithCancel(t.Context())
@@ -61,7 +60,7 @@ func TestTCPServerShutdown(t *testing.T) {
 	cancel()
 	select {
 	case err := <-done:
-		require.ErrorIs(t, err, dnsserver.ErrServerClosed)
+		require.ErrorIs(t, err, acidns.ErrServerClosed)
 	case <-time.After(2 * time.Second):
 		t.Fatal("Serve did not return")
 	}
@@ -70,7 +69,7 @@ func TestTCPServerShutdown(t *testing.T) {
 func TestTCPServerNoTruncation(t *testing.T) {
 	t.Parallel()
 
-	h := dnsserver.HandlerFunc(func(_ context.Context, w dnsserver.ResponseWriter, q wire.Message) {
+	h := acidns.HandlerFunc(func(_ context.Context, w acidns.ResponseWriter, q wire.Message) {
 		b := wire.NewBuilder().
 			ID(q.ID()).
 			Response(true).

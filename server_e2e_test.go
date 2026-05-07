@@ -1,4 +1,4 @@
-package dnsserver_test
+package acidns_test
 
 import (
 	"context"
@@ -8,9 +8,9 @@ import (
 	"testing"
 	"time"
 
+	"github.com/lestrrat-go/acidns"
 	"github.com/lestrrat-go/acidns/authoritative"
 	"github.com/lestrrat-go/acidns/dnsclient"
-	"github.com/lestrrat-go/acidns/dnsserver"
 	"github.com/lestrrat-go/acidns/wire"
 	"github.com/lestrrat-go/acidns/wire/rdata"
 	"github.com/lestrrat-go/acidns/wire/rrtype"
@@ -41,9 +41,9 @@ func startAuthServer(t *testing.T) (netip.AddrPort, netip.AddrPort) {
 	h, err := authoritative.New(authoritative.WithZone(z))
 	require.NoError(t, err)
 
-	udpSrv, err := dnsserver.ListenUDP(netip.MustParseAddrPort("127.0.0.1:0"), h)
+	udpSrv, err := acidns.ListenUDP(netip.MustParseAddrPort("127.0.0.1:0"), h)
 	require.NoError(t, err)
-	tcpSrv, err := dnsserver.ListenTCP(netip.MustParseAddrPort("127.0.0.1:0"), h)
+	tcpSrv, err := acidns.ListenTCP(netip.MustParseAddrPort("127.0.0.1:0"), h)
 	require.NoError(t, err)
 
 	ctx, cancel := context.WithCancel(t.Context())

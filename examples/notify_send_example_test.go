@@ -10,7 +10,6 @@ import (
 
 	"github.com/lestrrat-go/acidns"
 	"github.com/lestrrat-go/acidns/authoritative"
-	"github.com/lestrrat-go/acidns/dnsserver"
 	"github.com/lestrrat-go/acidns/notify"
 	"github.com/lestrrat-go/acidns/wire"
 	"github.com/lestrrat-go/acidns/zonefile"
@@ -30,7 +29,7 @@ ns1 IN  A    192.0.2.10
 `))
 	h, err := authoritative.New(
 		authoritative.WithZone(z),
-		authoritative.WithNotifyHandler(func(_ wire.Question, _ dnsserver.ResponseWriter) {
+		authoritative.WithNotifyHandler(func(_ wire.Question, _ acidns.ResponseWriter) {
 			fired.Add(1)
 		}),
 	)
@@ -38,7 +37,7 @@ ns1 IN  A    192.0.2.10
 		fmt.Println("auth:", err)
 		return
 	}
-	srv, err := dnsserver.ListenUDP(netip.MustParseAddrPort("127.0.0.1:0"), h)
+	srv, err := acidns.ListenUDP(netip.MustParseAddrPort("127.0.0.1:0"), h)
 	if err != nil {
 		fmt.Println("listen:", err)
 		return

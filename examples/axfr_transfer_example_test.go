@@ -11,7 +11,6 @@ import (
 	"github.com/lestrrat-go/acidns"
 	"github.com/lestrrat-go/acidns/authoritative"
 	"github.com/lestrrat-go/acidns/axfr"
-	"github.com/lestrrat-go/acidns/dnsserver"
 	"github.com/lestrrat-go/acidns/wire"
 	"github.com/lestrrat-go/acidns/wire/rrtype"
 	"github.com/lestrrat-go/acidns/zonefile"
@@ -32,7 +31,7 @@ www IN  A    192.0.2.42
 		fmt.Println("auth:", err)
 		return
 	}
-	srv, err := dnsserver.ListenTCP(netip.MustParseAddrPort("127.0.0.1:0"), h)
+	srv, err := acidns.ListenTCP(netip.MustParseAddrPort("127.0.0.1:0"), h)
 	if err != nil {
 		fmt.Println("listen:", err)
 		return

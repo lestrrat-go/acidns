@@ -10,7 +10,6 @@ import (
 
 	"github.com/lestrrat-go/acidns"
 	"github.com/lestrrat-go/acidns/authoritative"
-	"github.com/lestrrat-go/acidns/dnsserver"
 	"github.com/lestrrat-go/acidns/ixfr"
 	"github.com/lestrrat-go/acidns/wire"
 	"github.com/lestrrat-go/acidns/wire/rdata"
@@ -35,7 +34,7 @@ func TestTransferAXFRFallback(t *testing.T) {
 	h, err := authoritative.New(authoritative.WithZone(z))
 	require.NoError(t, err)
 
-	srv, err := dnsserver.ListenTCP(netip.MustParseAddrPort("127.0.0.1:0"), h)
+	srv, err := acidns.ListenTCP(netip.MustParseAddrPort("127.0.0.1:0"), h)
 	require.NoError(t, err)
 	ctx, cancel := context.WithCancel(t.Context())
 	t.Cleanup(cancel)

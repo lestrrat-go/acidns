@@ -8,9 +8,9 @@ import (
 	"strings"
 	"time"
 
+	"github.com/lestrrat-go/acidns"
 	"github.com/lestrrat-go/acidns/authoritative"
 	"github.com/lestrrat-go/acidns/dnsclient"
-	"github.com/lestrrat-go/acidns/dnsserver"
 	"github.com/lestrrat-go/acidns/wire"
 	"github.com/lestrrat-go/acidns/wire/rdata"
 	"github.com/lestrrat-go/acidns/wire/rrtype"
@@ -29,7 +29,7 @@ func startLocalNS(ctx context.Context, zoneText string) (netip.AddrPort, error) 
 	if err != nil {
 		return netip.AddrPort{}, err
 	}
-	srv, err := dnsserver.ListenUDP(netip.MustParseAddrPort("127.0.0.1:0"), h)
+	srv, err := acidns.ListenUDP(netip.MustParseAddrPort("127.0.0.1:0"), h)
 	if err != nil {
 		return netip.AddrPort{}, err
 	}

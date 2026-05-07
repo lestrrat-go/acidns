@@ -1,4 +1,4 @@
-package dnsserver_test
+package acidns_test
 
 import (
 	"context"
@@ -7,7 +7,6 @@ import (
 	"time"
 
 	"github.com/lestrrat-go/acidns"
-	"github.com/lestrrat-go/acidns/dnsserver"
 	"github.com/lestrrat-go/acidns/wire"
 	"github.com/lestrrat-go/acidns/wire/rrtype"
 	"github.com/stretchr/testify/require"
@@ -15,16 +14,16 @@ import (
 
 type echoHandler struct{}
 
-func (echoHandler) ServeDNS(_ context.Context, w dnsserver.ResponseWriter, q wire.Message) {
+func (echoHandler) ServeDNS(_ context.Context, w acidns.ResponseWriter, q wire.Message) {
 	resp, _ := wire.NewBuilder().ID(q.ID()).Response(true).Question(q.Questions()[0]).Build()
 	_ = w.WriteMsg(resp)
 }
 
 func TestUDPListenWithOptions(t *testing.T) {
 	t.Parallel()
-	srv, err := dnsserver.ListenUDP(netip.MustParseAddrPort("127.0.0.1:0"), echoHandler{},
-		dnsserver.WithUDPReadBuffer(4096),
-		dnsserver.WithUDPMaxResponse(1232),
+	srv, err := acidns.ListenUDP(netip.MustParseAddrPort("127.0.0.1:0"), echoHandler{},
+		acidns.WithUDPReadBuffer(4096),
+		acidns.WithUDPMaxResponse(1232),
 	)
 	require.NoError(t, err)
 	ctx, cancel := context.WithCancel(t.Context())
@@ -46,8 +45,8 @@ func TestUDPListenWithOptions(t *testing.T) {
 
 func TestTCPListenWithOptions(t *testing.T) {
 	t.Parallel()
-	srv, err := dnsserver.ListenTCP(netip.MustParseAddrPort("127.0.0.1:0"), echoHandler{},
-		dnsserver.WithTCPIdleTimeout(2*time.Second),
+	srv, err := acidns.ListenTCP(netip.MustParseAddrPort("127.0.0.1:0"), echoHandler{},
+		acidns.WithTCPIdleTimeout(2*time.Second),
 	)
 	require.NoError(t, err)
 	ctx, cancel := context.WithCancel(t.Context())

@@ -10,7 +10,6 @@ import (
 
 	"github.com/lestrrat-go/acidns"
 	"github.com/lestrrat-go/acidns/authoritative"
-	"github.com/lestrrat-go/acidns/dnsserver"
 	"github.com/lestrrat-go/acidns/notify"
 	"github.com/lestrrat-go/acidns/wire"
 	"github.com/lestrrat-go/acidns/zonefile"
@@ -33,7 +32,7 @@ func startSecondary(t *testing.T, h authoritative.NotifyHandler) netip.AddrPort 
 		authoritative.WithNotifyHandler(h),
 	)
 	require.NoError(t, err)
-	srv, err := dnsserver.ListenUDP(netip.MustParseAddrPort("127.0.0.1:0"), a)
+	srv, err := acidns.ListenUDP(netip.MustParseAddrPort("127.0.0.1:0"), a)
 	require.NoError(t, err)
 	ctx, cancel := context.WithCancel(t.Context())
 	t.Cleanup(cancel)
@@ -45,7 +44,7 @@ func TestSendNotifyAcks(t *testing.T) {
 	t.Parallel()
 
 	var fired atomic.Int32
-	addr := startSecondary(t, func(_ wire.Question, _ dnsserver.ResponseWriter) {
+	addr := startSecondary(t, func(_ wire.Question, _ acidns.ResponseWriter) {
 		fired.Add(1)
 	})
 
