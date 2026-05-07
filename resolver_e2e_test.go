@@ -1,4 +1,4 @@
-package dnsclient_test
+package acidns_test
 
 import (
 	"context"
@@ -7,7 +7,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/lestrrat-go/acidns/dnsclient"
+	"github.com/lestrrat-go/acidns"
 	"github.com/lestrrat-go/acidns/doh"
 	"github.com/lestrrat-go/acidns/dot"
 	"github.com/lestrrat-go/acidns/wire"
@@ -23,14 +23,14 @@ func TestE2ELiveResolver(t *testing.T) {
 	}
 
 	addr := netip.MustParseAddrPort("1.1.1.1:53")
-	r, err := dnsclient.New(dnsclient.WithServers(addr))
+	r, err := acidns.NewResolver(acidns.WithServers(addr))
 	require.NoError(t, err)
 
 	ctx, cancel := context.WithTimeout(t.Context(), 5*time.Second)
 	defer cancel()
 
 	t.Run("UDP LookupHost example.com", func(t *testing.T) {
-		addrs, err := dnsclient.LookupHost(ctx, r, "example.com")
+		addrs, err := acidns.LookupHost(ctx, r, "example.com")
 		require.NoError(t, err)
 		require.NotEmpty(t, addrs)
 		t.Logf("example.com -> %v", addrs)
@@ -47,9 +47,9 @@ func TestE2ELiveResolver(t *testing.T) {
 		ex, err := dot.New(netip.MustParseAddrPort("1.1.1.1:853"),
 			dot.WithServerName("cloudflare-dns.com"))
 		require.NoError(t, err)
-		rd, err := dnsclient.New(dnsclient.WithExchanger(ex))
+		rd, err := acidns.NewResolver(acidns.WithExchanger(ex))
 		require.NoError(t, err)
-		addrs, err := dnsclient.LookupHost(ctx, rd, "example.com")
+		addrs, err := acidns.LookupHost(ctx, rd, "example.com")
 		require.NoError(t, err)
 		require.NotEmpty(t, addrs)
 		t.Logf("DoT example.com -> %v", addrs)
@@ -58,9 +58,9 @@ func TestE2ELiveResolver(t *testing.T) {
 	t.Run("DoH via cloudflare-dns.com", func(t *testing.T) {
 		ex, err := doh.New("https://cloudflare-dns.com/dns-query")
 		require.NoError(t, err)
-		rh, err := dnsclient.New(dnsclient.WithExchanger(ex))
+		rh, err := acidns.NewResolver(acidns.WithExchanger(ex))
 		require.NoError(t, err)
-		addrs, err := dnsclient.LookupHost(ctx, rh, "example.com")
+		addrs, err := acidns.LookupHost(ctx, rh, "example.com")
 		require.NoError(t, err)
 		require.NotEmpty(t, addrs)
 		t.Logf("DoH example.com -> %v", addrs)

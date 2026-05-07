@@ -1,4 +1,4 @@
-package dnsclient_test
+package acidns_test
 
 import (
 	"context"
@@ -8,7 +8,6 @@ import (
 	"time"
 
 	"github.com/lestrrat-go/acidns"
-	"github.com/lestrrat-go/acidns/dnsclient"
 	"github.com/lestrrat-go/acidns/specialuse"
 	"github.com/lestrrat-go/acidns/wire"
 	"github.com/lestrrat-go/acidns/wire/rrtype"
@@ -17,11 +16,11 @@ import (
 
 func TestRCodeErrorIs(t *testing.T) {
 	t.Parallel()
-	live := &dnsclient.RCodeError{Code: wire.RCODENXDomain}
-	require.True(t, errors.Is(live, dnsclient.ErrNXDOMAIN))
-	require.False(t, errors.Is(live, dnsclient.ErrServFail))
+	live := &acidns.RCodeError{Code: wire.RCODENXDomain}
+	require.True(t, errors.Is(live, acidns.ErrNXDOMAIN))
+	require.False(t, errors.Is(live, acidns.ErrServFail))
 	require.False(t, errors.Is(live, errors.New("other")))
-	require.Equal(t, "dnsclient: NXDOMAIN", live.Error())
+	require.Equal(t, "acidns: NXDOMAIN", live.Error())
 }
 
 func TestSpecialUseLoopbackForType(t *testing.T) {
@@ -48,29 +47,29 @@ func (s *stubExchanger) Exchange(_ context.Context, _ wire.Message) (wire.Messag
 
 func TestNewWithExchanger(t *testing.T) {
 	t.Parallel()
-	r, err := dnsclient.New(dnsclient.WithExchanger(&stubExchanger{}))
+	r, err := acidns.NewResolver(acidns.WithExchanger(&stubExchanger{}))
 	require.NoError(t, err)
 	require.NotNil(t, r)
 }
 
 func TestNewRequiresSomething(t *testing.T) {
 	t.Parallel()
-	_, err := dnsclient.New()
-	require.ErrorIs(t, err, dnsclient.ErrNoResolver)
+	_, err := acidns.NewResolver()
+	require.ErrorIs(t, err, acidns.ErrNoResolver)
 }
 
 func TestOptionAccessors(t *testing.T) {
 	t.Parallel()
 	// Just ensure each option compiles and applies without panic.
-	_ = dnsclient.WithEDNSUDPSize(4096)
-	_ = dnsclient.WithDNSSEC(true)
-	_ = dnsclient.WithEDNS(false)
-	_ = dnsclient.WithAttempts(3)
-	_ = dnsclient.WithPerAttemptTimeout(time.Second)
-	_ = dnsclient.WithSearchList(wire.MustParseName("example.com"))
-	_ = dnsclient.WithNdots(2)
-	_ = dnsclient.WithSpecialUse(false)
-	_ = dnsclient.WithServers(netip.MustParseAddrPort("127.0.0.1:53"))
+	_ = acidns.WithEDNSUDPSize(4096)
+	_ = acidns.WithDNSSEC(true)
+	_ = acidns.WithEDNS(false)
+	_ = acidns.WithAttempts(3)
+	_ = acidns.WithPerAttemptTimeout(time.Second)
+	_ = acidns.WithSearchList(wire.MustParseName("example.com"))
+	_ = acidns.WithNdots(2)
+	_ = acidns.WithSpecialUse(false)
+	_ = acidns.WithServers(netip.MustParseAddrPort("127.0.0.1:53"))
 }
 
 func TestAnswerMethods(t *testing.T) {
@@ -84,7 +83,7 @@ func TestAnswerMethods(t *testing.T) {
 		Build()
 	require.NoError(t, err)
 	stub := &stubExchanger{resp: q}
-	r, err := dnsclient.New(dnsclient.WithExchanger(stub), dnsclient.WithSpecialUse(false))
+	r, err := acidns.NewResolver(acidns.WithExchanger(stub), acidns.WithSpecialUse(false))
 	require.NoError(t, err)
 	ans, err := r.Resolve(context.Background(), wire.MustParseName("example.com"), rrtype.A)
 	require.NoError(t, err)

@@ -12,7 +12,7 @@ import (
 	"os"
 	"time"
 
-	"github.com/lestrrat-go/acidns/dnsclient"
+	"github.com/lestrrat-go/acidns"
 	"github.com/lestrrat-go/acidns/wire"
 	"github.com/lestrrat-go/acidns/wire/rdata"
 	"github.com/lestrrat-go/acidns/wire/rrtype"
@@ -31,14 +31,14 @@ func main() {
 	addr, err := netip.ParseAddrPort(*server)
 	check(err)
 
-	r, err := dnsclient.New(dnsclient.WithServers(addr))
+	r, err := acidns.NewResolver(acidns.WithServers(addr))
 	check(err)
 
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
 	if *rrType == "" {
-		addrs, err := dnsclient.LookupHost(ctx, r, host)
+		addrs, err := acidns.LookupHost(ctx, r, host)
 		check(err)
 		for _, a := range addrs {
 			fmt.Println(a)

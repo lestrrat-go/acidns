@@ -6,8 +6,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/lestrrat-go/acidns"
 	"github.com/lestrrat-go/acidns/ddr"
-	"github.com/lestrrat-go/acidns/dnsclient"
 	"github.com/lestrrat-go/acidns/wire"
 	"github.com/lestrrat-go/acidns/wire/rdata"
 	"github.com/lestrrat-go/acidns/wire/rrtype"
@@ -15,10 +15,10 @@ import (
 )
 
 type fakeResolver struct {
-	answer dnsclient.Answer
+	answer acidns.Answer
 }
 
-func (f *fakeResolver) Resolve(_ context.Context, _ wire.Name, _ rrtype.Type) (dnsclient.Answer, error) {
+func (f *fakeResolver) Resolve(_ context.Context, _ wire.Name, _ rrtype.Type) (acidns.Answer, error) {
 	return f.answer, nil
 }
 

@@ -13,7 +13,6 @@ import (
 	"time"
 
 	"github.com/lestrrat-go/acidns"
-	"github.com/lestrrat-go/acidns/dnsclient"
 	"github.com/lestrrat-go/acidns/doh"
 	"github.com/lestrrat-go/acidns/dot"
 	"github.com/lestrrat-go/acidns/wire"
@@ -119,14 +118,14 @@ func splitAtServerArg(argv []string, server *string) (flags, positional []string
 	return out, nil
 }
 
-func buildResolver(o opts) (dnsclient.Resolver, error) {
+func buildResolver(o opts) (acidns.Resolver, error) {
 	switch {
 	case o.dohURL != "":
 		ex, err := doh.New(o.dohURL)
 		if err != nil {
 			return nil, err
 		}
-		return dnsclient.New(dnsclient.WithExchanger(ex))
+		return acidns.NewResolver(acidns.WithExchanger(ex))
 	case o.useDoT:
 		addr, err := serverAddr(o, 853)
 		if err != nil {
@@ -140,7 +139,7 @@ func buildResolver(o opts) (dnsclient.Resolver, error) {
 		if err != nil {
 			return nil, err
 		}
-		return dnsclient.New(dnsclient.WithExchanger(ex))
+		return acidns.NewResolver(acidns.WithExchanger(ex))
 	case o.useTCP:
 		addr, err := serverAddr(o, 53)
 		if err != nil {
@@ -150,9 +149,9 @@ func buildResolver(o opts) (dnsclient.Resolver, error) {
 		if err != nil {
 			return nil, err
 		}
-		return dnsclient.New(dnsclient.WithExchanger(ex))
+		return acidns.NewResolver(acidns.WithExchanger(ex))
 	case o.useSys:
-		return dnsclient.New(dnsclient.WithSystemResolvers())
+		return acidns.NewResolver(acidns.WithSystemResolvers())
 	default:
 		var ex acidns.Exchanger
 		addr, err := serverAddr(o, 53)
@@ -163,7 +162,7 @@ func buildResolver(o opts) (dnsclient.Resolver, error) {
 		if err != nil {
 			return nil, err
 		}
-		return dnsclient.New(dnsclient.WithExchanger(ex))
+		return acidns.NewResolver(acidns.WithExchanger(ex))
 	}
 }
 
@@ -186,7 +185,7 @@ func serverAddr(o opts, defaultPort int) (netip.AddrPort, error) {
 	return netip.AddrPortFrom(addr, uint16(port)), nil
 }
 
-func render(w *os.File, name wire.Name, rt rrtype.Type, ans dnsclient.Answer, elapsed time.Duration, o opts) {
+func render(w *os.File, name wire.Name, rt rrtype.Type, ans acidns.Answer, elapsed time.Duration, o opts) {
 	if o.short {
 		for _, rec := range ans.Records() {
 			fmt.Fprintln(w, formatRData(rec.RData()))

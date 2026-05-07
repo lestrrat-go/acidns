@@ -5,8 +5,8 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/lestrrat-go/acidns"
 	"github.com/lestrrat-go/acidns/ddr"
-	"github.com/lestrrat-go/acidns/dnsclient"
 	"github.com/lestrrat-go/acidns/wire"
 	"github.com/lestrrat-go/acidns/wire/rdata"
 	"github.com/lestrrat-go/acidns/wire/rrtype"
@@ -26,7 +26,7 @@ func (f *fakeAnswer) Truncated() bool         { return false }
 
 type fakeResolver struct{ records []wire.Record }
 
-func (f *fakeResolver) Resolve(_ context.Context, _ wire.Name, _ rrtype.Type) (dnsclient.Answer, error) {
+func (f *fakeResolver) Resolve(_ context.Context, _ wire.Name, _ rrtype.Type) (acidns.Answer, error) {
 	return &fakeAnswer{records: f.records}, nil
 }
 

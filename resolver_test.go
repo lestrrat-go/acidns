@@ -1,4 +1,4 @@
-package dnsclient_test
+package acidns_test
 
 import (
 	"net"
@@ -8,7 +8,6 @@ import (
 	"time"
 
 	"github.com/lestrrat-go/acidns"
-	"github.com/lestrrat-go/acidns/dnsclient"
 	"github.com/lestrrat-go/acidns/wire"
 	"github.com/lestrrat-go/acidns/wire/rdata"
 	"github.com/lestrrat-go/acidns/wire/rrtype"
@@ -66,11 +65,11 @@ func startServer(t *testing.T, v4 []netip.Addr, v6 []netip.Addr) netip.AddrPort 
 	return netip.AddrPortFrom(netip.MustParseAddr("127.0.0.1"), uint16(a.Port))
 }
 
-func newResolver(t *testing.T, addr netip.AddrPort) dnsclient.Resolver {
+func newResolver(t *testing.T, addr netip.AddrPort) acidns.Resolver {
 	t.Helper()
 	ex, err := acidns.NewUDPExchanger(addr)
 	require.NoError(t, err)
-	r, err := dnsclient.New(dnsclient.WithExchanger(ex))
+	r, err := acidns.NewResolver(acidns.WithExchanger(ex))
 	require.NoError(t, err)
 	return r
 }
@@ -101,7 +100,7 @@ func TestLookupHost(t *testing.T) {
 	)
 	r := newResolver(t, addr)
 
-	addrs, err := dnsclient.LookupHost(t.Context(), r, "example.com")
+	addrs, err := acidns.LookupHost(t.Context(), r, "example.com")
 	require.NoError(t, err)
 	require.Equal(t, 3, len(addrs))
 
@@ -121,7 +120,7 @@ func TestLookupHostV4Only(t *testing.T) {
 	)
 	r := newResolver(t, addr)
 
-	addrs, err := dnsclient.LookupHost(t.Context(), r, "example.com")
+	addrs, err := acidns.LookupHost(t.Context(), r, "example.com")
 	require.NoError(t, err)
 	require.Equal(t, 1, len(addrs))
 	require.Equal(t, "203.0.113.1", addrs[0].String())
@@ -129,16 +128,16 @@ func TestLookupHostV4Only(t *testing.T) {
 
 func TestNewRequiresExchangerOrServers(t *testing.T) {
 	t.Parallel()
-	_, err := dnsclient.New()
+	_, err := acidns.NewResolver()
 	require.Error(t, err)
 }
 
 func TestNewWithServers(t *testing.T) {
 	t.Parallel()
 	addr := startServer(t, []netip.Addr{netip.MustParseAddr("203.0.113.1")}, nil)
-	r, err := dnsclient.New(dnsclient.WithServers(addr))
+	r, err := acidns.NewResolver(acidns.WithServers(addr))
 	require.NoError(t, err)
-	addrs, err := dnsclient.LookupHost(t.Context(), r, "example.com")
+	addrs, err := acidns.LookupHost(t.Context(), r, "example.com")
 	require.NoError(t, err)
 	require.Equal(t, 1, len(addrs))
 }

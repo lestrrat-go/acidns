@@ -8,7 +8,7 @@ import (
 	"context"
 	"sort"
 
-	"github.com/lestrrat-go/acidns/dnsclient"
+	"github.com/lestrrat-go/acidns"
 	"github.com/lestrrat-go/acidns/wire"
 	"github.com/lestrrat-go/acidns/wire/rdata"
 	"github.com/lestrrat-go/acidns/wire/rrtype"
@@ -31,7 +31,7 @@ type Relay struct {
 // Discover queries `_amt._udp.<domain>` for SRV records and returns the
 // candidate relays sorted by RFC 2782 priority (ascending; weight ties
 // preserve server-supplied order).
-func Discover(ctx context.Context, r dnsclient.Resolver, domain wire.Name) ([]Relay, error) {
+func Discover(ctx context.Context, r acidns.Resolver, domain wire.Name) ([]Relay, error) {
 	name, err := DiscoveryName(domain)
 	if err != nil {
 		return nil, err

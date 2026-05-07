@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/lestrrat-go/acidns/dnsclient"
+	"github.com/lestrrat-go/acidns"
 	"github.com/lestrrat-go/acidns/wire"
 	"github.com/lestrrat-go/acidns/wire/rdata"
 	"github.com/lestrrat-go/acidns/wire/rrtype"
@@ -28,14 +28,14 @@ www  IN  A    192.0.2.42
 		return
 	}
 
-	r, err := dnsclient.New(dnsclient.WithServers(addr))
+	r, err := acidns.NewResolver(acidns.WithServers(addr))
 	if err != nil {
 		fmt.Println("client:", err)
 		return
 	}
 	qctx, qcancel := context.WithTimeout(ctx, 2*time.Second)
 	defer qcancel()
-	addrs, err := dnsclient.ResolveAs[rdata.A](qctx, r, wire.MustParseName("www.example.com"), rrtype.A)
+	addrs, err := acidns.ResolveAs[rdata.A](qctx, r, wire.MustParseName("www.example.com"), rrtype.A)
 	if err != nil {
 		fmt.Println("resolve:", err)
 		return

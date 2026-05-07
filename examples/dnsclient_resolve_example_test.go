@@ -10,7 +10,6 @@ import (
 
 	"github.com/lestrrat-go/acidns"
 	"github.com/lestrrat-go/acidns/authoritative"
-	"github.com/lestrrat-go/acidns/dnsclient"
 	"github.com/lestrrat-go/acidns/wire"
 	"github.com/lestrrat-go/acidns/wire/rdata"
 	"github.com/lestrrat-go/acidns/wire/rrtype"
@@ -38,7 +37,7 @@ func startLocalNS(ctx context.Context, zoneText string) (netip.AddrPort, error) 
 }
 
 func Example_dnsclient_resolve() {
-	// Resolve is the single primitive on dnsclient.Resolver: name + type
+	// Resolve is the single primitive on acidns.Resolver: name + type
 	// in, Answer out. Errors carry a typed *RCodeError when the response
 	// has a non-NoError RCODE.
 	ctx, cancel := context.WithCancel(context.Background())
@@ -55,7 +54,7 @@ mail IN A    192.0.2.11
 		return
 	}
 
-	r, err := dnsclient.New(dnsclient.WithServers(addr))
+	r, err := acidns.NewResolver(acidns.WithServers(addr))
 	if err != nil {
 		fmt.Println("client:", err)
 		return

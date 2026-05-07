@@ -1,11 +1,11 @@
-package dnsclient_test
+package acidns_test
 
 import (
 	"context"
 	"net/netip"
 	"testing"
 
-	"github.com/lestrrat-go/acidns/dnsclient"
+	"github.com/lestrrat-go/acidns"
 	"github.com/lestrrat-go/acidns/wire"
 	"github.com/lestrrat-go/acidns/wire/rdata"
 	"github.com/lestrrat-go/acidns/wire/rrtype"
@@ -23,7 +23,7 @@ func (f failExchanger) Exchange(_ context.Context, _ wire.Message) (wire.Message
 
 func TestSpecialUseLocalhostA(t *testing.T) {
 	t.Parallel()
-	r, err := dnsclient.New(dnsclient.WithExchanger(failExchanger{t}))
+	r, err := acidns.NewResolver(acidns.WithExchanger(failExchanger{t}))
 	require.NoError(t, err)
 
 	ans, err := r.Resolve(t.Context(), wire.MustParseName("localhost"), rrtype.A)
@@ -34,7 +34,7 @@ func TestSpecialUseLocalhostA(t *testing.T) {
 
 func TestSpecialUseLocalhostAAAA(t *testing.T) {
 	t.Parallel()
-	r, err := dnsclient.New(dnsclient.WithExchanger(failExchanger{t}))
+	r, err := acidns.NewResolver(acidns.WithExchanger(failExchanger{t}))
 	require.NoError(t, err)
 	ans, err := r.Resolve(t.Context(), wire.MustParseName("foo.localhost"), rrtype.AAAA)
 	require.NoError(t, err)
@@ -44,11 +44,11 @@ func TestSpecialUseLocalhostAAAA(t *testing.T) {
 
 func TestSpecialUseInvalid(t *testing.T) {
 	t.Parallel()
-	r, err := dnsclient.New(dnsclient.WithExchanger(failExchanger{t}))
+	r, err := acidns.NewResolver(acidns.WithExchanger(failExchanger{t}))
 	require.NoError(t, err)
 	_, err = r.Resolve(t.Context(), wire.MustParseName("nope.invalid"), rrtype.A)
-	require.ErrorIs(t, err, dnsclient.ErrNXDOMAIN)
-	var rerr *dnsclient.RCodeError
+	require.ErrorIs(t, err, acidns.ErrNXDOMAIN)
+	var rerr *acidns.RCodeError
 	require.ErrorAs(t, err, &rerr)
 	require.Equal(t, wire.RCODENXDomain, rerr.Answer.RCODE())
 }
@@ -72,9 +72,9 @@ func (r *recordingExchanger) Exchange(_ context.Context, q wire.Message) (wire.M
 func TestSpecialUseDisabled(t *testing.T) {
 	t.Parallel()
 	rec := &recordingExchanger{}
-	r, err := dnsclient.New(
-		dnsclient.WithExchanger(rec),
-		dnsclient.WithSpecialUse(false),
+	r, err := acidns.NewResolver(
+		acidns.WithExchanger(rec),
+		acidns.WithSpecialUse(false),
 	)
 	require.NoError(t, err)
 	ans, err := r.Resolve(t.Context(), wire.MustParseName("anything.localhost"), rrtype.A)

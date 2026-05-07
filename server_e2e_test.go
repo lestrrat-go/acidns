@@ -10,7 +10,6 @@ import (
 
 	"github.com/lestrrat-go/acidns"
 	"github.com/lestrrat-go/acidns/authoritative"
-	"github.com/lestrrat-go/acidns/dnsclient"
 	"github.com/lestrrat-go/acidns/wire"
 	"github.com/lestrrat-go/acidns/wire/rdata"
 	"github.com/lestrrat-go/acidns/wire/rrtype"
@@ -62,14 +61,14 @@ func TestE2EAuthoritativeOverUDPAndTCP(t *testing.T) {
 	// raising EDNS UDP size on a deliberately-large response.
 	_ = tcpAddr // not used directly here; Resolver will dial TCP itself
 
-	r, err := dnsclient.New(dnsclient.WithServers(udpAddr))
+	r, err := acidns.NewResolver(acidns.WithServers(udpAddr))
 	require.NoError(t, err)
 
 	ctx, cancel := context.WithTimeout(t.Context(), 2*time.Second)
 	defer cancel()
 
 	t.Run("LookupHost www", func(t *testing.T) {
-		addrs, err := dnsclient.LookupHost(ctx, r, "www.example.com")
+		addrs, err := acidns.LookupHost(ctx, r, "www.example.com")
 		require.NoError(t, err)
 		got := make([]string, len(addrs))
 		for i, a := range addrs {
@@ -93,8 +92,8 @@ func TestE2EAuthoritativeOverUDPAndTCP(t *testing.T) {
 
 	t.Run("NXDOMAIN", func(t *testing.T) {
 		_, err := r.Resolve(ctx, wire.MustParseName("nope.example.com"), rrtype.A)
-		require.ErrorIs(t, err, dnsclient.ErrNXDOMAIN)
-		var rerr *dnsclient.RCodeError
+		require.ErrorIs(t, err, acidns.ErrNXDOMAIN)
+		var rerr *acidns.RCodeError
 		require.ErrorAs(t, err, &rerr)
 		require.Equal(t, 1, len(rerr.Answer.Raw().Authorities()))
 	})
@@ -119,6 +118,6 @@ func TestE2EAuthoritativeOverUDPAndTCP(t *testing.T) {
 
 	t.Run("REFUSED out-of-zone", func(t *testing.T) {
 		_, err := r.Resolve(ctx, wire.MustParseName("example.org"), rrtype.A)
-		require.ErrorIs(t, err, dnsclient.ErrRefused)
+		require.ErrorIs(t, err, acidns.ErrRefused)
 	})
 }

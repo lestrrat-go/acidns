@@ -25,39 +25,68 @@ Follows `lestrrat-go/jwx` and `lestrrat-go/helium` conventions.
 ## Layout
 
 ```
-acidns/                root: top-level convenience re-exports only, no logic
-  dnsmsg/              wire-format messages, headers, questions, RRs, EDNS0
+acidns/                root: high-level convenience layer + UDP/TCP exchangers + Server framework
+  resolver.go          Resolver, NewResolver, WithAttempts/WithDNSSEC/etc.
+  lookup.go            LookupHost, LookupA, LookupMX, ...
+  extract.go           Extract[T], ResolveAs[T]
+  exchanger.go         Exchanger / StreamExchanger / MessageStream interfaces
+  exchanger_udp.go     NewUDPExchanger, WithUDPTimeout, WithUDPReadBufferSize
+  exchanger_tcp.go     NewTCPExchanger, WithTCPTimeout
+  server.go            Server, Handler, HandlerFunc, ResponseWriter
+  server_udp.go        ListenUDP, UDPListenerOption
+  server_tcp.go        ListenTCP, TCPListenerOption
+  middleware_acl.go    NewACL, WithACLAllow, WithACLDeny
+  middleware_ratelimit.go  NewRateLimit, WithRateLimitQPS, ...
+
+  wire/                RFC 1034/1035 core: Message, Question, Record, Builder, EDNS
     rrtype/            RR type + class constants
     rdata/             rdata codecs (one file per RR type)
-    internal/wire/     low-level packer/unpacker (compression, bounds)
-  dnsname/             domain name type + parsing/encoding
+    wirebb/            "building blocks" — pure-function packer/unpacker, Name primitive
+    name.go            wire.Name (alias to wirebb.Name) + ParseName/MustParseName/etc.
+  zonefile/            RFC 1035 §5 master-file parser + writer
+    classless/         RFC 2317 classless in-addr.arpa helper
+
   dnssec/              DNSSEC verification primitives (KeyTag, Verify, VerifyDS)
     validator/         chain-of-trust validator scaffold + NTAStore (RFC 4035)
-  dnszone/             RFC 1035 §5 master-file parser + writer
   dso/                 DNS Stateful Operations TLV codec (RFC 8490)
   tsig/                RFC 8945 transaction signature
-  dnsclient/           client-facing API (Resolver, Answer, options)
-    amt/               RFC 8777 AMT relay discovery
-    axfr/              AXFR client
-    ddr/               RFC 9462 Discovery of Designated Resolvers
-    ixfr/              IXFR client (incremental + AXFR-fallback)
-    dnsupdate/         RFC 2136 client builder
-    resolvconf/        /etc/resolv.conf parser
-    transport/         transport interface + sub-packages
-      udp/, tcp/, dot/, doh/, doq/
-      internal/streamframe/
-  dnsserver/           Handler / ResponseWriter framework
-    authoritative/     master-file-backed authoritative server
-    chaos/             RFC 4892 id.server / hostname.bind handler
-    recursive/         iterative recursive resolver + cache
-    acl/               source-based ACL middleware
-    ratelimit/         per-source token-bucket middleware
+  sig0/                RFC 2931 SIG(0) signing/verification
+  dnscrypt/            DNSCrypt v2 transport
+  mdns/                RFC 6762 multicast DNS browse + DNS-SD
+
+  dot/                 RFC 7858 DNS over TLS
+  doh/                 RFC 8484 DNS over HTTPS
+  doq/                 RFC 9250 DNS over QUIC
+
+  amt/                 RFC 8777 AMT relay discovery
+  axfr/                RFC 5936 AXFR client
+  ddr/                 RFC 9462 Discovery of Designated Resolvers
+  ixfr/                RFC 1995 IXFR client
+  notify/              RFC 1996 NOTIFY client
+  update/              RFC 2136 dynamic update builder
+  resolvconf/          /etc/resolv.conf parser
+  specialuse/          RFC 6761 special-use domain shortcut
+
+  authoritative/       master-file-backed authoritative server
+  chaos/               RFC 4892 id.server / hostname.bind handler
+  recursive/           iterative recursive resolver + cache
+
+  internal/streamframe/  RFC 1035 §4.2.2 length-framed TCP/DoT/DoQ codec
+
   cmd/
     acidig/            dig-style CLI
     acidns-server/     authoritative / recursive / hybrid daemon
   examples/            runnable Example_<area>_<op> tests, one file per example
     lookup/            minimal SDK usage example (binary)
 ```
+
+### Naming conventions
+
+- Spec-named packages (`dnssec`, `tsig`, `sig0`, `dso`, `mdns`, `dnscrypt`, `dot`, `doh`, `doq`, `axfr`, `ixfr`, `notify`, `update`, `ddr`, `amt`, `chaos`, `specialuse`) match their RFC / protocol name.
+- Functional names (`recursive`, `authoritative`, `resolvconf`, `zonefile`, `wire`) describe what the package does; used where no single spec name fits.
+- Top-level convenience names (`Resolver`, `Server`, `Exchanger`) live in the root `acidns` package.
+- The `wire/wirebb` and `dnssec/dnssecbb` (etc.) sub-packages follow jwx's xxxbb pattern: pure-function primitive layer below the ergonomic package.
+- Option types are prefixed when they would otherwise collide in `acidns`: `UDPExchangerOption` vs `UDPListenerOption`, `WithUDPTimeout` vs `WithUDPReadBuffer`, etc.
 
 ## Supported RFCs
 

@@ -1,4 +1,4 @@
-package dnsclient_test
+package acidns_test
 
 import (
 	"context"
@@ -9,7 +9,6 @@ import (
 	"time"
 
 	"github.com/lestrrat-go/acidns"
-	"github.com/lestrrat-go/acidns/dnsclient"
 	"github.com/lestrrat-go/acidns/wire"
 	"github.com/lestrrat-go/acidns/wire/rdata"
 	"github.com/lestrrat-go/acidns/wire/rrtype"
@@ -76,14 +75,14 @@ func TestSearchListSuffixed(t *testing.T) {
 
 	addr, queries := startSearchServer(t, "host.example.com.")
 	ex, _ := acidns.NewUDPExchanger(addr)
-	r, err := dnsclient.New(
-		dnsclient.WithExchanger(ex),
-		dnsclient.WithSearchList(wire.MustParseName("example.com")),
-		dnsclient.WithNdots(2),
+	r, err := acidns.NewResolver(
+		acidns.WithExchanger(ex),
+		acidns.WithSearchList(wire.MustParseName("example.com")),
+		acidns.WithNdots(2),
 	)
 	require.NoError(t, err)
 
-	addrs, err := dnsclient.LookupHost(t.Context(), r, "host")
+	addrs, err := acidns.LookupHost(t.Context(), r, "host")
 	require.NoError(t, err)
 	require.Equal(t, 1, len(addrs))
 	require.Equal(t, "192.0.2.1", addrs[0].String())
@@ -99,14 +98,14 @@ func TestSearchListAbsoluteSkipsSearch(t *testing.T) {
 
 	addr, queries := startSearchServer(t, "host.")
 	ex, _ := acidns.NewUDPExchanger(addr)
-	r, err := dnsclient.New(
-		dnsclient.WithExchanger(ex),
-		dnsclient.WithSearchList(wire.MustParseName("example.com")),
-		dnsclient.WithNdots(2),
+	r, err := acidns.NewResolver(
+		acidns.WithExchanger(ex),
+		acidns.WithSearchList(wire.MustParseName("example.com")),
+		acidns.WithNdots(2),
 	)
 	require.NoError(t, err)
 
-	addrs, err := dnsclient.LookupHost(t.Context(), r, "host.")
+	addrs, err := acidns.LookupHost(t.Context(), r, "host.")
 	require.NoError(t, err)
 	require.Equal(t, 1, len(addrs))
 
@@ -122,14 +121,14 @@ func TestSearchListNdotsAbsoluteFirst(t *testing.T) {
 
 	addr, queries := startSearchServer(t, "a.b.c.")
 	ex, _ := acidns.NewUDPExchanger(addr)
-	r, err := dnsclient.New(
-		dnsclient.WithExchanger(ex),
-		dnsclient.WithSearchList(wire.MustParseName("example.com")),
-		dnsclient.WithNdots(1), // a.b.c has 2 dots ≥ ndots → try absolute first
+	r, err := acidns.NewResolver(
+		acidns.WithExchanger(ex),
+		acidns.WithSearchList(wire.MustParseName("example.com")),
+		acidns.WithNdots(1), // a.b.c has 2 dots ≥ ndots → try absolute first
 	)
 	require.NoError(t, err)
 
-	addrs, err := dnsclient.LookupHost(t.Context(), r, "a.b.c")
+	addrs, err := acidns.LookupHost(t.Context(), r, "a.b.c")
 	require.NoError(t, err)
 	require.Equal(t, 1, len(addrs))
 
@@ -158,9 +157,9 @@ func TestSearchListUnused(t *testing.T) {
 	// No search list configured → behave exactly as before.
 	addr, _ := startSearchServer(t, "host.")
 	ex, _ := acidns.NewUDPExchanger(addr)
-	r, err := dnsclient.New(dnsclient.WithExchanger(ex))
+	r, err := acidns.NewResolver(acidns.WithExchanger(ex))
 	require.NoError(t, err)
 
-	_, err = dnsclient.LookupHost(context.WithValue(t.Context(), struct{}{}, 1), r, "host.")
+	_, err = acidns.LookupHost(context.WithValue(t.Context(), struct{}{}, 1), r, "host.")
 	require.NoError(t, err)
 }

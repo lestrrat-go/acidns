@@ -9,7 +9,6 @@ import (
 
 	"github.com/lestrrat-go/acidns"
 	"github.com/lestrrat-go/acidns/authoritative"
-	"github.com/lestrrat-go/acidns/dnsclient"
 	"github.com/lestrrat-go/acidns/wire"
 	"github.com/lestrrat-go/acidns/wire/rdata"
 	"github.com/lestrrat-go/acidns/wire/rrtype"
@@ -41,7 +40,7 @@ www IN  A    192.0.2.42
 	go func() { _ = srv.Serve(ctx) }()
 
 	// Now ask it.
-	r, err := dnsclient.New(dnsclient.WithServers(srv.Addr()))
+	r, err := acidns.NewResolver(acidns.WithServers(srv.Addr()))
 	if err != nil {
 		fmt.Println("client:", err)
 		return

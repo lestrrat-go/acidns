@@ -17,7 +17,7 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/lestrrat-go/acidns/dnsclient"
+	"github.com/lestrrat-go/acidns"
 	"github.com/lestrrat-go/acidns/wire"
 	"github.com/lestrrat-go/acidns/wire/rdata"
 	"github.com/lestrrat-go/acidns/wire/rrtype"
@@ -64,7 +64,7 @@ type Endpoint struct {
 // Discover queries _dns.resolver.arpa via r and returns the Endpoints sorted
 // by priority (lowest first; priority 0 has special meaning per RFC 9460 and
 // is filtered out — those are AliasMode SVCB entries).
-func Discover(ctx context.Context, r dnsclient.Resolver) ([]Endpoint, error) {
+func Discover(ctx context.Context, r acidns.Resolver) ([]Endpoint, error) {
 	ans, err := r.Resolve(ctx, ResolverDomain, rrtype.SVCB)
 	if err != nil {
 		return nil, err

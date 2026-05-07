@@ -1,4 +1,4 @@
-package dnsclient
+package acidns
 
 import (
 	"fmt"
@@ -17,7 +17,7 @@ type RCodeError struct {
 }
 
 func (e *RCodeError) Error() string {
-	return fmt.Sprintf("dnsclient: %s", e.Code)
+	return fmt.Sprintf("acidns: %s", e.Code)
 }
 
 // Is matches sentinels by RCODE only — the attached Answer is not part of

@@ -38,10 +38,14 @@ func WithRateLimitQPS(qps float64) RateLimitOption {
 
 // WithRateLimitBurst sets how many tokens a fresh source begins with. Defaults to
 // 20 — twice WithRateLimitQPS by convention.
-func WithRateLimitBurst(n int) RateLimitOption { return rateLimitOptionFunc(func(c *rateLimitConfig) { c.burst = n }) }
+func WithRateLimitBurst(n int) RateLimitOption {
+	return rateLimitOptionFunc(func(c *rateLimitConfig) { c.burst = n })
+}
 
 // WithRateLimitDrop silences over-budget queries instead of returning REFUSED.
-func WithRateLimitDrop() RateLimitOption { return rateLimitOptionFunc(func(c *rateLimitConfig) { c.drop = true }) }
+func WithRateLimitDrop() RateLimitOption {
+	return rateLimitOptionFunc(func(c *rateLimitConfig) { c.drop = true })
+}
 
 // WithRateLimitGroupPrefix coalesces sources by the given CIDR mask before keying
 // the bucket — useful so a single misbehaving /24 isn't permitted to

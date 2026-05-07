@@ -1,11 +1,11 @@
 // Package dnsclient is the user-facing entry point for performing DNS
 // queries against a configured resolver.
 //
-// Two layers are exposed: the low-level acidns.Exchanger (one query, one
+// Two layers are exposed: the low-level Exchanger (one query, one
 // response, no retry, no fall-back) and the high-level Resolver, which adds
 // query construction, ID randomisation, parallel A/AAAA dispatch, and typed
 // convenience helpers.
-package dnsclient
+package acidns
 
 import (
 	"context"
@@ -16,7 +16,6 @@ import (
 	"net/netip"
 	"time"
 
-	"github.com/lestrrat-go/acidns"
 	"github.com/lestrrat-go/acidns/resolvconf"
 	"github.com/lestrrat-go/acidns/specialuse"
 	"github.com/lestrrat-go/acidns/wire"
@@ -75,15 +74,15 @@ func (a *answer) RCODE() wire.RCODE       { return a.raw.Flags().RCODE() }
 func (a *answer) Authoritative() bool     { return a.raw.Flags().Authoritative() }
 func (a *answer) Truncated() bool         { return a.raw.Flags().Truncated() }
 
-// Option configures a Resolver.
-type Option interface{ applyResolver(*config) }
+// ResolverOption configures a Resolver.
+type ResolverOption interface{ applyResolver(*resolverConfig) }
 
-type optionFunc func(*config)
+type resolverOptionFunc func(*resolverConfig)
 
-func (f optionFunc) applyResolver(c *config) { f(c) }
+func (f resolverOptionFunc) applyResolver(c *resolverConfig) { f(c) }
 
-type config struct {
-	exchanger         acidns.Exchanger
+type resolverConfig struct {
+	exchanger         Exchanger
 	servers           []netip.AddrPort
 	ednsUDP           uint16
 	ednsDO            bool
@@ -99,54 +98,54 @@ type config struct {
 
 // WithExchanger pins the Resolver to a specific transport. Mutually
 // exclusive with WithServers.
-func WithExchanger(ex acidns.Exchanger) Option {
-	return optionFunc(func(c *config) { c.exchanger = ex })
+func WithExchanger(ex Exchanger) ResolverOption {
+	return resolverOptionFunc(func(c *resolverConfig) { c.exchanger = ex })
 }
 
 // WithServers configures the Resolver to talk UDP to the given servers in
 // order, falling over to the next on failure.
-func WithServers(servers ...netip.AddrPort) Option {
-	return optionFunc(func(c *config) { c.servers = append(c.servers[:0], servers...) })
+func WithServers(servers ...netip.AddrPort) ResolverOption {
+	return resolverOptionFunc(func(c *resolverConfig) { c.servers = append(c.servers[:0], servers...) })
 }
 
 // WithEDNSUDPSize advertises a non-default UDP payload size in OPT.
 // The default (1232) follows IETF DNS Flag Day 2020.
-func WithEDNSUDPSize(n uint16) Option {
-	return optionFunc(func(c *config) { c.ednsUDP = n })
+func WithEDNSUDPSize(n uint16) ResolverOption {
+	return resolverOptionFunc(func(c *resolverConfig) { c.ednsUDP = n })
 }
 
 // WithDNSSEC toggles the DO bit in OPT. When true (default false), DNSSEC
 // RRs are requested in responses.
-func WithDNSSEC(v bool) Option {
-	return optionFunc(func(c *config) { c.ednsDO = v })
+func WithDNSSEC(v bool) ResolverOption {
+	return resolverOptionFunc(func(c *resolverConfig) { c.ednsDO = v })
 }
 
 // WithEDNS toggles inclusion of the OPT pseudo-RR in outgoing queries.
 // Default is true — pass false only when targeting servers known to
 // misbehave on EDNS.
-func WithEDNS(v bool) Option {
-	return optionFunc(func(c *config) { c.disableEDNS = !v })
+func WithEDNS(v bool) ResolverOption {
+	return resolverOptionFunc(func(c *resolverConfig) { c.disableEDNS = !v })
 }
 
 // WithAttempts sets how many times each server is retried before failover
 // to the next. Defaults to 1 (no retry). Applied only to WithServers; a
 // caller-supplied WithExchanger handles its own retry policy.
-func WithAttempts(n int) Option {
-	return optionFunc(func(c *config) { c.attempts = n })
+func WithAttempts(n int) ResolverOption {
+	return resolverOptionFunc(func(c *resolverConfig) { c.attempts = n })
 }
 
 // WithPerAttemptTimeout caps the duration of each attempt. Zero means the
 // outer context's deadline (if any) is the only bound.
-func WithPerAttemptTimeout(d time.Duration) Option {
-	return optionFunc(func(c *config) { c.perAttempt = d })
+func WithPerAttemptTimeout(d time.Duration) ResolverOption {
+	return resolverOptionFunc(func(c *resolverConfig) { c.perAttempt = d })
 }
 
 // WithSystemResolvers loads /etc/resolv.conf and uses its nameservers,
 // search list, and ndots, equivalent to WithServers + WithSearchList +
 // WithNdots sourced from the system file. Returns an error from New if no
 // nameserver entries are found.
-func WithSystemResolvers() Option {
-	return optionFunc(func(c *config) {
+func WithSystemResolvers() ResolverOption {
+	return resolverOptionFunc(func(c *resolverConfig) {
 		cfg, err := resolvconf.Load("")
 		if err != nil {
 			c.systemErr = err
@@ -167,24 +166,24 @@ func WithSystemResolvers() Option {
 // localhost., *.invalid., and *.onion. Default is true — pass false for
 // tooling that needs to interrogate a DNS server about how it handles those
 // names rather than having the resolver answer locally.
-func WithSpecialUse(v bool) Option {
-	return optionFunc(func(c *config) { c.disableSpecialUse = !v })
+func WithSpecialUse(v bool) ResolverOption {
+	return resolverOptionFunc(func(c *resolverConfig) { c.disableSpecialUse = !v })
 }
 
 // WithSearchList sets the suffixes appended to short names by LookupHost.
 // Names with a trailing dot bypass the search list.
-func WithSearchList(suffixes ...wire.Name) Option {
-	return optionFunc(func(c *config) { c.searchList = append(c.searchList[:0], suffixes...) })
+func WithSearchList(suffixes ...wire.Name) ResolverOption {
+	return resolverOptionFunc(func(c *resolverConfig) { c.searchList = append(c.searchList[:0], suffixes...) })
 }
 
 // WithNdots sets the threshold of dots above which a name is tried in
 // absolute form before applying the search list. Defaults to 1.
-func WithNdots(n int) Option {
-	return optionFunc(func(c *config) { c.ndots = n; c.ndotsSet = true })
+func WithNdots(n int) ResolverOption {
+	return resolverOptionFunc(func(c *resolverConfig) { c.ndots = n; c.ndotsSet = true })
 }
 
 type resolver struct {
-	exchanger         acidns.Exchanger
+	exchanger         Exchanger
 	ednsUDP           uint16
 	ednsDO            bool
 	disableEDNS       bool
@@ -195,8 +194,8 @@ type resolver struct {
 
 // New returns a Resolver. Exactly one of WithExchanger or WithServers must
 // be supplied.
-func New(opts ...Option) (Resolver, error) {
-	c := config{ednsUDP: 1232}
+func NewResolver(opts ...ResolverOption) (Resolver, error) {
+	c := resolverConfig{ednsUDP: 1232}
 	for _, o := range opts {
 		o.applyResolver(&c)
 	}
@@ -376,18 +375,18 @@ func randomID() (uint16, error) {
 	return binary.BigEndian.Uint16(b[:]), nil
 }
 
-func buildFallover(servers []netip.AddrPort, attempts int, perAttempt time.Duration) (acidns.Exchanger, error) {
-	exs := make([]acidns.Exchanger, 0, len(servers))
+func buildFallover(servers []netip.AddrPort, attempts int, perAttempt time.Duration) (Exchanger, error) {
+	exs := make([]Exchanger, 0, len(servers))
 	for _, s := range servers {
-		uex, err := acidns.NewUDPExchanger(s)
+		uex, err := NewUDPExchanger(s)
 		if err != nil {
 			return nil, err
 		}
-		tex, err := acidns.NewTCPExchanger(s)
+		tex, err := NewTCPExchanger(s)
 		if err != nil {
 			return nil, err
 		}
-		var ex acidns.Exchanger = &tcFallback{primary: uex, fallback: tex}
+		var ex Exchanger = &tcFallback{primary: uex, fallback: tex}
 		if attempts > 1 || perAttempt > 0 {
 			ex = &retryExchanger{inner: ex, attempts: max(attempts, 1), perAttempt: perAttempt}
 		}
@@ -402,7 +401,7 @@ func buildFallover(servers []netip.AddrPort, attempts int, perAttempt time.Durat
 // retryExchanger retries a wrapped Exchanger up to attempts times, with an
 // optional per-attempt timeout that caps each individual try.
 type retryExchanger struct {
-	inner      acidns.Exchanger
+	inner      Exchanger
 	attempts   int
 	perAttempt time.Duration
 }
@@ -430,7 +429,7 @@ func (r *retryExchanger) Exchange(ctx context.Context, q wire.Message) (wire.Mes
 	return nil, lastErr
 }
 
-type failover struct{ exs []acidns.Exchanger }
+type failover struct{ exs []Exchanger }
 
 func (f *failover) Exchange(ctx context.Context, q wire.Message) (wire.Message, error) {
 	var lastErr error
@@ -450,7 +449,7 @@ func (f *failover) Exchange(ctx context.Context, q wire.Message) (wire.Message, 
 // tcFallback wraps a primary (typically UDP) exchanger with a fallback
 // (typically TCP) for retrying truncated responses per RFC 1035 §4.2.1.
 type tcFallback struct {
-	primary, fallback acidns.Exchanger
+	primary, fallback Exchanger
 }
 
 func (e *tcFallback) Exchange(ctx context.Context, q wire.Message) (wire.Message, error) {
