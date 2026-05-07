@@ -9,7 +9,7 @@ import (
 
 	"github.com/lestrrat-go/acidns/dnsclient/transport/udp"
 	"github.com/lestrrat-go/acidns/dnsserver"
-	"github.com/lestrrat-go/acidns/dnsserver/recursive"
+	"github.com/lestrrat-go/acidns/recursive"
 	"github.com/lestrrat-go/acidns/wire"
 	"github.com/lestrrat-go/acidns/wire/rrtype"
 	"github.com/stretchr/testify/require"

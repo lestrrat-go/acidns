@@ -8,8 +8,8 @@ import (
 	"time"
 
 	"github.com/lestrrat-go/acidns/dnsserver"
-	"github.com/lestrrat-go/acidns/dnsserver/authoritative"
-	"github.com/lestrrat-go/acidns/dnsserver/recursive"
+	"github.com/lestrrat-go/acidns/authoritative"
+	"github.com/lestrrat-go/acidns/recursive"
 	"github.com/lestrrat-go/acidns/dnszone"
 	"github.com/lestrrat-go/acidns/wire"
 	"github.com/lestrrat-go/acidns/wire/rdata"

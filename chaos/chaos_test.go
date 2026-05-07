@@ -6,7 +6,7 @@ import (
 	"testing"
 
 	"github.com/lestrrat-go/acidns/dnsserver"
-	"github.com/lestrrat-go/acidns/dnsserver/chaos"
+	"github.com/lestrrat-go/acidns/chaos"
 	"github.com/lestrrat-go/acidns/wire"
 	"github.com/lestrrat-go/acidns/wire/rdata"
 	"github.com/lestrrat-go/acidns/wire/rrtype"

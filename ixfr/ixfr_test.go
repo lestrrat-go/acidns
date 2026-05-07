@@ -11,7 +11,7 @@ import (
 	"github.com/lestrrat-go/acidns/dnsclient/transport"
 	"github.com/lestrrat-go/acidns/dnsclient/transport/tcp"
 	"github.com/lestrrat-go/acidns/dnsserver"
-	"github.com/lestrrat-go/acidns/dnsserver/authoritative"
+	"github.com/lestrrat-go/acidns/authoritative"
 	"github.com/lestrrat-go/acidns/dnszone"
 	"github.com/lestrrat-go/acidns/ixfr"
 	"github.com/lestrrat-go/acidns/wire"
