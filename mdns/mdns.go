@@ -116,8 +116,8 @@ func ParseBrowseResponse(m wire.Message) []Service {
 		}
 		instanceName := ptr.PtrDName()
 		key := instanceName.String()
-		s := srvByOwner[key]
-		if s == nil {
+		s, haveSRV := srvByOwner[key]
+		if !haveSRV {
 			continue
 		}
 		svc := Service{

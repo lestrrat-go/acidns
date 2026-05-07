@@ -23,27 +23,20 @@ const (
 )
 
 // ZONEMD is the Message Digest for DNS Zones rdata (RFC 8976).
-type ZONEMD interface {
-	RData
-	Serial() uint32
-	Scheme() ZONEMDScheme
-	HashAlgorithm() ZONEMDHashAlgorithm
-	Digest() []byte
-}
-
-type zonemd struct {
+type ZONEMD struct {
 	serial uint32
 	scheme ZONEMDScheme
 	hash   ZONEMDHashAlgorithm
 	digest []byte
 }
 
-func (zonemd) Type() rrtype.Type                    { return rrtype.ZONEMD }
-func (z zonemd) Serial() uint32                     { return z.serial }
-func (z zonemd) Scheme() ZONEMDScheme               { return z.scheme }
-func (z zonemd) HashAlgorithm() ZONEMDHashAlgorithm { return z.hash }
-func (z zonemd) Digest() []byte                     { return z.digest }
-func (z zonemd) Pack(p *wirebb.Packer) {
+func (ZONEMD) Type() rrtype.Type                    { return rrtype.ZONEMD }
+func (ZONEMD) typedRData()                          {}
+func (z ZONEMD) Serial() uint32                     { return z.serial }
+func (z ZONEMD) Scheme() ZONEMDScheme               { return z.scheme }
+func (z ZONEMD) HashAlgorithm() ZONEMDHashAlgorithm { return z.hash }
+func (z ZONEMD) Digest() []byte                     { return z.digest }
+func (z ZONEMD) Pack(p *wirebb.Packer) {
 	p.Uint32(z.serial)
 	p.Uint8(uint8(z.scheme))
 	p.Uint8(uint8(z.hash))
@@ -54,30 +47,31 @@ func (z zonemd) Pack(p *wirebb.Packer) {
 func NewZONEMD(serial uint32, scheme ZONEMDScheme, hash ZONEMDHashAlgorithm, digest []byte) ZONEMD {
 	cp := make([]byte, len(digest))
 	copy(cp, digest)
-	return zonemd{serial: serial, scheme: scheme, hash: hash, digest: cp}
+	return ZONEMD{serial: serial, scheme: scheme, hash: hash, digest: cp}
 }
 
 func unpackZONEMD(u *wirebb.Unpacker, rdlen int) (ZONEMD, error) {
+	var zero ZONEMD
 	if rdlen < 6 {
-		return nil, fmt.Errorf("%w: ZONEMD rdlen=%d, want >=6", ErrInvalidRData, rdlen)
+		return zero, fmt.Errorf("%w: ZONEMD rdlen=%d, want >=6", ErrInvalidRData, rdlen)
 	}
 	serial, err := u.Uint32()
 	if err != nil {
-		return nil, err
+		return zero, err
 	}
 	scheme, err := u.Uint8()
 	if err != nil {
-		return nil, err
+		return zero, err
 	}
 	hash, err := u.Uint8()
 	if err != nil {
-		return nil, err
+		return zero, err
 	}
 	digest, err := u.Bytes(rdlen - 6)
 	if err != nil {
-		return nil, err
+		return zero, err
 	}
 	cp := make([]byte, len(digest))
 	copy(cp, digest)
-	return zonemd{serial: serial, scheme: ZONEMDScheme(scheme), hash: ZONEMDHashAlgorithm(hash), digest: cp}, nil
+	return ZONEMD{serial: serial, scheme: ZONEMDScheme(scheme), hash: ZONEMDHashAlgorithm(hash), digest: cp}, nil
 }

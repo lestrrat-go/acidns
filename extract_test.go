@@ -8,7 +8,6 @@ import (
 	"github.com/lestrrat-go/acidns"
 	"github.com/lestrrat-go/acidns/wire"
 	"github.com/lestrrat-go/acidns/wire/rdata"
-	"github.com/lestrrat-go/acidns/wire/rrtype"
 	"github.com/stretchr/testify/require"
 )
 
@@ -20,7 +19,7 @@ func TestResolveAs_A(t *testing.T) {
 	)
 	r := newResolver(t, addr)
 
-	as, err := acidns.ResolveAs[rdata.A](t.Context(), r, wire.MustParseName("example.com"), rrtype.A)
+	as, err := acidns.ResolveAs[rdata.A](t.Context(), r, wire.MustParseName("example.com"))
 	require.NoError(t, err)
 	got := make([]string, len(as))
 	for i, a := range as {
@@ -30,9 +29,8 @@ func TestResolveAs_A(t *testing.T) {
 	require.Equal(t, []string{"203.0.113.1", "203.0.113.2"}, got)
 }
 
-// ResolveAs[rdata.AAAA] paired with rrtype.A must return zero results — the
-// owner type filter prevents structural-satisfaction collisions between
-// rdata.A and rdata.AAAA.
+// ResolveAs[rdata.AAAA] against an A-only zone returns zero results — the
+// owner-type filter (inferred from T's zero value) excludes A records.
 func TestResolveAs_TypeFilterPreventsCollision(t *testing.T) {
 	t.Parallel()
 	addr := startServer(t,
@@ -41,7 +39,7 @@ func TestResolveAs_TypeFilterPreventsCollision(t *testing.T) {
 	)
 	r := newResolver(t, addr)
 
-	as, err := acidns.ResolveAs[rdata.AAAA](t.Context(), r, wire.MustParseName("example.com"), rrtype.AAAA)
+	as, err := acidns.ResolveAs[rdata.AAAA](t.Context(), r, wire.MustParseName("example.com"))
 	require.NoError(t, err)
 	require.Empty(t, as) // server returns no AAAA records
 }

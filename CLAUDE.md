@@ -14,7 +14,7 @@ Full-fledged DNS toolkit in Go. Module: `github.com/lestrrat-go/acidns`.
 
 Follows `lestrrat-go/jwx` and `lestrrat-go/helium` conventions.
 
-- Public API surface = interfaces. Concrete types = unexported impls returned by constructors.
+- Public types = interfaces ONLY when they prevent footguns (mutability, invariants, sum-type discriminators). Plain value carriers (rdata payloads, parsed records, transparent results) are exported structs with unexported fields. Constructors validate.
 - Constructors take functional options: `New(...Option)`. Options live in `option.go` per package.
 - Builders for compound objects: `pkg.NewXxxBuilder().A(...).B(...).Build() (Xxx, error)`.
 - Strongly typed accessors. NEVER expose `interface{}` / `any` in public signatures unless genuinely polymorphic.
@@ -218,35 +218,42 @@ Status legend: **Implemented** = working code with tests; **Partial** = document
 - Compression pointer loops: detect via offset-set or hop counter; reject malformed input with typed error.
 - Test data: capture real `dig +qr` packets as hex fixtures under `testdata/`.
 
-## Dispatching on rdata type — DO NOT type-switch on the interface
+## Dispatching on rdata type
 
-`rdata.A` and `rdata.AAAA` have identical method sets (`Type()`, `Pack()`, `Addr()`); `rdata.SVCB` is a structural superset of `rdata.CNAME` (both expose `Target()`). Go interface satisfaction is structural, so:
+Each typed rdata is a concrete struct (`rdata.A`, `rdata.AAAA`, `rdata.MX`, ..., `rdata.SVCB`, `rdata.HTTPS`) with unexported fields. `rdata.RData` is the umbrella interface implemented by all of them; `rdata.Typed` further requires a compile-time-constant `Type()` (every typed rdata satisfies Typed; `rdata.Unknown` deliberately does not). Type assertions like `rec.RData().(rdata.A)` only succeed when the dynamic type is exactly `rdata.A`, so the structural-satisfaction collisions of the old interface-typed era (A vs AAAA, CNAME vs SVCB) no longer apply.
 
-- A `*svcb` value satisfies `rdata.CNAME` and will match a `case rdata.CNAME:` arm BEFORE a `case rdata.SVCB:` arm in a type switch.
-- An `aaaaData` value satisfies `rdata.A` and vice versa; whichever arm appears first wins.
-
-**Rule:** dispatch on `rec.Type()` (or `rd.Type()`) and then assert to the concrete interface — NEVER `switch rd := rec.RData().(type)`.
+**Recommended dispatch pattern** — switch on `rec.Type()` (or `rd.Type()`) for clarity, then assert:
 
 ```go
-// good
 switch rec.Type() {
 case rrtype.A:
     addr := rec.RData().(rdata.A).Addr()
 case rrtype.AAAA:
     addr := rec.RData().(rdata.AAAA).Addr()
-case rrtype.SVCB, rrtype.HTTPS:
+case rrtype.SVCB:
     s := rec.RData().(rdata.SVCB)
     ...
-}
-
-// bad — picks the wrong case for AAAA / SVCB
-switch rd := rec.RData().(type) {
-case rdata.A: ...
-case rdata.CNAME: ...   // also matches SVCB
+case rrtype.HTTPS:
+    s := rec.RData().(rdata.HTTPS)
+    ...
 }
 ```
 
-This rule applies to all rdata interface dispatch. If a future call-site needs the same logic, add the dispatch helper to the package that owns it rather than duplicating the type switch.
+`switch rd := rec.RData().(type)` is now safe (no false matches), but type-on-rec.Type() reads more directly and pairs with the rrtype constants used elsewhere.
+
+For helpers that share logic across SVCB and HTTPS (or other shape-equivalent rdata pairs), use a generic with a type-set constraint that includes the shared methods:
+
+```go
+type svcbLike interface {
+    rdata.SVCB | rdata.HTTPS
+    Priority() uint16
+    Target() wire.Name
+    Params() []rdata.SVCBParam
+}
+func formatSVCB[T svcbLike](s T) string { ... }
+```
+
+For single-record assertions, prefer `wire.RDataAs[T rdata.Typed](rec)` — the rrtype is inferred from T's zero value. For slice extraction, use `acidns.Extract[T rdata.RData](records)` (allows Unknown via a special case) or `acidns.ResolveAs[T rdata.Typed](ctx, r, name)`.
 
 ## Pre-flight for any task in this repo
 

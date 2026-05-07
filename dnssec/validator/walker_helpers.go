@@ -28,7 +28,7 @@ func recordsOfType(records []wire.Record, t rrtype.Type, owner wire.Name) []wire
 func extractRRSIGs(records []wire.Record) []rdata.RRSIG {
 	out := make([]rdata.RRSIG, 0, len(records))
 	for _, r := range records {
-		s, ok := wire.RDataAs[rdata.RRSIG](r, rrtype.RRSIG)
+		s, ok := wire.RDataAs[rdata.RRSIG](r)
 		if !ok {
 			continue
 		}
@@ -79,7 +79,7 @@ func allNSEC(records []wire.Record) []wire.Record {
 // authoritative zone of a response without parsing SOA records.
 func signerOf(records []wire.Record) wire.Name {
 	for _, r := range records {
-		s, ok := wire.RDataAs[rdata.RRSIG](r, rrtype.RRSIG)
+		s, ok := wire.RDataAs[rdata.RRSIG](r)
 		if ok {
 			return s.SignerName()
 		}

@@ -60,27 +60,20 @@ const (
 )
 
 // DNSKEY is the DNSSEC public key rdata (RFC 4034 §2).
-type DNSKEY interface {
-	RData
-	Flags() uint16
-	Protocol() uint8
-	Algorithm() DNSSECAlgorithm
-	PublicKey() []byte
-}
-
-type dnskey struct {
+type DNSKEY struct {
 	flags     uint16
 	protocol  uint8
 	algorithm DNSSECAlgorithm
 	pubkey    []byte
 }
 
-func (dnskey) Type() rrtype.Type            { return rrtype.DNSKEY }
-func (k dnskey) Flags() uint16              { return k.flags }
-func (k dnskey) Protocol() uint8            { return k.protocol }
-func (k dnskey) Algorithm() DNSSECAlgorithm { return k.algorithm }
-func (k dnskey) PublicKey() []byte          { return k.pubkey }
-func (k dnskey) Pack(p *wirebb.Packer) {
+func (DNSKEY) Type() rrtype.Type            { return rrtype.DNSKEY }
+func (DNSKEY) typedRData()                  {}
+func (k DNSKEY) Flags() uint16              { return k.flags }
+func (k DNSKEY) Protocol() uint8            { return k.protocol }
+func (k DNSKEY) Algorithm() DNSSECAlgorithm { return k.algorithm }
+func (k DNSKEY) PublicKey() []byte          { return k.pubkey }
+func (k DNSKEY) Pack(p *wirebb.Packer) {
 	p.Uint16(k.flags)
 	p.Uint8(k.protocol)
 	p.Uint8(uint8(k.algorithm))
@@ -91,54 +84,48 @@ func (k dnskey) Pack(p *wirebb.Packer) {
 func NewDNSKEY(flags uint16, protocol uint8, algorithm DNSSECAlgorithm, pubkey []byte) DNSKEY {
 	cp := make([]byte, len(pubkey))
 	copy(cp, pubkey)
-	return dnskey{flags: flags, protocol: protocol, algorithm: algorithm, pubkey: cp}
+	return DNSKEY{flags: flags, protocol: protocol, algorithm: algorithm, pubkey: cp}
 }
 
 func unpackDNSKEY(u *wirebb.Unpacker, rdlen int) (DNSKEY, error) {
+	var zero DNSKEY
 	end := u.Off() + rdlen
 	flags, err := u.Uint16()
 	if err != nil {
-		return nil, err
+		return zero, err
 	}
 	proto, err := u.Uint8()
 	if err != nil {
-		return nil, err
+		return zero, err
 	}
 	alg, err := u.Uint8()
 	if err != nil {
-		return nil, err
+		return zero, err
 	}
 	pk, err := u.Bytes(end - u.Off())
 	if err != nil {
-		return nil, err
+		return zero, err
 	}
 	cp := make([]byte, len(pk))
 	copy(cp, pk)
-	return dnskey{flags: flags, protocol: proto, algorithm: DNSSECAlgorithm(alg), pubkey: cp}, nil
+	return DNSKEY{flags: flags, protocol: proto, algorithm: DNSSECAlgorithm(alg), pubkey: cp}, nil
 }
 
 // DS is the delegation signer rdata (RFC 4034 §5).
-type DS interface {
-	RData
-	KeyTag() uint16
-	Algorithm() DNSSECAlgorithm
-	DigestType() DSDigestType
-	Digest() []byte
-}
-
-type dsRec struct {
+type DS struct {
 	keyTag    uint16
 	algorithm DNSSECAlgorithm
 	digestT   DSDigestType
 	digest    []byte
 }
 
-func (dsRec) Type() rrtype.Type            { return rrtype.DS }
-func (d dsRec) KeyTag() uint16             { return d.keyTag }
-func (d dsRec) Algorithm() DNSSECAlgorithm { return d.algorithm }
-func (d dsRec) DigestType() DSDigestType   { return d.digestT }
-func (d dsRec) Digest() []byte             { return d.digest }
-func (d dsRec) Pack(p *wirebb.Packer) {
+func (DS) Type() rrtype.Type            { return rrtype.DS }
+func (DS) typedRData()                  {}
+func (d DS) KeyTag() uint16             { return d.keyTag }
+func (d DS) Algorithm() DNSSECAlgorithm { return d.algorithm }
+func (d DS) DigestType() DSDigestType   { return d.digestT }
+func (d DS) Digest() []byte             { return d.digest }
+func (d DS) Pack(p *wirebb.Packer) {
 	p.Uint16(d.keyTag)
 	p.Uint8(uint8(d.algorithm))
 	p.Uint8(uint8(d.digestT))
@@ -149,47 +136,35 @@ func (d dsRec) Pack(p *wirebb.Packer) {
 func NewDS(keyTag uint16, alg DNSSECAlgorithm, dt DSDigestType, digest []byte) DS {
 	cp := make([]byte, len(digest))
 	copy(cp, digest)
-	return dsRec{keyTag: keyTag, algorithm: alg, digestT: dt, digest: cp}
+	return DS{keyTag: keyTag, algorithm: alg, digestT: dt, digest: cp}
 }
 
 func unpackDS(u *wirebb.Unpacker, rdlen int) (DS, error) {
+	var zero DS
 	end := u.Off() + rdlen
 	tag, err := u.Uint16()
 	if err != nil {
-		return nil, err
+		return zero, err
 	}
 	alg, err := u.Uint8()
 	if err != nil {
-		return nil, err
+		return zero, err
 	}
 	dt, err := u.Uint8()
 	if err != nil {
-		return nil, err
+		return zero, err
 	}
 	dig, err := u.Bytes(end - u.Off())
 	if err != nil {
-		return nil, err
+		return zero, err
 	}
 	cp := make([]byte, len(dig))
 	copy(cp, dig)
-	return dsRec{keyTag: tag, algorithm: DNSSECAlgorithm(alg), digestT: DSDigestType(dt), digest: cp}, nil
+	return DS{keyTag: tag, algorithm: DNSSECAlgorithm(alg), digestT: DSDigestType(dt), digest: cp}, nil
 }
 
 // RRSIG is the resource record signature rdata (RFC 4034 §3).
-type RRSIG interface {
-	RData
-	TypeCovered() rrtype.Type
-	Algorithm() DNSSECAlgorithm
-	Labels() uint8
-	OriginalTTL() time.Duration
-	SignatureExpiration() time.Time
-	SignatureInception() time.Time
-	KeyTag() uint16
-	SignerName() wirebb.Name
-	Signature() []byte
-}
-
-type rrsig struct {
+type RRSIG struct {
 	typeCovered rrtype.Type
 	algorithm   DNSSECAlgorithm
 	labels      uint8
@@ -201,17 +176,18 @@ type rrsig struct {
 	signature   []byte
 }
 
-func (rrsig) Type() rrtype.Type                { return rrtype.RRSIG }
-func (r rrsig) TypeCovered() rrtype.Type       { return r.typeCovered }
-func (r rrsig) Algorithm() DNSSECAlgorithm     { return r.algorithm }
-func (r rrsig) Labels() uint8                  { return r.labels }
-func (r rrsig) OriginalTTL() time.Duration     { return time.Duration(r.origTTL) * time.Second }
-func (r rrsig) SignatureExpiration() time.Time { return time.Unix(int64(r.sigExp), 0).UTC() }
-func (r rrsig) SignatureInception() time.Time  { return time.Unix(int64(r.sigInc), 0).UTC() }
-func (r rrsig) KeyTag() uint16                 { return r.keyTag }
-func (r rrsig) SignerName() wirebb.Name        { return r.signerName }
-func (r rrsig) Signature() []byte              { return r.signature }
-func (r rrsig) Pack(p *wirebb.Packer) {
+func (RRSIG) Type() rrtype.Type                { return rrtype.RRSIG }
+func (RRSIG) typedRData()                      {}
+func (r RRSIG) TypeCovered() rrtype.Type       { return r.typeCovered }
+func (r RRSIG) Algorithm() DNSSECAlgorithm     { return r.algorithm }
+func (r RRSIG) Labels() uint8                  { return r.labels }
+func (r RRSIG) OriginalTTL() time.Duration     { return time.Duration(r.origTTL) * time.Second }
+func (r RRSIG) SignatureExpiration() time.Time { return time.Unix(int64(r.sigExp), 0).UTC() }
+func (r RRSIG) SignatureInception() time.Time  { return time.Unix(int64(r.sigInc), 0).UTC() }
+func (r RRSIG) KeyTag() uint16                 { return r.keyTag }
+func (r RRSIG) SignerName() wirebb.Name        { return r.signerName }
+func (r RRSIG) Signature() []byte              { return r.signature }
+func (r RRSIG) Pack(p *wirebb.Packer) {
 	p.Uint16(uint16(r.typeCovered))
 	p.Uint8(uint8(r.algorithm))
 	p.Uint8(r.labels)
@@ -230,7 +206,7 @@ func NewRRSIG(typeCovered rrtype.Type, alg DNSSECAlgorithm, labels uint8,
 	keyTag uint16, signerName wirebb.Name, signature []byte) RRSIG {
 	cp := make([]byte, len(signature))
 	copy(cp, signature)
-	return rrsig{
+	return RRSIG{
 		typeCovered: typeCovered,
 		algorithm:   alg,
 		labels:      labels,
@@ -244,46 +220,47 @@ func NewRRSIG(typeCovered rrtype.Type, alg DNSSECAlgorithm, labels uint8,
 }
 
 func unpackRRSIG(u *wirebb.Unpacker, rdlen int) (RRSIG, error) {
+	var zero RRSIG
 	end := u.Off() + rdlen
 	tc, err := u.Uint16()
 	if err != nil {
-		return nil, err
+		return zero, err
 	}
 	alg, err := u.Uint8()
 	if err != nil {
-		return nil, err
+		return zero, err
 	}
 	labels, err := u.Uint8()
 	if err != nil {
-		return nil, err
+		return zero, err
 	}
 	origTTL, err := u.Uint32()
 	if err != nil {
-		return nil, err
+		return zero, err
 	}
 	sigExp, err := u.Uint32()
 	if err != nil {
-		return nil, err
+		return zero, err
 	}
 	sigInc, err := u.Uint32()
 	if err != nil {
-		return nil, err
+		return zero, err
 	}
 	keyTag, err := u.Uint16()
 	if err != nil {
-		return nil, err
+		return zero, err
 	}
 	signer, err := u.Name()
 	if err != nil {
-		return nil, err
+		return zero, err
 	}
 	sig, err := u.Bytes(end - u.Off())
 	if err != nil {
-		return nil, err
+		return zero, err
 	}
 	cp := make([]byte, len(sig))
 	copy(cp, sig)
-	return rrsig{
+	return RRSIG{
 		typeCovered: rrtype.Type(tc),
 		algorithm:   DNSSECAlgorithm(alg),
 		labels:      labels,
@@ -297,21 +274,16 @@ func unpackRRSIG(u *wirebb.Unpacker, rdlen int) (RRSIG, error) {
 }
 
 // NSEC is the next secure rdata (RFC 4034 §4).
-type NSEC interface {
-	RData
-	NextDomainName() wirebb.Name
-	Types() []rrtype.Type
-}
-
-type nsec struct {
+type NSEC struct {
 	next  wirebb.Name
 	types []rrtype.Type
 }
 
-func (nsec) Type() rrtype.Type             { return rrtype.NSEC }
-func (n nsec) NextDomainName() wirebb.Name { return n.next }
-func (n nsec) Types() []rrtype.Type        { return n.types }
-func (n nsec) Pack(p *wirebb.Packer) {
+func (NSEC) Type() rrtype.Type             { return rrtype.NSEC }
+func (NSEC) typedRData()                   {}
+func (n NSEC) NextDomainName() wirebb.Name { return n.next }
+func (n NSEC) Types() []rrtype.Type        { return n.types }
+func (n NSEC) Pack(p *wirebb.Packer) {
 	p.NameUncompressed(n.next)
 	encodeTypeBitmap(p, n.types)
 }
@@ -319,20 +291,21 @@ func (n nsec) Pack(p *wirebb.Packer) {
 // NewNSEC returns an NSEC rdata.
 func NewNSEC(next wirebb.Name, types []rrtype.Type) NSEC {
 	cp := append([]rrtype.Type(nil), types...)
-	return nsec{next: next, types: cp}
+	return NSEC{next: next, types: cp}
 }
 
 func unpackNSEC(u *wirebb.Unpacker, rdlen int) (NSEC, error) {
+	var zero NSEC
 	end := u.Off() + rdlen
 	next, err := u.Name()
 	if err != nil {
-		return nil, err
+		return zero, err
 	}
 	types, err := decodeTypeBitmap(u, end-u.Off())
 	if err != nil {
-		return nil, err
+		return zero, err
 	}
-	return nsec{next: next, types: types}, nil
+	return NSEC{next: next, types: types}, nil
 }
 
 // encodeTypeBitmap implements the type-bitmap encoding of RFC 4034 §4.1.2.
@@ -412,17 +385,7 @@ func decodeTypeBitmap(u *wirebb.Unpacker, n int) ([]rrtype.Type, error) {
 // NSEC3 is the hashed authenticated denial-of-existence rdata
 // (RFC 5155 §3.2). Salt and NextHashedOwner are stored as raw bytes; the
 // caller is responsible for any base32hex encoding.
-type NSEC3 interface {
-	RData
-	HashAlgorithm() uint8
-	Flags() uint8
-	Iterations() uint16
-	Salt() []byte
-	NextHashedOwner() []byte
-	Types() []rrtype.Type
-}
-
-type nsec3 struct {
+type NSEC3 struct {
 	hashAlg    uint8
 	flags      uint8
 	iterations uint16
@@ -431,14 +394,15 @@ type nsec3 struct {
 	types      []rrtype.Type
 }
 
-func (nsec3) Type() rrtype.Type         { return rrtype.NSEC3 }
-func (n nsec3) HashAlgorithm() uint8    { return n.hashAlg }
-func (n nsec3) Flags() uint8            { return n.flags }
-func (n nsec3) Iterations() uint16      { return n.iterations }
-func (n nsec3) Salt() []byte            { return n.salt }
-func (n nsec3) NextHashedOwner() []byte { return n.nextOwner }
-func (n nsec3) Types() []rrtype.Type    { return n.types }
-func (n nsec3) Pack(p *wirebb.Packer) {
+func (NSEC3) Type() rrtype.Type         { return rrtype.NSEC3 }
+func (NSEC3) typedRData()               {}
+func (n NSEC3) HashAlgorithm() uint8    { return n.hashAlg }
+func (n NSEC3) Flags() uint8            { return n.flags }
+func (n NSEC3) Iterations() uint16      { return n.iterations }
+func (n NSEC3) Salt() []byte            { return n.salt }
+func (n NSEC3) NextHashedOwner() []byte { return n.nextOwner }
+func (n NSEC3) Types() []rrtype.Type    { return n.types }
+func (n NSEC3) Pack(p *wirebb.Packer) {
 	p.Uint8(n.hashAlg)
 	p.Uint8(n.flags)
 	p.Uint16(n.iterations)
@@ -454,51 +418,52 @@ func NewNSEC3(hashAlg, flags uint8, iterations uint16, salt, nextOwner []byte, t
 	saltCp := append([]byte(nil), salt...)
 	nextCp := append([]byte(nil), nextOwner...)
 	tCp := append([]rrtype.Type(nil), types...)
-	return nsec3{
+	return NSEC3{
 		hashAlg: hashAlg, flags: flags, iterations: iterations,
 		salt: saltCp, nextOwner: nextCp, types: tCp,
 	}
 }
 
 func unpackNSEC3(u *wirebb.Unpacker, rdlen int) (NSEC3, error) {
+	var zero NSEC3
 	end := u.Off() + rdlen
 	alg, err := u.Uint8()
 	if err != nil {
-		return nil, err
+		return zero, err
 	}
 	flags, err := u.Uint8()
 	if err != nil {
-		return nil, err
+		return zero, err
 	}
 	iters, err := u.Uint16()
 	if err != nil {
-		return nil, err
+		return zero, err
 	}
 	saltLen, err := u.Uint8()
 	if err != nil {
-		return nil, err
+		return zero, err
 	}
 	salt, err := u.Bytes(int(saltLen))
 	if err != nil {
-		return nil, err
+		return zero, err
 	}
 	hashLen, err := u.Uint8()
 	if err != nil {
-		return nil, err
+		return zero, err
 	}
 	hash, err := u.Bytes(int(hashLen))
 	if err != nil {
-		return nil, err
+		return zero, err
 	}
 	types, err := decodeTypeBitmap(u, end-u.Off())
 	if err != nil {
-		return nil, err
+		return zero, err
 	}
 	saltCp := make([]byte, len(salt))
 	copy(saltCp, salt)
 	hashCp := make([]byte, len(hash))
 	copy(hashCp, hash)
-	return nsec3{
+	return NSEC3{
 		hashAlg: alg, flags: flags, iterations: iters,
 		salt: saltCp, nextOwner: hashCp, types: types,
 	}, nil

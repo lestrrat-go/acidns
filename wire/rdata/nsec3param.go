@@ -7,26 +7,19 @@ import (
 
 // NSEC3PARAM advertises the parameters used to compute NSEC3 hashes
 // across a zone (RFC 5155 §4).
-type NSEC3PARAM interface {
-	RData
-	HashAlgorithm() uint8
-	Flags() uint8
-	Iterations() uint16
-	Salt() []byte
-}
-
-type nsec3param struct {
+type NSEC3PARAM struct {
 	alg, flags uint8
 	iter       uint16
 	salt       []byte
 }
 
-func (nsec3param) Type() rrtype.Type      { return rrtype.NSEC3PARAM }
-func (n nsec3param) HashAlgorithm() uint8 { return n.alg }
-func (n nsec3param) Flags() uint8         { return n.flags }
-func (n nsec3param) Iterations() uint16   { return n.iter }
-func (n nsec3param) Salt() []byte         { return n.salt }
-func (n nsec3param) Pack(p *wirebb.Packer) {
+func (NSEC3PARAM) Type() rrtype.Type      { return rrtype.NSEC3PARAM }
+func (NSEC3PARAM) typedRData()            {}
+func (n NSEC3PARAM) HashAlgorithm() uint8 { return n.alg }
+func (n NSEC3PARAM) Flags() uint8         { return n.flags }
+func (n NSEC3PARAM) Iterations() uint16   { return n.iter }
+func (n NSEC3PARAM) Salt() []byte         { return n.salt }
+func (n NSEC3PARAM) Pack(p *wirebb.Packer) {
 	p.Uint8(n.alg)
 	p.Uint8(n.flags)
 	p.Uint16(n.iter)
@@ -37,30 +30,31 @@ func (n nsec3param) Pack(p *wirebb.Packer) {
 // NewNSEC3PARAM returns an NSEC3PARAM rdata.
 func NewNSEC3PARAM(alg, flags uint8, iter uint16, salt []byte) NSEC3PARAM {
 	cp := append([]byte(nil), salt...)
-	return nsec3param{alg: alg, flags: flags, iter: iter, salt: cp}
+	return NSEC3PARAM{alg: alg, flags: flags, iter: iter, salt: cp}
 }
 
 func unpackNSEC3PARAM(u *wirebb.Unpacker) (NSEC3PARAM, error) {
+	var zero NSEC3PARAM
 	alg, err := u.Uint8()
 	if err != nil {
-		return nil, err
+		return zero, err
 	}
 	flags, err := u.Uint8()
 	if err != nil {
-		return nil, err
+		return zero, err
 	}
 	iter, err := u.Uint16()
 	if err != nil {
-		return nil, err
+		return zero, err
 	}
 	saltLen, err := u.Uint8()
 	if err != nil {
-		return nil, err
+		return zero, err
 	}
 	salt, err := u.Bytes(int(saltLen))
 	if err != nil {
-		return nil, err
+		return zero, err
 	}
 	cp := append([]byte(nil), salt...)
-	return nsec3param{alg: alg, flags: flags, iter: iter, salt: cp}, nil
+	return NSEC3PARAM{alg: alg, flags: flags, iter: iter, salt: cp}, nil
 }

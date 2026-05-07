@@ -34,27 +34,20 @@ const (
 
 // TLSA is the TLSA rdata (RFC 6698) — DANE binding of a TLS certificate
 // or public-key hash to a domain name.
-type TLSA interface {
-	RData
-	Usage() TLSAUsage
-	Selector() TLSASelector
-	MatchingType() TLSAMatchingType
-	CertificateAssociation() []byte
-}
-
-type tlsa struct {
+type TLSA struct {
 	usage    TLSAUsage
 	selector TLSASelector
 	matching TLSAMatchingType
 	data     []byte
 }
 
-func (tlsa) Type() rrtype.Type                { return rrtype.TLSA }
-func (t tlsa) Usage() TLSAUsage               { return t.usage }
-func (t tlsa) Selector() TLSASelector         { return t.selector }
-func (t tlsa) MatchingType() TLSAMatchingType { return t.matching }
-func (t tlsa) CertificateAssociation() []byte { return t.data }
-func (t tlsa) Pack(p *wirebb.Packer) {
+func (TLSA) Type() rrtype.Type                { return rrtype.TLSA }
+func (TLSA) typedRData()                      {}
+func (t TLSA) Usage() TLSAUsage               { return t.usage }
+func (t TLSA) Selector() TLSASelector         { return t.selector }
+func (t TLSA) MatchingType() TLSAMatchingType { return t.matching }
+func (t TLSA) CertificateAssociation() []byte { return t.data }
+func (t TLSA) Pack(p *wirebb.Packer) {
 	p.Uint8(uint8(t.usage))
 	p.Uint8(uint8(t.selector))
 	p.Uint8(uint8(t.matching))
@@ -65,29 +58,30 @@ func (t tlsa) Pack(p *wirebb.Packer) {
 func NewTLSA(usage TLSAUsage, selector TLSASelector, matching TLSAMatchingType, data []byte) TLSA {
 	cp := make([]byte, len(data))
 	copy(cp, data)
-	return tlsa{usage: usage, selector: selector, matching: matching, data: cp}
+	return TLSA{usage: usage, selector: selector, matching: matching, data: cp}
 }
 
 func unpackTLSA(u *wirebb.Unpacker, rdlen int) (TLSA, error) {
+	var zero TLSA
 	usage, err := u.Uint8()
 	if err != nil {
-		return nil, err
+		return zero, err
 	}
 	selector, err := u.Uint8()
 	if err != nil {
-		return nil, err
+		return zero, err
 	}
 	matching, err := u.Uint8()
 	if err != nil {
-		return nil, err
+		return zero, err
 	}
 	data, err := u.Bytes(rdlen - 3)
 	if err != nil {
-		return nil, err
+		return zero, err
 	}
 	cp := make([]byte, len(data))
 	copy(cp, data)
-	return tlsa{
+	return TLSA{
 		usage: TLSAUsage(usage), selector: TLSASelector(selector),
 		matching: TLSAMatchingType(matching), data: cp,
 	}, nil
@@ -95,27 +89,20 @@ func unpackTLSA(u *wirebb.Unpacker, rdlen int) (TLSA, error) {
 
 // SMIMEA is the SMIMEA rdata (RFC 8162). Wire layout matches TLSA; only
 // the RR type code differs.
-type SMIMEA interface {
-	RData
-	Usage() TLSAUsage
-	Selector() TLSASelector
-	MatchingType() TLSAMatchingType
-	CertificateAssociation() []byte
-}
-
-type smimea struct {
+type SMIMEA struct {
 	usage    TLSAUsage
 	selector TLSASelector
 	matching TLSAMatchingType
 	data     []byte
 }
 
-func (smimea) Type() rrtype.Type                { return rrtype.SMIMEA }
-func (s smimea) Usage() TLSAUsage               { return s.usage }
-func (s smimea) Selector() TLSASelector         { return s.selector }
-func (s smimea) MatchingType() TLSAMatchingType { return s.matching }
-func (s smimea) CertificateAssociation() []byte { return s.data }
-func (s smimea) Pack(p *wirebb.Packer) {
+func (SMIMEA) Type() rrtype.Type                { return rrtype.SMIMEA }
+func (SMIMEA) typedRData()                      {}
+func (s SMIMEA) Usage() TLSAUsage               { return s.usage }
+func (s SMIMEA) Selector() TLSASelector         { return s.selector }
+func (s SMIMEA) MatchingType() TLSAMatchingType { return s.matching }
+func (s SMIMEA) CertificateAssociation() []byte { return s.data }
+func (s SMIMEA) Pack(p *wirebb.Packer) {
 	p.Uint8(uint8(s.usage))
 	p.Uint8(uint8(s.selector))
 	p.Uint8(uint8(s.matching))
@@ -126,29 +113,30 @@ func (s smimea) Pack(p *wirebb.Packer) {
 func NewSMIMEA(usage TLSAUsage, selector TLSASelector, matching TLSAMatchingType, data []byte) SMIMEA {
 	cp := make([]byte, len(data))
 	copy(cp, data)
-	return smimea{usage: usage, selector: selector, matching: matching, data: cp}
+	return SMIMEA{usage: usage, selector: selector, matching: matching, data: cp}
 }
 
 func unpackSMIMEA(u *wirebb.Unpacker, rdlen int) (SMIMEA, error) {
+	var zero SMIMEA
 	usage, err := u.Uint8()
 	if err != nil {
-		return nil, err
+		return zero, err
 	}
 	selector, err := u.Uint8()
 	if err != nil {
-		return nil, err
+		return zero, err
 	}
 	matching, err := u.Uint8()
 	if err != nil {
-		return nil, err
+		return zero, err
 	}
 	data, err := u.Bytes(rdlen - 3)
 	if err != nil {
-		return nil, err
+		return zero, err
 	}
 	cp := make([]byte, len(data))
 	copy(cp, data)
-	return smimea{
+	return SMIMEA{
 		usage: TLSAUsage(usage), selector: TLSASelector(selector),
 		matching: TLSAMatchingType(matching), data: cp,
 	}, nil

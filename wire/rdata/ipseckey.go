@@ -34,17 +34,7 @@ const (
 //
 // GatewayAddr is set when GatewayType is IPv4 or IPv6; GatewayName is set
 // when GatewayType is Name; both are zero-valued when GatewayType is None.
-type IPSECKEY interface {
-	RData
-	Precedence() uint8
-	GatewayType() IPSECKEYGatewayType
-	Algorithm() IPSECKEYAlgorithm
-	GatewayAddr() netip.Addr
-	GatewayName() wirebb.Name
-	PublicKey() []byte
-}
-
-type ipseckey struct {
+type IPSECKEY struct {
 	prec   uint8
 	gt     IPSECKEYGatewayType
 	alg    IPSECKEYAlgorithm
@@ -53,14 +43,15 @@ type ipseckey struct {
 	pubkey []byte
 }
 
-func (ipseckey) Type() rrtype.Type                  { return rrtype.IPSECKEY }
-func (k ipseckey) Precedence() uint8                { return k.prec }
-func (k ipseckey) GatewayType() IPSECKEYGatewayType { return k.gt }
-func (k ipseckey) Algorithm() IPSECKEYAlgorithm     { return k.alg }
-func (k ipseckey) GatewayAddr() netip.Addr          { return k.gwAddr }
-func (k ipseckey) GatewayName() wirebb.Name         { return k.gwName }
-func (k ipseckey) PublicKey() []byte                { return k.pubkey }
-func (k ipseckey) Pack(p *wirebb.Packer) {
+func (IPSECKEY) Type() rrtype.Type                  { return rrtype.IPSECKEY }
+func (IPSECKEY) typedRData()                        {}
+func (k IPSECKEY) Precedence() uint8                { return k.prec }
+func (k IPSECKEY) GatewayType() IPSECKEYGatewayType { return k.gt }
+func (k IPSECKEY) Algorithm() IPSECKEYAlgorithm     { return k.alg }
+func (k IPSECKEY) GatewayAddr() netip.Addr          { return k.gwAddr }
+func (k IPSECKEY) GatewayName() wirebb.Name         { return k.gwName }
+func (k IPSECKEY) PublicKey() []byte                { return k.pubkey }
+func (k IPSECKEY) Pack(p *wirebb.Packer) {
 	p.Uint8(k.prec)
 	p.Uint8(uint8(k.gt))
 	p.Uint8(uint8(k.alg))
@@ -82,76 +73,78 @@ func (k ipseckey) Pack(p *wirebb.Packer) {
 func NewIPSECKEYNoGateway(prec uint8, alg IPSECKEYAlgorithm, pubkey []byte) IPSECKEY {
 	cp := make([]byte, len(pubkey))
 	copy(cp, pubkey)
-	return ipseckey{prec: prec, gt: IPSECKEYGatewayNone, alg: alg, pubkey: cp}
+	return IPSECKEY{prec: prec, gt: IPSECKEYGatewayNone, alg: alg, pubkey: cp}
 }
 
 // NewIPSECKEYAddr returns an IPSECKEY rdata whose gateway is an IPv4 or IPv6
 // address.
 func NewIPSECKEYAddr(prec uint8, alg IPSECKEYAlgorithm, addr netip.Addr, pubkey []byte) (IPSECKEY, error) {
+	var zero IPSECKEY
 	gt := IPSECKEYGatewayIPv4
 	if addr.Is6() {
 		gt = IPSECKEYGatewayIPv6
 	} else if !addr.Is4() {
-		return nil, fmt.Errorf("%w: IPSECKEY gateway address must be IPv4 or IPv6", ErrInvalidRData)
+		return zero, fmt.Errorf("%w: IPSECKEY gateway address must be IPv4 or IPv6", ErrInvalidRData)
 	}
 	cp := make([]byte, len(pubkey))
 	copy(cp, pubkey)
-	return ipseckey{prec: prec, gt: gt, alg: alg, gwAddr: addr, pubkey: cp}, nil
+	return IPSECKEY{prec: prec, gt: gt, alg: alg, gwAddr: addr, pubkey: cp}, nil
 }
 
 // NewIPSECKEYName returns an IPSECKEY rdata whose gateway is a domain name.
 func NewIPSECKEYName(prec uint8, alg IPSECKEYAlgorithm, name wirebb.Name, pubkey []byte) IPSECKEY {
 	cp := make([]byte, len(pubkey))
 	copy(cp, pubkey)
-	return ipseckey{prec: prec, gt: IPSECKEYGatewayName, alg: alg, gwName: name, pubkey: cp}
+	return IPSECKEY{prec: prec, gt: IPSECKEYGatewayName, alg: alg, gwName: name, pubkey: cp}
 }
 
 func unpackIPSECKEY(u *wirebb.Unpacker, rdlen int) (IPSECKEY, error) {
+	var zero IPSECKEY
 	end := u.Off() + rdlen
 	prec, err := u.Uint8()
 	if err != nil {
-		return nil, err
+		return zero, err
 	}
 	gt, err := u.Uint8()
 	if err != nil {
-		return nil, err
+		return zero, err
 	}
 	alg, err := u.Uint8()
 	if err != nil {
-		return nil, err
+		return zero, err
 	}
-	k := ipseckey{prec: prec, gt: IPSECKEYGatewayType(gt), alg: IPSECKEYAlgorithm(alg)}
+	k := IPSECKEY{prec: prec, gt: IPSECKEYGatewayType(gt), alg: IPSECKEYAlgorithm(alg)}
 	switch IPSECKEYGatewayType(gt) {
 	case IPSECKEYGatewayNone:
 		// no gateway
 	case IPSECKEYGatewayIPv4:
 		b, err := u.Bytes(4)
 		if err != nil {
-			return nil, err
+			return zero, err
 		}
 		k.gwAddr = netip.AddrFrom4([4]byte(b))
 	case IPSECKEYGatewayIPv6:
 		b, err := u.Bytes(16)
 		if err != nil {
-			return nil, err
+			return zero, err
 		}
 		k.gwAddr = netip.AddrFrom16([16]byte(b))
 	case IPSECKEYGatewayName:
 		n, err := u.Name()
 		if err != nil {
-			return nil, err
+			return zero, err
 		}
 		k.gwName = n
 	default:
-		return nil, fmt.Errorf("%w: IPSECKEY unknown gateway type %d", ErrInvalidRData, gt)
+		return zero, fmt.Errorf("%w: IPSECKEY unknown gateway type %d", ErrInvalidRData, gt)
 	}
 	remaining := end - u.Off()
 	if remaining < 0 {
-		return nil, fmt.Errorf("%w: IPSECKEY gateway exceeds rdlen", ErrInvalidRData)
+		return zero, fmt.Errorf("%w: IPSECKEY gateway exceeds rdlen", ErrInvalidRData)
 	}
 	pk, err := u.Bytes(remaining)
 	if err != nil {
-		return nil, err
+		return zero, err
 	}
 	cp := make([]byte, len(pk))
 	copy(cp, pk)

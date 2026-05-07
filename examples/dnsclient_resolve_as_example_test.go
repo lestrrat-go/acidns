@@ -8,7 +8,6 @@ import (
 	"github.com/lestrrat-go/acidns"
 	"github.com/lestrrat-go/acidns/wire"
 	"github.com/lestrrat-go/acidns/wire/rdata"
-	"github.com/lestrrat-go/acidns/wire/rrtype"
 )
 
 func Example_dnsclient_resolveas() {
@@ -35,7 +34,7 @@ www  IN  A    192.0.2.42
 	}
 	qctx, qcancel := context.WithTimeout(ctx, 2*time.Second)
 	defer qcancel()
-	addrs, err := acidns.ResolveAs[rdata.A](qctx, r, wire.MustParseName("www.example.com"), rrtype.A)
+	addrs, err := acidns.ResolveAs[rdata.A](qctx, r, wire.MustParseName("www.example.com"))
 	if err != nil {
 		fmt.Println("resolve:", err)
 		return

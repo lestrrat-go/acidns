@@ -1,6 +1,8 @@
 // Package rdata defines the typed resource record payloads carried inside a
-// DNS message. Public types are interfaces with strongly-typed accessors;
-// constructors return concrete unexported implementations.
+// DNS message. Each typed payload is an exported struct with unexported
+// fields and value-receiver accessors; construct via the per-type New
+// constructors. Unknown carries the rdata for RR types this package does
+// not decode.
 package rdata
 
 import (
@@ -24,6 +26,16 @@ type RData interface {
 	Pack(p *wirebb.Packer)
 }
 
+// Typed is the constraint for rdata payloads whose Type() is a compile-time
+// constant. Every typed rdata in this package satisfies Typed; Unknown
+// does not, because its RR type is carried in a per-instance field. Used
+// as the constraint for ResolveAs so that ResolveAs[Unknown] is a compile
+// error — Unknown has no inherent rrtype to query for.
+type Typed interface {
+	RData
+	typedRData()
+}
+
 // Pack returns the wire-format bytes of r's payload (rdata only — no
 // length prefix). Names in compressible positions are emitted with the
 // internal codec's default policy; for canonicalisation purposes (e.g.
@@ -43,7 +55,7 @@ func Unpack(t rrtype.Type, u *wirebb.Unpacker, rdlen int) (RData, error) {
 		return nil, fmt.Errorf("%w: rdlen %d exceeds remaining %d", ErrInvalidRData, rdlen, u.Remaining())
 	}
 	if rdlen == 0 {
-		return &unknown{typ: t, data: nil}, nil
+		return Unknown{typ: t, data: nil}, nil
 	}
 	end := u.Off() + rdlen
 
@@ -155,6 +167,6 @@ func unpackTyped(t rrtype.Type, u *wirebb.Unpacker, rdlen int) (RData, error) {
 		// copy because u.Bytes aliases the underlying message
 		cp := make([]byte, len(b))
 		copy(cp, b)
-		return &unknown{typ: t, data: cp}, nil
+		return Unknown{typ: t, data: cp}, nil
 	}
 }

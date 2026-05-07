@@ -32,6 +32,7 @@ func (f optionFunc) applyNotify(c *config) { f(c) }
 type config struct {
 	timeout time.Duration
 	soa     rdata.SOA
+	hasSOA  bool
 }
 
 // WithTimeout sets the per-secondary timeout when ctx has no deadline.
@@ -44,7 +45,10 @@ func WithTimeout(d time.Duration) Option {
 // Some secondaries skip the follow-up SOA query when the new SOA is
 // piggy-backed on the NOTIFY.
 func WithSOA(soa rdata.SOA) Option {
-	return optionFunc(func(c *config) { c.soa = soa })
+	return optionFunc(func(c *config) {
+		c.soa = soa
+		c.hasSOA = true
+	})
 }
 
 // Send transmits a NOTIFY for zone over ex and waits for the ACK.
@@ -62,7 +66,7 @@ func Send(ctx context.Context, ex acidns.Exchanger, zone wire.Name, opts ...Opti
 		Opcode(wire.OpcodeNotify).
 		Authoritative(true).
 		Question(wire.NewQuestion(zone, rrtype.SOA))
-	if c.soa != nil {
+	if c.hasSOA {
 		b = b.Answer(wire.NewRecord(zone, time.Duration(c.soa.Minimum()), c.soa))
 	}
 	q, err := b.Build()

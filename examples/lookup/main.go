@@ -90,8 +90,10 @@ func formatRData(rd rdata.RData) string {
 			v.MName(), v.RName(), v.Serial(),
 			int(v.Refresh().Seconds()), int(v.Retry().Seconds()),
 			int(v.Expire().Seconds()), int(v.Minimum().Seconds()))
-	case rrtype.SVCB, rrtype.HTTPS:
+	case rrtype.SVCB:
 		return formatSVCB(rd.(rdata.SVCB))
+	case rrtype.HTTPS:
+		return formatSVCB(rd.(rdata.HTTPS))
 	case rrtype.CAA:
 		v := rd.(rdata.CAA)
 		return fmt.Sprintf("%d %s %q", v.Flags(), v.Tag(), v.Value())
@@ -116,7 +118,17 @@ func formatRData(rd rdata.RData) string {
 	}
 }
 
-func formatSVCB(s rdata.SVCB) string {
+// svcbLike covers the methods shared by rdata.SVCB and rdata.HTTPS via
+// their embedded body. The type-set constraint pairs with the method set
+// promoted from svcbBody on each member.
+type svcbLike interface {
+	rdata.SVCB | rdata.HTTPS
+	Priority() uint16
+	Target() wire.Name
+	Params() []rdata.SVCBParam
+}
+
+func formatSVCB[T svcbLike](s T) string {
 	out := fmt.Sprintf("%d %s", s.Priority(), s.Target())
 	for _, p := range s.Params() {
 		out += fmt.Sprintf(" key%d=%x", p.Key(), p.Value())

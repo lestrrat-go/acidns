@@ -26,24 +26,18 @@ const (
 )
 
 // SSHFP is the SSH key fingerprint rdata (RFC 4255).
-type SSHFP interface {
-	RData
-	Algorithm() SSHFPAlgorithm
-	FingerprintType() SSHFPType
-	Fingerprint() []byte
-}
-
-type sshfp struct {
+type SSHFP struct {
 	alg   SSHFPAlgorithm
 	fpt   SSHFPType
 	value []byte
 }
 
-func (sshfp) Type() rrtype.Type            { return rrtype.SSHFP }
-func (s sshfp) Algorithm() SSHFPAlgorithm  { return s.alg }
-func (s sshfp) FingerprintType() SSHFPType { return s.fpt }
-func (s sshfp) Fingerprint() []byte        { return s.value }
-func (s sshfp) Pack(p *wirebb.Packer) {
+func (SSHFP) Type() rrtype.Type            { return rrtype.SSHFP }
+func (SSHFP) typedRData()                  {}
+func (s SSHFP) Algorithm() SSHFPAlgorithm  { return s.alg }
+func (s SSHFP) FingerprintType() SSHFPType { return s.fpt }
+func (s SSHFP) Fingerprint() []byte        { return s.value }
+func (s SSHFP) Pack(p *wirebb.Packer) {
 	p.Uint8(uint8(s.alg))
 	p.Uint8(uint8(s.fpt))
 	p.Raw(s.value)
@@ -53,23 +47,24 @@ func (s sshfp) Pack(p *wirebb.Packer) {
 func NewSSHFP(alg SSHFPAlgorithm, fpt SSHFPType, fingerprint []byte) SSHFP {
 	cp := make([]byte, len(fingerprint))
 	copy(cp, fingerprint)
-	return sshfp{alg: alg, fpt: fpt, value: cp}
+	return SSHFP{alg: alg, fpt: fpt, value: cp}
 }
 
 func unpackSSHFP(u *wirebb.Unpacker, rdlen int) (SSHFP, error) {
+	var zero SSHFP
 	alg, err := u.Uint8()
 	if err != nil {
-		return nil, err
+		return zero, err
 	}
 	fpt, err := u.Uint8()
 	if err != nil {
-		return nil, err
+		return zero, err
 	}
 	fp, err := u.Bytes(rdlen - 2)
 	if err != nil {
-		return nil, err
+		return zero, err
 	}
 	cp := make([]byte, len(fp))
 	copy(cp, fp)
-	return sshfp{alg: SSHFPAlgorithm(alg), fpt: SSHFPType(fpt), value: cp}, nil
+	return SSHFP{alg: SSHFPAlgorithm(alg), fpt: SSHFPType(fpt), value: cp}, nil
 }

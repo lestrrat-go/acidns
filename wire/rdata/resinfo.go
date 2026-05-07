@@ -9,16 +9,12 @@ import (
 
 // RESINFO is the DNS Resolver Information rdata (RFC 9606). Wire format
 // matches TXT: a sequence of <character-string>s.
-type RESINFO interface {
-	RData
-	Strings() []string
-}
+type RESINFO struct{ strs []string }
 
-type resinfo struct{ strs []string }
-
-func (resinfo) Type() rrtype.Type   { return rrtype.RESINFO }
-func (r resinfo) Strings() []string { return r.strs }
-func (r resinfo) Pack(p *wirebb.Packer) {
+func (RESINFO) Type() rrtype.Type   { return rrtype.RESINFO }
+func (RESINFO) typedRData()         {}
+func (r RESINFO) Strings() []string { return r.strs }
+func (r RESINFO) Pack(p *wirebb.Packer) {
 	for _, s := range r.strs {
 		_ = p.CharString([]byte(s))
 	}
@@ -26,25 +22,27 @@ func (r resinfo) Pack(p *wirebb.Packer) {
 
 // NewRESINFO returns a RESINFO rdata. Each string must be ≤ 255 bytes.
 func NewRESINFO(strs ...string) (RESINFO, error) {
+	var zero RESINFO
 	for i, s := range strs {
 		if len(s) > 255 {
-			return nil, fmt.Errorf("%w: RESINFO string %d exceeds 255 bytes", ErrInvalidRData, i)
+			return zero, fmt.Errorf("%w: RESINFO string %d exceeds 255 bytes", ErrInvalidRData, i)
 		}
 	}
 	cp := make([]string, len(strs))
 	copy(cp, strs)
-	return resinfo{strs: cp}, nil
+	return RESINFO{strs: cp}, nil
 }
 
 func unpackRESINFO(u *wirebb.Unpacker, rdlen int) (RESINFO, error) {
+	var zero RESINFO
 	end := u.Off() + rdlen
 	var out []string
 	for u.Off() < end {
 		s, err := u.CharString()
 		if err != nil {
-			return nil, err
+			return zero, err
 		}
 		out = append(out, string(s))
 	}
-	return resinfo{strs: out}, nil
+	return RESINFO{strs: out}, nil
 }

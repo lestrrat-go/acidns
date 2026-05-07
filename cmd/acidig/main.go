@@ -264,13 +264,10 @@ func formatRData(rd rdata.RData) string {
 			v.MName(), v.RName(), v.Serial(),
 			int(v.Refresh().Seconds()), int(v.Retry().Seconds()),
 			int(v.Expire().Seconds()), int(v.Minimum().Seconds()))
-	case rrtype.SVCB, rrtype.HTTPS:
-		s := rd.(rdata.SVCB)
-		out := fmt.Sprintf("%d %s", s.Priority(), s.Target())
-		for _, p := range s.Params() {
-			out += fmt.Sprintf(" key%d=%x", p.Key(), p.Value())
-		}
-		return out
+	case rrtype.SVCB:
+		return formatSvcbBody(rd.(rdata.SVCB).Priority(), rd.(rdata.SVCB).Target().String(), rd.(rdata.SVCB).Params())
+	case rrtype.HTTPS:
+		return formatSvcbBody(rd.(rdata.HTTPS).Priority(), rd.(rdata.HTTPS).Target().String(), rd.(rdata.HTTPS).Params())
 	case rrtype.CAA:
 		v := rd.(rdata.CAA)
 		return fmt.Sprintf("%d %s %q", v.Flags(), v.Tag(), v.Value())
@@ -280,4 +277,12 @@ func formatRData(rd rdata.RData) string {
 		}
 		return fmt.Sprintf("(%s)", rd.Type())
 	}
+}
+
+func formatSvcbBody(priority uint16, target string, params []rdata.SVCBParam) string {
+	out := fmt.Sprintf("%d %s", priority, target)
+	for _, p := range params {
+		out += fmt.Sprintf(" key%d=%x", p.Key(), p.Value())
+	}
+	return out
 }

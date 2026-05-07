@@ -239,7 +239,7 @@ func conflictsWith(records []wire.Record, p Publication) bool {
 			if !r.Name().Equal(p.Instance) {
 				continue
 			}
-			s, ok := wire.RDataAs[rdata.SRV](r, rrtype.SRV)
+			s, ok := wire.RDataAs[rdata.SRV](r)
 			if !ok {
 				continue
 			}
@@ -250,7 +250,7 @@ func conflictsWith(records []wire.Record, p Publication) bool {
 			if !r.Name().Equal(p.Host) {
 				continue
 			}
-			a, ok := wire.RDataAs[rdata.A](r, rrtype.A)
+			a, ok := wire.RDataAs[rdata.A](r)
 			if !ok {
 				continue
 			}
@@ -261,7 +261,7 @@ func conflictsWith(records []wire.Record, p Publication) bool {
 			if !r.Name().Equal(p.Host) {
 				continue
 			}
-			aaaa, ok := wire.RDataAs[rdata.AAAA](r, rrtype.AAAA)
+			aaaa, ok := wire.RDataAs[rdata.AAAA](r)
 			if !ok {
 				continue
 			}

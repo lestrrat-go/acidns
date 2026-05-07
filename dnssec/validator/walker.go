@@ -323,7 +323,7 @@ func (w *walker) fetchAndVerifyDNSKEY(ctx context.Context, zone wire.Name, dss [
 	}
 	keys := make([]rdata.DNSKEY, 0, len(dnskeyRRs))
 	for _, r := range dnskeyRRs {
-		k, ok := wire.RDataAs[rdata.DNSKEY](r, rrtype.DNSKEY)
+		k, ok := wire.RDataAs[rdata.DNSKEY](r)
 		if !ok {
 			return nil, fmt.Errorf("validator: bad DNSKEY rdata at %s", zone)
 		}
@@ -417,7 +417,7 @@ func (w *walker) classifyDSResponse(candidate, parentZone wire.Name, parentKeys 
 	if len(dsRRs) > 0 {
 		dsRDatas := make([]rdata.DS, 0, len(dsRRs))
 		for _, r := range dsRRs {
-			d, ok := wire.RDataAs[rdata.DS](r, rrtype.DS)
+			d, ok := wire.RDataAs[rdata.DS](r)
 			if !ok {
 				return dsOutcomeUnknown, nil, fmt.Errorf("validator: bad DS rdata at %s", candidate)
 			}
@@ -461,7 +461,7 @@ func (w *walker) classifyDSViaNSEC(candidate wire.Name, parentKeys []rdata.DNSKE
 		return dsOutcomeUnknown, true, fmt.Errorf("NSEC rrsig: %w", err)
 	}
 	for _, r := range nsecRRs {
-		nsec, ok := wire.RDataAs[rdata.NSEC](r, rrtype.NSEC)
+		nsec, ok := wire.RDataAs[rdata.NSEC](r)
 		if !ok {
 			continue
 		}
@@ -577,7 +577,7 @@ func (w *walker) validateNSECNXDomain(qname wire.Name, parentKeys []rdata.DNSKEY
 	// < qname < next). This is intentionally simplified pending NSEC3
 	// closest-encloser support.
 	for _, r := range nsecRRs {
-		nsec, ok := wire.RDataAs[rdata.NSEC](r, rrtype.NSEC)
+		nsec, ok := wire.RDataAs[rdata.NSEC](r)
 		if !ok {
 			continue
 		}
@@ -615,7 +615,7 @@ func (w *walker) validateNoDataNSEC(qname wire.Name, qtype rrtype.Type, parentKe
 		return nil, false
 	}
 	for _, r := range nsecRRs {
-		nsec, ok := wire.RDataAs[rdata.NSEC](r, rrtype.NSEC)
+		nsec, ok := wire.RDataAs[rdata.NSEC](r)
 		if !ok {
 			continue
 		}
@@ -676,7 +676,7 @@ func (w *walker) validateNegative(qname wire.Name, qtype rrtype.Type, parentKeys
 // Returns the RRSIG that satisfied verification and the matching DNSKEY.
 func (w *walker) verifyRRsetWithKeys(set []wire.Record, sigs []rdata.RRSIG, keys []rdata.DNSKEY) (rdata.RRSIG, rdata.DNSKEY, error) {
 	if len(set) == 0 {
-		return nil, nil, fmt.Errorf("validator: empty rrset")
+		return rdata.RRSIG{}, rdata.DNSKEY{}, fmt.Errorf("validator: empty rrset")
 	}
 	if len(sigs) > w.maxRRSIGsTry {
 		sigs = sigs[:w.maxRRSIGsTry]
@@ -702,7 +702,7 @@ func (w *walker) verifyRRsetWithKeys(set []wire.Record, sigs []rdata.RRSIG, keys
 	if lastErr == nil {
 		lastErr = fmt.Errorf("no RRSIG matched any key")
 	}
-	return nil, nil, lastErr
+	return rdata.RRSIG{}, rdata.DNSKEY{}, lastErr
 }
 
 func rrsigValidNowWithSkew(sig rdata.RRSIG, now time.Time, skew time.Duration) bool {

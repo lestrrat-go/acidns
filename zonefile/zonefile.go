@@ -44,7 +44,7 @@ func (z *zone) SOA() (rdata.SOA, wire.Record, bool) {
 			return r.RData().(rdata.SOA), r, true
 		}
 	}
-	return nil, nil, false
+	return rdata.SOA{}, nil, false
 }
 
 // Option configures a parse.

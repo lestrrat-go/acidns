@@ -40,7 +40,7 @@ func TestHTTPSType(t *testing.T) {
 	r := rdata.NewHTTPS(1, wirebb.MustParse("example.com"))
 	require.Equal(t, rrtype.HTTPS, r.Type())
 
-	got := packUnpack(t, r).(rdata.SVCB)
+	got := packUnpack(t, r).(rdata.HTTPS)
 	require.Equal(t, rrtype.HTTPS, got.Type())
 }
 

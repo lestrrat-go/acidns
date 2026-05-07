@@ -45,16 +45,16 @@ func NewRecordClass(name wirebb.Name, class rrtype.Class, ttl time.Duration, rd 
 	return record{name: name, class: class, ttl: ttl, rd: rd}
 }
 
-// RDataAs asserts rec.RData() to T iff rec.Type() == t. The Type() check
-// MUST come before the assertion because rdata interface satisfaction is
-// structural — rdata.A and rdata.AAAA share a method set, rdata.CNAME and
-// rdata.SVCB share Target(), etc. Callers MUST pass the rrtype.Type that
-// corresponds to T (e.g. rdata.MX paired with rrtype.MX).
+// RDataAs asserts rec.RData() to T iff rec.Type() matches T's owning
+// rrtype (inferred from the zero value of T). Returns the zero T and
+// false if the type check or the assertion fails.
 //
-// Returns the zero T and false if rec.Type() != t or the assertion fails.
-func RDataAs[T rdata.RData](rec Record, t rrtype.Type) (T, bool) {
+// T is constrained to rdata.Typed; RDataAs[rdata.Unknown] is a compile
+// error because Unknown has no inherent rrtype. Callers wanting to test
+// whether a record is Unknown should type-assert rec.RData() directly.
+func RDataAs[T rdata.Typed](rec Record) (T, bool) {
 	var zero T
-	if rec.Type() != t {
+	if rec.Type() != zero.Type() {
 		return zero, false
 	}
 	v, ok := rec.RData().(T)

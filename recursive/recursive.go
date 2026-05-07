@@ -485,7 +485,7 @@ func (r *recursive) serversFromReferral(ctx context.Context, resp wire.Message, 
 		if auth.Type() != rrtype.NS {
 			continue
 		}
-		ns, ok := wire.RDataAs[rdata.NS](auth, rrtype.NS)
+		ns, ok := wire.RDataAs[rdata.NS](auth)
 		if !ok {
 			continue
 		}
@@ -507,7 +507,7 @@ func (r *recursive) serversFromReferral(ctx context.Context, resp wire.Message, 
 		}
 		for _, rec := range entry.Answer {
 			if rec.Type() == rrtype.A {
-				a, ok := wire.RDataAs[rdata.A](rec, rrtype.A)
+				a, ok := wire.RDataAs[rdata.A](rec)
 				if !ok {
 					continue
 				}
@@ -526,13 +526,13 @@ func glueFor(target wire.Name, additional []wire.Record) []netip.AddrPort {
 		}
 		switch add.Type() {
 		case rrtype.A:
-			a, ok := wire.RDataAs[rdata.A](add, rrtype.A)
+			a, ok := wire.RDataAs[rdata.A](add)
 			if !ok {
 				continue
 			}
 			out = append(out, netip.AddrPortFrom(a.Addr(), 53))
 		case rrtype.AAAA:
-			aaaa, ok := wire.RDataAs[rdata.AAAA](add, rrtype.AAAA)
+			aaaa, ok := wire.RDataAs[rdata.AAAA](add)
 			if !ok {
 				continue
 			}
@@ -564,7 +564,7 @@ func pickCNAMETarget(records []wire.Record, owner wire.Name) (wire.Name, bool) {
 		if !r.Name().Equal(owner) {
 			continue
 		}
-		c, ok := wire.RDataAs[rdata.CNAME](r, rrtype.CNAME)
+		c, ok := wire.RDataAs[rdata.CNAME](r)
 		if !ok {
 			continue
 		}
@@ -618,7 +618,7 @@ func negativeCacheTTL(authority []wire.Record) time.Duration {
 		if r.Type() != rrtype.SOA {
 			continue
 		}
-		soa, ok := wire.RDataAs[rdata.SOA](r, rrtype.SOA)
+		soa, ok := wire.RDataAs[rdata.SOA](r)
 		if !ok {
 			continue
 		}

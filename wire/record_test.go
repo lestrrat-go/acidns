@@ -7,7 +7,6 @@ import (
 
 	"github.com/lestrrat-go/acidns/wire"
 	"github.com/lestrrat-go/acidns/wire/rdata"
-	"github.com/lestrrat-go/acidns/wire/rrtype"
 	"github.com/stretchr/testify/require"
 )
 
@@ -16,45 +15,48 @@ func TestRDataAs_Match(t *testing.T) {
 	name := wire.MustParseName("example.com")
 	rec := wire.NewRecord(name, 60*time.Second, rdata.NewA(netip.MustParseAddr("192.0.2.1")))
 
-	a, ok := wire.RDataAs[rdata.A](rec, rrtype.A)
+	a, ok := wire.RDataAs[rdata.A](rec)
 	require.True(t, ok)
 	require.Equal(t, "192.0.2.1", a.Addr().String())
 }
 
-// RDataAs[rdata.AAAA] paired with rrtype.AAAA on an A record must return
-// (zero, false) — the rrtype gate prevents the structural-satisfaction
-// collision between rdata.A and rdata.AAAA.
+// RDataAs[rdata.AAAA] on an A record must return (zero, false) — the
+// inferred type gate (T's zero value reports rrtype.AAAA, record's type is
+// A, so they don't match) prevents the structural-satisfaction collision
+// that would otherwise let the assertion succeed.
 func TestRDataAs_TypeFilterPreventsACollision(t *testing.T) {
 	t.Parallel()
 	name := wire.MustParseName("example.com")
 	rec := wire.NewRecord(name, 60*time.Second, rdata.NewA(netip.MustParseAddr("192.0.2.1")))
 
-	v, ok := wire.RDataAs[rdata.AAAA](rec, rrtype.AAAA)
+	v, ok := wire.RDataAs[rdata.AAAA](rec)
 	require.False(t, ok)
-	require.Nil(t, v)
+	require.Equal(t, rdata.AAAA{}, v)
 }
 
-// SVCB structurally satisfies CNAME (both expose Target()). Asking for CNAME
-// when the record is SVCB must return (zero, false).
+// SVCB and CNAME used to share Target(), so an SVCB asserted to CNAME
+// would have succeeded under the old interface-typed rdata. With the
+// concrete-struct refactor these are now distinct types — but we still
+// assert the rrtype gate keeps the assertion pristine.
 func TestRDataAs_TypeFilterPreventsCNAMECollision(t *testing.T) {
 	t.Parallel()
 	name := wire.MustParseName("example.com")
 	target := wire.MustParseName("svc.example.net")
 	rec := wire.NewRecord(name, 60*time.Second, rdata.NewSVCB(1, target))
 
-	v, ok := wire.RDataAs[rdata.CNAME](rec, rrtype.CNAME)
+	v, ok := wire.RDataAs[rdata.CNAME](rec)
 	require.False(t, ok)
-	require.Nil(t, v)
+	require.Equal(t, rdata.CNAME{}, v)
 }
 
-// Mismatched (T, rrtype.Type) pair: rrtype matches the record but T does not.
-// Caught by the assertion, returns (zero, false) without panicking.
-func TestRDataAs_AssertionFailure(t *testing.T) {
+// Asking for a T whose rrtype doesn't match the record's type returns
+// (zero, false) without panicking.
+func TestRDataAs_TypeMismatch(t *testing.T) {
 	t.Parallel()
 	name := wire.MustParseName("example.com")
 	rec := wire.NewRecord(name, 60*time.Second, rdata.NewA(netip.MustParseAddr("192.0.2.1")))
 
-	v, ok := wire.RDataAs[rdata.MX](rec, rrtype.A)
+	v, ok := wire.RDataAs[rdata.MX](rec)
 	require.False(t, ok)
-	require.Nil(t, v)
+	require.Equal(t, rdata.MX{}, v)
 }

@@ -133,7 +133,7 @@ func nsec3OwnerHash(owner wire.Name) ([]byte, error) {
 func nsec3Match(name wire.Name, params nsec3Params, records []wire.Record) (wire.Record, rdata.NSEC3, bool) {
 	want := nsec3Hash(name, params.salt, params.iterations)
 	if want == nil {
-		return nil, nil, false
+		return nil, rdata.NSEC3{}, false
 	}
 	for _, r := range records {
 		if r.Type() != rrtype.NSEC3 {
@@ -144,14 +144,14 @@ func nsec3Match(name wire.Name, params nsec3Params, records []wire.Record) (wire
 			continue
 		}
 		if bytesEqual(got, want) {
-			n3, ok := wire.RDataAs[rdata.NSEC3](r, rrtype.NSEC3)
+			n3, ok := wire.RDataAs[rdata.NSEC3](r)
 			if !ok {
 				continue
 			}
 			return r, n3, true
 		}
 	}
-	return nil, nil, false
+	return nil, rdata.NSEC3{}, false
 }
 
 // nsec3Cover returns the NSEC3 record whose (owner-hash, next-hash)
@@ -160,7 +160,7 @@ func nsec3Match(name wire.Name, params nsec3Params, records []wire.Record) (wire
 func nsec3Cover(name wire.Name, params nsec3Params, records []wire.Record) (wire.Record, rdata.NSEC3, bool) {
 	target := nsec3Hash(name, params.salt, params.iterations)
 	if target == nil {
-		return nil, nil, false
+		return nil, rdata.NSEC3{}, false
 	}
 	for _, r := range records {
 		if r.Type() != rrtype.NSEC3 {
@@ -170,7 +170,7 @@ func nsec3Cover(name wire.Name, params nsec3Params, records []wire.Record) (wire
 		if err != nil {
 			continue
 		}
-		n3, ok := wire.RDataAs[rdata.NSEC3](r, rrtype.NSEC3)
+		n3, ok := wire.RDataAs[rdata.NSEC3](r)
 		if !ok {
 			continue
 		}
@@ -179,7 +179,7 @@ func nsec3Cover(name wire.Name, params nsec3Params, records []wire.Record) (wire
 			return r, n3, true
 		}
 	}
-	return nil, nil, false
+	return nil, rdata.NSEC3{}, false
 }
 
 // hashIntervalContains reports whether x falls strictly between owner and
@@ -236,7 +236,7 @@ func extractNSEC3Params(records []wire.Record) (nsec3Params, bool) {
 		if r.Type() != rrtype.NSEC3 {
 			continue
 		}
-		n3, ok := wire.RDataAs[rdata.NSEC3](r, rrtype.NSEC3)
+		n3, ok := wire.RDataAs[rdata.NSEC3](r)
 		if !ok {
 			continue
 		}

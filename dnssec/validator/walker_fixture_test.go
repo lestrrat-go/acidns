@@ -399,7 +399,7 @@ func newKey(t *testing.T, alg rdata.DNSSECAlgorithm, ksk bool) keyMat {
 // are signed with the KSK.
 func (z *signedZone) signRRset(set []wire.Record) rdata.RRSIG {
 	if len(set) == 0 {
-		return nil
+		return rdata.RRSIG{}
 	}
 	useKSK := set[0].Type() == rrtype.DNSKEY
 	k := z.zsk

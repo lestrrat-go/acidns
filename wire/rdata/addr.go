@@ -9,16 +9,12 @@ import (
 )
 
 // A is the IPv4 address rdata payload (RFC 1035 §3.4.1).
-type A interface {
-	RData
-	Addr() netip.Addr
-}
+type A struct{ addr netip.Addr }
 
-type aData struct{ addr netip.Addr }
-
-func (aData) Type() rrtype.Type  { return rrtype.A }
-func (a aData) Addr() netip.Addr { return a.addr }
-func (a aData) Pack(p *wirebb.Packer) {
+func (A) Type() rrtype.Type  { return rrtype.A }
+func (A) typedRData()        {}
+func (a A) Addr() netip.Addr { return a.addr }
+func (a A) Pack(p *wirebb.Packer) {
 	b := a.addr.As4()
 	p.Raw(b[:])
 }
@@ -28,28 +24,25 @@ func NewA(addr netip.Addr) A {
 	if !addr.Is4() {
 		panic(fmt.Errorf("%w: A requires IPv4 address, got %s", ErrInvalidRData, addr))
 	}
-	return aData{addr: addr}
+	return A{addr: addr}
 }
 
 func unpackA(u *wirebb.Unpacker) (A, error) {
+	var zero A
 	b, err := u.Bytes(4)
 	if err != nil {
-		return nil, err
+		return zero, err
 	}
-	return aData{addr: netip.AddrFrom4([4]byte(b))}, nil
+	return A{addr: netip.AddrFrom4([4]byte(b))}, nil
 }
 
 // AAAA is the IPv6 address rdata payload (RFC 3596).
-type AAAA interface {
-	RData
-	Addr() netip.Addr
-}
+type AAAA struct{ addr netip.Addr }
 
-type aaaaData struct{ addr netip.Addr }
-
-func (aaaaData) Type() rrtype.Type  { return rrtype.AAAA }
-func (a aaaaData) Addr() netip.Addr { return a.addr }
-func (a aaaaData) Pack(p *wirebb.Packer) {
+func (AAAA) Type() rrtype.Type  { return rrtype.AAAA }
+func (AAAA) typedRData()        {}
+func (a AAAA) Addr() netip.Addr { return a.addr }
+func (a AAAA) Pack(p *wirebb.Packer) {
 	b := a.addr.As16()
 	p.Raw(b[:])
 }
@@ -60,13 +53,14 @@ func NewAAAA(addr netip.Addr) AAAA {
 	if !addr.Is6() {
 		panic(fmt.Errorf("%w: AAAA requires IPv6 address, got %s", ErrInvalidRData, addr))
 	}
-	return aaaaData{addr: addr}
+	return AAAA{addr: addr}
 }
 
 func unpackAAAA(u *wirebb.Unpacker) (AAAA, error) {
+	var zero AAAA
 	b, err := u.Bytes(16)
 	if err != nil {
-		return nil, err
+		return zero, err
 	}
-	return aaaaData{addr: netip.AddrFrom16([16]byte(b))}, nil
+	return AAAA{addr: netip.AddrFrom16([16]byte(b))}, nil
 }

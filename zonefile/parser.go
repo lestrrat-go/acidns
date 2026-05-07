@@ -296,36 +296,37 @@ func (p *parser) parseRData(t rrtype.Type, fields []fieldTok) (rdata.RData, erro
 }
 
 func (p *parser) parseSOA(fields []fieldTok) (rdata.SOA, error) {
+	var zero rdata.SOA
 	if len(fields) != 7 {
-		return nil, fmt.Errorf("SOA: expected 7 fields, got %d", len(fields))
+		return zero, fmt.Errorf("SOA: expected 7 fields, got %d", len(fields))
 	}
 	mname, err := p.resolveName(fields[0].text)
 	if err != nil {
-		return nil, err
+		return zero, err
 	}
 	rname, err := p.resolveName(fields[1].text)
 	if err != nil {
-		return nil, err
+		return zero, err
 	}
 	serial, err := strconv.ParseUint(fields[2].text, 10, 32)
 	if err != nil {
-		return nil, fmt.Errorf("SOA serial: %w", err)
+		return zero, fmt.Errorf("SOA serial: %w", err)
 	}
 	refresh, err := strconv.ParseInt(fields[3].text, 10, 64)
 	if err != nil {
-		return nil, fmt.Errorf("SOA refresh: %w", err)
+		return zero, fmt.Errorf("SOA refresh: %w", err)
 	}
 	retry, err := strconv.ParseInt(fields[4].text, 10, 64)
 	if err != nil {
-		return nil, fmt.Errorf("SOA retry: %w", err)
+		return zero, fmt.Errorf("SOA retry: %w", err)
 	}
 	expire, err := strconv.ParseInt(fields[5].text, 10, 64)
 	if err != nil {
-		return nil, fmt.Errorf("SOA expire: %w", err)
+		return zero, fmt.Errorf("SOA expire: %w", err)
 	}
 	minimum, err := strconv.ParseInt(fields[6].text, 10, 64)
 	if err != nil {
-		return nil, fmt.Errorf("SOA minimum: %w", err)
+		return zero, fmt.Errorf("SOA minimum: %w", err)
 	}
 	return rdata.NewSOA(mname, rname,
 		uint32(serial),

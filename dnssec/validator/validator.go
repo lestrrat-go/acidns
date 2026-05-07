@@ -99,14 +99,14 @@ func (v *Validator) NTAs() *NTAStore { return v.opts.NTAs }
 // policy is BogusReturnSERVFAIL or for caller programming errors).
 func (v *Validator) ValidateRRset(set []wire.Record, rrsigs []rdata.RRSIG, keys []rdata.DNSKEY) (Result, rdata.RRSIG, error) {
 	if len(set) == 0 {
-		return Indeterminate, nil, fmt.Errorf("validator: empty RRset")
+		return Indeterminate, rdata.RRSIG{}, fmt.Errorf("validator: empty RRset")
 	}
 	owner := set[0].Name()
 	if v.opts.NTAs.Covers(owner) {
-		return Indeterminate, nil, nil
+		return Indeterminate, rdata.RRSIG{}, nil
 	}
 	if len(rrsigs) == 0 {
-		return Bogus, nil, ErrNoCoveringRRSIG
+		return Bogus, rdata.RRSIG{}, ErrNoCoveringRRSIG
 	}
 	now := v.opts.Now()
 	var lastErr error
@@ -128,9 +128,9 @@ func (v *Validator) ValidateRRset(set []wire.Record, rrsigs []rdata.RRSIG, keys 
 		}
 	}
 	if v.opts.BogusPolicy == BogusReturnAnswer {
-		return Bogus, nil, lastErr
+		return Bogus, rdata.RRSIG{}, lastErr
 	}
-	return Bogus, nil, fmt.Errorf("validator: %w", lastErr)
+	return Bogus, rdata.RRSIG{}, fmt.Errorf("validator: %w", lastErr)
 }
 
 // VerifyDelegation checks that the supplied DNSKEY set chains to a parent
@@ -176,5 +176,5 @@ func findMatchingKey(keys []rdata.DNSKEY, sig rdata.RRSIG) (rdata.DNSKEY, bool) 
 		}
 		return k, true
 	}
-	return nil, false
+	return rdata.DNSKEY{}, false
 }

@@ -10,33 +10,23 @@ import (
 // SOA is the start-of-authority rdata (RFC 1035 §3.3.13). All time-based
 // fields are exposed as time.Duration; on the wire they are 32-bit unsigned
 // seconds.
-type SOA interface {
-	RData
-	MName() wirebb.Name
-	RName() wirebb.Name
-	Serial() uint32
-	Refresh() time.Duration
-	Retry() time.Duration
-	Expire() time.Duration
-	Minimum() time.Duration
-}
-
-type soa struct {
+type SOA struct {
 	mname, rname                    wirebb.Name
 	serial                          uint32
 	refresh, retry, expire, minimum time.Duration
 }
 
-func (soa) Type() rrtype.Type        { return rrtype.SOA }
-func (s soa) MName() wirebb.Name     { return s.mname }
-func (s soa) RName() wirebb.Name     { return s.rname }
-func (s soa) Serial() uint32         { return s.serial }
-func (s soa) Refresh() time.Duration { return s.refresh }
-func (s soa) Retry() time.Duration   { return s.retry }
-func (s soa) Expire() time.Duration  { return s.expire }
-func (s soa) Minimum() time.Duration { return s.minimum }
+func (SOA) Type() rrtype.Type        { return rrtype.SOA }
+func (SOA) typedRData()              {}
+func (s SOA) MName() wirebb.Name     { return s.mname }
+func (s SOA) RName() wirebb.Name     { return s.rname }
+func (s SOA) Serial() uint32         { return s.serial }
+func (s SOA) Refresh() time.Duration { return s.refresh }
+func (s SOA) Retry() time.Duration   { return s.retry }
+func (s SOA) Expire() time.Duration  { return s.expire }
+func (s SOA) Minimum() time.Duration { return s.minimum }
 
-func (s soa) Pack(p *wirebb.Packer) {
+func (s SOA) Pack(p *wirebb.Packer) {
 	p.Name(s.mname)
 	p.Name(s.rname)
 	p.Uint32(s.serial)
@@ -48,42 +38,43 @@ func (s soa) Pack(p *wirebb.Packer) {
 
 // NewSOA returns an SOA rdata.
 func NewSOA(mname, rname wirebb.Name, serial uint32, refresh, retry, expire, minimum time.Duration) SOA {
-	return soa{
+	return SOA{
 		mname: mname, rname: rname, serial: serial,
 		refresh: refresh, retry: retry, expire: expire, minimum: minimum,
 	}
 }
 
 func unpackSOA(u *wirebb.Unpacker) (SOA, error) {
+	var zero SOA
 	mname, err := u.Name()
 	if err != nil {
-		return nil, err
+		return zero, err
 	}
 	rname, err := u.Name()
 	if err != nil {
-		return nil, err
+		return zero, err
 	}
 	serial, err := u.Uint32()
 	if err != nil {
-		return nil, err
+		return zero, err
 	}
 	refresh, err := u.Uint32()
 	if err != nil {
-		return nil, err
+		return zero, err
 	}
 	retry, err := u.Uint32()
 	if err != nil {
-		return nil, err
+		return zero, err
 	}
 	expire, err := u.Uint32()
 	if err != nil {
-		return nil, err
+		return zero, err
 	}
 	minimum, err := u.Uint32()
 	if err != nil {
-		return nil, err
+		return zero, err
 	}
-	return soa{
+	return SOA{
 		mname:   mname,
 		rname:   rname,
 		serial:  serial,

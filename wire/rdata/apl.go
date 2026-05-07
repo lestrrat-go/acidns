@@ -18,46 +18,37 @@ const (
 )
 
 // APLItem is a single prefix entry inside an APL rdata payload (RFC 3123).
-type APLItem interface {
-	Family() APLAddressFamily
-	Prefix() netip.Prefix
-	Negate() bool
-}
-
-type aplItem struct {
+type APLItem struct {
 	family APLAddressFamily
 	prefix netip.Prefix
 	neg    bool
 }
 
-func (a aplItem) Family() APLAddressFamily { return a.family }
-func (a aplItem) Prefix() netip.Prefix     { return a.prefix }
-func (a aplItem) Negate() bool             { return a.neg }
+func (a APLItem) Family() APLAddressFamily { return a.family }
+func (a APLItem) Prefix() netip.Prefix     { return a.prefix }
+func (a APLItem) Negate() bool             { return a.neg }
 
 // NewAPLItem returns an APL item. The prefix's address family is inferred
 // from the prefix; IPv4 maps to family 1, IPv6 to family 2.
 func NewAPLItem(prefix netip.Prefix, negate bool) (APLItem, error) {
+	var zero APLItem
 	if !prefix.IsValid() {
-		return nil, fmt.Errorf("%w: APL prefix invalid", ErrInvalidRData)
+		return zero, fmt.Errorf("%w: APL prefix invalid", ErrInvalidRData)
 	}
 	family := APLFamilyIPv4
 	if prefix.Addr().Is6() {
 		family = APLFamilyIPv6
 	}
-	return aplItem{family: family, prefix: prefix, neg: negate}, nil
+	return APLItem{family: family, prefix: prefix, neg: negate}, nil
 }
 
 // APL is the Address Prefix List rdata (RFC 3123).
-type APL interface {
-	RData
-	Items() []APLItem
-}
+type APL struct{ items []APLItem }
 
-type apl struct{ items []APLItem }
-
-func (apl) Type() rrtype.Type  { return rrtype.APL }
-func (a apl) Items() []APLItem { return a.items }
-func (a apl) Pack(p *wirebb.Packer) {
+func (APL) Type() rrtype.Type  { return rrtype.APL }
+func (APL) typedRData()        {}
+func (a APL) Items() []APLItem { return a.items }
+func (a APL) Pack(p *wirebb.Packer) {
 	for _, it := range a.items {
 		p.Uint16(uint16(it.Family()))
 		p.Uint8(uint8(it.Prefix().Bits()))
@@ -75,38 +66,39 @@ func (a apl) Pack(p *wirebb.Packer) {
 func NewAPL(items ...APLItem) APL {
 	cp := make([]APLItem, len(items))
 	copy(cp, items)
-	return apl{items: cp}
+	return APL{items: cp}
 }
 
 func unpackAPL(u *wirebb.Unpacker, rdlen int) (APL, error) {
+	var zero APL
 	end := u.Off() + rdlen
 	var items []APLItem
 	for u.Off() < end {
 		fam, err := u.Uint16()
 		if err != nil {
-			return nil, err
+			return zero, err
 		}
 		prefix, err := u.Uint8()
 		if err != nil {
-			return nil, err
+			return zero, err
 		}
 		nlen, err := u.Uint8()
 		if err != nil {
-			return nil, err
+			return zero, err
 		}
 		alen := int(nlen & 0x7f)
 		neg := nlen&0x80 != 0
 		afd, err := u.Bytes(alen)
 		if err != nil {
-			return nil, err
+			return zero, err
 		}
 		p, err := decodeAPLAFD(APLAddressFamily(fam), prefix, afd)
 		if err != nil {
-			return nil, err
+			return zero, err
 		}
-		items = append(items, aplItem{family: APLAddressFamily(fam), prefix: p, neg: neg})
+		items = append(items, APLItem{family: APLAddressFamily(fam), prefix: p, neg: neg})
 	}
-	return apl{items: items}, nil
+	return APL{items: items}, nil
 }
 
 func encodeAPLAFD(p netip.Prefix) []byte {

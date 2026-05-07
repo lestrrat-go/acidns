@@ -6,27 +6,20 @@ import (
 )
 
 // SRV is the service-location rdata (RFC 2782).
-type SRV interface {
-	RData
-	Priority() uint16
-	Weight() uint16
-	Port() uint16
-	Target() wirebb.Name
-}
-
-type srv struct {
+type SRV struct {
 	priority uint16
 	weight   uint16
 	port     uint16
 	target   wirebb.Name
 }
 
-func (srv) Type() rrtype.Type     { return rrtype.SRV }
-func (s srv) Priority() uint16    { return s.priority }
-func (s srv) Weight() uint16      { return s.weight }
-func (s srv) Port() uint16        { return s.port }
-func (s srv) Target() wirebb.Name { return s.target }
-func (s srv) Pack(p *wirebb.Packer) {
+func (SRV) Type() rrtype.Type     { return rrtype.SRV }
+func (SRV) typedRData()           {}
+func (s SRV) Priority() uint16    { return s.priority }
+func (s SRV) Weight() uint16      { return s.weight }
+func (s SRV) Port() uint16        { return s.port }
+func (s SRV) Target() wirebb.Name { return s.target }
+func (s SRV) Pack(p *wirebb.Packer) {
 	p.Uint16(s.priority)
 	p.Uint16(s.weight)
 	p.Uint16(s.port)
@@ -36,25 +29,26 @@ func (s srv) Pack(p *wirebb.Packer) {
 
 // NewSRV returns an SRV rdata.
 func NewSRV(priority, weight, port uint16, target wirebb.Name) SRV {
-	return srv{priority: priority, weight: weight, port: port, target: target}
+	return SRV{priority: priority, weight: weight, port: port, target: target}
 }
 
 func unpackSRV(u *wirebb.Unpacker) (SRV, error) {
+	var zero SRV
 	priority, err := u.Uint16()
 	if err != nil {
-		return nil, err
+		return zero, err
 	}
 	weight, err := u.Uint16()
 	if err != nil {
-		return nil, err
+		return zero, err
 	}
 	port, err := u.Uint16()
 	if err != nil {
-		return nil, err
+		return zero, err
 	}
 	target, err := u.Name()
 	if err != nil {
-		return nil, err
+		return zero, err
 	}
-	return srv{priority: priority, weight: weight, port: port, target: target}, nil
+	return SRV{priority: priority, weight: weight, port: port, target: target}, nil
 }
