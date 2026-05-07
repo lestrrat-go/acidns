@@ -26,6 +26,7 @@ type config struct {
 	maxTTL       time.Duration
 	maxNegTTL    time.Duration
 	queryTimeout time.Duration
+	now          func() time.Time
 }
 
 // WithUpstream sets the Exchanger used to forward queries. The caller
@@ -116,4 +117,11 @@ func WithMaxNegativeTTL(d time.Duration) Option {
 // seconds.
 func WithQueryTimeout(d time.Duration) Option {
 	return optionFunc(func(c *config) { c.queryTimeout = d })
+}
+
+// WithNowFunc injects the clock used for cache freshness decisions.
+// The default is [time.Now]. Tests pass a controllable clock to verify
+// TTL expiry without sleeping in real time.
+func WithNowFunc(now func() time.Time) Option {
+	return optionFunc(func(c *config) { c.now = now })
 }

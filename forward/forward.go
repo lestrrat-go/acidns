@@ -43,12 +43,16 @@ func New(opts ...Option) (*Handler, error) {
 		maxTTL:       24 * time.Hour,
 		maxNegTTL:    5 * time.Minute,
 		queryTimeout: 5 * time.Second,
+		now:          time.Now,
 	}
 	for _, o := range opts {
 		o.applyForward(&c)
 	}
 	if c.upstream == nil {
 		return nil, ErrNoUpstream
+	}
+	if c.now == nil {
+		c.now = time.Now
 	}
 	return &Handler{cfg: c, cache: newCache(c.cacheSize)}, nil
 }
@@ -73,7 +77,7 @@ func (h *Handler) ServeDNS(ctx context.Context, w acidns.ResponseWriter, q wire.
 	}
 
 	qq := q.Questions()[0]
-	now := time.Now()
+	now := h.cfg.now()
 
 	if e, ok := h.cache.get(qq.Name(), qq.Type(), qq.Class(), now); ok {
 		_ = w.WriteMsg(buildFromCache(q, e, now))
@@ -93,7 +97,7 @@ func (h *Handler) ServeDNS(ctx context.Context, w acidns.ResponseWriter, q wire.
 		return
 	}
 
-	if e, ok := makeEntry(resp, h.cfg, time.Now()); ok {
+	if e, ok := makeEntry(resp, h.cfg, h.cfg.now()); ok {
 		h.cache.put(qq.Name(), qq.Type(), qq.Class(), e)
 	}
 

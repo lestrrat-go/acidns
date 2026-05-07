@@ -489,10 +489,13 @@ func startRefusingDoQ(t *testing.T) (netip.AddrPort, *tls.Config) {
 			if err != nil {
 				return
 			}
-			// Hold briefly so the client's DialAddr returns a live conn,
-			// then tear down so OpenStreamSync / Write trip.
+			// Wait for the client to open a stream, then tear the
+			// connection down. This synchronizes the close on a real
+			// client action instead of a wall-clock sleep — the
+			// resulting error path (OpenStreamSync / Write) is the
+			// behavior under test.
 			go func(c *quic.Conn) {
-				time.Sleep(20 * time.Millisecond)
+				_, _ = c.AcceptStream(t.Context())
 				_ = c.CloseWithError(42, "go away")
 			}(conn)
 		}

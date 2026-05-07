@@ -218,12 +218,12 @@ func TestExchangeReadErrorReturnsCtxErrWhenCancelled(t *testing.T) {
 	c1, c2 := net.Pipe()
 	defer c2.Close()
 
-	// Server reads request but never replies.
-	go func() { _, _ = streamframe.ReadFrame(c2) }()
-
 	ctx, cancel := context.WithCancel(t.Context())
+	// Server reads the request — guaranteeing WriteFrame returned and
+	// Exchange has reached ReadFrame — and only then cancels. This is
+	// race-free: no sleep is needed to order cancel after the write.
 	go func() {
-		time.Sleep(50 * time.Millisecond)
+		_, _ = streamframe.ReadFrame(c2)
 		cancel()
 	}()
 	_, err := streamframe.Exchange(ctx, c1, mustQ(t, 2), time.Hour)
@@ -317,18 +317,21 @@ func TestConnStreamNextCtxCancelDuringRead(t *testing.T) {
 	c1, c2 := net.Pipe()
 	defer c2.Close()
 
-	// Server reads request but never replies.
-	go func() { _, _ = streamframe.ReadFrame(c2) }()
+	// Server reads request — proving NewConnStream finished WriteFrame —
+	// and only then we proceed to call Next.
+	written := make(chan struct{})
+	go func() {
+		_, _ = streamframe.ReadFrame(c2)
+		close(written)
+	}()
 
 	stream, err := streamframe.NewConnStream(t.Context(), c1, mustQ(t, 0x88), time.Hour)
 	require.NoError(t, err)
 	defer stream.Close()
 
+	<-written
 	ctx, cancel := context.WithCancel(t.Context())
-	go func() {
-		time.Sleep(50 * time.Millisecond)
-		cancel()
-	}()
+	cancel() // ctx is already done before Next observes it
 	_, err = stream.Next(ctx)
 	require.Error(t, err)
 	require.ErrorIs(t, err, context.Canceled)

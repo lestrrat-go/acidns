@@ -5,6 +5,7 @@ import (
 	"crypto/tls"
 	"errors"
 	"net/netip"
+	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -16,6 +17,29 @@ import (
 	"github.com/lestrrat-go/acidns/wire/rrtype"
 	"github.com/stretchr/testify/require"
 )
+
+// fakeClock returns a controllable time. Tests advance it via Advance to
+// verify TTL-driven expiry without sleeping in real time.
+type fakeClock struct {
+	mu sync.Mutex
+	t  time.Time
+}
+
+func newFakeClock() *fakeClock {
+	return &fakeClock{t: time.Date(2026, 5, 7, 0, 0, 0, 0, time.UTC)}
+}
+
+func (c *fakeClock) Now() time.Time {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return c.t
+}
+
+func (c *fakeClock) Advance(d time.Duration) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.t = c.t.Add(d)
+}
 
 // fakeUpstream is an Exchanger whose answer is decided by handler — the
 // test inspects upstream-side queries via a counter and an optional spy.
@@ -126,7 +150,8 @@ func TestPositiveCacheTTLDecrements(t *testing.T) {
 			return answer(q, 10*time.Second, netip.MustParseAddr("203.0.113.10"))
 		},
 	}
-	h, err := forward.New(forward.WithUpstream(upstream))
+	clk := newFakeClock()
+	h, err := forward.New(forward.WithUpstream(upstream), forward.WithNowFunc(clk.Now))
 	require.NoError(t, err)
 
 	q := clientQuery(t, "example.com", rrtype.A)
@@ -134,7 +159,7 @@ func TestPositiveCacheTTLDecrements(t *testing.T) {
 	h.ServeDNS(t.Context(), w1, q)
 	first := w1.got.Answers()[0].TTL()
 
-	time.Sleep(50 * time.Millisecond)
+	clk.Advance(2 * time.Second)
 	w2 := &captureWriter{}
 	h.ServeDNS(t.Context(), w2, q)
 	second := w2.got.Answers()[0].TTL()
@@ -146,10 +171,11 @@ func TestPositiveCacheExpires(t *testing.T) {
 	t.Parallel()
 	upstream := &fakeUpstream{
 		handler: func(q wire.Message) wire.Message {
-			return answer(q, 50*time.Millisecond, netip.MustParseAddr("203.0.113.10"))
+			return answer(q, time.Second, netip.MustParseAddr("203.0.113.10"))
 		},
 	}
-	h, err := forward.New(forward.WithUpstream(upstream))
+	clk := newFakeClock()
+	h, err := forward.New(forward.WithUpstream(upstream), forward.WithNowFunc(clk.Now))
 	require.NoError(t, err)
 
 	q := clientQuery(t, "example.com", rrtype.A)
@@ -157,7 +183,7 @@ func TestPositiveCacheExpires(t *testing.T) {
 	h.ServeDNS(t.Context(), w, q)
 	require.Equal(t, int64(1), upstream.calls.Load())
 
-	time.Sleep(80 * time.Millisecond)
+	clk.Advance(2 * time.Second)
 	w = &captureWriter{}
 	h.ServeDNS(t.Context(), w, q)
 	require.Equal(t, int64(2), upstream.calls.Load(), "expired entry should refetch")
@@ -210,9 +236,11 @@ func TestNegativeCacheCappedByMaxNegTTL(t *testing.T) {
 			return nxdomain(q, time.Hour, 24*time.Hour)
 		},
 	}
+	clk := newFakeClock()
 	h, err := forward.New(
 		forward.WithUpstream(upstream),
-		forward.WithMaxNegativeTTL(80*time.Millisecond),
+		forward.WithMaxNegativeTTL(time.Second),
+		forward.WithNowFunc(clk.Now),
 	)
 	require.NoError(t, err)
 
@@ -221,7 +249,7 @@ func TestNegativeCacheCappedByMaxNegTTL(t *testing.T) {
 	h.ServeDNS(t.Context(), w, q)
 	require.Equal(t, int64(1), upstream.calls.Load())
 
-	time.Sleep(120 * time.Millisecond)
+	clk.Advance(2 * time.Second)
 	w = &captureWriter{}
 	h.ServeDNS(t.Context(), w, q)
 	require.Equal(t, int64(2), upstream.calls.Load(), "negative cache should expire after maxNegTTL")
@@ -584,9 +612,11 @@ func TestMaxTTLCap(t *testing.T) {
 			return answer(q, 7*24*time.Hour, netip.MustParseAddr("203.0.113.10"))
 		},
 	}
+	clk := newFakeClock()
 	h, err := forward.New(
 		forward.WithUpstream(up),
-		forward.WithMaxTTL(50*time.Millisecond),
+		forward.WithMaxTTL(time.Second),
+		forward.WithNowFunc(clk.Now),
 	)
 	require.NoError(t, err)
 
@@ -602,7 +632,7 @@ func TestMaxTTLCap(t *testing.T) {
 
 	// After the cap, the entry must expire even though the upstream
 	// TTL was a week.
-	time.Sleep(120 * time.Millisecond)
+	clk.Advance(2 * time.Second)
 	w = &captureWriter{}
 	h.ServeDNS(t.Context(), w, q)
 	require.Equal(t, int64(2), up.calls.Load(),
@@ -680,12 +710,11 @@ func TestCacheReplacesExisting(t *testing.T) {
 	up := &fakeUpstream{
 		handler: func(q wire.Message) wire.Message {
 			counter.Add(1)
-			// Tiny TTL so the entry expires quickly; then we re-fetch
-			// and the put path replaces the existing key.
-			return answer(q, 30*time.Millisecond, netip.MustParseAddr("203.0.113.10"))
+			return answer(q, time.Second, netip.MustParseAddr("203.0.113.10"))
 		},
 	}
-	h, err := forward.New(forward.WithUpstream(up))
+	clk := newFakeClock()
+	h, err := forward.New(forward.WithUpstream(up), forward.WithNowFunc(clk.Now))
 	require.NoError(t, err)
 
 	q := clientQuery(t, "example.com", rrtype.A)
@@ -693,7 +722,7 @@ func TestCacheReplacesExisting(t *testing.T) {
 	h.ServeDNS(t.Context(), w, q)
 	require.Equal(t, 1, h.CacheSize())
 
-	time.Sleep(60 * time.Millisecond)
+	clk.Advance(2 * time.Second)
 	w = &captureWriter{}
 	h.ServeDNS(t.Context(), w, q)
 	require.Equal(t, int64(2), up.calls.Load())
@@ -841,14 +870,16 @@ func TestNegativeTTLFromSOATTLLowerThanMinimum(t *testing.T) {
 	t.Parallel()
 	up := &fakeUpstream{
 		handler: func(q wire.Message) wire.Message {
-			// SOA TTL is 50 ms (small), MINIMUM is 1 hour (large) —
-			// the cached negative entry should expire after ~50 ms.
-			return nxdomain(q, 50*time.Millisecond, time.Hour)
+			// SOA TTL is 1s (small), MINIMUM is 1 hour (large) — the
+			// cached negative entry should expire after the SOA TTL.
+			return nxdomain(q, time.Second, time.Hour)
 		},
 	}
+	clk := newFakeClock()
 	h, err := forward.New(
 		forward.WithUpstream(up),
 		forward.WithMaxNegativeTTL(time.Hour), // ensure no other cap interferes
+		forward.WithNowFunc(clk.Now),
 	)
 	require.NoError(t, err)
 
@@ -857,7 +888,7 @@ func TestNegativeTTLFromSOATTLLowerThanMinimum(t *testing.T) {
 	h.ServeDNS(t.Context(), w, q)
 	require.Equal(t, int64(1), up.calls.Load())
 
-	time.Sleep(120 * time.Millisecond)
+	clk.Advance(2 * time.Second)
 	w = &captureWriter{}
 	h.ServeDNS(t.Context(), w, q)
 	require.Equal(t, int64(2), up.calls.Load(),
