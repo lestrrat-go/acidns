@@ -4,8 +4,8 @@ import (
 	"fmt"
 
 	"github.com/lestrrat-go/acidns/dnsclient/specialuse"
-	"github.com/lestrrat-go/acidns/dnsmsg/rrtype"
-	"github.com/lestrrat-go/acidns/dnsname"
+	"github.com/lestrrat-go/acidns/wire"
+	"github.com/lestrrat-go/acidns/wire/rrtype"
 )
 
 func Example_specialuse_disposition() {
@@ -18,7 +18,7 @@ func Example_specialuse_disposition() {
 		"any.invalid",
 		"private.onion",
 	} {
-		fmt.Printf("%-20s %v\n", n, specialuse.For(dnsname.MustParse(n)))
+		fmt.Printf("%-20s %v\n", n, specialuse.For(wire.MustParseName(n)))
 	}
 
 	// LoopbackForType returns the synthetic answer for the localhost zone.

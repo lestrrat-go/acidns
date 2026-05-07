@@ -8,10 +8,9 @@ import (
 	"time"
 
 	"github.com/lestrrat-go/acidns/dnsclient/transport/udp"
-	"github.com/lestrrat-go/acidns/dnsmsg"
-	"github.com/lestrrat-go/acidns/dnsmsg/rdata"
-	"github.com/lestrrat-go/acidns/dnsmsg/rrtype"
-	"github.com/lestrrat-go/acidns/dnsname"
+	"github.com/lestrrat-go/acidns/wire"
+	"github.com/lestrrat-go/acidns/wire/rdata"
+	"github.com/lestrrat-go/acidns/wire/rrtype"
 	"github.com/stretchr/testify/require"
 )
 
@@ -30,13 +29,13 @@ func startEcho(t *testing.T) netip.AddrPort {
 			if err != nil {
 				return
 			}
-			req, err := dnsmsg.Unmarshal(buf[:n])
+			req, err := wire.Unmarshal(buf[:n])
 			if err != nil {
 				continue
 			}
-			ans := dnsmsg.NewRecord(req.Questions()[0].Name(), 60*time.Second,
+			ans := wire.NewRecord(req.Questions()[0].Name(), 60*time.Second,
 				rdata.NewA(netip.MustParseAddr("203.0.113.1")))
-			resp, err := dnsmsg.NewBuilder().
+			resp, err := wire.NewBuilder().
 				ID(req.ID()).
 				Response(true).
 				RecursionDesired(req.Flags().RecursionDesired()).
@@ -47,7 +46,7 @@ func startEcho(t *testing.T) netip.AddrPort {
 			if err != nil {
 				continue
 			}
-			wire, err := dnsmsg.Marshal(resp)
+			wire, err := wire.Marshal(resp)
 			if err != nil {
 				continue
 			}
@@ -66,10 +65,10 @@ func TestExchange(t *testing.T) {
 	ex, err := udp.New(addr)
 	require.NoError(t, err)
 
-	q, err := dnsmsg.NewBuilder().
+	q, err := wire.NewBuilder().
 		ID(0xbeef).
 		RecursionDesired(true).
-		Question(dnsmsg.NewQuestion(dnsname.MustParse("example.com"), rrtype.A)).
+		Question(wire.NewQuestion(wire.MustParseName("example.com"), rrtype.A)).
 		Build()
 	require.NoError(t, err)
 
@@ -97,9 +96,9 @@ func TestExchangeContextCancelled(t *testing.T) {
 	ex, err := udp.New(addr)
 	require.NoError(t, err)
 
-	q, _ := dnsmsg.NewBuilder().
+	q, _ := wire.NewBuilder().
 		ID(1).
-		Question(dnsmsg.NewQuestion(dnsname.MustParse("example.com"), rrtype.A)).
+		Question(wire.NewQuestion(wire.MustParseName("example.com"), rrtype.A)).
 		Build()
 
 	ctx, cancel := context.WithTimeout(t.Context(), 50*time.Millisecond)
@@ -123,36 +122,36 @@ func TestExchangeMismatchedID(t *testing.T) {
 		if err != nil {
 			return
 		}
-		req, err := dnsmsg.Unmarshal(buf[:n])
+		req, err := wire.Unmarshal(buf[:n])
 		if err != nil {
 			return
 		}
 		// Spoof: respond with a different ID first, then with the correct one.
-		bad, _ := dnsmsg.NewBuilder().
+		bad, _ := wire.NewBuilder().
 			ID(req.ID() ^ 0xffff).
 			Response(true).
 			Question(req.Questions()[0]).
 			Build()
-		bw, _ := dnsmsg.Marshal(bad)
+		bw, _ := wire.Marshal(bad)
 		pc.WriteTo(bw, src)
 
-		good, _ := dnsmsg.NewBuilder().
+		good, _ := wire.NewBuilder().
 			ID(req.ID()).
 			Response(true).
 			Question(req.Questions()[0]).
-			Answer(dnsmsg.NewRecord(req.Questions()[0].Name(), time.Minute,
+			Answer(wire.NewRecord(req.Questions()[0].Name(), time.Minute,
 				rdata.NewA(netip.MustParseAddr("203.0.113.2")))).
 			Build()
-		gw, _ := dnsmsg.Marshal(good)
+		gw, _ := wire.Marshal(good)
 		pc.WriteTo(gw, src)
 	}()
 
 	ex, err := udp.New(addr, udp.WithTimeout(2*time.Second))
 	require.NoError(t, err)
-	q, _ := dnsmsg.NewBuilder().
+	q, _ := wire.NewBuilder().
 		ID(0x1234).
 		RecursionDesired(true).
-		Question(dnsmsg.NewQuestion(dnsname.MustParse("example.com"), rrtype.A)).
+		Question(wire.NewQuestion(wire.MustParseName("example.com"), rrtype.A)).
 		Build()
 
 	resp, err := ex.Exchange(t.Context(), q)

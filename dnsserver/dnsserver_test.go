@@ -7,11 +7,10 @@ import (
 	"time"
 
 	"github.com/lestrrat-go/acidns/dnsclient/transport/udp"
-	"github.com/lestrrat-go/acidns/dnsmsg"
-	"github.com/lestrrat-go/acidns/dnsmsg/rdata"
-	"github.com/lestrrat-go/acidns/dnsmsg/rrtype"
-	"github.com/lestrrat-go/acidns/dnsname"
 	"github.com/lestrrat-go/acidns/dnsserver"
+	"github.com/lestrrat-go/acidns/wire"
+	"github.com/lestrrat-go/acidns/wire/rdata"
+	"github.com/lestrrat-go/acidns/wire/rrtype"
 	"github.com/stretchr/testify/require"
 )
 
@@ -25,12 +24,12 @@ func startUDP(t *testing.T, h dnsserver.Handler) (dnsserver.Server, context.Canc
 	return srv, cancel
 }
 
-func mkQuery(t *testing.T, name string, rt rrtype.Type) dnsmsg.Message {
+func mkQuery(t *testing.T, name string, rt rrtype.Type) wire.Message {
 	t.Helper()
-	q, err := dnsmsg.NewBuilder().
+	q, err := wire.NewBuilder().
 		ID(0x1234).
 		RecursionDesired(true).
-		Question(dnsmsg.NewQuestion(dnsname.MustParse(name), rt)).
+		Question(wire.NewQuestion(wire.MustParseName(name), rt)).
 		Build()
 	require.NoError(t, err)
 	return q
@@ -39,10 +38,10 @@ func mkQuery(t *testing.T, name string, rt rrtype.Type) dnsmsg.Message {
 func TestUDPServerEcho(t *testing.T) {
 	t.Parallel()
 
-	h := dnsserver.HandlerFunc(func(ctx context.Context, w dnsserver.ResponseWriter, q dnsmsg.Message) {
-		ans := dnsmsg.NewRecord(q.Questions()[0].Name(), time.Minute,
+	h := dnsserver.HandlerFunc(func(ctx context.Context, w dnsserver.ResponseWriter, q wire.Message) {
+		ans := wire.NewRecord(q.Questions()[0].Name(), time.Minute,
 			rdata.NewA(netip.MustParseAddr("203.0.113.77")))
-		resp, _ := dnsmsg.NewBuilder().
+		resp, _ := wire.NewBuilder().
 			ID(q.ID()).
 			Response(true).
 			RecursionAvailable(true).
@@ -64,7 +63,7 @@ func TestUDPServerEcho(t *testing.T) {
 func TestUDPServerShutdownOnContextCancel(t *testing.T) {
 	t.Parallel()
 
-	h := dnsserver.HandlerFunc(func(_ context.Context, _ dnsserver.ResponseWriter, _ dnsmsg.Message) {})
+	h := dnsserver.HandlerFunc(func(_ context.Context, _ dnsserver.ResponseWriter, _ wire.Message) {})
 	srv, err := dnsserver.ListenUDP(netip.MustParseAddrPort("127.0.0.1:0"), h)
 	require.NoError(t, err)
 
@@ -86,8 +85,8 @@ func TestUDPServerTruncation(t *testing.T) {
 
 	// Build a response so large it can't fit in the default 512-byte UDP
 	// limit: 50 long TXT records.
-	h := dnsserver.HandlerFunc(func(ctx context.Context, w dnsserver.ResponseWriter, q dnsmsg.Message) {
-		b := dnsmsg.NewBuilder().
+	h := dnsserver.HandlerFunc(func(ctx context.Context, w dnsserver.ResponseWriter, q wire.Message) {
+		b := wire.NewBuilder().
 			ID(q.ID()).
 			Response(true).
 			Question(q.Questions()[0])
@@ -97,7 +96,7 @@ func TestUDPServerTruncation(t *testing.T) {
 		}
 		txt, _ := rdata.NewTXT(string(long))
 		for i := 0; i < 50; i++ {
-			b = b.Answer(dnsmsg.NewRecord(q.Questions()[0].Name(), time.Minute, txt))
+			b = b.Answer(wire.NewRecord(q.Questions()[0].Name(), time.Minute, txt))
 		}
 		resp, _ := b.Build()
 		_ = w.WriteMsg(resp)
@@ -108,9 +107,9 @@ func TestUDPServerTruncation(t *testing.T) {
 	require.NoError(t, err)
 
 	// Send a query WITHOUT EDNS so the server caps at 512 bytes.
-	q, err := dnsmsg.NewBuilder().
+	q, err := wire.NewBuilder().
 		ID(1).
-		Question(dnsmsg.NewQuestion(dnsname.MustParse("example.com"), rrtype.TXT)).
+		Question(wire.NewQuestion(wire.MustParseName("example.com"), rrtype.TXT)).
 		Build()
 	require.NoError(t, err)
 
@@ -123,15 +122,15 @@ func TestUDPServerTruncation(t *testing.T) {
 func TestUDPServerEDNSPayloadSize(t *testing.T) {
 	t.Parallel()
 
-	h := dnsserver.HandlerFunc(func(ctx context.Context, w dnsserver.ResponseWriter, q dnsmsg.Message) {
-		b := dnsmsg.NewBuilder().
+	h := dnsserver.HandlerFunc(func(ctx context.Context, w dnsserver.ResponseWriter, q wire.Message) {
+		b := wire.NewBuilder().
 			ID(q.ID()).
 			Response(true).
 			Question(q.Questions()[0])
 		// 10 short TXT records — fits in 4096 but not 512
 		short, _ := rdata.NewTXT("hello")
 		for i := 0; i < 10; i++ {
-			b = b.Answer(dnsmsg.NewRecord(q.Questions()[0].Name(), time.Minute, short))
+			b = b.Answer(wire.NewRecord(q.Questions()[0].Name(), time.Minute, short))
 		}
 		// pad with more TXT to push past 512 bytes
 		long := make([]byte, 100)
@@ -140,7 +139,7 @@ func TestUDPServerEDNSPayloadSize(t *testing.T) {
 		}
 		txt, _ := rdata.NewTXT(string(long))
 		for i := 0; i < 5; i++ {
-			b = b.Answer(dnsmsg.NewRecord(q.Questions()[0].Name(), time.Minute, txt))
+			b = b.Answer(wire.NewRecord(q.Questions()[0].Name(), time.Minute, txt))
 		}
 		resp, _ := b.Build()
 		_ = w.WriteMsg(resp)
@@ -151,10 +150,10 @@ func TestUDPServerEDNSPayloadSize(t *testing.T) {
 	require.NoError(t, err)
 
 	// Query with EDNS advertising 4096 bytes — server should not truncate.
-	q, err := dnsmsg.NewBuilder().
+	q, err := wire.NewBuilder().
 		ID(1).
-		Question(dnsmsg.NewQuestion(dnsname.MustParse("example.com"), rrtype.TXT)).
-		EDNS(dnsmsg.NewEDNSBuilder().UDPSize(4096).Build()).
+		Question(wire.NewQuestion(wire.MustParseName("example.com"), rrtype.TXT)).
+		EDNS(wire.NewEDNSBuilder().UDPSize(4096).Build()).
 		Build()
 	require.NoError(t, err)
 

@@ -39,7 +39,7 @@ type TLV struct {
 // flags) is handled by the caller — this package operates only on the
 // message-data portion (RFC 8490 §5.4).
 type Message struct {
-	Primary  TLV   // Primary TLV (REQUIRED in requests; optional in responses)
+	Primary    TLV   // Primary TLV (REQUIRED in requests; optional in responses)
 	Additional []TLV // Additional TLVs in document order
 }
 

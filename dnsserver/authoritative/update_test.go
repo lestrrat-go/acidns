@@ -9,13 +9,12 @@ import (
 
 	"github.com/lestrrat-go/acidns/dnsclient/dnsupdate"
 	"github.com/lestrrat-go/acidns/dnsclient/transport/udp"
-	"github.com/lestrrat-go/acidns/dnsmsg"
-	"github.com/lestrrat-go/acidns/dnsmsg/rdata"
-	"github.com/lestrrat-go/acidns/dnsmsg/rrtype"
-	"github.com/lestrrat-go/acidns/dnsname"
 	"github.com/lestrrat-go/acidns/dnsserver"
 	"github.com/lestrrat-go/acidns/dnsserver/authoritative"
 	"github.com/lestrrat-go/acidns/dnszone"
+	"github.com/lestrrat-go/acidns/wire"
+	"github.com/lestrrat-go/acidns/wire/rdata"
+	"github.com/lestrrat-go/acidns/wire/rrtype"
 	"github.com/stretchr/testify/require"
 )
 
@@ -46,23 +45,23 @@ func TestUpdateAddRRset(t *testing.T) {
 	a, addr := startUpdatable(t)
 
 	// Add new record at "blog.example.com".
-	new := dnsmsg.NewRecord(dnsname.MustParse("blog.example.com"), 60*time.Second,
+	new := wire.NewRecord(wire.MustParseName("blog.example.com"), 60*time.Second,
 		rdata.NewA(netip.MustParseAddr("198.51.100.5")))
 
 	ex, err := udp.New(addr)
 	require.NoError(t, err)
-	msg, err := dnsupdate.NewBuilder(dnsname.MustParse("example.com")).
+	msg, err := dnsupdate.NewBuilder(wire.MustParseName("example.com")).
 		AddRRset(new).
 		Build()
 	require.NoError(t, err)
 	resp, err := ex.Exchange(t.Context(), msg)
 	require.NoError(t, err)
-	require.Equal(t, dnsmsg.RCODENoError, resp.Flags().RCODE())
+	require.Equal(t, wire.RCODENoError, resp.Flags().RCODE())
 
 	// Verify the new record appears in subsequent queries.
-	q, _ := dnsmsg.NewBuilder().
+	q, _ := wire.NewBuilder().
 		ID(2).
-		Question(dnsmsg.NewQuestion(dnsname.MustParse("blog.example.com"), rrtype.A)).
+		Question(wire.NewQuestion(wire.MustParseName("blog.example.com"), rrtype.A)).
 		Build()
 	r2, err := ex.Exchange(t.Context(), q)
 	require.NoError(t, err)
@@ -77,18 +76,18 @@ func TestUpdateDeleteRRset(t *testing.T) {
 
 	ex, err := udp.New(addr)
 	require.NoError(t, err)
-	msg, err := dnsupdate.NewBuilder(dnsname.MustParse("example.com")).
-		DeleteRRset(dnsname.MustParse("www.example.com"), rrtype.A).
+	msg, err := dnsupdate.NewBuilder(wire.MustParseName("example.com")).
+		DeleteRRset(wire.MustParseName("www.example.com"), rrtype.A).
 		Build()
 	require.NoError(t, err)
 	resp, err := ex.Exchange(t.Context(), msg)
 	require.NoError(t, err)
-	require.Equal(t, dnsmsg.RCODENoError, resp.Flags().RCODE())
+	require.Equal(t, wire.RCODENoError, resp.Flags().RCODE())
 
 	// Now www.example.com should NXDOMAIN (we don't keep namesExist after delete) or NODATA.
-	q, _ := dnsmsg.NewBuilder().
+	q, _ := wire.NewBuilder().
 		ID(3).
-		Question(dnsmsg.NewQuestion(dnsname.MustParse("www.example.com"), rrtype.A)).
+		Question(wire.NewQuestion(wire.MustParseName("www.example.com"), rrtype.A)).
 		Build()
 	r, err := ex.Exchange(t.Context(), q)
 	require.NoError(t, err)
@@ -101,15 +100,15 @@ func TestUpdatePrereqRRsetExistsFails(t *testing.T) {
 
 	ex, err := udp.New(addr)
 	require.NoError(t, err)
-	msg, err := dnsupdate.NewBuilder(dnsname.MustParse("example.com")).
-		PrereqRRsetExists(dnsname.MustParse("nope.example.com"), rrtype.A).
-		AddRRset(dnsmsg.NewRecord(dnsname.MustParse("blog.example.com"), 60*time.Second,
+	msg, err := dnsupdate.NewBuilder(wire.MustParseName("example.com")).
+		PrereqRRsetExists(wire.MustParseName("nope.example.com"), rrtype.A).
+		AddRRset(wire.NewRecord(wire.MustParseName("blog.example.com"), 60*time.Second,
 			rdata.NewA(netip.MustParseAddr("198.51.100.7")))).
 		Build()
 	require.NoError(t, err)
 	resp, err := ex.Exchange(t.Context(), msg)
 	require.NoError(t, err)
-	require.Equal(t, dnsmsg.RCODENXRRSet, resp.Flags().RCODE())
+	require.Equal(t, wire.RCODENXRRSet, resp.Flags().RCODE())
 }
 
 func TestUpdatePrereqRRsetAbsentSucceeds(t *testing.T) {
@@ -118,15 +117,15 @@ func TestUpdatePrereqRRsetAbsentSucceeds(t *testing.T) {
 
 	ex, err := udp.New(addr)
 	require.NoError(t, err)
-	msg, err := dnsupdate.NewBuilder(dnsname.MustParse("example.com")).
-		PrereqRRsetAbsent(dnsname.MustParse("blog.example.com"), rrtype.A).
-		AddRRset(dnsmsg.NewRecord(dnsname.MustParse("blog.example.com"), 60*time.Second,
+	msg, err := dnsupdate.NewBuilder(wire.MustParseName("example.com")).
+		PrereqRRsetAbsent(wire.MustParseName("blog.example.com"), rrtype.A).
+		AddRRset(wire.NewRecord(wire.MustParseName("blog.example.com"), 60*time.Second,
 			rdata.NewA(netip.MustParseAddr("198.51.100.8")))).
 		Build()
 	require.NoError(t, err)
 	resp, err := ex.Exchange(t.Context(), msg)
 	require.NoError(t, err)
-	require.Equal(t, dnsmsg.RCODENoError, resp.Flags().RCODE())
+	require.Equal(t, wire.RCODENoError, resp.Flags().RCODE())
 }
 
 func TestUpdateOutOfZoneRefused(t *testing.T) {
@@ -134,12 +133,12 @@ func TestUpdateOutOfZoneRefused(t *testing.T) {
 	_, addr := startUpdatable(t)
 	ex, err := udp.New(addr)
 	require.NoError(t, err)
-	msg, err := dnsupdate.NewBuilder(dnsname.MustParse("example.org")).
-		AddRRset(dnsmsg.NewRecord(dnsname.MustParse("a.example.org"), 60*time.Second,
+	msg, err := dnsupdate.NewBuilder(wire.MustParseName("example.org")).
+		AddRRset(wire.NewRecord(wire.MustParseName("a.example.org"), 60*time.Second,
 			rdata.NewA(netip.MustParseAddr("198.51.100.9")))).
 		Build()
 	require.NoError(t, err)
 	resp, err := ex.Exchange(t.Context(), msg)
 	require.NoError(t, err)
-	require.Equal(t, dnsmsg.RCODENotAuth, resp.Flags().RCODE())
+	require.Equal(t, wire.RCODENotAuth, resp.Flags().RCODE())
 }

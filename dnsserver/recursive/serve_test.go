@@ -8,11 +8,10 @@ import (
 	"time"
 
 	"github.com/lestrrat-go/acidns/dnsclient/transport/udp"
-	"github.com/lestrrat-go/acidns/dnsmsg"
-	"github.com/lestrrat-go/acidns/dnsmsg/rrtype"
-	"github.com/lestrrat-go/acidns/dnsname"
 	"github.com/lestrrat-go/acidns/dnsserver"
 	"github.com/lestrrat-go/acidns/dnsserver/recursive"
+	"github.com/lestrrat-go/acidns/wire"
+	"github.com/lestrrat-go/acidns/wire/rrtype"
 	"github.com/stretchr/testify/require"
 )
 
@@ -40,9 +39,9 @@ www IN  A    192.0.2.42
 
 	ex, err := udp.New(srv.Addr())
 	require.NoError(t, err)
-	q, err := dnsmsg.NewBuilder().
+	q, err := wire.NewBuilder().
 		ID(0xbeef).
-		Question(dnsmsg.NewQuestion(dnsname.MustParse("www.example.com"), rrtype.A)).
+		Question(wire.NewQuestion(wire.MustParseName("www.example.com"), rrtype.A)).
 		RecursionDesired(true).
 		Build()
 	require.NoError(t, err)
@@ -65,7 +64,7 @@ func TestServeDNSFormErrOnEmptyQuestion(t *testing.T) {
 	t.Cleanup(cancel)
 	go func() { _ = srv.Serve(ctx) }()
 
-	q, err := dnsmsg.NewBuilder().ID(1).Build() // no question
+	q, err := wire.NewBuilder().ID(1).Build() // no question
 	require.NoError(t, err)
 	ex, err := udp.New(srv.Addr())
 	require.NoError(t, err)
@@ -73,7 +72,7 @@ func TestServeDNSFormErrOnEmptyQuestion(t *testing.T) {
 	defer qcancel()
 	resp, err := ex.Exchange(qctx, q)
 	require.NoError(t, err)
-	require.Equal(t, dnsmsg.RCODEFormErr, resp.Flags().RCODE())
+	require.Equal(t, wire.RCODEFormErr, resp.Flags().RCODE())
 }
 
 func TestServeDNSServFailOnUnreachable(t *testing.T) {
@@ -89,9 +88,9 @@ func TestServeDNSServFailOnUnreachable(t *testing.T) {
 	t.Cleanup(cancel)
 	go func() { _ = srv.Serve(ctx) }()
 
-	q, err := dnsmsg.NewBuilder().
+	q, err := wire.NewBuilder().
 		ID(2).
-		Question(dnsmsg.NewQuestion(dnsname.MustParse("nope.invalid"), rrtype.A)).
+		Question(wire.NewQuestion(wire.MustParseName("nope.invalid"), rrtype.A)).
 		Build()
 	require.NoError(t, err)
 	ex, err := udp.New(srv.Addr())
@@ -100,7 +99,7 @@ func TestServeDNSServFailOnUnreachable(t *testing.T) {
 	defer qcancel()
 	resp, err := ex.Exchange(qctx, q)
 	require.NoError(t, err)
-	require.Equal(t, dnsmsg.RCODEServFail, resp.Flags().RCODE())
+	require.Equal(t, wire.RCODEServFail, resp.Flags().RCODE())
 }
 
 // trim used in helper above to avoid unused-import linter complaints.

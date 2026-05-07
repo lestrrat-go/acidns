@@ -12,12 +12,12 @@ import (
 	"sync"
 	"time"
 
-	"github.com/lestrrat-go/acidns/dnsmsg"
+	"github.com/lestrrat-go/acidns/wire"
 )
 
 // WriteFrame marshals m and writes it as a length-prefixed frame to w.
-func WriteFrame(w io.Writer, m dnsmsg.Message) error {
-	wire, err := dnsmsg.Marshal(m)
+func WriteFrame(w io.Writer, m wire.Message) error {
+	wire, err := wire.Marshal(m)
 	if err != nil {
 		return fmt.Errorf("streamframe: marshal: %w", err)
 	}
@@ -38,7 +38,7 @@ func WriteFrame(w io.Writer, m dnsmsg.Message) error {
 // ReadFrame reads the next length-prefixed frame from r and returns the
 // unmarshaled message. Returns io.EOF if r reaches end-of-file before any
 // length bytes are read; an EOF mid-frame is reported as io.ErrUnexpectedEOF.
-func ReadFrame(r io.Reader) (dnsmsg.Message, error) {
+func ReadFrame(r io.Reader) (wire.Message, error) {
 	var hdr [2]byte
 	if _, err := io.ReadFull(r, hdr[:]); err != nil {
 		// Translate the "no bytes" case to a clean io.EOF; other shapes
@@ -52,7 +52,7 @@ func ReadFrame(r io.Reader) (dnsmsg.Message, error) {
 		}
 		return nil, fmt.Errorf("streamframe: read body: %w", err)
 	}
-	m, err := dnsmsg.Unmarshal(body)
+	m, err := wire.Unmarshal(body)
 	if err != nil {
 		return nil, fmt.Errorf("streamframe: unmarshal: %w", err)
 	}
@@ -63,7 +63,7 @@ func ReadFrame(r io.Reader) (dnsmsg.Message, error) {
 // conn. The caller is responsible for dialing/handshaking; conn is closed
 // before this function returns. Cancellation of ctx aborts a pending I/O by
 // setting an immediate connection deadline.
-func Exchange(ctx context.Context, conn net.Conn, q dnsmsg.Message, fallbackTimeout time.Duration) (dnsmsg.Message, error) {
+func Exchange(ctx context.Context, conn net.Conn, q wire.Message, fallbackTimeout time.Duration) (wire.Message, error) {
 	defer conn.Close()
 
 	if dl, ok := ctx.Deadline(); ok {
@@ -105,10 +105,10 @@ func Exchange(ctx context.Context, conn net.Conn, q dnsmsg.Message, fallbackTime
 // Callers MUST Close the stream — including on error and after EOF — to
 // release the underlying connection.
 type ConnStream struct {
-	conn    net.Conn
-	expect  uint16
-	stop    chan struct{}
-	stopOnce sync.Once
+	conn      net.Conn
+	expect    uint16
+	stop      chan struct{}
+	stopOnce  sync.Once
 	closeOnce sync.Once
 }
 
@@ -117,7 +117,7 @@ type ConnStream struct {
 // length-prefixed frame, and returns a ConnStream ready for Next().
 //
 // On error the conn is closed before NewConnStream returns.
-func NewConnStream(ctx context.Context, conn net.Conn, q dnsmsg.Message, fallbackTimeout time.Duration) (*ConnStream, error) {
+func NewConnStream(ctx context.Context, conn net.Conn, q wire.Message, fallbackTimeout time.Duration) (*ConnStream, error) {
 	if dl, ok := ctx.Deadline(); ok {
 		_ = conn.SetDeadline(dl)
 	} else if fallbackTimeout > 0 {
@@ -141,7 +141,7 @@ func NewConnStream(ctx context.Context, conn net.Conn, q dnsmsg.Message, fallbac
 
 // Next reads the next response frame. ctx cancellation is honored by
 // bumping the conn deadline.
-func (s *ConnStream) Next(ctx context.Context) (dnsmsg.Message, error) {
+func (s *ConnStream) Next(ctx context.Context) (wire.Message, error) {
 	if dl, ok := ctx.Deadline(); ok {
 		_ = s.conn.SetDeadline(dl)
 	}

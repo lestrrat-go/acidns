@@ -8,13 +8,12 @@ import (
 	"time"
 
 	"github.com/lestrrat-go/acidns/dnsclient/transport/udp"
-	"github.com/lestrrat-go/acidns/dnsmsg"
-	"github.com/lestrrat-go/acidns/dnsmsg/rrtype"
-	"github.com/lestrrat-go/acidns/dnsname"
 	"github.com/lestrrat-go/acidns/dnsserver"
 	"github.com/lestrrat-go/acidns/dnsserver/acl"
 	"github.com/lestrrat-go/acidns/dnsserver/authoritative"
 	"github.com/lestrrat-go/acidns/dnszone"
+	"github.com/lestrrat-go/acidns/wire"
+	"github.com/lestrrat-go/acidns/wire/rrtype"
 )
 
 func Example_dnsserver_acl() {
@@ -42,9 +41,9 @@ www IN  A    192.0.2.42
 	go func() { _ = srv.Serve(ctx) }()
 
 	// Loopback request — allowed.
-	q, _ := dnsmsg.NewBuilder().
+	q, _ := wire.NewBuilder().
 		ID(1).
-		Question(dnsmsg.NewQuestion(dnsname.MustParse("www.example.com"), rrtype.A)).
+		Question(wire.NewQuestion(wire.MustParseName("www.example.com"), rrtype.A)).
 		Build()
 	ex, _ := udp.New(srv.Addr())
 	qctx, qcancel := context.WithTimeout(ctx, 2*time.Second)

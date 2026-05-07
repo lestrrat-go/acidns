@@ -1,7 +1,7 @@
 // Package doq implements DNS over Dedicated QUIC connections (RFC 9250).
 //
 // Each Exchange opens a fresh QUIC connection, opens one bidirectional
-// stream, sends a length-prefixed query (RFC 9250 §4.2.1 — same wire
+// stream, sends a length-prefixed query (RFC 9250 §4.2.1 — same msg
 // framing as TCP), reads a length-prefixed response, then closes the
 // stream and connection. Connection reuse and stream multiplexing are out
 // of scope for this primitive transport.
@@ -21,7 +21,7 @@ import (
 
 	"github.com/lestrrat-go/acidns/dnsclient/transport"
 	"github.com/lestrrat-go/acidns/dnsclient/transport/internal/streamframe"
-	"github.com/lestrrat-go/acidns/dnsmsg"
+	"github.com/lestrrat-go/acidns/wire"
 )
 
 // alpn is the ALPN identifier registered for DoQ.
@@ -99,8 +99,8 @@ func containsALPN(list []string, want string) bool {
 	return false
 }
 
-func (e *exchanger) Exchange(ctx context.Context, q dnsmsg.Message) (dnsmsg.Message, error) {
-	wire, err := dnsmsg.Marshal(q)
+func (e *exchanger) Exchange(ctx context.Context, q wire.Message) (wire.Message, error) {
+	msg, err := wire.Marshal(q)
 	if err != nil {
 		return nil, fmt.Errorf("doq: marshal: %w", err)
 	}
@@ -125,11 +125,11 @@ func (e *exchanger) Exchange(ctx context.Context, q dnsmsg.Message) (dnsmsg.Mess
 	}
 
 	var hdr [2]byte
-	binary.BigEndian.PutUint16(hdr[:], uint16(len(wire)))
+	binary.BigEndian.PutUint16(hdr[:], uint16(len(msg)))
 	if _, err := stream.Write(hdr[:]); err != nil {
 		return nil, fmt.Errorf("doq: write length: %w", err)
 	}
-	if _, err := stream.Write(wire); err != nil {
+	if _, err := stream.Write(msg); err != nil {
 		return nil, fmt.Errorf("doq: write body: %w", err)
 	}
 	// RFC 9250 §4.2: client MUST send the FIN after the query body.
@@ -146,7 +146,7 @@ func (e *exchanger) Exchange(ctx context.Context, q dnsmsg.Message) (dnsmsg.Mess
 		return nil, fmt.Errorf("doq: read body: %w", err)
 	}
 
-	resp, err := dnsmsg.Unmarshal(body)
+	resp, err := wire.Unmarshal(body)
 	if err != nil {
 		return nil, fmt.Errorf("doq: unmarshal: %w", err)
 	}
@@ -163,7 +163,7 @@ func (e *exchanger) Exchange(ctx context.Context, q dnsmsg.Message) (dnsmsg.Mess
 // which the caller pulls responses. Implements XFR-over-QUIC (RFC 9103
 // §4.4): one query, then a stream of responses on the same QUIC stream
 // until the server FINs the read side.
-func (e *exchanger) Stream(ctx context.Context, q dnsmsg.Message) (transport.MessageStream, error) {
+func (e *exchanger) Stream(ctx context.Context, q wire.Message) (transport.MessageStream, error) {
 	dialCtx := ctx
 	if _, ok := ctx.Deadline(); !ok && e.timeout > 0 {
 		var cancel context.CancelFunc
@@ -204,7 +204,7 @@ type doqStream struct {
 	closeOnce sync.Once
 }
 
-func (s *doqStream) Next(ctx context.Context) (dnsmsg.Message, error) {
+func (s *doqStream) Next(ctx context.Context) (wire.Message, error) {
 	if dl, ok := ctx.Deadline(); ok {
 		_ = s.stream.SetReadDeadline(dl)
 	}

@@ -3,8 +3,8 @@ package examples_test
 import (
 	"fmt"
 
-	"github.com/lestrrat-go/acidns/dnsname"
 	"github.com/lestrrat-go/acidns/dnssec/validator"
+	"github.com/lestrrat-go/acidns/wire"
 )
 
 func Example_validator_nta() {
@@ -13,17 +13,17 @@ func Example_validator_nta() {
 	// outage (cf. the May-2025 .de incident). Covers reports whether a
 	// name falls under any registered NTA.
 	store := validator.NewNTAStore()
-	store.Add(dnsname.MustParse("de"))
+	store.Add(wire.MustParseName("de"))
 
-	fmt.Println(store.Covers(dnsname.MustParse("de")))
-	fmt.Println(store.Covers(dnsname.MustParse("denic.de")))
-	fmt.Println(store.Covers(dnsname.MustParse("example.com")))
+	fmt.Println(store.Covers(wire.MustParseName("de")))
+	fmt.Println(store.Covers(wire.MustParseName("denic.de")))
+	fmt.Println(store.Covers(wire.MustParseName("example.com")))
 
 	// Wire the store into a Validator; ValidateRRset short-circuits to
 	// Indeterminate (and skips signature checks) for any name covered by
 	// the store.
 	v := validator.New(validator.Options{NTAs: store})
-	res, err := v.VerifyDelegation(dnsname.MustParse("denic.de"), nil, nil)
+	res, err := v.VerifyDelegation(wire.MustParseName("denic.de"), nil, nil)
 	fmt.Println("result:", res, "err:", err == nil)
 
 	// OUTPUT:

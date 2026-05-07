@@ -14,9 +14,8 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/lestrrat-go/acidns/dnsmsg"
-	"github.com/lestrrat-go/acidns/dnsmsg/rdata"
-	"github.com/lestrrat-go/acidns/dnsname"
+	"github.com/lestrrat-go/acidns/wire"
+	"github.com/lestrrat-go/acidns/wire/rdata"
 )
 
 // BuildDelegationCNAMEs returns the parent-zone CNAME records that
@@ -34,7 +33,7 @@ import (
 //	0.2.0.192.in-addr.arpa. CNAME 0.0-31.2.0.192.in-addr.arpa.
 //	1.2.0.192.in-addr.arpa. CNAME 1.0-31.2.0.192.in-addr.arpa.
 //	... (32 records total)
-func BuildDelegationCNAMEs(prefix netip.Prefix, subzoneOwner dnsname.Name, ttl time.Duration) ([]dnsmsg.Record, error) {
+func BuildDelegationCNAMEs(prefix netip.Prefix, subzoneOwner wire.Name, ttl time.Duration) ([]wire.Record, error) {
 	if !prefix.Addr().Is4() {
 		return nil, fmt.Errorf("classless: prefix must be IPv4")
 	}
@@ -53,26 +52,26 @@ func BuildDelegationCNAMEs(prefix netip.Prefix, subzoneOwner dnsname.Name, ttl t
 		return nil, err
 	}
 
-	out := make([]dnsmsg.Record, 0, count)
+	out := make([]wire.Record, 0, count)
 	for i := 0; i < count; i++ {
 		oct := strconv.Itoa(startOctet + i)
 		ownerStr := oct + "." + parentRev.String()
-		owner, err := dnsname.Parse(ownerStr)
+		owner, err := wire.ParseName(ownerStr)
 		if err != nil {
 			return nil, err
 		}
 		targetStr := oct + "." + subzoneOwner.String()
-		target, err := dnsname.Parse(targetStr)
+		target, err := wire.ParseName(targetStr)
 		if err != nil {
 			return nil, err
 		}
-		out = append(out, dnsmsg.NewRecord(owner, ttl, rdata.NewCNAME(target)))
+		out = append(out, wire.NewRecord(owner, ttl, rdata.NewCNAME(target)))
 	}
 	return out, nil
 }
 
 // reverseInAddr returns the IN-ADDR.ARPA name of the /24 that contains
 // (a, b, c, *).
-func reverseInAddr(a, b, c byte) (dnsname.Name, error) {
-	return dnsname.Parse(fmt.Sprintf("%d.%d.%d.in-addr.arpa", c, b, a))
+func reverseInAddr(a, b, c byte) (wire.Name, error) {
+	return wire.ParseName(fmt.Sprintf("%d.%d.%d.in-addr.arpa", c, b, a))
 }

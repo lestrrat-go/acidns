@@ -9,14 +9,14 @@ package transport
 import (
 	"context"
 
-	"github.com/lestrrat-go/acidns/dnsmsg"
+	"github.com/lestrrat-go/acidns/wire"
 )
 
 // Exchanger performs a single DNS request/response exchange. Implementations
 // MUST honor the context deadline and cancellation. They MUST NOT retry; the
 // caller's resolver is responsible for retry policy.
 type Exchanger interface {
-	Exchange(ctx context.Context, q dnsmsg.Message) (dnsmsg.Message, error)
+	Exchange(ctx context.Context, q wire.Message) (wire.Message, error)
 }
 
 // StreamExchanger sends a single query and returns a MessageStream from
@@ -29,7 +29,7 @@ type Exchanger interface {
 // MUST honor the context deadline and cancellation; closing the returned
 // stream MUST close the underlying connection.
 type StreamExchanger interface {
-	Stream(ctx context.Context, q dnsmsg.Message) (MessageStream, error)
+	Stream(ctx context.Context, q wire.Message) (MessageStream, error)
 }
 
 // MessageStream yields the responses to a streaming query. Next blocks
@@ -37,6 +37,6 @@ type StreamExchanger interface {
 // closes the stream. Callers MUST Close the stream when done — including on
 // error and after EOF — to release the underlying connection.
 type MessageStream interface {
-	Next(ctx context.Context) (dnsmsg.Message, error)
+	Next(ctx context.Context) (wire.Message, error)
 	Close() error
 }

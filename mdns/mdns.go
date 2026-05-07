@@ -4,7 +4,7 @@
 //
 // The package is intentionally minimal — Browse and Resolve cover the
 // service-discovery use cases; service announcement (Publish) is out of
-// scope for this version. The wire format reuses dnsmsg, so unit tests
+// scope for this version. The msg format reuses dnsmsg, so unit tests
 // for query/response synthesis run without any network at all.
 package mdns
 
@@ -17,10 +17,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/lestrrat-go/acidns/dnsmsg"
-	"github.com/lestrrat-go/acidns/dnsmsg/rdata"
-	"github.com/lestrrat-go/acidns/dnsmsg/rrtype"
-	"github.com/lestrrat-go/acidns/dnsname"
+	"github.com/lestrrat-go/acidns/wire"
+	"github.com/lestrrat-go/acidns/wire/rdata"
+	"github.com/lestrrat-go/acidns/wire/rrtype"
 )
 
 // Default mDNS link-local addresses (RFC 6762 §3).
@@ -31,7 +30,7 @@ const (
 )
 
 // LocalDomain is the special-use suffix that mDNS responders own.
-var LocalDomain = dnsname.MustParse("local")
+var LocalDomain = wire.MustParseName("local")
 
 // ErrNoResponse is returned when Browse or Resolve produces no answers
 // within the configured deadline.
@@ -42,8 +41,8 @@ type Service struct {
 	// Instance name (the "Foo Bar" part of "Foo Bar._http._tcp.local.").
 	Instance string
 	// Service type ("_http._tcp.local.").
-	Type     dnsname.Name
-	Host     dnsname.Name
+	Type     wire.Name
+	Host     wire.Name
 	Port     uint16
 	Priority uint16
 	Weight   uint16
@@ -55,15 +54,15 @@ type Service struct {
 // BuildBrowseQuery constructs a PTR query for the given service type
 // (e.g. "_http._tcp" or "_http._tcp.local"). The result can be marshalled
 // directly and sent via any UDP path.
-func BuildBrowseQuery(service string) (dnsmsg.Message, error) {
+func BuildBrowseQuery(service string) (wire.Message, error) {
 	name, err := serviceName(service)
 	if err != nil {
 		return nil, err
 	}
-	return dnsmsg.NewBuilder().
+	return wire.NewBuilder().
 		ID(0). // RFC 6762 §18.1 — mDNS requests use ID 0.
 		RecursionDesired(false).
-		Question(dnsmsg.NewQuestion(name, rrtype.PTR)).
+		Question(wire.NewQuestion(name, rrtype.PTR)).
 		Build()
 }
 
@@ -71,13 +70,13 @@ func BuildBrowseQuery(service string) (dnsmsg.Message, error) {
 // mDNS response. Multiple responses may need to be merged by the caller
 // (additional sections from later responses can fill in addresses for
 // hosts whose SRV came in earlier).
-func ParseBrowseResponse(m dnsmsg.Message) []Service {
+func ParseBrowseResponse(m wire.Message) []Service {
 	srvByOwner := map[string]rdata.SRV{}
 	srvTTLs := map[string]time.Duration{}
 	txtByOwner := map[string][]string{}
 	addrsByHost := map[string][]netip.Addr{}
 
-	scanner := func(rec dnsmsg.Record) {
+	scanner := func(rec wire.Record) {
 		key := rec.Name().String()
 		switch rec.Type() {
 		case rrtype.SRV:
@@ -145,7 +144,7 @@ func Browse(ctx context.Context, service string, timeout time.Duration) ([]Servi
 	if err != nil {
 		return nil, err
 	}
-	wire, err := dnsmsg.Marshal(q)
+	msg, err := wire.Marshal(q)
 	if err != nil {
 		return nil, err
 	}
@@ -157,7 +156,7 @@ func Browse(ctx context.Context, service string, timeout time.Duration) ([]Servi
 	defer conn.Close()
 
 	dst := &net.UDPAddr{IP: net.ParseIP(GroupV4), Port: Port}
-	if _, err := conn.WriteTo(wire, dst); err != nil {
+	if _, err := conn.WriteTo(msg, dst); err != nil {
 		return nil, fmt.Errorf("mdns: send: %w", err)
 	}
 
@@ -184,7 +183,7 @@ func Browse(ctx context.Context, service string, timeout time.Duration) ([]Servi
 		if err != nil {
 			break
 		}
-		resp, err := dnsmsg.Unmarshal(buf[:n])
+		resp, err := wire.Unmarshal(buf[:n])
 		if err != nil {
 			continue
 		}
@@ -209,16 +208,16 @@ func openMulticast() (*net.UDPConn, error) {
 }
 
 // serviceName normalises a user-supplied service spec. Accepts "_http._tcp",
-// "_http._tcp.local", or "_http._tcp.local." and returns the wire form.
-func serviceName(service string) (dnsname.Name, error) {
+// "_http._tcp.local", or "_http._tcp.local." and returns the msg form.
+func serviceName(service string) (wire.Name, error) {
 	s := strings.TrimSuffix(service, ".")
 	if !strings.HasSuffix(s, ".local") {
 		s = s + ".local"
 	}
-	return dnsname.Parse(s)
+	return wire.ParseName(s)
 }
 
-func leadingLabel(n dnsname.Name) string {
+func leadingLabel(n wire.Name) string {
 	for l := range n.Labels() {
 		return string(l)
 	}

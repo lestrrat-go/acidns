@@ -7,37 +7,36 @@ import (
 	"time"
 
 	"github.com/lestrrat-go/acidns/dnsclient/notify"
-	"github.com/lestrrat-go/acidns/dnsclient/transport/udp"
 	"github.com/lestrrat-go/acidns/dnsclient/transport"
-	"github.com/lestrrat-go/acidns/dnsmsg"
-	"github.com/lestrrat-go/acidns/dnsmsg/rdata"
-	"github.com/lestrrat-go/acidns/dnsname"
+	"github.com/lestrrat-go/acidns/dnsclient/transport/udp"
 	"github.com/lestrrat-go/acidns/dnsserver"
+	"github.com/lestrrat-go/acidns/wire"
+	"github.com/lestrrat-go/acidns/wire/rdata"
 	"github.com/stretchr/testify/require"
 )
 
 func TestSendWithSOAAndTimeout(t *testing.T) {
 	t.Parallel()
 
-	var got atomic.Pointer[dnsmsg.Question]
-	addr := startSecondary(t, func(q dnsmsg.Question, _ dnsserver.ResponseWriter) {
+	var got atomic.Pointer[wire.Question]
+	addr := startSecondary(t, func(q wire.Question, _ dnsserver.ResponseWriter) {
 		got.Store(&q)
 	})
 	ex, err := udp.New(addr)
 	require.NoError(t, err)
 
 	soa := rdata.NewSOA(
-		dnsname.MustParse("ns1.example.com"),
-		dnsname.MustParse("hm.example.com"),
+		wire.MustParseName("ns1.example.com"),
+		wire.MustParseName("hm.example.com"),
 		42, time.Hour, time.Hour, time.Hour, time.Hour,
 	)
 
-	resp, err := notify.Send(t.Context(), ex, dnsname.MustParse("example.com"),
+	resp, err := notify.Send(t.Context(), ex, wire.MustParseName("example.com"),
 		notify.WithSOA(soa),
 		notify.WithTimeout(2*time.Second),
 	)
 	require.NoError(t, err)
-	require.Equal(t, dnsmsg.OpcodeNotify, resp.Flags().Opcode())
+	require.Equal(t, wire.OpcodeNotify, resp.Flags().Opcode())
 }
 
 func TestBroadcast(t *testing.T) {
@@ -54,7 +53,7 @@ func TestBroadcast(t *testing.T) {
 		exs[i] = ex
 	}
 
-	results := notify.Broadcast(t.Context(), exs, dnsname.MustParse("example.com"))
+	results := notify.Broadcast(t.Context(), exs, wire.MustParseName("example.com"))
 	require.Len(t, results, 2)
 	for _, r := range results {
 		require.NoError(t, r.Err())

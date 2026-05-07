@@ -6,9 +6,9 @@ import (
 	"testing"
 
 	"github.com/lestrrat-go/acidns/dnsclient"
-	"github.com/lestrrat-go/acidns/dnsmsg/rdata"
-	"github.com/lestrrat-go/acidns/dnsmsg/rrtype"
-	"github.com/lestrrat-go/acidns/dnsname"
+	"github.com/lestrrat-go/acidns/wire"
+	"github.com/lestrrat-go/acidns/wire/rdata"
+	"github.com/lestrrat-go/acidns/wire/rrtype"
 	"github.com/stretchr/testify/require"
 )
 
@@ -20,7 +20,7 @@ func TestResolveAs_A(t *testing.T) {
 	)
 	r := newResolver(t, addr)
 
-	as, err := dnsclient.ResolveAs[rdata.A](t.Context(), r, dnsname.MustParse("example.com"), rrtype.A)
+	as, err := dnsclient.ResolveAs[rdata.A](t.Context(), r, wire.MustParseName("example.com"), rrtype.A)
 	require.NoError(t, err)
 	got := make([]string, len(as))
 	for i, a := range as {
@@ -41,7 +41,7 @@ func TestResolveAs_TypeFilterPreventsCollision(t *testing.T) {
 	)
 	r := newResolver(t, addr)
 
-	as, err := dnsclient.ResolveAs[rdata.AAAA](t.Context(), r, dnsname.MustParse("example.com"), rrtype.AAAA)
+	as, err := dnsclient.ResolveAs[rdata.AAAA](t.Context(), r, wire.MustParseName("example.com"), rrtype.AAAA)
 	require.NoError(t, err)
 	require.Empty(t, as) // server returns no AAAA records
 }

@@ -16,7 +16,7 @@ import (
 
 	"github.com/lestrrat-go/acidns/dnsclient/transport"
 	"github.com/lestrrat-go/acidns/dnsclient/transport/internal/streamframe"
-	"github.com/lestrrat-go/acidns/dnsmsg"
+	"github.com/lestrrat-go/acidns/wire"
 )
 
 // Option configures a TCP Exchanger.
@@ -53,7 +53,7 @@ func New(addr netip.AddrPort, opts ...Option) (transport.Exchanger, error) {
 	return &exchanger{addr: addr, timeout: c.timeout}, nil
 }
 
-func (e *exchanger) Exchange(ctx context.Context, q dnsmsg.Message) (dnsmsg.Message, error) {
+func (e *exchanger) Exchange(ctx context.Context, q wire.Message) (wire.Message, error) {
 	var d net.Dialer
 	conn, err := d.DialContext(ctx, "tcp", e.addr.String())
 	if err != nil {
@@ -65,7 +65,7 @@ func (e *exchanger) Exchange(ctx context.Context, q dnsmsg.Message) (dnsmsg.Mess
 // Stream sends q over a fresh TCP connection and returns a MessageStream
 // from which the caller pulls responses. The stream MUST be closed by the
 // caller to release the connection.
-func (e *exchanger) Stream(ctx context.Context, q dnsmsg.Message) (transport.MessageStream, error) {
+func (e *exchanger) Stream(ctx context.Context, q wire.Message) (transport.MessageStream, error) {
 	var d net.Dialer
 	conn, err := d.DialContext(ctx, "tcp", e.addr.String())
 	if err != nil {

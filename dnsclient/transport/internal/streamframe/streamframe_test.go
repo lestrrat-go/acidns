@@ -9,28 +9,27 @@ import (
 	"time"
 
 	"github.com/lestrrat-go/acidns/dnsclient/transport/internal/streamframe"
-	"github.com/lestrrat-go/acidns/dnsmsg"
-	"github.com/lestrrat-go/acidns/dnsmsg/rrtype"
-	"github.com/lestrrat-go/acidns/dnsname"
+	"github.com/lestrrat-go/acidns/wire"
+	"github.com/lestrrat-go/acidns/wire/rrtype"
 	"github.com/stretchr/testify/require"
 )
 
-func mustQuery(t *testing.T, id uint16, name string) dnsmsg.Message {
+func mustQuery(t *testing.T, id uint16, name string) wire.Message {
 	t.Helper()
-	q, err := dnsmsg.NewBuilder().
+	q, err := wire.NewBuilder().
 		ID(id).
-		Question(dnsmsg.NewQuestion(dnsname.MustParse(name), rrtype.A)).
+		Question(wire.NewQuestion(wire.MustParseName(name), rrtype.A)).
 		Build()
 	require.NoError(t, err)
 	return q
 }
 
-func mustResponse(t *testing.T, id uint16, name string) dnsmsg.Message {
+func mustResponse(t *testing.T, id uint16, name string) wire.Message {
 	t.Helper()
-	q, err := dnsmsg.NewBuilder().
+	q, err := wire.NewBuilder().
 		ID(id).
 		Response(true).
-		Question(dnsmsg.NewQuestion(dnsname.MustParse(name), rrtype.A)).
+		Question(wire.NewQuestion(wire.MustParseName(name), rrtype.A)).
 		Build()
 	require.NoError(t, err)
 	return q

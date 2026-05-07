@@ -18,7 +18,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/lestrrat-go/acidns/dnsname"
+	"github.com/lestrrat-go/acidns/wire"
 )
 
 // DefaultPath is the conventional location of resolv.conf on Unix.
@@ -27,7 +27,7 @@ const DefaultPath = "/etc/resolv.conf"
 // Config is a parsed resolv.conf snapshot.
 type Config struct {
 	Nameservers []netip.AddrPort
-	Search      []dnsname.Name
+	Search      []wire.Name
 	Ndots       int
 	Timeout     time.Duration
 	Attempts    int
@@ -67,7 +67,7 @@ func Parse(r io.Reader) (*Config, error) {
 		case "search":
 			cfg.Search = cfg.Search[:0]
 			for _, s := range fields[1:] {
-				n, err := dnsname.Parse(s)
+				n, err := wire.ParseName(s)
 				if err != nil {
 					continue
 				}
@@ -75,8 +75,8 @@ func Parse(r io.Reader) (*Config, error) {
 			}
 		case "domain":
 			if len(fields) >= 2 {
-				if n, err := dnsname.Parse(fields[1]); err == nil {
-					cfg.Search = []dnsname.Name{n}
+				if n, err := wire.ParseName(fields[1]); err == nil {
+					cfg.Search = []wire.Name{n}
 				}
 			}
 		case "options":

@@ -7,12 +7,11 @@ import (
 	"time"
 
 	"github.com/lestrrat-go/acidns/dnsclient/transport/udp"
-	"github.com/lestrrat-go/acidns/dnsmsg"
-	"github.com/lestrrat-go/acidns/dnsmsg/rdata"
-	"github.com/lestrrat-go/acidns/dnsmsg/rrtype"
-	"github.com/lestrrat-go/acidns/dnsname"
 	"github.com/lestrrat-go/acidns/dnsserver"
 	"github.com/lestrrat-go/acidns/dnsserver/chaos"
+	"github.com/lestrrat-go/acidns/wire"
+	"github.com/lestrrat-go/acidns/wire/rdata"
+	"github.com/lestrrat-go/acidns/wire/rrtype"
 )
 
 func Example_dnsserver_chaos() {
@@ -33,9 +32,9 @@ func Example_dnsserver_chaos() {
 	go func() { _ = srv.Serve(ctx) }()
 
 	// Build a CHAOS-class TXT query for id.server.
-	q, _ := dnsmsg.NewBuilder().
+	q, _ := wire.NewBuilder().
 		ID(1).
-		Question(dnsmsg.NewQuestionClass(dnsname.MustParse("id.server."), rrtype.TXT, rrtype.ClassCH)).
+		Question(wire.NewQuestionClass(wire.MustParseName("id.server."), rrtype.TXT, rrtype.ClassCH)).
 		Build()
 	ex, _ := udp.New(srv.Addr())
 	qctx, qcancel := context.WithTimeout(ctx, 2*time.Second)

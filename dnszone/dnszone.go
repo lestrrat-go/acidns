@@ -1,5 +1,5 @@
 // Package dnszone parses RFC 1035 §5 master files into a strongly-typed
-// Zone composed of dnsmsg.Records. It supports the common subset used by
+// Zone composed of wire.Records. It supports the common subset used by
 // production zone files: $ORIGIN, $TTL, parenthesised line continuation,
 // `;` end-of-line comments, quoted strings, the `@` and blank owner-name
 // shortcuts, and presentation-format RDATA for A, AAAA, NS, CNAME, PTR,
@@ -15,10 +15,9 @@ import (
 	"fmt"
 	"io"
 
-	"github.com/lestrrat-go/acidns/dnsmsg"
-	"github.com/lestrrat-go/acidns/dnsmsg/rdata"
-	"github.com/lestrrat-go/acidns/dnsmsg/rrtype"
-	"github.com/lestrrat-go/acidns/dnsname"
+	"github.com/lestrrat-go/acidns/wire"
+	"github.com/lestrrat-go/acidns/wire/rdata"
+	"github.com/lestrrat-go/acidns/wire/rrtype"
 )
 
 // ErrParse is returned when a master file fails to parse.
@@ -26,20 +25,20 @@ var ErrParse = errors.New("dnszone: parse error")
 
 // Zone is a parsed master file.
 type Zone interface {
-	Origin() dnsname.Name
-	Records() []dnsmsg.Record
+	Origin() wire.Name
+	Records() []wire.Record
 	// SOA returns the first SOA record observed and its rdata, if any.
-	SOA() (rdata.SOA, dnsmsg.Record, bool)
+	SOA() (rdata.SOA, wire.Record, bool)
 }
 
 type zone struct {
-	origin  dnsname.Name
-	records []dnsmsg.Record
+	origin  wire.Name
+	records []wire.Record
 }
 
-func (z *zone) Origin() dnsname.Name     { return z.origin }
-func (z *zone) Records() []dnsmsg.Record { return z.records }
-func (z *zone) SOA() (rdata.SOA, dnsmsg.Record, bool) {
+func (z *zone) Origin() wire.Name      { return z.origin }
+func (z *zone) Records() []wire.Record { return z.records }
+func (z *zone) SOA() (rdata.SOA, wire.Record, bool) {
 	for _, r := range z.records {
 		if r.Type() == rrtype.SOA {
 			return r.RData().(rdata.SOA), r, true
@@ -56,12 +55,12 @@ type optionFunc func(*config)
 func (f optionFunc) applyZone(c *config) { f(c) }
 
 type config struct {
-	origin     dnsname.Name
+	origin     wire.Name
 	defaultTTL int64 // seconds, -1 = unset
 }
 
 // WithOrigin sets the initial origin used until $ORIGIN appears.
-func WithOrigin(n dnsname.Name) Option {
+func WithOrigin(n wire.Name) Option {
 	return optionFunc(func(c *config) { c.origin = n })
 }
 

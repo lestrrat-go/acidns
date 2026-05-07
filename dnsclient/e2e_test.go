@@ -10,8 +10,8 @@ import (
 	"github.com/lestrrat-go/acidns/dnsclient"
 	"github.com/lestrrat-go/acidns/dnsclient/transport/doh"
 	"github.com/lestrrat-go/acidns/dnsclient/transport/dot"
-	"github.com/lestrrat-go/acidns/dnsmsg/rrtype"
-	"github.com/lestrrat-go/acidns/dnsname"
+	"github.com/lestrrat-go/acidns/wire"
+	"github.com/lestrrat-go/acidns/wire/rrtype"
 	"github.com/stretchr/testify/require"
 )
 
@@ -37,7 +37,7 @@ func TestE2ELiveResolver(t *testing.T) {
 	})
 
 	t.Run("UDP Resolve MX cloudflare.com", func(t *testing.T) {
-		ans, err := r.Resolve(ctx, dnsname.MustParse("cloudflare.com"), rrtype.MX)
+		ans, err := r.Resolve(ctx, wire.MustParseName("cloudflare.com"), rrtype.MX)
 		require.NoError(t, err)
 		require.NotEmpty(t, ans.Records())
 		t.Logf("MX cloudflare.com -> %d records", len(ans.Records()))

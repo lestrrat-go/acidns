@@ -11,7 +11,7 @@ package dnssec
 import (
 	"encoding/binary"
 
-	"github.com/lestrrat-go/acidns/dnsmsg/rdata"
+	"github.com/lestrrat-go/acidns/wire/rdata"
 )
 
 // KeyTag computes the RFC 4034 Appendix B.1 key tag of a DNSKEY rdata.

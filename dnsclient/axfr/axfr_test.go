@@ -11,12 +11,11 @@ import (
 	"github.com/lestrrat-go/acidns/dnsclient/axfr"
 	"github.com/lestrrat-go/acidns/dnsclient/transport"
 	"github.com/lestrrat-go/acidns/dnsclient/transport/tcp"
-	"github.com/lestrrat-go/acidns/dnsmsg"
-	"github.com/lestrrat-go/acidns/dnsmsg/rrtype"
-	"github.com/lestrrat-go/acidns/dnsname"
 	"github.com/lestrrat-go/acidns/dnsserver"
 	"github.com/lestrrat-go/acidns/dnsserver/authoritative"
 	"github.com/lestrrat-go/acidns/dnszone"
+	"github.com/lestrrat-go/acidns/wire"
+	"github.com/lestrrat-go/acidns/wire/rrtype"
 	"github.com/stretchr/testify/require"
 )
 
@@ -57,11 +56,11 @@ func TestTransferRoundTrip(t *testing.T) {
 
 	xferCtx, xcancel := context.WithTimeout(t.Context(), 5*time.Second)
 	defer xcancel()
-	xfer, err := axfr.Start(xferCtx, newStreamEx(t, srv.Addr()), dnsname.MustParse("example.com"))
+	xfer, err := axfr.Start(xferCtx, newStreamEx(t, srv.Addr()), wire.MustParseName("example.com"))
 	require.NoError(t, err)
 	defer xfer.Close()
 
-	var records []dnsmsg.Record
+	var records []wire.Record
 	for {
 		ev, err := xfer.Next(xferCtx)
 		if err == io.EOF {
@@ -99,7 +98,7 @@ func TestTransferRefusedOutOfZone(t *testing.T) {
 	t.Cleanup(cancel)
 	go func() { _ = srv.Serve(ctx) }()
 
-	xfer, err := axfr.Start(t.Context(), newStreamEx(t, srv.Addr()), dnsname.MustParse("example.org"))
+	xfer, err := axfr.Start(t.Context(), newStreamEx(t, srv.Addr()), wire.MustParseName("example.org"))
 	if err == nil {
 		// Some servers send a single SERVFAIL/REFUSED message — the recReader
 		// surfaces that as an error on the first Next call.

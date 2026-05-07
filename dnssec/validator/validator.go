@@ -5,10 +5,9 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/lestrrat-go/acidns/dnsmsg"
-	"github.com/lestrrat-go/acidns/dnsmsg/rdata"
-	"github.com/lestrrat-go/acidns/dnsname"
 	"github.com/lestrrat-go/acidns/dnssec"
+	"github.com/lestrrat-go/acidns/wire"
+	"github.com/lestrrat-go/acidns/wire/rdata"
 )
 
 // ErrNoCoveringRRSIG is returned when a validation request supplies an
@@ -98,7 +97,7 @@ func (v *Validator) NTAs() *NTAStore { return v.opts.NTAs }
 // Returns: result, the RRSIG that satisfied verification (zero-valued for
 // non-Secure results), and the underlying error (only for Bogus when the
 // policy is BogusReturnSERVFAIL or for caller programming errors).
-func (v *Validator) ValidateRRset(set []dnsmsg.Record, rrsigs []rdata.RRSIG, keys []rdata.DNSKEY) (Result, rdata.RRSIG, error) {
+func (v *Validator) ValidateRRset(set []wire.Record, rrsigs []rdata.RRSIG, keys []rdata.DNSKEY) (Result, rdata.RRSIG, error) {
 	if len(set) == 0 {
 		return Indeterminate, nil, fmt.Errorf("validator: empty RRset")
 	}
@@ -138,7 +137,7 @@ func (v *Validator) ValidateRRset(set []dnsmsg.Record, rrsigs []rdata.RRSIG, key
 // zone via at least one of the parent's DS records. Use for stepping the
 // chain-of-trust walk. The owner name is the DELEGATION POINT (i.e. the
 // child zone's apex) — it is also what the NTA store is consulted with.
-func (v *Validator) VerifyDelegation(owner dnsname.Name, dsRecords []rdata.DS, keys []rdata.DNSKEY) (Result, error) {
+func (v *Validator) VerifyDelegation(owner wire.Name, dsRecords []rdata.DS, keys []rdata.DNSKEY) (Result, error) {
 	if v.opts.NTAs.Covers(owner) {
 		return Indeterminate, nil
 	}

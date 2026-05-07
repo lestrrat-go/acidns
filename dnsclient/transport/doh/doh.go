@@ -15,7 +15,7 @@ import (
 	"net/url"
 
 	"github.com/lestrrat-go/acidns/dnsclient/transport"
-	"github.com/lestrrat-go/acidns/dnsmsg"
+	"github.com/lestrrat-go/acidns/wire"
 )
 
 const contentType = "application/dns-message"
@@ -83,13 +83,13 @@ func New(endpoint string, opts ...Option) (transport.Exchanger, error) {
 	return &exchanger{endpoint: endpoint, client: c.client, method: c.method, userAgent: c.userAgent}, nil
 }
 
-func (e *exchanger) Exchange(ctx context.Context, q dnsmsg.Message) (dnsmsg.Message, error) {
-	wire, err := dnsmsg.Marshal(q)
+func (e *exchanger) Exchange(ctx context.Context, q wire.Message) (wire.Message, error) {
+	msg, err := wire.Marshal(q)
 	if err != nil {
 		return nil, fmt.Errorf("doh: marshal: %w", err)
 	}
 
-	req, err := e.buildRequest(ctx, wire)
+	req, err := e.buildRequest(ctx, msg)
 	if err != nil {
 		return nil, err
 	}
@@ -112,7 +112,7 @@ func (e *exchanger) Exchange(ctx context.Context, q dnsmsg.Message) (dnsmsg.Mess
 	if err != nil {
 		return nil, fmt.Errorf("doh: read body: %w", err)
 	}
-	m, err := dnsmsg.Unmarshal(body)
+	m, err := wire.Unmarshal(body)
 	if err != nil {
 		return nil, fmt.Errorf("doh: unmarshal: %w", err)
 	}
@@ -122,11 +122,11 @@ func (e *exchanger) Exchange(ctx context.Context, q dnsmsg.Message) (dnsmsg.Mess
 	return m, nil
 }
 
-func (e *exchanger) buildRequest(ctx context.Context, wire []byte) (*http.Request, error) {
+func (e *exchanger) buildRequest(ctx context.Context, msg []byte) (*http.Request, error) {
 	switch e.method {
 	case MethodGET:
 		// RFC 8484 §4.1: dns parameter, base64url-encoded, no padding.
-		dnsParam := base64.RawURLEncoding.EncodeToString(wire)
+		dnsParam := base64.RawURLEncoding.EncodeToString(msg)
 		u, _ := url.Parse(e.endpoint)
 		qry := u.Query()
 		qry.Set("dns", dnsParam)
@@ -141,7 +141,7 @@ func (e *exchanger) buildRequest(ctx context.Context, wire []byte) (*http.Reques
 		}
 		return req, nil
 	default:
-		req, err := http.NewRequestWithContext(ctx, http.MethodPost, e.endpoint, bytes.NewReader(wire))
+		req, err := http.NewRequestWithContext(ctx, http.MethodPost, e.endpoint, bytes.NewReader(msg))
 		if err != nil {
 			return nil, err
 		}

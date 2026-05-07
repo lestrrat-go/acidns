@@ -5,9 +5,9 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/lestrrat-go/acidns/dnsmsg"
-	"github.com/lestrrat-go/acidns/dnsmsg/rrtype"
 	"github.com/lestrrat-go/acidns/dnszone"
+	"github.com/lestrrat-go/acidns/wire"
+	"github.com/lestrrat-go/acidns/wire/rrtype"
 	"github.com/stretchr/testify/require"
 )
 
@@ -42,7 +42,7 @@ mail IN MX   10 mail.example.com.
 	require.Equal(t, got, want)
 }
 
-func indexRecords(rrs []dnsmsg.Record) map[string]int {
+func indexRecords(rrs []wire.Record) map[string]int {
 	m := map[string]int{}
 	for _, r := range rrs {
 		key := r.Name().String() + "|" + r.Type().String()

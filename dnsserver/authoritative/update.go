@@ -3,33 +3,32 @@ package authoritative
 import (
 	"bytes"
 
-	"github.com/lestrrat-go/acidns/dnsmsg"
-	"github.com/lestrrat-go/acidns/dnsmsg/rdata"
-	"github.com/lestrrat-go/acidns/dnsmsg/rrtype"
-	"github.com/lestrrat-go/acidns/dnsname"
 	"github.com/lestrrat-go/acidns/dnsserver"
+	"github.com/lestrrat-go/acidns/wire"
+	"github.com/lestrrat-go/acidns/wire/rdata"
+	"github.com/lestrrat-go/acidns/wire/rrtype"
 )
 
 // serveUpdate implements RFC 2136 dynamic update for an authoritative
 // zone. The server is permissive: any caller able to send to the listener
 // is granted update authority. Production deployments should layer a
 // TSIG-aware ACL middleware in front of this handler.
-func (a *authoritative) serveUpdate(w dnsserver.ResponseWriter, q dnsmsg.Message) {
-	b := dnsmsg.NewBuilder().
+func (a *authoritative) serveUpdate(w dnsserver.ResponseWriter, q wire.Message) {
+	b := wire.NewBuilder().
 		ID(q.ID()).
 		Response(true).
-		Opcode(dnsmsg.OpcodeUpdate)
+		Opcode(wire.OpcodeUpdate)
 	for _, qq := range q.Questions() {
 		b = b.Question(qq)
 	}
 
 	if len(q.Questions()) != 1 {
-		_ = w.WriteMsg(mustBuild(b.RCODE(dnsmsg.RCODEFormErr)))
+		_ = w.WriteMsg(mustBuild(b.RCODE(wire.RCODEFormErr)))
 		return
 	}
 	zoneQ := q.Questions()[0]
 	if zoneQ.Type() != rrtype.SOA {
-		_ = w.WriteMsg(mustBuild(b.RCODE(dnsmsg.RCODEFormErr)))
+		_ = w.WriteMsg(mustBuild(b.RCODE(wire.RCODEFormErr)))
 		return
 	}
 
@@ -37,13 +36,13 @@ func (a *authoritative) serveUpdate(w dnsserver.ResponseWriter, q dnsmsg.Message
 	defer a.mu.Unlock()
 	zone, ok := a.zones[nameKey(zoneQ.Name())]
 	if !ok {
-		_ = w.WriteMsg(mustBuild(b.RCODE(dnsmsg.RCODENotAuth)))
+		_ = w.WriteMsg(mustBuild(b.RCODE(wire.RCODENotAuth)))
 		return
 	}
 
 	// Prerequisites — RFC 2136 §3.2.
 	for _, p := range q.Answers() {
-		if rcode := zone.checkPrereq(p); rcode != dnsmsg.RCODENoError {
+		if rcode := zone.checkPrereq(p); rcode != wire.RCODENoError {
 			_ = w.WriteMsg(mustBuild(b.RCODE(rcode)))
 			return
 		}
@@ -56,7 +55,7 @@ func (a *authoritative) serveUpdate(w dnsserver.ResponseWriter, q dnsmsg.Message
 	_ = w.WriteMsg(mustBuild(b))
 }
 
-func (z *zoneIndex) checkPrereq(p dnsmsg.Record) dnsmsg.RCODE {
+func (z *zoneIndex) checkPrereq(p wire.Record) wire.RCODE {
 	name := p.Name()
 	t := p.Type()
 	class := p.Class()
@@ -81,25 +80,25 @@ func (z *zoneIndex) checkPrereq(p dnsmsg.Record) dnsmsg.RCODE {
 	switch {
 	case t == rrtype.ANY && class == rrtype.ClassANY:
 		if !hasName() {
-			return dnsmsg.RCODENXDomain
+			return wire.RCODENXDomain
 		}
 	case t == rrtype.ANY && class == rrtype.ClassNONE:
 		if hasName() {
-			return dnsmsg.RCODEYXDomain
+			return wire.RCODEYXDomain
 		}
 	case class == rrtype.ClassANY:
 		if !hasType() {
-			return dnsmsg.RCODENXRRSet
+			return wire.RCODENXRRSet
 		}
 	case class == rrtype.ClassNONE:
 		if hasType() {
-			return dnsmsg.RCODEYXRRSet
+			return wire.RCODEYXRRSet
 		}
 	}
-	return dnsmsg.RCODENoError
+	return wire.RCODENoError
 }
 
-func (z *zoneIndex) applyUpdate(u dnsmsg.Record) {
+func (z *zoneIndex) applyUpdate(u wire.Record) {
 	name := u.Name()
 	t := u.Type()
 	class := u.Class()
@@ -147,14 +146,14 @@ func (z *zoneIndex) applyUpdate(u dnsmsg.Record) {
 	default:
 		// Add to RRset. NewRecordClass forces IN even if the wire said
 		// otherwise — internal storage is class-IN.
-		stored := dnsmsg.NewRecord(name, u.TTL(), u.RData())
+		stored := wire.NewRecord(name, u.TTL(), u.RData())
 		z.byName[nameKey(name)] = append(z.byName[nameKey(name)], stored)
 		// Mark the name (and ancestors) as existing for wildcard logic.
 		z.markExists(name)
 	}
 }
 
-func (z *zoneIndex) markExists(n dnsname.Name) {
+func (z *zoneIndex) markExists(n wire.Name) {
 	cur := n
 	for {
 		z.namesExist[nameKey(cur)] = struct{}{}

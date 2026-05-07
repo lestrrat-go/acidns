@@ -21,10 +21,9 @@ import (
 	"github.com/lestrrat-go/acidns/dnsclient/transport"
 	"github.com/lestrrat-go/acidns/dnsclient/transport/tcp"
 	"github.com/lestrrat-go/acidns/dnsclient/transport/udp"
-	"github.com/lestrrat-go/acidns/dnsmsg"
-	"github.com/lestrrat-go/acidns/dnsmsg/rdata"
-	"github.com/lestrrat-go/acidns/dnsmsg/rrtype"
-	"github.com/lestrrat-go/acidns/dnsname"
+	"github.com/lestrrat-go/acidns/wire"
+	"github.com/lestrrat-go/acidns/wire/rdata"
+	"github.com/lestrrat-go/acidns/wire/rrtype"
 )
 
 // ErrNoResolver is returned when New cannot construct a Resolver because no
@@ -43,7 +42,7 @@ type Resolver interface {
 	// with the raw response. A non-NoError RCODE is returned as a typed
 	// *RCodeError carrying the response; the matched record list is empty
 	// in that case.
-	Resolve(ctx context.Context, name dnsname.Name, t rrtype.Type) (Answer, error)
+	Resolve(ctx context.Context, name wire.Name, t rrtype.Type) (Answer, error)
 }
 
 // SearchLister is an optional capability satisfied by resolver impls that
@@ -51,32 +50,32 @@ type Resolver interface {
 // type-assert against this to expand short names; resolvers without this
 // capability skip the expansion step.
 type SearchLister interface {
-	SearchList() []dnsname.Name
+	SearchList() []wire.Name
 	Ndots() int
 }
 
 // Answer is the typed result of a Resolve call.
 type Answer interface {
-	Question() dnsmsg.Question
-	Records() []dnsmsg.Record
-	Raw() dnsmsg.Message
-	RCODE() dnsmsg.RCODE
+	Question() wire.Question
+	Records() []wire.Record
+	Raw() wire.Message
+	RCODE() wire.RCODE
 	Authoritative() bool
 	Truncated() bool
 }
 
 type answer struct {
-	q       dnsmsg.Question
-	records []dnsmsg.Record
-	raw     dnsmsg.Message
+	q       wire.Question
+	records []wire.Record
+	raw     wire.Message
 }
 
-func (a *answer) Question() dnsmsg.Question { return a.q }
-func (a *answer) Records() []dnsmsg.Record  { return a.records }
-func (a *answer) Raw() dnsmsg.Message       { return a.raw }
-func (a *answer) RCODE() dnsmsg.RCODE       { return a.raw.Flags().RCODE() }
-func (a *answer) Authoritative() bool       { return a.raw.Flags().Authoritative() }
-func (a *answer) Truncated() bool           { return a.raw.Flags().Truncated() }
+func (a *answer) Question() wire.Question { return a.q }
+func (a *answer) Records() []wire.Record  { return a.records }
+func (a *answer) Raw() wire.Message       { return a.raw }
+func (a *answer) RCODE() wire.RCODE       { return a.raw.Flags().RCODE() }
+func (a *answer) Authoritative() bool     { return a.raw.Flags().Authoritative() }
+func (a *answer) Truncated() bool         { return a.raw.Flags().Truncated() }
 
 // Option configures a Resolver.
 type Option interface{ applyResolver(*config) }
@@ -86,18 +85,18 @@ type optionFunc func(*config)
 func (f optionFunc) applyResolver(c *config) { f(c) }
 
 type config struct {
-	exchanger        transport.Exchanger
-	servers          []netip.AddrPort
-	ednsUDP          uint16
-	ednsDO           bool
-	disableEDNS      bool
-	attempts         int
-	perAttempt       time.Duration
-	searchList       []dnsname.Name
-	ndots            int
-	ndotsSet         bool
+	exchanger         transport.Exchanger
+	servers           []netip.AddrPort
+	ednsUDP           uint16
+	ednsDO            bool
+	disableEDNS       bool
+	attempts          int
+	perAttempt        time.Duration
+	searchList        []wire.Name
+	ndots             int
+	ndotsSet          bool
 	disableSpecialUse bool
-	systemErr        error
+	systemErr         error
 }
 
 // WithExchanger pins the Resolver to a specific transport. Mutually
@@ -176,7 +175,7 @@ func WithSpecialUse(v bool) Option {
 
 // WithSearchList sets the suffixes appended to short names by LookupHost.
 // Names with a trailing dot bypass the search list.
-func WithSearchList(suffixes ...dnsname.Name) Option {
+func WithSearchList(suffixes ...wire.Name) Option {
 	return optionFunc(func(c *config) { c.searchList = append(c.searchList[:0], suffixes...) })
 }
 
@@ -191,7 +190,7 @@ type resolver struct {
 	ednsUDP           uint16
 	ednsDO            bool
 	disableEDNS       bool
-	searchList        []dnsname.Name
+	searchList        []wire.Name
 	ndots             int
 	disableSpecialUse bool
 }
@@ -230,13 +229,13 @@ func New(opts ...Option) (Resolver, error) {
 		ednsUDP:           c.ednsUDP,
 		ednsDO:            c.ednsDO,
 		disableEDNS:       c.disableEDNS,
-		searchList:        append([]dnsname.Name(nil), c.searchList...),
+		searchList:        append([]wire.Name(nil), c.searchList...),
 		ndots:             ndots,
 		disableSpecialUse: c.disableSpecialUse,
 	}, nil
 }
 
-func (r *resolver) Resolve(ctx context.Context, name dnsname.Name, t rrtype.Type) (Answer, error) {
+func (r *resolver) Resolve(ctx context.Context, name wire.Name, t rrtype.Type) (Answer, error) {
 	if !r.disableSpecialUse {
 		if ans, ok := r.specialUseAnswer(name, t); ok {
 			return wrapRCode(ans)
@@ -246,12 +245,12 @@ func (r *resolver) Resolve(ctx context.Context, name dnsname.Name, t rrtype.Type
 	if err != nil {
 		return nil, err
 	}
-	b := dnsmsg.NewBuilder().
+	b := wire.NewBuilder().
 		ID(id).
 		RecursionDesired(true).
-		Question(dnsmsg.NewQuestion(name, t))
+		Question(wire.NewQuestion(name, t))
 	if !r.disableEDNS {
-		b = b.EDNS(dnsmsg.NewEDNSBuilder().
+		b = b.EDNS(wire.NewEDNSBuilder().
 			UDPSize(r.ednsUDP).
 			DO(r.ednsDO).
 			Build())
@@ -265,7 +264,7 @@ func (r *resolver) Resolve(ctx context.Context, name dnsname.Name, t rrtype.Type
 		return nil, err
 	}
 	q0 := resp.Questions()
-	var question dnsmsg.Question
+	var question wire.Question
 	if len(q0) > 0 {
 		question = q0[0]
 	}
@@ -277,7 +276,7 @@ func (r *resolver) Resolve(ctx context.Context, name dnsname.Name, t rrtype.Type
 // wrapRCode converts an Answer with a non-NoError RCODE into an RCodeError
 // carrying that answer. NoError responses are returned (Answer, nil).
 func wrapRCode(ans Answer) (Answer, error) {
-	if rcode := ans.RCODE(); rcode != dnsmsg.RCODENoError {
+	if rcode := ans.RCODE(); rcode != wire.RCODENoError {
 		return nil, &RCodeError{Code: rcode, Answer: ans}
 	}
 	return ans, nil
@@ -285,10 +284,10 @@ func wrapRCode(ans Answer) (Answer, error) {
 
 // specialUseAnswer applies the RFC 6761 short-circuit. It returns
 // (answer, true) when the resolver should NOT issue a network query.
-func (r *resolver) specialUseAnswer(name dnsname.Name, t rrtype.Type) (Answer, bool) {
+func (r *resolver) specialUseAnswer(name wire.Name, t rrtype.Type) (Answer, bool) {
 	switch specialuse.For(name) {
 	case specialuse.SynthLocalhost:
-		records := make([]dnsmsg.Record, 0, 1)
+		records := make([]wire.Record, 0, 1)
 		for _, addr := range specialuse.LoopbackForType(t) {
 			var rd rdata.RData
 			switch t {
@@ -299,27 +298,27 @@ func (r *resolver) specialUseAnswer(name dnsname.Name, t rrtype.Type) (Answer, b
 			}
 			if rd != nil {
 				records = append(records,
-					dnsmsg.NewRecord(name, 0, rd))
+					wire.NewRecord(name, 0, rd))
 			}
 		}
-		raw := synthMessage(name, t, records, dnsmsg.RCODENoError)
-		return &answer{q: dnsmsg.NewQuestion(name, t), records: records, raw: raw}, true
+		raw := synthMessage(name, t, records, wire.RCODENoError)
+		return &answer{q: wire.NewQuestion(name, t), records: records, raw: raw}, true
 	case specialuse.Refuse, specialuse.Local:
-		raw := synthMessage(name, t, nil, dnsmsg.RCODENXDomain)
-		return &answer{q: dnsmsg.NewQuestion(name, t), raw: raw}, true
+		raw := synthMessage(name, t, nil, wire.RCODENXDomain)
+		return &answer{q: wire.NewQuestion(name, t), raw: raw}, true
 	default:
 		return nil, false
 	}
 }
 
-func synthMessage(name dnsname.Name, t rrtype.Type, records []dnsmsg.Record, rcode dnsmsg.RCODE) dnsmsg.Message {
-	b := dnsmsg.NewBuilder().
+func synthMessage(name wire.Name, t rrtype.Type, records []wire.Record, rcode wire.RCODE) wire.Message {
+	b := wire.NewBuilder().
 		ID(0).
 		Response(true).
 		RecursionDesired(true).
 		RecursionAvailable(true).
-		Question(dnsmsg.NewQuestion(name, t))
-	if rcode != dnsmsg.RCODENoError {
+		Question(wire.NewQuestion(name, t))
+	if rcode != wire.RCODENoError {
 		b = b.RCODE(rcode)
 	}
 	for _, rec := range records {
@@ -333,12 +332,12 @@ func synthMessage(name dnsname.Name, t rrtype.Type, records []dnsmsg.Record, rco
 // answer record of qtype whose owner is the final target. CNAMEs in the
 // chain are NOT included — Records() is the typed result, the raw
 // response (including CNAMEs) remains accessible via Answer.Raw().
-func matchAnswers(answers []dnsmsg.Record, qname dnsname.Name, qtype rrtype.Type) []dnsmsg.Record {
+func matchAnswers(answers []wire.Record, qname wire.Name, qtype rrtype.Type) []wire.Record {
 	const maxHops = 8
 	target := qname
 	if qtype != rrtype.CNAME {
 		for hop := 0; hop < maxHops; hop++ {
-			var next dnsname.Name
+			var next wire.Name
 			found := false
 			for _, rec := range answers {
 				if rec.Type() != rrtype.CNAME || !rec.Name().Equal(target) {
@@ -354,7 +353,7 @@ func matchAnswers(answers []dnsmsg.Record, qname dnsname.Name, qtype rrtype.Type
 			target = next
 		}
 	}
-	out := make([]dnsmsg.Record, 0, len(answers))
+	out := make([]wire.Record, 0, len(answers))
 	for _, rec := range answers {
 		if rec.Type() == qtype && rec.Name().Equal(target) {
 			out = append(out, rec)
@@ -366,7 +365,7 @@ func matchAnswers(answers []dnsmsg.Record, qname dnsname.Name, qtype rrtype.Type
 // SearchList satisfies SearchLister so package-level helpers (LookupHost,
 // future search-list-aware lookups) can expand short names against the
 // resolver's configured suffixes.
-func (r *resolver) SearchList() []dnsname.Name { return r.searchList }
+func (r *resolver) SearchList() []wire.Name { return r.searchList }
 
 // Ndots satisfies SearchLister.
 func (r *resolver) Ndots() int { return r.ndots }
@@ -410,7 +409,7 @@ type retryExchanger struct {
 	perAttempt time.Duration
 }
 
-func (r *retryExchanger) Exchange(ctx context.Context, q dnsmsg.Message) (dnsmsg.Message, error) {
+func (r *retryExchanger) Exchange(ctx context.Context, q wire.Message) (wire.Message, error) {
 	var lastErr error
 	for i := 0; i < r.attempts; i++ {
 		attemptCtx := ctx
@@ -435,7 +434,7 @@ func (r *retryExchanger) Exchange(ctx context.Context, q dnsmsg.Message) (dnsmsg
 
 type failover struct{ exs []transport.Exchanger }
 
-func (f *failover) Exchange(ctx context.Context, q dnsmsg.Message) (dnsmsg.Message, error) {
+func (f *failover) Exchange(ctx context.Context, q wire.Message) (wire.Message, error) {
 	var lastErr error
 	for _, ex := range f.exs {
 		resp, err := ex.Exchange(ctx, q)
@@ -456,7 +455,7 @@ type tcFallback struct {
 	primary, fallback transport.Exchanger
 }
 
-func (e *tcFallback) Exchange(ctx context.Context, q dnsmsg.Message) (dnsmsg.Message, error) {
+func (e *tcFallback) Exchange(ctx context.Context, q wire.Message) (wire.Message, error) {
 	resp, err := e.primary.Exchange(ctx, q)
 	if err != nil {
 		return nil, err

@@ -10,11 +10,10 @@ import (
 
 	"github.com/lestrrat-go/acidns/dnsclient/notify"
 	"github.com/lestrrat-go/acidns/dnsclient/transport/udp"
-	"github.com/lestrrat-go/acidns/dnsmsg"
-	"github.com/lestrrat-go/acidns/dnsname"
 	"github.com/lestrrat-go/acidns/dnsserver"
 	"github.com/lestrrat-go/acidns/dnsserver/authoritative"
 	"github.com/lestrrat-go/acidns/dnszone"
+	"github.com/lestrrat-go/acidns/wire"
 	"github.com/stretchr/testify/require"
 )
 
@@ -34,7 +33,7 @@ func TestServeNotifyAcksAndCallsHandler(t *testing.T) {
 	var fired atomic.Int32
 	h, err := authoritative.New(
 		authoritative.WithZone(z),
-		authoritative.WithNotifyHandler(func(_ dnsmsg.Question, _ dnsserver.ResponseWriter) {
+		authoritative.WithNotifyHandler(func(_ wire.Question, _ dnsserver.ResponseWriter) {
 			fired.Add(1)
 		}),
 	)
@@ -48,7 +47,7 @@ func TestServeNotifyAcksAndCallsHandler(t *testing.T) {
 
 	ex, err := udp.New(srv.Addr())
 	require.NoError(t, err)
-	resp, err := notify.Send(t.Context(), ex, dnsname.MustParse("example.com"))
+	resp, err := notify.Send(t.Context(), ex, wire.MustParseName("example.com"))
 	require.NoError(t, err)
 	require.True(t, resp.Flags().Authoritative())
 	require.Eventually(t, func() bool { return fired.Load() == 1 }, time.Second, 10*time.Millisecond)
@@ -68,9 +67,9 @@ func TestServeNotifyRefusesUnknownZone(t *testing.T) {
 
 	ex, err := udp.New(srv.Addr())
 	require.NoError(t, err)
-	resp, err := notify.Send(t.Context(), ex, dnsname.MustParse("example.org"))
+	resp, err := notify.Send(t.Context(), ex, wire.MustParseName("example.org"))
 	require.NoError(t, err)
-	require.Equal(t, dnsmsg.RCODENotAuth, resp.Flags().RCODE())
+	require.Equal(t, wire.RCODENotAuth, resp.Flags().RCODE())
 }
 
 func TestZonesAccessor(t *testing.T) {

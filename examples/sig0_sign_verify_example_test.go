@@ -6,11 +6,10 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/lestrrat-go/acidns/dnsmsg"
-	"github.com/lestrrat-go/acidns/dnsmsg/rdata"
-	"github.com/lestrrat-go/acidns/dnsmsg/rrtype"
-	"github.com/lestrrat-go/acidns/dnsname"
 	"github.com/lestrrat-go/acidns/sig0"
+	"github.com/lestrrat-go/acidns/wire"
+	"github.com/lestrrat-go/acidns/wire/rdata"
+	"github.com/lestrrat-go/acidns/wire/rrtype"
 )
 
 func Example_sig0_sign_verify() {
@@ -23,19 +22,19 @@ func Example_sig0_sign_verify() {
 		return
 	}
 
-	q, _ := dnsmsg.NewBuilder().
+	q, _ := wire.NewBuilder().
 		ID(0xdead).
-		Question(dnsmsg.NewQuestion(dnsname.MustParse("example.com"), rrtype.A)).
+		Question(wire.NewQuestion(wire.MustParseName("example.com"), rrtype.A)).
 		Build()
-	wire, err := dnsmsg.Marshal(q)
+	msg, err := wire.Marshal(q)
 	if err != nil {
 		fmt.Println("marshal:", err)
 		return
 	}
 
-	signer := dnsname.MustParse("test.signer")
+	signer := wire.MustParseName("test.signer")
 	now := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
-	signed, err := sig0.Sign(wire, signer, rdata.AlgED25519, 4242,
+	signed, err := sig0.Sign(msg, signer, rdata.AlgED25519, 4242,
 		func(payload []byte) ([]byte, error) {
 			return ed25519.Sign(priv, payload), nil
 		}, now, time.Hour)
@@ -50,7 +49,7 @@ func Example_sig0_sign_verify() {
 		return
 	}
 
-	verified, _ := dnsmsg.Unmarshal(body)
+	verified, _ := wire.Unmarshal(body)
 	fmt.Printf("verified id: %#x\n", verified.ID())
 
 	// OUTPUT:

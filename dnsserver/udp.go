@@ -8,7 +8,7 @@ import (
 	"net/netip"
 	"sync"
 
-	"github.com/lestrrat-go/acidns/dnsmsg"
+	"github.com/lestrrat-go/acidns/wire"
 )
 
 // UDPOption configures a UDP server.
@@ -109,7 +109,7 @@ func (s *udpServer) Serve(ctx context.Context) error {
 }
 
 func (s *udpServer) handlePacket(ctx context.Context, body []byte, src netip.AddrPort) {
-	q, err := dnsmsg.Unmarshal(body)
+	q, err := wire.Unmarshal(body)
 	if err != nil {
 		return // malformed → drop silently
 	}
@@ -145,22 +145,22 @@ func (w *udpResponseWriter) RemoteAddr() netip.AddrPort { return w.dst }
 func (w *udpResponseWriter) LocalAddr() netip.AddrPort  { return w.local }
 func (w *udpResponseWriter) Network() string            { return "udp" }
 
-func (w *udpResponseWriter) WriteMsg(m dnsmsg.Message) error {
+func (w *udpResponseWriter) WriteMsg(m wire.Message) error {
 	if w.wrote {
 		return fmt.Errorf("dnsserver: WriteMsg called twice on UDP response")
 	}
-	wire, err := dnsmsg.Marshal(m)
+	buf, err := wire.Marshal(m)
 	if err != nil {
 		return err
 	}
-	if w.maxLen > 0 && len(wire) > w.maxLen {
+	if w.maxLen > 0 && len(buf) > w.maxLen {
 		// Truncate per RFC 1035 §4.1.1: keep header + question, drop the
 		// rest, set the TC bit.
-		var question dnsmsg.Question
+		var question wire.Question
 		if qs := m.Questions(); len(qs) > 0 {
 			question = qs[0]
 		}
-		b := dnsmsg.NewBuilder().
+		b := wire.NewBuilder().
 			ID(m.ID()).
 			Flags(m.Flags().WithTruncated(true).WithResponse(true))
 		if question != nil {
@@ -170,13 +170,13 @@ func (w *udpResponseWriter) WriteMsg(m dnsmsg.Message) error {
 		if err != nil {
 			return err
 		}
-		wire, err = dnsmsg.Marshal(stripped)
+		buf, err = wire.Marshal(stripped)
 		if err != nil {
 			return err
 		}
 	}
 	w.wrote = true
 	udst := net.UDPAddrFromAddrPort(w.dst)
-	_, err = w.pc.WriteTo(wire, udst)
+	_, err = w.pc.WriteTo(buf, udst)
 	return err
 }

@@ -9,11 +9,10 @@ import (
 	"testing"
 	"time"
 
-	"github.com/lestrrat-go/acidns/dnsmsg"
-	"github.com/lestrrat-go/acidns/dnsmsg/rdata"
-	"github.com/lestrrat-go/acidns/dnsname"
 	"github.com/lestrrat-go/acidns/dnssec"
 	"github.com/lestrrat-go/acidns/dnssec/validator"
+	"github.com/lestrrat-go/acidns/wire"
+	"github.com/lestrrat-go/acidns/wire/rdata"
 	"github.com/stretchr/testify/require"
 )
 
@@ -26,7 +25,7 @@ func makeECDSAP256Key(t *testing.T) (*ecdsa.PrivateKey, rdata.DNSKEY) {
 	return priv, key
 }
 
-func signRRSIG(t *testing.T, priv *ecdsa.PrivateKey, set []dnsmsg.Record, key rdata.DNSKEY, inception, expiration time.Time) rdata.RRSIG {
+func signRRSIG(t *testing.T, priv *ecdsa.PrivateKey, set []wire.Record, key rdata.DNSKEY, inception, expiration time.Time) rdata.RRSIG {
 	t.Helper()
 	signer := set[0].Name()
 	skeleton := rdata.NewRRSIG(set[0].Type(), rdata.AlgECDSAP256SHA256,
@@ -49,8 +48,8 @@ func TestValidateRRsetSecure(t *testing.T) {
 	t.Parallel()
 	priv, key := makeECDSAP256Key(t)
 	now := time.Now().UTC().Truncate(time.Second)
-	set := []dnsmsg.Record{
-		dnsmsg.NewRecord(dnsname.MustParse("example.com"), time.Hour,
+	set := []wire.Record{
+		wire.NewRecord(wire.MustParseName("example.com"), time.Hour,
 			rdata.NewA(netip.MustParseAddr("192.0.2.1"))),
 	}
 	sig := signRRSIG(t, priv, set, key, now.Add(-time.Hour), now.Add(time.Hour))
@@ -72,8 +71,8 @@ func TestValidateRRsetEmptySet(t *testing.T) {
 func TestValidateRRsetNoRRSIG(t *testing.T) {
 	t.Parallel()
 	v := validator.New(validator.Options{})
-	set := []dnsmsg.Record{
-		dnsmsg.NewRecord(dnsname.MustParse("example.com"), time.Hour,
+	set := []wire.Record{
+		wire.NewRecord(wire.MustParseName("example.com"), time.Hour,
 			rdata.NewA(netip.MustParseAddr("192.0.2.1"))),
 	}
 	res, _, err := v.ValidateRRset(set, nil, nil)
@@ -83,10 +82,10 @@ func TestValidateRRsetNoRRSIG(t *testing.T) {
 
 func TestValidateRRsetNTAShortCircuits(t *testing.T) {
 	t.Parallel()
-	store := validator.NewNTAStore(dnsname.MustParse("example.com"))
+	store := validator.NewNTAStore(wire.MustParseName("example.com"))
 	v := validator.New(validator.Options{NTAs: store})
-	set := []dnsmsg.Record{
-		dnsmsg.NewRecord(dnsname.MustParse("example.com"), time.Hour,
+	set := []wire.Record{
+		wire.NewRecord(wire.MustParseName("example.com"), time.Hour,
 			rdata.NewA(netip.MustParseAddr("192.0.2.1"))),
 	}
 	res, _, err := v.ValidateRRset(set, nil, nil)
@@ -98,8 +97,8 @@ func TestValidateRRsetExpiredRRSIG(t *testing.T) {
 	t.Parallel()
 	priv, key := makeECDSAP256Key(t)
 	now := time.Now().UTC().Truncate(time.Second)
-	set := []dnsmsg.Record{
-		dnsmsg.NewRecord(dnsname.MustParse("example.com"), time.Hour,
+	set := []wire.Record{
+		wire.NewRecord(wire.MustParseName("example.com"), time.Hour,
 			rdata.NewA(netip.MustParseAddr("192.0.2.1"))),
 	}
 	// Inception/expiration both in the past.
@@ -118,8 +117,8 @@ func TestValidateRRsetNoMatchingKey(t *testing.T) {
 	t.Parallel()
 	priv, key := makeECDSAP256Key(t)
 	now := time.Now().UTC().Truncate(time.Second)
-	set := []dnsmsg.Record{
-		dnsmsg.NewRecord(dnsname.MustParse("example.com"), time.Hour,
+	set := []wire.Record{
+		wire.NewRecord(wire.MustParseName("example.com"), time.Hour,
 			rdata.NewA(netip.MustParseAddr("192.0.2.1"))),
 	}
 	sig := signRRSIG(t, priv, set, key, now.Add(-time.Hour), now.Add(time.Hour))
@@ -138,7 +137,7 @@ func TestValidateRRsetNoMatchingKey(t *testing.T) {
 func TestVerifyDelegationSecure(t *testing.T) {
 	t.Parallel()
 	_, key := makeECDSAP256Key(t)
-	owner := dnsname.MustParse("example.com")
+	owner := wire.MustParseName("example.com")
 	// Build a real DS that matches.
 	digest, err := dnssec.DSDigest(owner, key, rdata.DigestSHA256)
 	require.NoError(t, err)
@@ -153,7 +152,7 @@ func TestVerifyDelegationSecure(t *testing.T) {
 func TestVerifyDelegationBogus(t *testing.T) {
 	t.Parallel()
 	_, key := makeECDSAP256Key(t)
-	owner := dnsname.MustParse("example.com")
+	owner := wire.MustParseName("example.com")
 	// Bogus DS — random bytes.
 	ds := rdata.NewDS(dnssec.KeyTag(key), key.Algorithm(), rdata.DigestSHA256, make([]byte, 32))
 	v := validator.New(validator.Options{})
@@ -172,7 +171,7 @@ func TestResultString(t *testing.T) {
 
 func TestNTAStoreNames(t *testing.T) {
 	t.Parallel()
-	s := validator.NewNTAStore(dnsname.MustParse("a.example"), dnsname.MustParse("b.example"))
+	s := validator.NewNTAStore(wire.MustParseName("a.example"), wire.MustParseName("b.example"))
 	names := s.Names()
 	require.Len(t, names, 2)
 }

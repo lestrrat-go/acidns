@@ -6,9 +6,9 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/lestrrat-go/acidns/dnsmsg/rdata"
-	"github.com/lestrrat-go/acidns/dnsmsg/rrtype"
-	"github.com/lestrrat-go/acidns/dnsname"
+	"github.com/lestrrat-go/acidns/wire"
+	"github.com/lestrrat-go/acidns/wire/rdata"
+	"github.com/lestrrat-go/acidns/wire/rrtype"
 )
 
 // LookupHost dispatches A and AAAA queries for host concurrently and returns
@@ -46,33 +46,33 @@ func LookupHost(ctx context.Context, r Resolver, host string) ([]netip.Addr, err
 // candidateNames builds the ordered list of FQDNs to attempt for a LookupHost
 // call. When r does not satisfy SearchLister (or the search list is empty),
 // only the parsed host is returned.
-func candidateNames(r Resolver, host string) ([]dnsname.Name, error) {
+func candidateNames(r Resolver, host string) ([]wire.Name, error) {
 	absolute := strings.HasSuffix(host, ".")
-	base, err := dnsname.Parse(host)
+	base, err := wire.ParseName(host)
 	if err != nil {
 		return nil, err
 	}
 	sl, ok := r.(SearchLister)
 	if absolute || !ok || len(sl.SearchList()) == 0 {
-		return []dnsname.Name{base}, nil
+		return []wire.Name{base}, nil
 	}
 	dots := strings.Count(strings.TrimSuffix(host, "."), ".")
 	list := sl.SearchList()
-	suffixed := make([]dnsname.Name, 0, len(list))
+	suffixed := make([]wire.Name, 0, len(list))
 	for _, s := range list {
-		n, err := dnsname.Parse(host + "." + s.String())
+		n, err := wire.ParseName(host + "." + s.String())
 		if err != nil {
 			continue
 		}
 		suffixed = append(suffixed, n)
 	}
 	if dots >= sl.Ndots() {
-		return append([]dnsname.Name{base}, suffixed...), nil
+		return append([]wire.Name{base}, suffixed...), nil
 	}
 	return append(suffixed, base), nil
 }
 
-func lookupHostAbsolute(ctx context.Context, r Resolver, name dnsname.Name) ([]netip.Addr, error) {
+func lookupHostAbsolute(ctx context.Context, r Resolver, name wire.Name) ([]netip.Addr, error) {
 	type result struct {
 		addrs []netip.Addr
 		err   error
@@ -118,4 +118,3 @@ func lookupHostAbsolute(ctx context.Context, r Resolver, name dnsname.Name) ([]n
 	}
 	return addrs, nil
 }
-

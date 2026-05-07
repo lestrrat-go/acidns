@@ -5,10 +5,10 @@ import (
 	"testing"
 	"time"
 
-	"github.com/lestrrat-go/acidns/dnsmsg"
-	"github.com/lestrrat-go/acidns/dnsmsg/rdata"
-	"github.com/lestrrat-go/acidns/dnsmsg/rrtype"
 	"github.com/lestrrat-go/acidns/dnszone"
+	"github.com/lestrrat-go/acidns/wire"
+	"github.com/lestrrat-go/acidns/wire/rdata"
+	"github.com/lestrrat-go/acidns/wire/rrtype"
 	"github.com/stretchr/testify/require"
 )
 
@@ -123,7 +123,7 @@ func TestParseErrors(t *testing.T) {
 	}
 }
 
-func findRR(rrs []dnsmsg.Record, name string, t rrtype.Type) (dnsmsg.Record, bool) {
+func findRR(rrs []wire.Record, name string, t rrtype.Type) (wire.Record, bool) {
 	for _, r := range rrs {
 		if r.Name().String() == name && r.Type() == t {
 			return r, true

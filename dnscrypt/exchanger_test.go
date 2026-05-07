@@ -12,10 +12,9 @@ import (
 	"golang.org/x/crypto/curve25519"
 
 	"github.com/lestrrat-go/acidns/dnscrypt"
-	"github.com/lestrrat-go/acidns/dnsmsg"
-	"github.com/lestrrat-go/acidns/dnsmsg/rdata"
-	"github.com/lestrrat-go/acidns/dnsmsg/rrtype"
-	"github.com/lestrrat-go/acidns/dnsname"
+	"github.com/lestrrat-go/acidns/wire"
+	"github.com/lestrrat-go/acidns/wire/rdata"
+	"github.com/lestrrat-go/acidns/wire/rrtype"
 	"github.com/stretchr/testify/require"
 )
 
@@ -67,9 +66,9 @@ func TestExchangerEndToEnd(t *testing.T) {
 	ex, err := dnscrypt.New(addr, cert)
 	require.NoError(t, err)
 
-	q, _ := dnsmsg.NewBuilder().
+	q, _ := wire.NewBuilder().
 		ID(0xface).
-		Question(dnsmsg.NewQuestion(dnsname.MustParse("example.com"), rrtype.A)).
+		Question(wire.NewQuestion(wire.MustParseName("example.com"), rrtype.A)).
 		Build()
 
 	ctx, cancel := context.WithTimeout(t.Context(), 5*time.Second)
@@ -97,21 +96,21 @@ func buildFakeResponse(query []byte, cert *dnscrypt.Cert, resolverSK [32]byte) (
 	if err != nil {
 		return nil, err
 	}
-	req, err := dnsmsg.Unmarshal(plain)
+	req, err := wire.Unmarshal(plain)
 	if err != nil {
 		return nil, err
 	}
-	resp, err := dnsmsg.NewBuilder().
+	resp, err := wire.NewBuilder().
 		ID(req.ID()).
 		Response(true).
 		Question(req.Questions()[0]).
-		Answer(dnsmsg.NewRecord(req.Questions()[0].Name(), time.Minute,
+		Answer(wire.NewRecord(req.Questions()[0].Name(), time.Minute,
 			rdata.NewA(netip.MustParseAddr("203.0.113.99")))).
 		Build()
 	if err != nil {
 		return nil, err
 	}
-	respWire, err := dnsmsg.Marshal(resp)
+	respWire, err := wire.Marshal(resp)
 	if err != nil {
 		return nil, err
 	}

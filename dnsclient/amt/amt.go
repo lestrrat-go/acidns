@@ -9,15 +9,15 @@ import (
 	"sort"
 
 	"github.com/lestrrat-go/acidns/dnsclient"
-	"github.com/lestrrat-go/acidns/dnsmsg/rdata"
-	"github.com/lestrrat-go/acidns/dnsmsg/rrtype"
-	"github.com/lestrrat-go/acidns/dnsname"
+	"github.com/lestrrat-go/acidns/wire"
+	"github.com/lestrrat-go/acidns/wire/rdata"
+	"github.com/lestrrat-go/acidns/wire/rrtype"
 )
 
 // DiscoveryName returns the SRV name a client queries to find AMT relays
 // for the supplied domain (RFC 8777 §3).
-func DiscoveryName(domain dnsname.Name) (dnsname.Name, error) {
-	return dnsname.Parse("_amt._udp." + domain.String())
+func DiscoveryName(domain wire.Name) (wire.Name, error) {
+	return wire.ParseName("_amt._udp." + domain.String())
 }
 
 // Relay is a single AMT relay candidate.
@@ -25,13 +25,13 @@ type Relay struct {
 	Priority uint16
 	Weight   uint16
 	Port     uint16
-	Target   dnsname.Name
+	Target   wire.Name
 }
 
 // Discover queries `_amt._udp.<domain>` for SRV records and returns the
 // candidate relays sorted by RFC 2782 priority (ascending; weight ties
 // preserve server-supplied order).
-func Discover(ctx context.Context, r dnsclient.Resolver, domain dnsname.Name) ([]Relay, error) {
+func Discover(ctx context.Context, r dnsclient.Resolver, domain wire.Name) ([]Relay, error) {
 	name, err := DiscoveryName(domain)
 	if err != nil {
 		return nil, err

@@ -11,11 +11,11 @@ import (
 	"github.com/lestrrat-go/acidns/dnsclient/axfr"
 	"github.com/lestrrat-go/acidns/dnsclient/transport"
 	"github.com/lestrrat-go/acidns/dnsclient/transport/tcp"
-	"github.com/lestrrat-go/acidns/dnsmsg/rrtype"
-	"github.com/lestrrat-go/acidns/dnsname"
 	"github.com/lestrrat-go/acidns/dnsserver"
 	"github.com/lestrrat-go/acidns/dnsserver/authoritative"
 	"github.com/lestrrat-go/acidns/dnszone"
+	"github.com/lestrrat-go/acidns/wire"
+	"github.com/lestrrat-go/acidns/wire/rrtype"
 )
 
 func Example_axfr_transfer() {
@@ -52,7 +52,7 @@ www IN  A    192.0.2.42
 
 	xferCtx, xcancel := context.WithTimeout(ctx, 5*time.Second)
 	defer xcancel()
-	xfer, err := axfr.Start(xferCtx, sx, dnsname.MustParse("example.com"))
+	xfer, err := axfr.Start(xferCtx, sx, wire.MustParseName("example.com"))
 	if err != nil {
 		fmt.Println("axfr start:", err)
 		return

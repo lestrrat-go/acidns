@@ -8,10 +8,9 @@ import (
 
 	"github.com/lestrrat-go/acidns/dnsclient"
 	"github.com/lestrrat-go/acidns/dnsclient/ddr"
-	"github.com/lestrrat-go/acidns/dnsmsg"
-	"github.com/lestrrat-go/acidns/dnsmsg/rdata"
-	"github.com/lestrrat-go/acidns/dnsmsg/rrtype"
-	"github.com/lestrrat-go/acidns/dnsname"
+	"github.com/lestrrat-go/acidns/wire"
+	"github.com/lestrrat-go/acidns/wire/rdata"
+	"github.com/lestrrat-go/acidns/wire/rrtype"
 	"github.com/stretchr/testify/require"
 )
 
@@ -19,21 +18,21 @@ type fakeResolver struct {
 	answer dnsclient.Answer
 }
 
-func (f *fakeResolver) Resolve(_ context.Context, _ dnsname.Name, _ rrtype.Type) (dnsclient.Answer, error) {
+func (f *fakeResolver) Resolve(_ context.Context, _ wire.Name, _ rrtype.Type) (dnsclient.Answer, error) {
 	return f.answer, nil
 }
 
 type fakeAnswer struct {
-	q       dnsmsg.Question
-	records []dnsmsg.Record
+	q       wire.Question
+	records []wire.Record
 }
 
-func (f *fakeAnswer) Question() dnsmsg.Question { return f.q }
-func (f *fakeAnswer) Records() []dnsmsg.Record  { return f.records }
-func (f *fakeAnswer) Raw() dnsmsg.Message       { return nil }
-func (f *fakeAnswer) RCODE() dnsmsg.RCODE       { return dnsmsg.RCODENoError }
-func (f *fakeAnswer) Authoritative() bool       { return false }
-func (f *fakeAnswer) Truncated() bool           { return false }
+func (f *fakeAnswer) Question() wire.Question { return f.q }
+func (f *fakeAnswer) Records() []wire.Record  { return f.records }
+func (f *fakeAnswer) Raw() wire.Message       { return nil }
+func (f *fakeAnswer) RCODE() wire.RCODE       { return wire.RCODENoError }
+func (f *fakeAnswer) Authoritative() bool     { return false }
+func (f *fakeAnswer) Truncated() bool         { return false }
 
 func TestDiscover(t *testing.T) {
 	t.Parallel()
@@ -42,7 +41,7 @@ func TestDiscover(t *testing.T) {
 	require.NoError(t, err)
 	v4hint, err := rdata.NewSvcParamIPv4Hint(netip.MustParseAddr("192.0.2.1"))
 	require.NoError(t, err)
-	dohSVCB := rdata.NewSVCB(1, dnsname.MustParse("doh.example.net"),
+	dohSVCB := rdata.NewSVCB(1, wire.MustParseName("doh.example.net"),
 		alpnH2,
 		rdata.NewSvcParamPort(443),
 		rdata.NewSvcParamDOHPath("/dns-query{?dns}"),
@@ -51,15 +50,15 @@ func TestDiscover(t *testing.T) {
 
 	alpnDoT, err := rdata.NewSvcParamALPN("dot")
 	require.NoError(t, err)
-	dotSVCB := rdata.NewSVCB(2, dnsname.MustParse("dot.example.net"),
+	dotSVCB := rdata.NewSVCB(2, wire.MustParseName("dot.example.net"),
 		alpnDoT,
 		rdata.NewSvcParamPort(853),
 	)
 
-	rec1 := dnsmsg.NewRecord(ddr.ResolverDomain, 60*time.Second, dohSVCB)
-	rec2 := dnsmsg.NewRecord(ddr.ResolverDomain, 60*time.Second, dotSVCB)
+	rec1 := wire.NewRecord(ddr.ResolverDomain, 60*time.Second, dohSVCB)
+	rec2 := wire.NewRecord(ddr.ResolverDomain, 60*time.Second, dotSVCB)
 
-	r := &fakeResolver{answer: &fakeAnswer{records: []dnsmsg.Record{rec1, rec2}}}
+	r := &fakeResolver{answer: &fakeAnswer{records: []wire.Record{rec1, rec2}}}
 	endpoints, err := ddr.Discover(context.Background(), r)
 	require.NoError(t, err)
 	require.Len(t, endpoints, 2)

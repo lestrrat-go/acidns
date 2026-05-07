@@ -4,8 +4,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/lestrrat-go/acidns/dnsname"
 	"github.com/lestrrat-go/acidns/dnszone"
+	"github.com/lestrrat-go/acidns/wire"
 	"github.com/stretchr/testify/require"
 )
 
@@ -15,7 +15,7 @@ func TestParseWithOptions(t *testing.T) {
 www IN A 192.0.2.2
 `
 	z, err := dnszone.Parse(strings.NewReader(src),
-		dnszone.WithOrigin(dnsname.MustParse("example.com")),
+		dnszone.WithOrigin(wire.MustParseName("example.com")),
 		dnszone.WithDefaultTTL(300),
 	)
 	require.NoError(t, err)

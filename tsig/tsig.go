@@ -4,19 +4,19 @@
 // authenticating zone transfers (AXFR/IXFR) and dynamic updates between
 // nameservers.
 //
-// Functions in this package operate on raw wire bytes rather than the
-// dnsmsg.Message interface because TSIG signs the message AFTER its wire
+// Functions in this package operate on raw msg bytes rather than the
+// wire.Message interface because TSIG signs the message AFTER its msg
 // encoding (the additional count is incremented as the TSIG RR is
 // appended). The intended use is:
 //
-//	wire, _ := dnsmsg.Marshal(m)
-//	signed, _ := tsig.Sign(wire, key, time.Now(), 5*time.Minute)
+//	msg, _ := wire.Marshal(m)
+//	signed, _ := tsig.Sign(msg, key, time.Now(), 5*time.Minute)
 //	// send signed
 //
 // On the receiver:
 //
 //	body, _, err := tsig.Verify(received, key)
-//	m, _ := dnsmsg.Unmarshal(body)
+//	m, _ := wire.Unmarshal(body)
 package tsig
 
 import (
@@ -30,8 +30,7 @@ import (
 	"hash"
 	"time"
 
-	"github.com/lestrrat-go/acidns/dnsmsg"
-	"github.com/lestrrat-go/acidns/dnsname"
+	"github.com/lestrrat-go/acidns/wire"
 )
 
 // Algorithm names the HMAC variant (canonical form per RFC 8945 §6).
@@ -46,7 +45,7 @@ const (
 
 // Key holds the credentials shared with the peer.
 type Key struct {
-	Name      dnsname.Name
+	Name      wire.Name
 	Algorithm Algorithm
 	Secret    []byte
 }
@@ -65,42 +64,42 @@ const (
 	tsigClass uint16 = 255 // ANY
 )
 
-// SignMessage marshals m and returns the TSIG-signed wire-format bytes.
-// Equivalent to Sign(dnsmsg.Marshal(m), key, now, fudge) — provided so
+// SignMessage marshals m and returns the TSIG-signed msg-format bytes.
+// Equivalent to Sign(wire.Marshal(m), key, now, fudge) — provided so
 // callers don't have to think about the marshal/sign ordering. Works for
 // any DNS message: queries, updates, NOTIFY, anything.
 //
 // fudge is the clock-skew window the receiver tolerates. Five minutes is
 // conventional.
-func SignMessage(m dnsmsg.Message, key Key, now time.Time, fudge time.Duration) ([]byte, error) {
-	wire, err := dnsmsg.Marshal(m)
+func SignMessage(m wire.Message, key Key, now time.Time, fudge time.Duration) ([]byte, error) {
+	msg, err := wire.Marshal(m)
 	if err != nil {
 		return nil, err
 	}
-	return Sign(wire, key, now, fudge)
+	return Sign(msg, key, now, fudge)
 }
 
-// Sign appends a TSIG RR to the additional section of wire and returns
-// the new wire bytes.
-func Sign(wire []byte, key Key, now time.Time, fudge time.Duration) ([]byte, error) {
-	if len(wire) < 12 {
-		return nil, fmt.Errorf("tsig: wire too short")
+// Sign appends a TSIG RR to the additional section of msg and returns
+// the new msg bytes.
+func Sign(msg []byte, key Key, now time.Time, fudge time.Duration) ([]byte, error) {
+	if len(msg) < 12 {
+		return nil, fmt.Errorf("tsig: msg too short")
 	}
-	algName := dnsname.MustParse(string(key.Algorithm))
+	algName := wire.MustParseName(string(key.Algorithm))
 
 	timeSigned := uint64(now.Unix())
 	fudgeSecs := uint16(fudge.Seconds())
 
 	tsigVars := buildTSIGVars(key.Name, algName, timeSigned, fudgeSecs, 0, nil)
-	mac, err := computeHMAC(key, append(append([]byte(nil), wire...), tsigVars...))
+	mac, err := computeHMAC(key, append(append([]byte(nil), msg...), tsigVars...))
 	if err != nil {
 		return nil, err
 	}
 
-	origID := binary.BigEndian.Uint16(wire[0:2])
+	origID := binary.BigEndian.Uint16(msg[0:2])
 
 	rdata := buildTSIGRData(algName, timeSigned, fudgeSecs, mac, origID, 0, nil)
-	out := append([]byte(nil), wire...)
+	out := append([]byte(nil), msg...)
 	out = appendTSIGRR(out, key.Name, rdata)
 
 	// Increment ARCOUNT.
@@ -109,19 +108,19 @@ func Sign(wire []byte, key Key, now time.Time, fudge time.Duration) ([]byte, err
 	return out, nil
 }
 
-// Verify confirms the trailing TSIG RR over wire using key. Returns the
+// Verify confirms the trailing TSIG RR over msg using key. Returns the
 // message body without the TSIG RR (with ARCOUNT decremented and the
 // original message ID restored if it was rewritten) and the time at which
 // the signature was generated.
-func Verify(wire []byte, key Key, now time.Time, fudge time.Duration) ([]byte, time.Time, error) {
-	body, tsig, err := stripTSIG(wire)
+func Verify(msg []byte, key Key, now time.Time, fudge time.Duration) ([]byte, time.Time, error) {
+	body, tsig, err := stripTSIG(msg)
 	if err != nil {
 		return nil, time.Time{}, err
 	}
 	if !tsig.keyName.Equal(key.Name) {
 		return nil, time.Time{}, fmt.Errorf("tsig: key name mismatch")
 	}
-	if !tsig.algorithm.Equal(dnsname.MustParse(string(key.Algorithm))) {
+	if !tsig.algorithm.Equal(wire.MustParseName(string(key.Algorithm))) {
 		return nil, time.Time{}, fmt.Errorf("tsig: algorithm mismatch")
 	}
 	signed := time.Unix(int64(tsig.timeSigned), 0).UTC()
@@ -165,7 +164,7 @@ func computeHMAC(key Key, payload []byte) ([]byte, error) {
 
 // buildTSIGVars builds the canonical "TSIG variables" prefix used in the
 // HMAC computation per RFC 8945 §4.3.3.
-func buildTSIGVars(keyName, algName dnsname.Name, timeSigned uint64, fudge, errCode uint16, other []byte) []byte {
+func buildTSIGVars(keyName, algName wire.Name, timeSigned uint64, fudge, errCode uint16, other []byte) []byte {
 	var buf []byte
 	buf = append(buf, keyName.AppendWire(nil)...)
 	buf = binary.BigEndian.AppendUint16(buf, tsigClass)
@@ -179,8 +178,8 @@ func buildTSIGVars(keyName, algName dnsname.Name, timeSigned uint64, fudge, errC
 	return buf
 }
 
-// buildTSIGRData builds the wire-format RDATA of the TSIG RR.
-func buildTSIGRData(algName dnsname.Name, timeSigned uint64, fudge uint16, mac []byte, origID, errCode uint16, other []byte) []byte {
+// buildTSIGRData builds the msg-format RDATA of the TSIG RR.
+func buildTSIGRData(algName wire.Name, timeSigned uint64, fudge uint16, mac []byte, origID, errCode uint16, other []byte) []byte {
 	var buf []byte
 	buf = append(buf, algName.AppendWire(nil)...)
 	buf = appendUint48(buf, timeSigned)
@@ -194,8 +193,8 @@ func buildTSIGRData(algName dnsname.Name, timeSigned uint64, fudge uint16, mac [
 	return buf
 }
 
-func appendTSIGRR(wire []byte, owner dnsname.Name, rd []byte) []byte {
-	out := append(wire, owner.AppendWire(nil)...)
+func appendTSIGRR(msg []byte, owner wire.Name, rd []byte) []byte {
+	out := append(msg, owner.AppendWire(nil)...)
 	out = binary.BigEndian.AppendUint16(out, tsigType)
 	out = binary.BigEndian.AppendUint16(out, tsigClass)
 	out = binary.BigEndian.AppendUint32(out, 0) // TTL
@@ -211,8 +210,8 @@ func appendUint48(buf []byte, v uint64) []byte {
 }
 
 type parsedTSIG struct {
-	keyName    dnsname.Name
-	algorithm  dnsname.Name
+	keyName    wire.Name
+	algorithm  wire.Name
 	timeSigned uint64
 	fudge      uint16
 	mac        []byte
@@ -221,57 +220,57 @@ type parsedTSIG struct {
 	other      []byte
 }
 
-// stripTSIG locates the trailing TSIG RR in wire (it MUST be the last RR
+// stripTSIG locates the trailing TSIG RR in msg (it MUST be the last RR
 // per RFC 8945 §5.1), parses it, and returns the body without the TSIG
 // (with ARCOUNT decremented by 1) plus the parsed TSIG.
-func stripTSIG(wire []byte) ([]byte, parsedTSIG, error) {
-	if len(wire) < 12 {
-		return nil, parsedTSIG{}, fmt.Errorf("tsig: wire too short")
+func stripTSIG(msg []byte) ([]byte, parsedTSIG, error) {
+	if len(msg) < 12 {
+		return nil, parsedTSIG{}, fmt.Errorf("tsig: msg too short")
 	}
-	arcount := binary.BigEndian.Uint16(wire[10:12])
+	arcount := binary.BigEndian.Uint16(msg[10:12])
 	if arcount == 0 {
 		return nil, parsedTSIG{}, ErrTSIGMissing
 	}
 
 	// The TSIG RR is the last RR in the message. We scan from the start to
 	// find every RR boundary, returning the offset of the last one.
-	start, err := findLastRROffset(wire)
+	start, err := findLastRROffset(msg)
 	if err != nil {
 		return nil, parsedTSIG{}, err
 	}
 
-	keyName, off, err := dnsname.DecodeWire(wire, start)
+	keyName, off, err := wire.DecodeName(msg, start)
 	if err != nil {
 		return nil, parsedTSIG{}, fmt.Errorf("tsig: parse owner: %w", err)
 	}
-	if off+10 > len(wire) {
+	if off+10 > len(msg) {
 		return nil, parsedTSIG{}, fmt.Errorf("tsig: truncated header")
 	}
-	rrType := binary.BigEndian.Uint16(wire[off : off+2])
+	rrType := binary.BigEndian.Uint16(msg[off : off+2])
 	if rrType != tsigType {
 		return nil, parsedTSIG{}, ErrTSIGMissing
 	}
-	rdlen := int(binary.BigEndian.Uint16(wire[off+8 : off+10]))
+	rdlen := int(binary.BigEndian.Uint16(msg[off+8 : off+10]))
 	rdataStart := off + 10
 	rdataEnd := rdataStart + rdlen
-	if rdataEnd > len(wire) {
+	if rdataEnd > len(msg) {
 		return nil, parsedTSIG{}, fmt.Errorf("tsig: truncated rdata")
 	}
 
-	tsig, err := parseTSIGRData(wire, rdataStart, rdataEnd)
+	tsig, err := parseTSIGRData(msg, rdataStart, rdataEnd)
 	if err != nil {
 		return nil, parsedTSIG{}, err
 	}
 	tsig.keyName = keyName
 
 	// Build the body without the TSIG RR and with ARCOUNT decremented.
-	body := append([]byte(nil), wire[:start]...)
+	body := append([]byte(nil), msg[:start]...)
 	binary.BigEndian.PutUint16(body[10:12], arcount-1)
 	return body, tsig, nil
 }
 
-func parseTSIGRData(wire []byte, start, end int) (parsedTSIG, error) {
-	algName, off, err := dnsname.DecodeWire(wire, start)
+func parseTSIGRData(msg []byte, start, end int) (parsedTSIG, error) {
+	algName, off, err := wire.DecodeName(msg, start)
 	if err != nil {
 		return parsedTSIG{}, fmt.Errorf("tsig: parse alg: %w", err)
 	}
@@ -279,27 +278,27 @@ func parseTSIGRData(wire []byte, start, end int) (parsedTSIG, error) {
 	if off+6+2+2 > end {
 		return parsedTSIG{}, fmt.Errorf("tsig: truncated time/fudge/mac-size")
 	}
-	timeSigned := readUint48(wire[off : off+6])
+	timeSigned := readUint48(msg[off : off+6])
 	off += 6
-	fudge := binary.BigEndian.Uint16(wire[off : off+2])
+	fudge := binary.BigEndian.Uint16(msg[off : off+2])
 	off += 2
-	macSize := int(binary.BigEndian.Uint16(wire[off : off+2]))
+	macSize := int(binary.BigEndian.Uint16(msg[off : off+2]))
 	off += 2
 	if off+macSize+2+2+2 > end {
 		return parsedTSIG{}, fmt.Errorf("tsig: truncated mac/origID/err/otherLen")
 	}
-	mac := append([]byte(nil), wire[off:off+macSize]...)
+	mac := append([]byte(nil), msg[off:off+macSize]...)
 	off += macSize
-	origID := binary.BigEndian.Uint16(wire[off : off+2])
+	origID := binary.BigEndian.Uint16(msg[off : off+2])
 	off += 2
-	errCode := binary.BigEndian.Uint16(wire[off : off+2])
+	errCode := binary.BigEndian.Uint16(msg[off : off+2])
 	off += 2
-	otherLen := int(binary.BigEndian.Uint16(wire[off : off+2]))
+	otherLen := int(binary.BigEndian.Uint16(msg[off : off+2]))
 	off += 2
 	if off+otherLen > end {
 		return parsedTSIG{}, fmt.Errorf("tsig: truncated other-data")
 	}
-	other := append([]byte(nil), wire[off:off+otherLen]...)
+	other := append([]byte(nil), msg[off:off+otherLen]...)
 	_ = need
 	return parsedTSIG{
 		algorithm:  algName,
@@ -317,26 +316,26 @@ func readUint48(b []byte) uint64 {
 		uint64(b[3])<<16 | uint64(b[4])<<8 | uint64(b[5])
 }
 
-// findLastRROffset returns the start offset of the last RR in wire by
+// findLastRROffset returns the start offset of the last RR in msg by
 // walking the question and RR sections. It is intentionally a fresh
-// minimal walker rather than a re-parse via dnsmsg.Unmarshal — TSIG must
-// run on the exact wire bytes the peer produced, with no canonicalisation.
-func findLastRROffset(wire []byte) (int, error) {
-	qdcount := int(binary.BigEndian.Uint16(wire[4:6]))
-	ancount := int(binary.BigEndian.Uint16(wire[6:8]))
-	nscount := int(binary.BigEndian.Uint16(wire[8:10]))
-	arcount := int(binary.BigEndian.Uint16(wire[10:12]))
+// minimal walker rather than a re-parse via wire.Unmarshal — TSIG must
+// run on the exact msg bytes the peer produced, with no canonicalisation.
+func findLastRROffset(msg []byte) (int, error) {
+	qdcount := int(binary.BigEndian.Uint16(msg[4:6]))
+	ancount := int(binary.BigEndian.Uint16(msg[6:8]))
+	nscount := int(binary.BigEndian.Uint16(msg[8:10]))
+	arcount := int(binary.BigEndian.Uint16(msg[10:12]))
 	totalRR := ancount + nscount + arcount
 	off := 12
 
 	// Skip questions.
 	for i := 0; i < qdcount; i++ {
-		_, next, err := dnsname.DecodeWire(wire, off)
+		_, next, err := wire.DecodeName(msg, off)
 		if err != nil {
 			return 0, err
 		}
 		off = next + 4 // qtype + qclass
-		if off > len(wire) {
+		if off > len(msg) {
 			return 0, fmt.Errorf("tsig: truncated question")
 		}
 	}
@@ -344,16 +343,16 @@ func findLastRROffset(wire []byte) (int, error) {
 	last := off
 	for i := 0; i < totalRR; i++ {
 		last = off
-		_, next, err := dnsname.DecodeWire(wire, off)
+		_, next, err := wire.DecodeName(msg, off)
 		if err != nil {
 			return 0, err
 		}
-		if next+10 > len(wire) {
+		if next+10 > len(msg) {
 			return 0, fmt.Errorf("tsig: truncated rr header")
 		}
-		rdlen := int(binary.BigEndian.Uint16(wire[next+8 : next+10]))
+		rdlen := int(binary.BigEndian.Uint16(msg[next+8 : next+10]))
 		off = next + 10 + rdlen
-		if off > len(wire) {
+		if off > len(msg) {
 			return 0, fmt.Errorf("tsig: truncated rr body")
 		}
 	}

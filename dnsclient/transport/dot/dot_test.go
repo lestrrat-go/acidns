@@ -18,10 +18,9 @@ import (
 	"time"
 
 	"github.com/lestrrat-go/acidns/dnsclient/transport/dot"
-	"github.com/lestrrat-go/acidns/dnsmsg"
-	"github.com/lestrrat-go/acidns/dnsmsg/rdata"
-	"github.com/lestrrat-go/acidns/dnsmsg/rrtype"
-	"github.com/lestrrat-go/acidns/dnsname"
+	"github.com/lestrrat-go/acidns/wire"
+	"github.com/lestrrat-go/acidns/wire/rdata"
+	"github.com/lestrrat-go/acidns/wire/rrtype"
 	"github.com/stretchr/testify/require"
 )
 
@@ -73,18 +72,18 @@ func startDoT(t *testing.T) (netip.AddrPort, *tls.Config) {
 				if _, err := io.ReadFull(c, body); err != nil {
 					return
 				}
-				req, err := dnsmsg.Unmarshal(body)
+				req, err := wire.Unmarshal(body)
 				if err != nil {
 					return
 				}
-				resp, _ := dnsmsg.NewBuilder().
+				resp, _ := wire.NewBuilder().
 					ID(req.ID()).
 					Response(true).
 					Question(req.Questions()[0]).
-					Answer(dnsmsg.NewRecord(req.Questions()[0].Name(), time.Minute,
+					Answer(wire.NewRecord(req.Questions()[0].Name(), time.Minute,
 						rdata.NewA(netip.MustParseAddr("198.51.100.42")))).
 					Build()
-				wire, _ := dnsmsg.Marshal(resp)
+				wire, _ := wire.Marshal(resp)
 				binary.BigEndian.PutUint16(lenBuf[:], uint16(len(wire)))
 				c.Write(lenBuf[:])
 				c.Write(wire)
@@ -103,10 +102,10 @@ func TestDoTExchange(t *testing.T) {
 	ex, err := dot.New(addr, dot.WithTLSConfig(cfg), dot.WithServerName("127.0.0.1"))
 	require.NoError(t, err)
 
-	q, _ := dnsmsg.NewBuilder().
+	q, _ := wire.NewBuilder().
 		ID(0xaa55).
 		RecursionDesired(true).
-		Question(dnsmsg.NewQuestion(dnsname.MustParse("example.com"), rrtype.A)).
+		Question(wire.NewQuestion(wire.MustParseName("example.com"), rrtype.A)).
 		Build()
 
 	resp, err := ex.Exchange(t.Context(), q)
@@ -128,9 +127,9 @@ func TestDoTContextCancel(t *testing.T) {
 	ex, err := dot.New(addr, dot.WithServerName("127.0.0.1"))
 	require.NoError(t, err)
 
-	q, _ := dnsmsg.NewBuilder().
+	q, _ := wire.NewBuilder().
 		ID(1).
-		Question(dnsmsg.NewQuestion(dnsname.MustParse("example.com"), rrtype.A)).
+		Question(wire.NewQuestion(wire.MustParseName("example.com"), rrtype.A)).
 		Build()
 
 	ctx, cancel := context.WithTimeout(t.Context(), 100*time.Millisecond)

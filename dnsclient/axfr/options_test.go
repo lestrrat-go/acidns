@@ -9,11 +9,11 @@ import (
 	"time"
 
 	"github.com/lestrrat-go/acidns/dnsclient/axfr"
-	"github.com/lestrrat-go/acidns/dnsmsg/rrtype"
-	"github.com/lestrrat-go/acidns/dnsname"
 	"github.com/lestrrat-go/acidns/dnsserver"
 	"github.com/lestrrat-go/acidns/dnsserver/authoritative"
 	"github.com/lestrrat-go/acidns/dnszone"
+	"github.com/lestrrat-go/acidns/wire"
+	"github.com/lestrrat-go/acidns/wire/rrtype"
 	"github.com/stretchr/testify/require"
 )
 
@@ -32,7 +32,7 @@ func TestStartWithTimeoutAndNewSOA(t *testing.T) {
 	xferCtx, xcancel := context.WithTimeout(t.Context(), 5*time.Second)
 	defer xcancel()
 	xfer, err := axfr.Start(xferCtx, newStreamEx(t, srv.Addr()),
-		dnsname.MustParse("example.com"),
+		wire.MustParseName("example.com"),
 		axfr.WithTimeout(2*time.Second))
 	require.NoError(t, err)
 	defer xfer.Close()

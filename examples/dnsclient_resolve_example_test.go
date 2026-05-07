@@ -9,12 +9,12 @@ import (
 	"time"
 
 	"github.com/lestrrat-go/acidns/dnsclient"
-	"github.com/lestrrat-go/acidns/dnsmsg/rdata"
-	"github.com/lestrrat-go/acidns/dnsmsg/rrtype"
-	"github.com/lestrrat-go/acidns/dnsname"
 	"github.com/lestrrat-go/acidns/dnsserver"
 	"github.com/lestrrat-go/acidns/dnsserver/authoritative"
 	"github.com/lestrrat-go/acidns/dnszone"
+	"github.com/lestrrat-go/acidns/wire"
+	"github.com/lestrrat-go/acidns/wire/rdata"
+	"github.com/lestrrat-go/acidns/wire/rrtype"
 )
 
 // startLocalNS is a tiny shared helper: spin up an authoritative server bound
@@ -62,7 +62,7 @@ mail IN A    192.0.2.11
 	}
 	qctx, qcancel := context.WithTimeout(ctx, 2*time.Second)
 	defer qcancel()
-	ans, err := r.Resolve(qctx, dnsname.MustParse("mail.example.com"), rrtype.A)
+	ans, err := r.Resolve(qctx, wire.MustParseName("mail.example.com"), rrtype.A)
 	if err != nil {
 		fmt.Println("resolve:", err)
 		return

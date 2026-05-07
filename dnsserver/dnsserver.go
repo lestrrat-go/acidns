@@ -13,7 +13,7 @@ import (
 	"errors"
 	"net/netip"
 
-	"github.com/lestrrat-go/acidns/dnsmsg"
+	"github.com/lestrrat-go/acidns/wire"
 )
 
 // ErrServerClosed is returned by Serve after Shutdown or context cancel.
@@ -21,14 +21,14 @@ var ErrServerClosed = errors.New("dnsserver: server closed")
 
 // Handler is the interface implemented by anything that answers DNS queries.
 type Handler interface {
-	ServeDNS(ctx context.Context, w ResponseWriter, q dnsmsg.Message)
+	ServeDNS(ctx context.Context, w ResponseWriter, q wire.Message)
 }
 
 // HandlerFunc adapts a plain function into a Handler.
-type HandlerFunc func(ctx context.Context, w ResponseWriter, q dnsmsg.Message)
+type HandlerFunc func(ctx context.Context, w ResponseWriter, q wire.Message)
 
 // ServeDNS calls f.
-func (f HandlerFunc) ServeDNS(ctx context.Context, w ResponseWriter, q dnsmsg.Message) {
+func (f HandlerFunc) ServeDNS(ctx context.Context, w ResponseWriter, q wire.Message) {
 	f(ctx, w, q)
 }
 
@@ -42,7 +42,7 @@ func (f HandlerFunc) ServeDNS(ctx context.Context, w ResponseWriter, q dnsmsg.Me
 // Network reports the underlying transport ("udp", "tcp", "dot", "doh") so
 // handlers can refuse stream-only operations (e.g. AXFR) over datagrams.
 type ResponseWriter interface {
-	WriteMsg(m dnsmsg.Message) error
+	WriteMsg(m wire.Message) error
 	RemoteAddr() netip.AddrPort
 	LocalAddr() netip.AddrPort
 	Network() string

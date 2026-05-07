@@ -7,11 +7,10 @@ import (
 	"time"
 
 	"github.com/lestrrat-go/acidns/dnsclient/transport/tcp"
-	"github.com/lestrrat-go/acidns/dnsmsg"
-	"github.com/lestrrat-go/acidns/dnsmsg/rdata"
-	"github.com/lestrrat-go/acidns/dnsmsg/rrtype"
-	"github.com/lestrrat-go/acidns/dnsname"
 	"github.com/lestrrat-go/acidns/dnsserver"
+	"github.com/lestrrat-go/acidns/wire"
+	"github.com/lestrrat-go/acidns/wire/rdata"
+	"github.com/lestrrat-go/acidns/wire/rrtype"
 	"github.com/stretchr/testify/require"
 )
 
@@ -28,10 +27,10 @@ func startTCP(t *testing.T, h dnsserver.Handler, opts ...dnsserver.TCPOption) dn
 func TestTCPServerEcho(t *testing.T) {
 	t.Parallel()
 
-	h := dnsserver.HandlerFunc(func(_ context.Context, w dnsserver.ResponseWriter, q dnsmsg.Message) {
-		ans := dnsmsg.NewRecord(q.Questions()[0].Name(), time.Minute,
+	h := dnsserver.HandlerFunc(func(_ context.Context, w dnsserver.ResponseWriter, q wire.Message) {
+		ans := wire.NewRecord(q.Questions()[0].Name(), time.Minute,
 			rdata.NewA(netip.MustParseAddr("203.0.113.88")))
-		resp, _ := dnsmsg.NewBuilder().
+		resp, _ := wire.NewBuilder().
 			ID(q.ID()).
 			Response(true).
 			Question(q.Questions()[0]).
@@ -52,7 +51,7 @@ func TestTCPServerEcho(t *testing.T) {
 func TestTCPServerShutdown(t *testing.T) {
 	t.Parallel()
 	srv, err := dnsserver.ListenTCP(netip.MustParseAddrPort("127.0.0.1:0"),
-		dnsserver.HandlerFunc(func(_ context.Context, _ dnsserver.ResponseWriter, _ dnsmsg.Message) {}))
+		dnsserver.HandlerFunc(func(_ context.Context, _ dnsserver.ResponseWriter, _ wire.Message) {}))
 	require.NoError(t, err)
 
 	ctx, cancel := context.WithCancel(t.Context())
@@ -71,8 +70,8 @@ func TestTCPServerShutdown(t *testing.T) {
 func TestTCPServerNoTruncation(t *testing.T) {
 	t.Parallel()
 
-	h := dnsserver.HandlerFunc(func(_ context.Context, w dnsserver.ResponseWriter, q dnsmsg.Message) {
-		b := dnsmsg.NewBuilder().
+	h := dnsserver.HandlerFunc(func(_ context.Context, w dnsserver.ResponseWriter, q wire.Message) {
+		b := wire.NewBuilder().
 			ID(q.ID()).
 			Response(true).
 			Question(q.Questions()[0])
@@ -82,7 +81,7 @@ func TestTCPServerNoTruncation(t *testing.T) {
 		}
 		txt, _ := rdata.NewTXT(string(long))
 		for i := 0; i < 50; i++ {
-			b = b.Answer(dnsmsg.NewRecord(q.Questions()[0].Name(), time.Minute, txt))
+			b = b.Answer(wire.NewRecord(q.Questions()[0].Name(), time.Minute, txt))
 		}
 		resp, _ := b.Build()
 		_ = w.WriteMsg(resp)
@@ -92,9 +91,9 @@ func TestTCPServerNoTruncation(t *testing.T) {
 	ex, err := tcp.New(srv.Addr())
 	require.NoError(t, err)
 
-	q, _ := dnsmsg.NewBuilder().
+	q, _ := wire.NewBuilder().
 		ID(1).
-		Question(dnsmsg.NewQuestion(dnsname.MustParse("example.com"), rrtype.TXT)).
+		Question(wire.NewQuestion(wire.MustParseName("example.com"), rrtype.TXT)).
 		Build()
 	resp, err := ex.Exchange(t.Context(), q)
 	require.NoError(t, err)

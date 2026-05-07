@@ -6,13 +6,12 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/lestrrat-go/acidns/dnsmsg"
-	"github.com/lestrrat-go/acidns/dnsmsg/rdata"
-	"github.com/lestrrat-go/acidns/dnsmsg/rrtype"
-	"github.com/lestrrat-go/acidns/dnsname"
 	"github.com/lestrrat-go/acidns/dnsserver"
 	"github.com/lestrrat-go/acidns/dnsserver/authoritative"
 	"github.com/lestrrat-go/acidns/dnszone"
+	"github.com/lestrrat-go/acidns/wire"
+	"github.com/lestrrat-go/acidns/wire/rdata"
+	"github.com/lestrrat-go/acidns/wire/rrtype"
 	"github.com/stretchr/testify/require"
 )
 
@@ -42,13 +41,13 @@ func newAuth(t *testing.T) authoritative.Authoritative {
 
 // inProcWriter is a minimal ResponseWriter that captures the response.
 type inProcWriter struct {
-	resp    dnsmsg.Message
+	resp    wire.Message
 	network string
 }
 
-func (w *inProcWriter) WriteMsg(m dnsmsg.Message) error { w.resp = m; return nil }
-func (w *inProcWriter) RemoteAddr() netip.AddrPort      { return netip.AddrPort{} }
-func (w *inProcWriter) LocalAddr() netip.AddrPort       { return netip.AddrPort{} }
+func (w *inProcWriter) WriteMsg(m wire.Message) error { w.resp = m; return nil }
+func (w *inProcWriter) RemoteAddr() netip.AddrPort    { return netip.AddrPort{} }
+func (w *inProcWriter) LocalAddr() netip.AddrPort     { return netip.AddrPort{} }
 func (w *inProcWriter) Network() string {
 	if w.network == "" {
 		return "tcp"
@@ -56,12 +55,12 @@ func (w *inProcWriter) Network() string {
 	return w.network
 }
 
-func ask(t *testing.T, a dnsserver.Handler, name string, rt rrtype.Type) dnsmsg.Message {
+func ask(t *testing.T, a dnsserver.Handler, name string, rt rrtype.Type) wire.Message {
 	t.Helper()
-	q, err := dnsmsg.NewBuilder().
+	q, err := wire.NewBuilder().
 		ID(1).
 		RecursionDesired(true).
-		Question(dnsmsg.NewQuestion(dnsname.MustParse(name), rt)).
+		Question(wire.NewQuestion(wire.MustParseName(name), rt)).
 		Build()
 	require.NoError(t, err)
 	w := &inProcWriter{}
@@ -74,7 +73,7 @@ func TestExactMatchA(t *testing.T) {
 	t.Parallel()
 	a := newAuth(t)
 	resp := ask(t, a, "www.example.com", rrtype.A)
-	require.Equal(t, dnsmsg.RCODENoError, resp.Flags().RCODE())
+	require.Equal(t, wire.RCODENoError, resp.Flags().RCODE())
 	require.True(t, resp.Flags().Authoritative())
 	require.Equal(t, 1, len(resp.Answers()))
 	require.Equal(t, "192.0.2.2", resp.Answers()[0].RData().(rdata.A).Addr().String())
@@ -84,7 +83,7 @@ func TestNODATA(t *testing.T) {
 	t.Parallel()
 	a := newAuth(t)
 	resp := ask(t, a, "mail.example.com", rrtype.AAAA) // mail has A but not AAAA
-	require.Equal(t, dnsmsg.RCODENoError, resp.Flags().RCODE())
+	require.Equal(t, wire.RCODENoError, resp.Flags().RCODE())
 	require.Equal(t, 0, len(resp.Answers()))
 	require.Equal(t, 1, len(resp.Authorities()))
 	require.Equal(t, rrtype.SOA, resp.Authorities()[0].Type())
@@ -94,7 +93,7 @@ func TestNXDOMAIN(t *testing.T) {
 	t.Parallel()
 	a := newAuth(t)
 	resp := ask(t, a, "nope.example.com", rrtype.A)
-	require.Equal(t, dnsmsg.RCODENXDomain, resp.Flags().RCODE())
+	require.Equal(t, wire.RCODENXDomain, resp.Flags().RCODE())
 	require.Equal(t, 0, len(resp.Answers()))
 	require.Equal(t, 1, len(resp.Authorities()))
 	require.Equal(t, rrtype.SOA, resp.Authorities()[0].Type())
@@ -104,7 +103,7 @@ func TestRefused(t *testing.T) {
 	t.Parallel()
 	a := newAuth(t)
 	resp := ask(t, a, "example.org", rrtype.A) // outside zone
-	require.Equal(t, dnsmsg.RCODERefused, resp.Flags().RCODE())
+	require.Equal(t, wire.RCODERefused, resp.Flags().RCODE())
 	require.False(t, resp.Flags().Authoritative())
 }
 
@@ -112,7 +111,7 @@ func TestCNAMEChase(t *testing.T) {
 	t.Parallel()
 	a := newAuth(t)
 	resp := ask(t, a, "alias.example.com", rrtype.A)
-	require.Equal(t, dnsmsg.RCODENoError, resp.Flags().RCODE())
+	require.Equal(t, wire.RCODENoError, resp.Flags().RCODE())
 	require.Equal(t, 2, len(resp.Answers()))
 	require.Equal(t, rrtype.CNAME, resp.Answers()[0].Type())
 	require.Equal(t, rrtype.A, resp.Answers()[1].Type())
@@ -123,7 +122,7 @@ func TestCNAMEChainOfTwo(t *testing.T) {
 	t.Parallel()
 	a := newAuth(t)
 	resp := ask(t, a, "chain.example.com", rrtype.A)
-	require.Equal(t, dnsmsg.RCODENoError, resp.Flags().RCODE())
+	require.Equal(t, wire.RCODENoError, resp.Flags().RCODE())
 	// chain → alias → www, then A
 	require.Equal(t, 3, len(resp.Answers()))
 	require.Equal(t, rrtype.CNAME, resp.Answers()[0].Type())

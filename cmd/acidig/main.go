@@ -18,10 +18,9 @@ import (
 	"github.com/lestrrat-go/acidns/dnsclient/transport/dot"
 	"github.com/lestrrat-go/acidns/dnsclient/transport/tcp"
 	"github.com/lestrrat-go/acidns/dnsclient/transport/udp"
-	"github.com/lestrrat-go/acidns/dnsmsg"
-	"github.com/lestrrat-go/acidns/dnsmsg/rdata"
-	"github.com/lestrrat-go/acidns/dnsmsg/rrtype"
-	"github.com/lestrrat-go/acidns/dnsname"
+	"github.com/lestrrat-go/acidns/wire"
+	"github.com/lestrrat-go/acidns/wire/rdata"
+	"github.com/lestrrat-go/acidns/wire/rrtype"
 )
 
 func main() {
@@ -92,7 +91,7 @@ func run(argv []string) error {
 	ctx, cancel := context.WithTimeout(context.Background(), o.timeout)
 	defer cancel()
 
-	name, err := dnsname.Parse(host)
+	name, err := wire.ParseName(host)
 	if err != nil {
 		return fmt.Errorf("parse name: %w", err)
 	}
@@ -189,7 +188,7 @@ func serverAddr(o opts, defaultPort int) (netip.AddrPort, error) {
 	return netip.AddrPortFrom(addr, uint16(port)), nil
 }
 
-func render(w *os.File, name dnsname.Name, rt rrtype.Type, ans dnsclient.Answer, elapsed time.Duration, o opts) {
+func render(w *os.File, name wire.Name, rt rrtype.Type, ans dnsclient.Answer, elapsed time.Duration, o opts) {
 	if o.short {
 		for _, rec := range ans.Records() {
 			fmt.Fprintln(w, formatRData(rec.RData()))
@@ -197,7 +196,7 @@ func render(w *os.File, name dnsname.Name, rt rrtype.Type, ans dnsclient.Answer,
 		return
 	}
 	fmt.Fprintf(w, ";; QUESTION SECTION:\n;%s\t\tIN\t%s\n\n", name, rt)
-	if rcode := ans.RCODE(); rcode != dnsmsg.RCODENoError {
+	if rcode := ans.RCODE(); rcode != wire.RCODENoError {
 		fmt.Fprintf(w, ";; ->>HEADER<<- rcode: %s\n", rcode)
 	}
 
@@ -235,7 +234,7 @@ func render(w *os.File, name dnsname.Name, rt rrtype.Type, ans dnsclient.Answer,
 	}
 }
 
-func formatRecord(rec dnsmsg.Record) string {
+func formatRecord(rec wire.Record) string {
 	return fmt.Sprintf("%s\t%d\t%s\t%s\t%s",
 		rec.Name(), int(rec.TTL().Seconds()), rec.Class(), rec.Type(), formatRData(rec.RData()))
 }

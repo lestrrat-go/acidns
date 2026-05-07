@@ -4,8 +4,8 @@
 // whose public half is normally published as a DNSKEY (or the legacy
 // KEY) record at the signer's name.
 //
-// As with tsig, this package operates on raw wire bytes — call
-// dnsmsg.Marshal first, then Sign or Verify.
+// As with tsig, this package operates on raw msg bytes — call
+// wire.Marshal first, then Sign or Verify.
 package sig0
 
 import (
@@ -24,8 +24,8 @@ import (
 	"math/big"
 	"time"
 
-	"github.com/lestrrat-go/acidns/dnsmsg/rdata"
-	"github.com/lestrrat-go/acidns/dnsname"
+	"github.com/lestrrat-go/acidns/wire"
+	"github.com/lestrrat-go/acidns/wire/rdata"
 )
 
 // sigType is the SIG RR type code (RFC 2535 §4.1, retained for SIG(0)).
@@ -36,44 +36,44 @@ const classANY uint16 = 255
 
 // Errors.
 var (
-	ErrSIGMissing       = errors.New("sig0: no SIG(0) record in message")
-	ErrBadTime          = errors.New("sig0: time outside validity window")
-	ErrBadSignature     = errors.New("sig0: signature did not verify")
-	ErrUnsupportedAlg   = errors.New("sig0: unsupported algorithm")
+	ErrSIGMissing     = errors.New("sig0: no SIG(0) record in message")
+	ErrBadTime        = errors.New("sig0: time outside validity window")
+	ErrBadSignature   = errors.New("sig0: signature did not verify")
+	ErrUnsupportedAlg = errors.New("sig0: unsupported algorithm")
 )
 
-// Sign appends a SIG(0) RR to the additional section of wire and returns
-// the new wire bytes. signFn produces the signature over the bytes that
+// Sign appends a SIG(0) RR to the additional section of msg and returns
+// the new msg bytes. signFn produces the signature over the bytes that
 // SIG(0) MUST cover (RFC 2931 §3.1) and is normally a closure around an
 // *rsa.PrivateKey, *ecdsa.PrivateKey, or ed25519.PrivateKey.
-func Sign(wire []byte, signer dnsname.Name, alg rdata.DNSSECAlgorithm, keyTag uint16,
+func Sign(msg []byte, signer wire.Name, alg rdata.DNSSECAlgorithm, keyTag uint16,
 	signFn func([]byte) ([]byte, error),
 	now time.Time, validity time.Duration) ([]byte, error) {
-	if len(wire) < 12 {
-		return nil, fmt.Errorf("sig0: wire too short")
+	if len(msg) < 12 {
+		return nil, fmt.Errorf("sig0: msg too short")
 	}
 	exp := now.Add(validity)
 	rdataNoSig := buildSIGRDataPrefix(alg, uint32(exp.Unix()), uint32(now.Unix()), keyTag, signer)
 
-	signedData := append(append([]byte(nil), rdataNoSig...), wire...)
+	signedData := append(append([]byte(nil), rdataNoSig...), msg...)
 	sig, err := signFn(signedData)
 	if err != nil {
 		return nil, fmt.Errorf("sig0: sign callback: %w", err)
 	}
 
 	rdataFull := append(append([]byte(nil), rdataNoSig...), sig...)
-	out := append(append([]byte(nil), wire...), appendSIGRR(nil, rdataFull)...)
+	out := append(append([]byte(nil), msg...), appendSIGRR(nil, rdataFull)...)
 
 	arcount := binary.BigEndian.Uint16(out[10:12])
 	binary.BigEndian.PutUint16(out[10:12], arcount+1)
 	return out, nil
 }
 
-// Verify confirms the trailing SIG(0) RR over wire using pubkeyWire, the
-// algorithm-specific public-key bytes (same wire format as a DNSKEY's
-// PublicKey field). Returns the wire bytes without the SIG(0) RR.
-func Verify(wire []byte, alg rdata.DNSSECAlgorithm, pubkeyWire []byte, expectedSigner dnsname.Name, now time.Time) ([]byte, error) {
-	body, sig, err := stripSIG(wire)
+// Verify confirms the trailing SIG(0) RR over msg using pubkeyWire, the
+// algorithm-specific public-key bytes (same msg format as a DNSKEY's
+// PublicKey field). Returns the msg bytes without the SIG(0) RR.
+func Verify(msg []byte, alg rdata.DNSSECAlgorithm, pubkeyWire []byte, expectedSigner wire.Name, now time.Time) ([]byte, error) {
+	body, sig, err := stripSIG(msg)
 	if err != nil {
 		return nil, err
 	}
@@ -98,12 +98,12 @@ func Verify(wire []byte, alg rdata.DNSSECAlgorithm, pubkeyWire []byte, expectedS
 
 // buildSIGRDataPrefix builds the part of the SIG(0) rdata that comes
 // before the signature field — exactly the bytes signed/verified.
-func buildSIGRDataPrefix(alg rdata.DNSSECAlgorithm, expiration, inception uint32, keyTag uint16, signer dnsname.Name) []byte {
+func buildSIGRDataPrefix(alg rdata.DNSSECAlgorithm, expiration, inception uint32, keyTag uint16, signer wire.Name) []byte {
 	var buf []byte
 	// type covered = 0 for SIG(0)
 	buf = binary.BigEndian.AppendUint16(buf, 0)
 	buf = append(buf, uint8(alg))
-	buf = append(buf, 0) // labels = 0
+	buf = append(buf, 0)                        // labels = 0
 	buf = binary.BigEndian.AppendUint32(buf, 0) // original TTL = 0
 	buf = binary.BigEndian.AppendUint32(buf, expiration)
 	buf = binary.BigEndian.AppendUint32(buf, inception)
@@ -112,7 +112,7 @@ func buildSIGRDataPrefix(alg rdata.DNSSECAlgorithm, expiration, inception uint32
 	return buf
 }
 
-// appendSIGRR builds the SIG(0) RR's wire form: owner=root, type=SIG,
+// appendSIGRR builds the SIG(0) RR's msg form: owner=root, type=SIG,
 // class=ANY, TTL=0, rdlen, rdata.
 func appendSIGRR(buf []byte, rdataBytes []byte) []byte {
 	buf = append(buf, 0) // owner = root
@@ -129,39 +129,39 @@ type parsedSIG struct {
 	expiration uint32
 	inception  uint32
 	keyTag     uint16
-	signer     dnsname.Name
+	signer     wire.Name
 	signature  []byte
 }
 
-func stripSIG(wire []byte) ([]byte, parsedSIG, error) {
-	if len(wire) < 12 {
-		return nil, parsedSIG{}, fmt.Errorf("sig0: wire too short")
+func stripSIG(msg []byte) ([]byte, parsedSIG, error) {
+	if len(msg) < 12 {
+		return nil, parsedSIG{}, fmt.Errorf("sig0: msg too short")
 	}
-	arcount := binary.BigEndian.Uint16(wire[10:12])
+	arcount := binary.BigEndian.Uint16(msg[10:12])
 	if arcount == 0 {
 		return nil, parsedSIG{}, ErrSIGMissing
 	}
 
-	last, err := findLastRROffset(wire)
+	last, err := findLastRROffset(msg)
 	if err != nil {
 		return nil, parsedSIG{}, err
 	}
-	owner, off, err := dnsname.DecodeWire(wire, last)
+	owner, off, err := wire.DecodeName(msg, last)
 	if err != nil {
 		return nil, parsedSIG{}, fmt.Errorf("sig0: parse owner: %w", err)
 	}
 	_ = owner
-	if off+10 > len(wire) {
+	if off+10 > len(msg) {
 		return nil, parsedSIG{}, fmt.Errorf("sig0: truncated header")
 	}
-	t := binary.BigEndian.Uint16(wire[off : off+2])
+	t := binary.BigEndian.Uint16(msg[off : off+2])
 	if t != sigType {
 		return nil, parsedSIG{}, ErrSIGMissing
 	}
-	rdlen := int(binary.BigEndian.Uint16(wire[off+8 : off+10]))
+	rdlen := int(binary.BigEndian.Uint16(msg[off+8 : off+10]))
 	rdataStart := off + 10
 	rdataEnd := rdataStart + rdlen
-	if rdataEnd > len(wire) {
+	if rdataEnd > len(msg) {
 		return nil, parsedSIG{}, fmt.Errorf("sig0: truncated rdata")
 	}
 
@@ -171,27 +171,27 @@ func stripSIG(wire []byte) ([]byte, parsedSIG, error) {
 	}
 	// type covered (2) + algorithm(1) + labels(1) + origTTL(4) + sigExp(4) + sigInc(4) + keyTag(2) = 18
 	cur += 2 // skip type covered
-	alg := rdata.DNSSECAlgorithm(wire[cur])
+	alg := rdata.DNSSECAlgorithm(msg[cur])
 	cur++
-	cur++ // labels
+	cur++    // labels
 	cur += 4 // orig TTL
-	expiration := binary.BigEndian.Uint32(wire[cur:])
+	expiration := binary.BigEndian.Uint32(msg[cur:])
 	cur += 4
-	inception := binary.BigEndian.Uint32(wire[cur:])
+	inception := binary.BigEndian.Uint32(msg[cur:])
 	cur += 4
-	keyTag := binary.BigEndian.Uint16(wire[cur:])
+	keyTag := binary.BigEndian.Uint16(msg[cur:])
 	cur += 2
 
-	signer, sigStart, err := dnsname.DecodeWire(wire, cur)
+	signer, sigStart, err := wire.DecodeName(msg, cur)
 	if err != nil {
 		return nil, parsedSIG{}, fmt.Errorf("sig0: parse signer: %w", err)
 	}
 	if sigStart > rdataEnd {
 		return nil, parsedSIG{}, fmt.Errorf("sig0: signer overruns rdata")
 	}
-	signature := append([]byte(nil), wire[sigStart:rdataEnd]...)
+	signature := append([]byte(nil), msg[sigStart:rdataEnd]...)
 
-	body := append([]byte(nil), wire[:last]...)
+	body := append([]byte(nil), msg[:last]...)
 	binary.BigEndian.PutUint16(body[10:12], arcount-1)
 	return body, parsedSIG{
 		algorithm: alg, expiration: expiration, inception: inception,
@@ -199,36 +199,36 @@ func stripSIG(wire []byte) ([]byte, parsedSIG, error) {
 	}, nil
 }
 
-func findLastRROffset(wire []byte) (int, error) {
-	qdcount := int(binary.BigEndian.Uint16(wire[4:6]))
-	ancount := int(binary.BigEndian.Uint16(wire[6:8]))
-	nscount := int(binary.BigEndian.Uint16(wire[8:10]))
-	arcount := int(binary.BigEndian.Uint16(wire[10:12]))
+func findLastRROffset(msg []byte) (int, error) {
+	qdcount := int(binary.BigEndian.Uint16(msg[4:6]))
+	ancount := int(binary.BigEndian.Uint16(msg[6:8]))
+	nscount := int(binary.BigEndian.Uint16(msg[8:10]))
+	arcount := int(binary.BigEndian.Uint16(msg[10:12]))
 	totalRR := ancount + nscount + arcount
 	off := 12
 	for i := 0; i < qdcount; i++ {
-		_, next, err := dnsname.DecodeWire(wire, off)
+		_, next, err := wire.DecodeName(msg, off)
 		if err != nil {
 			return 0, err
 		}
 		off = next + 4
-		if off > len(wire) {
+		if off > len(msg) {
 			return 0, fmt.Errorf("sig0: truncated question")
 		}
 	}
 	last := off
 	for i := 0; i < totalRR; i++ {
 		last = off
-		_, next, err := dnsname.DecodeWire(wire, off)
+		_, next, err := wire.DecodeName(msg, off)
 		if err != nil {
 			return 0, err
 		}
-		if next+10 > len(wire) {
+		if next+10 > len(msg) {
 			return 0, fmt.Errorf("sig0: truncated rr header")
 		}
-		rdlen := int(binary.BigEndian.Uint16(wire[next+8 : next+10]))
+		rdlen := int(binary.BigEndian.Uint16(msg[next+8 : next+10]))
 		off = next + 10 + rdlen
-		if off > len(wire) {
+		if off > len(msg) {
 			return 0, fmt.Errorf("sig0: truncated rr body")
 		}
 	}

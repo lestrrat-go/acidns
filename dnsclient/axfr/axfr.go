@@ -19,10 +19,9 @@ import (
 	"time"
 
 	"github.com/lestrrat-go/acidns/dnsclient/transport"
-	"github.com/lestrrat-go/acidns/dnsmsg"
-	"github.com/lestrrat-go/acidns/dnsmsg/rdata"
-	"github.com/lestrrat-go/acidns/dnsmsg/rrtype"
-	"github.com/lestrrat-go/acidns/dnsname"
+	"github.com/lestrrat-go/acidns/wire"
+	"github.com/lestrrat-go/acidns/wire/rdata"
+	"github.com/lestrrat-go/acidns/wire/rrtype"
 )
 
 // Transfer is the iterator returned by Start.
@@ -35,13 +34,13 @@ type Transfer interface {
 // RecordEvent carries a single record from the transfer.
 type RecordEvent interface {
 	isAXFREvent()
-	Record() dnsmsg.Record
+	Record() wire.Record
 }
 
-type recordEvent struct{ rec dnsmsg.Record }
+type recordEvent struct{ rec wire.Record }
 
-func (recordEvent) isAXFREvent()            {}
-func (e recordEvent) Record() dnsmsg.Record { return e.rec }
+func (recordEvent) isAXFREvent()          {}
+func (e recordEvent) Record() wire.Record { return e.rec }
 
 // Option configures a Start call.
 type Option interface{ applyAXFR(*config) }
@@ -62,7 +61,7 @@ func WithTimeout(d time.Duration) Option {
 
 // Start sends an AXFR query for zone over ex and returns a Transfer
 // iterator positioned just past the leading SOA.
-func Start(ctx context.Context, ex transport.StreamExchanger, zone dnsname.Name, opts ...Option) (Transfer, error) {
+func Start(ctx context.Context, ex transport.StreamExchanger, zone wire.Name, opts ...Option) (Transfer, error) {
 	c := config{timeout: 30 * time.Second}
 	for _, o := range opts {
 		o.applyAXFR(&c)
@@ -73,9 +72,9 @@ func Start(ctx context.Context, ex transport.StreamExchanger, zone dnsname.Name,
 	if err != nil {
 		return nil, err
 	}
-	q, err := dnsmsg.NewBuilder().
+	q, err := wire.NewBuilder().
 		ID(id).
-		Question(dnsmsg.NewQuestion(zone, rrtype.AXFR)).
+		Question(wire.NewQuestion(zone, rrtype.AXFR)).
 		Build()
 	if err != nil {
 		return nil, err
@@ -96,9 +95,9 @@ type transfer struct {
 	stream transport.MessageStream
 	reader *recReader
 
-	newSOA           rdata.SOA
-	emittedFirstSOA  bool
-	done             bool
+	newSOA          rdata.SOA
+	emittedFirstSOA bool
+	done            bool
 }
 
 func (t *transfer) NewSOA() rdata.SOA { return t.newSOA }
@@ -142,13 +141,13 @@ func (t *transfer) Next(ctx context.Context) (RecordEvent, error) {
 // pushback queue.
 type recReader struct {
 	stream   transport.MessageStream
-	curMsg   dnsmsg.Message
+	curMsg   wire.Message
 	curIdx   int
-	pushback []dnsmsg.Record
+	pushback []wire.Record
 	msgEOF   bool
 }
 
-func (rr *recReader) Read(ctx context.Context) (dnsmsg.Record, error) {
+func (rr *recReader) Read(ctx context.Context) (wire.Record, error) {
 	if len(rr.pushback) > 0 {
 		rec := rr.pushback[0]
 		rr.pushback = rr.pushback[1:]
@@ -171,7 +170,7 @@ func (rr *recReader) Read(ctx context.Context) (dnsmsg.Record, error) {
 			}
 			return nil, err
 		}
-		if rcode := msg.Flags().RCODE(); rcode != dnsmsg.RCODENoError {
+		if rcode := msg.Flags().RCODE(); rcode != wire.RCODENoError {
 			return nil, fmt.Errorf("axfr: %s", rcode)
 		}
 		rr.curMsg = msg
@@ -179,7 +178,7 @@ func (rr *recReader) Read(ctx context.Context) (dnsmsg.Record, error) {
 	}
 }
 
-func (rr *recReader) Push(rec dnsmsg.Record) {
+func (rr *recReader) Push(rec wire.Record) {
 	rr.pushback = append(rr.pushback, rec)
 }
 

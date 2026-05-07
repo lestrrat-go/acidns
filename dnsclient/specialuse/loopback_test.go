@@ -4,8 +4,8 @@ import (
 	"testing"
 
 	"github.com/lestrrat-go/acidns/dnsclient/specialuse"
-	"github.com/lestrrat-go/acidns/dnsmsg/rrtype"
-	"github.com/lestrrat-go/acidns/dnsname"
+	"github.com/lestrrat-go/acidns/wire"
+	"github.com/lestrrat-go/acidns/wire/rrtype"
 	"github.com/stretchr/testify/require"
 )
 
@@ -25,5 +25,5 @@ func TestLoopbackForType(t *testing.T) {
 
 func TestForInvalidName(t *testing.T) {
 	t.Parallel()
-	require.Equal(t, specialuse.Pass, specialuse.For(dnsname.Name{}))
+	require.Equal(t, specialuse.Pass, specialuse.For(wire.Name{}))
 }

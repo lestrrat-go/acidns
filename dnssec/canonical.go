@@ -6,9 +6,8 @@ import (
 	"fmt"
 	"sort"
 
-	"github.com/lestrrat-go/acidns/dnsmsg"
-	"github.com/lestrrat-go/acidns/dnsmsg/rdata"
-	"github.com/lestrrat-go/acidns/dnsname"
+	"github.com/lestrrat-go/acidns/wire"
+	"github.com/lestrrat-go/acidns/wire/rdata"
 )
 
 // canonicalRRSet produces the byte stream defined by RFC 4034 §6.3 for an
@@ -17,7 +16,7 @@ import (
 // canonical form of any embedded names.
 //
 // Pre-condition: every record in set has the same owner/type/class.
-func canonicalRRSet(set []dnsmsg.Record, rrsig rdata.RRSIG) ([]byte, error) {
+func canonicalRRSet(set []wire.Record, rrsig rdata.RRSIG) ([]byte, error) {
 	if len(set) == 0 {
 		return nil, fmt.Errorf("dnssec: empty rrset")
 	}
@@ -54,7 +53,7 @@ func canonicalRRSet(set []dnsmsg.Record, rrsig rdata.RRSIG) ([]byte, error) {
 // with the wildcard owner (not the QNAME) for signing — but the validator
 // is given the response RR, so we reconstruct only when the rrsig's
 // labels count is smaller than the owner's label count.
-func canonicalOwner(owner dnsname.Name, rrsig rdata.RRSIG) []byte {
+func canonicalOwner(owner wire.Name, rrsig rdata.RRSIG) []byte {
 	rrsigLabels := int(rrsig.Labels())
 	if rrsigLabels > 0 && rrsigLabels < owner.NumLabels() {
 		// Replace the leading labels with a single "*" — wildcard reconstruction.
@@ -63,14 +62,14 @@ func canonicalOwner(owner dnsname.Name, rrsig rdata.RRSIG) []byte {
 		for l := range stripped.Labels() {
 			labels = append(labels, string(l))
 		}
-		if star, err := dnsname.FromLabels(labels...); err == nil {
+		if star, err := wire.NameFromLabels(labels...); err == nil {
 			return star.AppendWire(nil)
 		}
 	}
 	return owner.AppendWire(nil)
 }
 
-func stripLeadingLabels(n dnsname.Name, count int) dnsname.Name {
+func stripLeadingLabels(n wire.Name, count int) wire.Name {
 	cur := n
 	for i := 0; i < count; i++ {
 		parent, ok := cur.Parent()
@@ -134,7 +133,7 @@ func rrsigSignedHeader(r rdata.RRSIG) []byte {
 }
 
 // signedData returns the bytes a verifier hashes against the RRSIG.
-func signedData(set []dnsmsg.Record, r rdata.RRSIG) ([]byte, error) {
+func signedData(set []wire.Record, r rdata.RRSIG) ([]byte, error) {
 	hdr := rrsigSignedHeader(r)
 	body, err := canonicalRRSet(set, r)
 	if err != nil {

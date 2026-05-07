@@ -3,17 +3,16 @@ package examples_test
 import (
 	"fmt"
 
-	"github.com/lestrrat-go/acidns/dnsmsg"
-	"github.com/lestrrat-go/acidns/dnsmsg/rrtype"
-	"github.com/lestrrat-go/acidns/dnsname"
+	"github.com/lestrrat-go/acidns/wire"
+	"github.com/lestrrat-go/acidns/wire/rrtype"
 )
 
 func Example_dnsmsg_build() {
 	// Builder constructs a Message piece-by-piece. Setters chain.
-	q, err := dnsmsg.NewBuilder().
+	q, err := wire.NewBuilder().
 		ID(0x1234).
 		RecursionDesired(true).
-		Question(dnsmsg.NewQuestion(dnsname.MustParse("example.com"), rrtype.A)).
+		Question(wire.NewQuestion(wire.MustParseName("example.com"), rrtype.A)).
 		Build()
 	if err != nil {
 		fmt.Println("build:", err)

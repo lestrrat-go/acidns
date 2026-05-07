@@ -5,20 +5,19 @@ import (
 	"net/netip"
 	"testing"
 
-	"github.com/lestrrat-go/acidns/dnsmsg"
-	"github.com/lestrrat-go/acidns/dnsmsg/rdata"
-	"github.com/lestrrat-go/acidns/dnsmsg/rrtype"
-	"github.com/lestrrat-go/acidns/dnsname"
 	"github.com/lestrrat-go/acidns/dnsserver"
 	"github.com/lestrrat-go/acidns/dnsserver/chaos"
+	"github.com/lestrrat-go/acidns/wire"
+	"github.com/lestrrat-go/acidns/wire/rdata"
+	"github.com/lestrrat-go/acidns/wire/rrtype"
 	"github.com/stretchr/testify/require"
 )
 
 type captureWriter struct {
-	resp dnsmsg.Message
+	resp wire.Message
 }
 
-func (c *captureWriter) WriteMsg(m dnsmsg.Message) error {
+func (c *captureWriter) WriteMsg(m wire.Message) error {
 	c.resp = m
 	return nil
 }
@@ -26,11 +25,11 @@ func (c *captureWriter) RemoteAddr() netip.AddrPort { return netip.AddrPort{} }
 func (c *captureWriter) LocalAddr() netip.AddrPort  { return netip.AddrPort{} }
 func (c *captureWriter) Network() string            { return "udp" }
 
-func mustQuery(t *testing.T, name string, class rrtype.Class) dnsmsg.Message {
+func mustQuery(t *testing.T, name string, class rrtype.Class) wire.Message {
 	t.Helper()
-	q, err := dnsmsg.NewBuilder().
+	q, err := wire.NewBuilder().
 		ID(1).
-		Question(dnsmsg.NewQuestionClass(dnsname.MustParse(name), rrtype.TXT, class)).
+		Question(wire.NewQuestionClass(wire.MustParseName(name), rrtype.TXT, class)).
 		Build()
 	require.NoError(t, err)
 	return q
@@ -71,9 +70,9 @@ func TestChaosVersion(t *testing.T) {
 func TestChaosDelegatesOnNonChaos(t *testing.T) {
 	t.Parallel()
 	delegated := false
-	next := dnsserver.HandlerFunc(func(_ context.Context, w dnsserver.ResponseWriter, q dnsmsg.Message) {
+	next := dnsserver.HandlerFunc(func(_ context.Context, w dnsserver.ResponseWriter, q wire.Message) {
 		delegated = true
-		resp, _ := dnsmsg.NewBuilder().ID(q.ID()).Response(true).Build()
+		resp, _ := wire.NewBuilder().ID(q.ID()).Response(true).Build()
 		_ = w.WriteMsg(resp)
 	})
 	h := chaos.New(chaos.WithIdentifier("foo"), chaos.WithNext(next))
@@ -87,5 +86,5 @@ func TestChaosRefusesWithoutNext(t *testing.T) {
 	h := chaos.New(chaos.WithIdentifier("foo"))
 	w := &captureWriter{}
 	h.ServeDNS(context.Background(), w, mustQuery(t, "example.com.", rrtype.ClassIN))
-	require.Equal(t, dnsmsg.RCODERefused, w.resp.Flags().RCODE())
+	require.Equal(t, wire.RCODERefused, w.resp.Flags().RCODE())
 }

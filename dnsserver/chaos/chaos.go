@@ -1,9 +1,9 @@
 // Package chaos answers CHAOS-class TXT identity queries per RFC 4892:
 //
-//   id.server.        — server identifier
-//   hostname.bind.    — BIND-style hostname (legacy synonym)
-//   version.server.   — server version
-//   version.bind.     — BIND-style version (legacy synonym)
+//	id.server.        — server identifier
+//	hostname.bind.    — BIND-style hostname (legacy synonym)
+//	version.server.   — server version
+//	version.bind.     — BIND-style version (legacy synonym)
 //
 // It is intended to be composed with another authoritative or recursive
 // Handler: the chaos.Handler responds to matching queries, otherwise it
@@ -15,11 +15,10 @@ import (
 	"strings"
 	"time"
 
-	"github.com/lestrrat-go/acidns/dnsmsg"
-	"github.com/lestrrat-go/acidns/dnsmsg/rdata"
-	"github.com/lestrrat-go/acidns/dnsmsg/rrtype"
-	"github.com/lestrrat-go/acidns/dnsname"
 	"github.com/lestrrat-go/acidns/dnsserver"
+	"github.com/lestrrat-go/acidns/wire"
+	"github.com/lestrrat-go/acidns/wire/rdata"
+	"github.com/lestrrat-go/acidns/wire/rrtype"
 )
 
 // Option customises the chaos handler.
@@ -67,7 +66,7 @@ func New(opts ...Option) dnsserver.Handler {
 
 type handler struct{ cfg config }
 
-func (h *handler) ServeDNS(ctx context.Context, w dnsserver.ResponseWriter, q dnsmsg.Message) {
+func (h *handler) ServeDNS(ctx context.Context, w dnsserver.ResponseWriter, q wire.Message) {
 	if len(q.Questions()) != 1 {
 		h.delegateOrRefuse(ctx, w, q)
 		return
@@ -87,8 +86,8 @@ func (h *handler) ServeDNS(ctx context.Context, w dnsserver.ResponseWriter, q dn
 		_ = writeRefused(w, q)
 		return
 	}
-	rec := dnsmsg.NewRecordClass(qst.Name(), rrtype.ClassCH, 0*time.Second, rd)
-	resp, err := dnsmsg.NewBuilder().
+	rec := wire.NewRecordClass(qst.Name(), rrtype.ClassCH, 0*time.Second, rd)
+	resp, err := wire.NewBuilder().
 		ID(q.ID()).
 		Response(true).
 		Authoritative(true).
@@ -102,7 +101,7 @@ func (h *handler) ServeDNS(ctx context.Context, w dnsserver.ResponseWriter, q dn
 	_ = w.WriteMsg(resp)
 }
 
-func (h *handler) lookup(n dnsname.Name) (string, bool) {
+func (h *handler) lookup(n wire.Name) (string, bool) {
 	s := strings.ToLower(strings.TrimSuffix(n.String(), "."))
 	switch s {
 	case "id.server", "hostname.bind":
@@ -119,7 +118,7 @@ func (h *handler) lookup(n dnsname.Name) (string, bool) {
 	return "", false
 }
 
-func (h *handler) delegateOrRefuse(ctx context.Context, w dnsserver.ResponseWriter, q dnsmsg.Message) {
+func (h *handler) delegateOrRefuse(ctx context.Context, w dnsserver.ResponseWriter, q wire.Message) {
 	if h.cfg.next != nil {
 		h.cfg.next.ServeDNS(ctx, w, q)
 		return
@@ -127,8 +126,8 @@ func (h *handler) delegateOrRefuse(ctx context.Context, w dnsserver.ResponseWrit
 	_ = writeRefused(w, q)
 }
 
-func writeRefused(w dnsserver.ResponseWriter, q dnsmsg.Message) error {
-	b := dnsmsg.NewBuilder().ID(q.ID()).Response(true).RCODE(dnsmsg.RCODERefused)
+func writeRefused(w dnsserver.ResponseWriter, q wire.Message) error {
+	b := wire.NewBuilder().ID(q.ID()).Response(true).RCODE(wire.RCODERefused)
 	for _, qq := range q.Questions() {
 		b = b.Question(qq)
 	}

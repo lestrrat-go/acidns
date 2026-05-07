@@ -5,11 +5,10 @@ import (
 	"testing"
 	"time"
 
-	"github.com/lestrrat-go/acidns/dnsmsg"
-	"github.com/lestrrat-go/acidns/dnsmsg/rdata"
-	"github.com/lestrrat-go/acidns/dnsmsg/rrtype"
-	"github.com/lestrrat-go/acidns/dnsname"
 	"github.com/lestrrat-go/acidns/dnssec"
+	"github.com/lestrrat-go/acidns/wire"
+	"github.com/lestrrat-go/acidns/wire/rdata"
+	"github.com/lestrrat-go/acidns/wire/rrtype"
 	"github.com/stretchr/testify/require"
 )
 
@@ -19,45 +18,45 @@ func TestSignedDataAcrossRDataTypes(t *testing.T) {
 	makeRRSIG := func(typ rrtype.Type, labels uint8) rdata.RRSIG {
 		return rdata.NewRRSIG(typ, rdata.AlgED25519, labels,
 			time.Hour, time.Now().Add(time.Hour), time.Now().Add(-time.Hour),
-			1, dnsname.MustParse("example.com"), nil)
+			1, wire.MustParseName("example.com"), nil)
 	}
 
 	cases := []struct {
 		name string
-		set  []dnsmsg.Record
+		set  []wire.Record
 		typ  rrtype.Type
 	}{
 		{
 			"NS",
-			[]dnsmsg.Record{
-				dnsmsg.NewRecord(dnsname.MustParse("example.com"), time.Hour,
-					rdata.NewNS(dnsname.MustParse("ns1.example.com"))),
+			[]wire.Record{
+				wire.NewRecord(wire.MustParseName("example.com"), time.Hour,
+					rdata.NewNS(wire.MustParseName("ns1.example.com"))),
 			},
 			rrtype.NS,
 		},
 		{
 			"CNAME",
-			[]dnsmsg.Record{
-				dnsmsg.NewRecord(dnsname.MustParse("a.example.com"), time.Hour,
-					rdata.NewCNAME(dnsname.MustParse("b.example.com"))),
+			[]wire.Record{
+				wire.NewRecord(wire.MustParseName("a.example.com"), time.Hour,
+					rdata.NewCNAME(wire.MustParseName("b.example.com"))),
 			},
 			rrtype.CNAME,
 		},
 		{
 			"PTR",
-			[]dnsmsg.Record{
-				dnsmsg.NewRecord(dnsname.MustParse("1.2.0.192.in-addr.arpa"), time.Hour,
-					rdata.NewPTR(dnsname.MustParse("host.example.com"))),
+			[]wire.Record{
+				wire.NewRecord(wire.MustParseName("1.2.0.192.in-addr.arpa"), time.Hour,
+					rdata.NewPTR(wire.MustParseName("host.example.com"))),
 			},
 			rrtype.PTR,
 		},
 		{
 			"SOA",
-			[]dnsmsg.Record{
-				dnsmsg.NewRecord(dnsname.MustParse("example.com"), time.Hour,
+			[]wire.Record{
+				wire.NewRecord(wire.MustParseName("example.com"), time.Hour,
 					rdata.NewSOA(
-						dnsname.MustParse("ns.example.com"),
-						dnsname.MustParse("hm.example.com"),
+						wire.MustParseName("ns.example.com"),
+						wire.MustParseName("hm.example.com"),
 						1, time.Hour, time.Hour, time.Hour, time.Hour,
 					)),
 			},
@@ -65,16 +64,16 @@ func TestSignedDataAcrossRDataTypes(t *testing.T) {
 		},
 		{
 			"MX",
-			[]dnsmsg.Record{
-				dnsmsg.NewRecord(dnsname.MustParse("example.com"), time.Hour,
-					rdata.NewMX(10, dnsname.MustParse("mx.example.com"))),
+			[]wire.Record{
+				wire.NewRecord(wire.MustParseName("example.com"), time.Hour,
+					rdata.NewMX(10, wire.MustParseName("mx.example.com"))),
 			},
 			rrtype.MX,
 		},
 		{
 			"A_unknown_default",
-			[]dnsmsg.Record{
-				dnsmsg.NewRecord(dnsname.MustParse("example.com"), time.Hour,
+			[]wire.Record{
+				wire.NewRecord(wire.MustParseName("example.com"), time.Hour,
 					rdata.NewA(netip.MustParseAddr("192.0.2.1"))),
 			},
 			rrtype.A,
@@ -94,13 +93,13 @@ func TestSignedDataWildcardOwner(t *testing.T) {
 	t.Parallel()
 	// owner has 4 labels but rrsig.Labels=2 → wildcard reconstruction
 	// would walk back two levels.
-	set := []dnsmsg.Record{
-		dnsmsg.NewRecord(dnsname.MustParse("foo.bar.example.com"), time.Hour,
+	set := []wire.Record{
+		wire.NewRecord(wire.MustParseName("foo.bar.example.com"), time.Hour,
 			rdata.NewA(netip.MustParseAddr("192.0.2.1"))),
 	}
 	rrsig := rdata.NewRRSIG(rrtype.A, rdata.AlgED25519, 2,
 		time.Hour, time.Now().Add(time.Hour), time.Now().Add(-time.Hour),
-		1, dnsname.MustParse("example.com"), nil)
+		1, wire.MustParseName("example.com"), nil)
 	out, err := dnssec.SignedData(set, rrsig)
 	require.NoError(t, err)
 	require.NotEmpty(t, out)
@@ -110,7 +109,7 @@ func TestSignedDataEmptySetErrors(t *testing.T) {
 	t.Parallel()
 	rrsig := rdata.NewRRSIG(rrtype.A, rdata.AlgED25519, 1,
 		time.Hour, time.Now().Add(time.Hour), time.Now().Add(-time.Hour),
-		1, dnsname.MustParse("example.com"), nil)
+		1, wire.MustParseName("example.com"), nil)
 	_, err := dnssec.SignedData(nil, rrsig)
 	require.Error(t, err)
 }

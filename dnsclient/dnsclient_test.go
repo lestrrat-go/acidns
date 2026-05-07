@@ -9,10 +9,9 @@ import (
 
 	"github.com/lestrrat-go/acidns/dnsclient"
 	"github.com/lestrrat-go/acidns/dnsclient/transport/udp"
-	"github.com/lestrrat-go/acidns/dnsmsg"
-	"github.com/lestrrat-go/acidns/dnsmsg/rdata"
-	"github.com/lestrrat-go/acidns/dnsmsg/rrtype"
-	"github.com/lestrrat-go/acidns/dnsname"
+	"github.com/lestrrat-go/acidns/wire"
+	"github.com/lestrrat-go/acidns/wire/rdata"
+	"github.com/lestrrat-go/acidns/wire/rrtype"
 	"github.com/stretchr/testify/require"
 )
 
@@ -31,12 +30,12 @@ func startServer(t *testing.T, v4 []netip.Addr, v6 []netip.Addr) netip.AddrPort 
 			if err != nil {
 				return
 			}
-			req, err := dnsmsg.Unmarshal(buf[:n])
+			req, err := wire.Unmarshal(buf[:n])
 			if err != nil || len(req.Questions()) == 0 {
 				continue
 			}
 			q := req.Questions()[0]
-			b := dnsmsg.NewBuilder().
+			b := wire.NewBuilder().
 				ID(req.ID()).
 				Response(true).
 				RecursionDesired(req.Flags().RecursionDesired()).
@@ -45,18 +44,18 @@ func startServer(t *testing.T, v4 []netip.Addr, v6 []netip.Addr) netip.AddrPort 
 			switch q.Type() {
 			case rrtype.A:
 				for _, a := range v4 {
-					b = b.Answer(dnsmsg.NewRecord(q.Name(), 60*time.Second, rdata.NewA(a)))
+					b = b.Answer(wire.NewRecord(q.Name(), 60*time.Second, rdata.NewA(a)))
 				}
 			case rrtype.AAAA:
 				for _, a := range v6 {
-					b = b.Answer(dnsmsg.NewRecord(q.Name(), 60*time.Second, rdata.NewAAAA(a)))
+					b = b.Answer(wire.NewRecord(q.Name(), 60*time.Second, rdata.NewAAAA(a)))
 				}
 			}
 			resp, err := b.Build()
 			if err != nil {
 				continue
 			}
-			wire, err := dnsmsg.Marshal(resp)
+			wire, err := wire.Marshal(resp)
 			if err != nil {
 				continue
 			}
@@ -84,9 +83,9 @@ func TestResolve(t *testing.T) {
 	)
 	r := newResolver(t, addr)
 
-	ans, err := r.Resolve(t.Context(), dnsname.MustParse("example.com"), rrtype.A)
+	ans, err := r.Resolve(t.Context(), wire.MustParseName("example.com"), rrtype.A)
 	require.NoError(t, err)
-	require.Equal(t, dnsmsg.RCODENoError, ans.RCODE())
+	require.Equal(t, wire.RCODENoError, ans.RCODE())
 	require.Equal(t, 1, len(ans.Records()))
 
 	a, ok := ans.Records()[0].RData().(rdata.A)

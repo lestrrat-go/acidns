@@ -12,8 +12,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/lestrrat-go/acidns/dnsmsg"
 	"github.com/lestrrat-go/acidns/dnsserver"
+	"github.com/lestrrat-go/acidns/wire"
 )
 
 // Option configures the limiter.
@@ -81,7 +81,7 @@ func New(inner dnsserver.Handler, opts ...Option) dnsserver.Handler {
 	}
 }
 
-func (l *limiter) ServeDNS(ctx context.Context, w dnsserver.ResponseWriter, q dnsmsg.Message) {
+func (l *limiter) ServeDNS(ctx context.Context, w dnsserver.ResponseWriter, q wire.Message) {
 	if !l.allow(w.RemoteAddr().Addr()) {
 		if l.drop {
 			return
@@ -126,12 +126,12 @@ func (l *limiter) key(src netip.Addr) string {
 	return src.String()
 }
 
-func (l *limiter) refuse(w dnsserver.ResponseWriter, q dnsmsg.Message) {
-	b := dnsmsg.NewBuilder().
+func (l *limiter) refuse(w dnsserver.ResponseWriter, q wire.Message) {
+	b := wire.NewBuilder().
 		ID(q.ID()).
 		Response(true).
 		RecursionDesired(q.Flags().RecursionDesired()).
-		RCODE(dnsmsg.RCODERefused)
+		RCODE(wire.RCODERefused)
 	if len(q.Questions()) > 0 {
 		b = b.Question(q.Questions()[0])
 	}

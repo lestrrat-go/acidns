@@ -10,10 +10,9 @@ import (
 	"time"
 
 	"github.com/lestrrat-go/acidns/dnsclient/transport/tcp"
-	"github.com/lestrrat-go/acidns/dnsmsg"
-	"github.com/lestrrat-go/acidns/dnsmsg/rdata"
-	"github.com/lestrrat-go/acidns/dnsmsg/rrtype"
-	"github.com/lestrrat-go/acidns/dnsname"
+	"github.com/lestrrat-go/acidns/wire"
+	"github.com/lestrrat-go/acidns/wire/rdata"
+	"github.com/lestrrat-go/acidns/wire/rrtype"
 	"github.com/stretchr/testify/require"
 )
 
@@ -40,22 +39,22 @@ func startTCPEcho(t *testing.T) netip.AddrPort {
 				if _, err := io.ReadFull(c, body); err != nil {
 					return
 				}
-				req, err := dnsmsg.Unmarshal(body)
+				req, err := wire.Unmarshal(body)
 				if err != nil {
 					return
 				}
-				resp, err := dnsmsg.NewBuilder().
+				resp, err := wire.NewBuilder().
 					ID(req.ID()).
 					Response(true).
 					RecursionAvailable(true).
 					Question(req.Questions()[0]).
-					Answer(dnsmsg.NewRecord(req.Questions()[0].Name(), 60*time.Second,
+					Answer(wire.NewRecord(req.Questions()[0].Name(), 60*time.Second,
 						rdata.NewA(netip.MustParseAddr("203.0.113.5")))).
 					Build()
 				if err != nil {
 					return
 				}
-				wire, err := dnsmsg.Marshal(resp)
+				wire, err := wire.Marshal(resp)
 				if err != nil {
 					return
 				}
@@ -76,10 +75,10 @@ func TestTCPExchange(t *testing.T) {
 	ex, err := tcp.New(addr)
 	require.NoError(t, err)
 
-	q, err := dnsmsg.NewBuilder().
+	q, err := wire.NewBuilder().
 		ID(0xfeed).
 		RecursionDesired(true).
-		Question(dnsmsg.NewQuestion(dnsname.MustParse("example.com"), rrtype.A)).
+		Question(wire.NewQuestion(wire.MustParseName("example.com"), rrtype.A)).
 		Build()
 	require.NoError(t, err)
 
@@ -100,9 +99,9 @@ func TestTCPContextDeadline(t *testing.T) {
 	ex, err := tcp.New(netip.AddrPortFrom(netip.MustParseAddr("127.0.0.1"), uint16(a.Port)))
 	require.NoError(t, err)
 
-	q, _ := dnsmsg.NewBuilder().
+	q, _ := wire.NewBuilder().
 		ID(1).
-		Question(dnsmsg.NewQuestion(dnsname.MustParse("example.com"), rrtype.A)).
+		Question(wire.NewQuestion(wire.MustParseName("example.com"), rrtype.A)).
 		Build()
 
 	ctx, cancel := context.WithTimeout(t.Context(), 50*time.Millisecond)

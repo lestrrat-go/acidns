@@ -7,9 +7,8 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/lestrrat-go/acidns/dnsmsg"
-	"github.com/lestrrat-go/acidns/dnsmsg/rrtype"
-	"github.com/lestrrat-go/acidns/dnsname"
+	"github.com/lestrrat-go/acidns/wire"
+	"github.com/lestrrat-go/acidns/wire/rrtype"
 	"github.com/stretchr/testify/require"
 )
 
@@ -97,10 +96,10 @@ func TestBuildHandlerModes(t *testing.T) {
 }
 
 type stubResponseWriter struct {
-	captured dnsmsg.Message
+	captured wire.Message
 }
 
-func (s *stubResponseWriter) WriteMsg(m dnsmsg.Message) error {
+func (s *stubResponseWriter) WriteMsg(m wire.Message) error {
 	s.captured = m
 	return nil
 }
@@ -112,7 +111,7 @@ func TestPeekingWriter(t *testing.T) {
 	t.Parallel()
 	stub := &stubResponseWriter{}
 	pw := &peekingWriter{ResponseWriter: stub}
-	m, _ := dnsmsg.NewBuilder().ID(1).Response(true).Build()
+	m, _ := wire.NewBuilder().ID(1).Response(true).Build()
 	require.NoError(t, pw.WriteMsg(m))
 	require.NotNil(t, pw.captured)
 }
@@ -127,9 +126,9 @@ func TestHybridFallthroughOnRefused(t *testing.T) {
 	h := hybrid{auth: auth, rec: rec}
 
 	// Out-of-zone query → auth REFUSEDs, hybrid then forwards to rec.
-	q, _ := dnsmsg.NewBuilder().
+	q, _ := wire.NewBuilder().
 		ID(1).
-		Question(dnsmsg.NewQuestion(dnsname.MustParse("example.org"), rrtype.A)).
+		Question(wire.NewQuestion(wire.MustParseName("example.org"), rrtype.A)).
 		Build()
 	w := &stubResponseWriter{}
 	ctx, cancel := context.WithTimeout(t.Context(), 100)

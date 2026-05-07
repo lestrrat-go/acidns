@@ -6,25 +6,24 @@ import (
 	"time"
 
 	"github.com/lestrrat-go/acidns/dnsclient/dnsupdate"
-	"github.com/lestrrat-go/acidns/dnsmsg"
-	"github.com/lestrrat-go/acidns/dnsmsg/rdata"
-	"github.com/lestrrat-go/acidns/dnsmsg/rrtype"
-	"github.com/lestrrat-go/acidns/dnsname"
+	"github.com/lestrrat-go/acidns/wire"
+	"github.com/lestrrat-go/acidns/wire/rdata"
+	"github.com/lestrrat-go/acidns/wire/rrtype"
 )
 
 func Example_dnsupdate_build() {
 	// dnsupdate.Builder constructs an RFC 2136 UPDATE message. Add a
-	// prerequisite, an addition, and a delete; Build returns a dnsmsg.Message
+	// prerequisite, an addition, and a delete; Build returns a wire.Message
 	// you can ship over any transport.Exchanger.
-	zone := dnsname.MustParse("example.com")
-	rec := dnsmsg.NewRecord(
-		dnsname.MustParse("blog.example.com"),
+	zone := wire.MustParseName("example.com")
+	rec := wire.NewRecord(
+		wire.MustParseName("blog.example.com"),
 		60*time.Second,
 		rdata.NewA(netip.MustParseAddr("198.51.100.5")),
 	)
 
 	msg, err := dnsupdate.NewBuilder(zone).
-		PrereqNameNotInUse(dnsname.MustParse("blog.example.com")).
+		PrereqNameNotInUse(wire.MustParseName("blog.example.com")).
 		AddRRset(rec).
 		Build()
 	if err != nil {

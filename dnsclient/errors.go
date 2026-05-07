@@ -3,7 +3,7 @@ package dnsclient
 import (
 	"fmt"
 
-	"github.com/lestrrat-go/acidns/dnsmsg"
+	"github.com/lestrrat-go/acidns/wire"
 )
 
 // RCodeError is returned by Resolve when the response carries a non-NoError
@@ -12,7 +12,7 @@ import (
 // with errors.As; callers that just want to branch on the kind of failure use
 // errors.Is against the package-level sentinels.
 type RCodeError struct {
-	Code   dnsmsg.RCODE
+	Code   wire.RCODE
 	Answer Answer
 }
 
@@ -34,14 +34,14 @@ func (e *RCodeError) Is(target error) bool {
 // the Answer field is nil. A Resolve call that matches one of these returns
 // a fresh RCodeError with both Code and Answer populated.
 var (
-	ErrFormErr   = &RCodeError{Code: dnsmsg.RCODEFormErr}
-	ErrServFail  = &RCodeError{Code: dnsmsg.RCODEServFail}
-	ErrNXDOMAIN  = &RCodeError{Code: dnsmsg.RCODENXDomain}
-	ErrNotImp    = &RCodeError{Code: dnsmsg.RCODENotImp}
-	ErrRefused   = &RCodeError{Code: dnsmsg.RCODERefused}
-	ErrYXDomain  = &RCodeError{Code: dnsmsg.RCODEYXDomain}
-	ErrYXRRSet   = &RCodeError{Code: dnsmsg.RCODEYXRRSet}
-	ErrNXRRSet   = &RCodeError{Code: dnsmsg.RCODENXRRSet}
-	ErrNotAuth   = &RCodeError{Code: dnsmsg.RCODENotAuth}
-	ErrNotZone   = &RCodeError{Code: dnsmsg.RCODENotZone}
+	ErrFormErr  = &RCodeError{Code: wire.RCODEFormErr}
+	ErrServFail = &RCodeError{Code: wire.RCODEServFail}
+	ErrNXDOMAIN = &RCodeError{Code: wire.RCODENXDomain}
+	ErrNotImp   = &RCodeError{Code: wire.RCODENotImp}
+	ErrRefused  = &RCodeError{Code: wire.RCODERefused}
+	ErrYXDomain = &RCodeError{Code: wire.RCODEYXDomain}
+	ErrYXRRSet  = &RCodeError{Code: wire.RCODEYXRRSet}
+	ErrNXRRSet  = &RCodeError{Code: wire.RCODENXRRSet}
+	ErrNotAuth  = &RCodeError{Code: wire.RCODENotAuth}
+	ErrNotZone  = &RCodeError{Code: wire.RCODENotZone}
 )

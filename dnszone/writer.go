@@ -6,10 +6,9 @@ import (
 	"io"
 	"strings"
 
-	"github.com/lestrrat-go/acidns/dnsmsg"
-	"github.com/lestrrat-go/acidns/dnsmsg/rdata"
-	"github.com/lestrrat-go/acidns/dnsmsg/rrtype"
-	"github.com/lestrrat-go/acidns/dnsname"
+	"github.com/lestrrat-go/acidns/wire"
+	"github.com/lestrrat-go/acidns/wire/rdata"
+	"github.com/lestrrat-go/acidns/wire/rrtype"
 )
 
 // Write emits z as RFC 1035 master-file text. The output begins with
@@ -62,7 +61,7 @@ func (b *bufWriter) Flush() error {
 	return err
 }
 
-func formatRecord(rec dnsmsg.Record, origin dnsname.Name) (string, error) {
+func formatRecord(rec wire.Record, origin wire.Name) (string, error) {
 	owner := relativise(rec.Name(), origin)
 	ttl := int64(rec.TTL().Seconds())
 	rdataStr, err := formatRDataPresentation(rec.RData(), origin)
@@ -73,7 +72,7 @@ func formatRecord(rec dnsmsg.Record, origin dnsname.Name) (string, error) {
 		owner, ttl, rec.Class(), rec.Type(), rdataStr), nil
 }
 
-func relativise(n, origin dnsname.Name) string {
+func relativise(n, origin wire.Name) string {
 	if n.Equal(origin) {
 		return "@"
 	}
@@ -85,7 +84,7 @@ func relativise(n, origin dnsname.Name) string {
 	return full
 }
 
-func formatRDataPresentation(rd rdata.RData, origin dnsname.Name) (string, error) {
+func formatRDataPresentation(rd rdata.RData, origin wire.Name) (string, error) {
 	switch rd.Type() {
 	case rrtype.A:
 		return rd.(rdata.A).Addr().String(), nil

@@ -17,10 +17,9 @@ import (
 	"time"
 
 	"github.com/lestrrat-go/acidns/dnsclient/transport"
-	"github.com/lestrrat-go/acidns/dnsmsg"
-	"github.com/lestrrat-go/acidns/dnsmsg/rdata"
-	"github.com/lestrrat-go/acidns/dnsmsg/rrtype"
-	"github.com/lestrrat-go/acidns/dnsname"
+	"github.com/lestrrat-go/acidns/wire"
+	"github.com/lestrrat-go/acidns/wire/rdata"
+	"github.com/lestrrat-go/acidns/wire/rrtype"
 )
 
 // Option configures a Send call.
@@ -49,7 +48,7 @@ func WithSOA(soa rdata.SOA) Option {
 }
 
 // Send transmits a NOTIFY for zone over ex and waits for the ACK.
-func Send(ctx context.Context, ex transport.Exchanger, zone dnsname.Name, opts ...Option) (dnsmsg.Message, error) {
+func Send(ctx context.Context, ex transport.Exchanger, zone wire.Name, opts ...Option) (wire.Message, error) {
 	c := config{timeout: 5 * time.Second}
 	for _, o := range opts {
 		o.applyNotify(&c)
@@ -58,13 +57,13 @@ func Send(ctx context.Context, ex transport.Exchanger, zone dnsname.Name, opts .
 	if err != nil {
 		return nil, err
 	}
-	b := dnsmsg.NewBuilder().
+	b := wire.NewBuilder().
 		ID(id).
-		Opcode(dnsmsg.OpcodeNotify).
+		Opcode(wire.OpcodeNotify).
 		Authoritative(true).
-		Question(dnsmsg.NewQuestion(zone, rrtype.SOA))
+		Question(wire.NewQuestion(zone, rrtype.SOA))
 	if c.soa != nil {
-		b = b.Answer(dnsmsg.NewRecord(zone, time.Duration(c.soa.Minimum()), c.soa))
+		b = b.Answer(wire.NewRecord(zone, time.Duration(c.soa.Minimum()), c.soa))
 	}
 	q, err := b.Build()
 	if err != nil {
@@ -82,28 +81,28 @@ func Send(ctx context.Context, ex transport.Exchanger, zone dnsname.Name, opts .
 // Result captures one secondary's response from Broadcast.
 type Result interface {
 	Exchanger() transport.Exchanger
-	Response() dnsmsg.Message
+	Response() wire.Message
 	Err() error
 }
 
 type result struct {
 	ex   transport.Exchanger
-	resp dnsmsg.Message
+	resp wire.Message
 	err  error
 }
 
 func (r result) Exchanger() transport.Exchanger { return r.ex }
-func (r result) Response() dnsmsg.Message       { return r.resp }
+func (r result) Response() wire.Message         { return r.resp }
 func (r result) Err() error                     { return r.err }
 
 // Broadcast sends NOTIFY in parallel to many secondaries and returns one
 // Result per exchanger, in the order supplied. Errors on individual
 // secondaries do not abort the broadcast.
-func Broadcast(ctx context.Context, exs []transport.Exchanger, zone dnsname.Name, opts ...Option) []Result {
+func Broadcast(ctx context.Context, exs []transport.Exchanger, zone wire.Name, opts ...Option) []Result {
 	out := make([]Result, len(exs))
 	type slot struct {
 		idx  int
-		resp dnsmsg.Message
+		resp wire.Message
 		err  error
 	}
 	ch := make(chan slot, len(exs))

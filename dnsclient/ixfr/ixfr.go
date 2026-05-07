@@ -29,10 +29,9 @@ import (
 	"time"
 
 	"github.com/lestrrat-go/acidns/dnsclient/transport"
-	"github.com/lestrrat-go/acidns/dnsmsg"
-	"github.com/lestrrat-go/acidns/dnsmsg/rdata"
-	"github.com/lestrrat-go/acidns/dnsmsg/rrtype"
-	"github.com/lestrrat-go/acidns/dnsname"
+	"github.com/lestrrat-go/acidns/wire"
+	"github.com/lestrrat-go/acidns/wire/rdata"
+	"github.com/lestrrat-go/acidns/wire/rrtype"
 )
 
 // Kind describes the shape of an IXFR response, queryable on the Transfer
@@ -70,7 +69,7 @@ type Event interface {
 // RecordEvent carries a single record from an AXFR-fallback transfer.
 type RecordEvent interface {
 	Event
-	Record() dnsmsg.Record
+	Record() wire.Record
 }
 
 // DiffEvent carries one (removed, added) sub-diff from an incremental
@@ -79,25 +78,25 @@ type DiffEvent interface {
 	Event
 	FromSerial() uint32
 	ToSerial() uint32
-	Removed() []dnsmsg.Record
-	Added() []dnsmsg.Record
+	Removed() []wire.Record
+	Added() []wire.Record
 }
 
-type recordEvent struct{ rec dnsmsg.Record }
+type recordEvent struct{ rec wire.Record }
 
-func (recordEvent) isTransferEvent()        {}
-func (e recordEvent) Record() dnsmsg.Record { return e.rec }
+func (recordEvent) isTransferEvent()      {}
+func (e recordEvent) Record() wire.Record { return e.rec }
 
 type diffEvent struct {
 	from, to       uint32
-	removed, added []dnsmsg.Record
+	removed, added []wire.Record
 }
 
-func (diffEvent) isTransferEvent()           {}
-func (e diffEvent) FromSerial() uint32       { return e.from }
-func (e diffEvent) ToSerial() uint32         { return e.to }
-func (e diffEvent) Removed() []dnsmsg.Record { return e.removed }
-func (e diffEvent) Added() []dnsmsg.Record   { return e.added }
+func (diffEvent) isTransferEvent()         {}
+func (e diffEvent) FromSerial() uint32     { return e.from }
+func (e diffEvent) ToSerial() uint32       { return e.to }
+func (e diffEvent) Removed() []wire.Record { return e.removed }
+func (e diffEvent) Added() []wire.Record   { return e.added }
 
 // Option configures a Start call.
 type Option interface{ applyIXFR(*config) }
@@ -124,7 +123,7 @@ func WithTimeout(d time.Duration) Option {
 // clientSOA names the requester's current view of the zone — only the
 // Serial field is interpreted by the server, but the full SOA RR is what
 // the wire requires.
-func Start(ctx context.Context, ex transport.StreamExchanger, zone dnsname.Name, clientSOA rdata.SOA, opts ...Option) (Transfer, error) {
+func Start(ctx context.Context, ex transport.StreamExchanger, zone wire.Name, clientSOA rdata.SOA, opts ...Option) (Transfer, error) {
 	c := config{timeout: 30 * time.Second}
 	for _, o := range opts {
 		o.applyIXFR(&c)
@@ -135,10 +134,10 @@ func Start(ctx context.Context, ex transport.StreamExchanger, zone dnsname.Name,
 	if err != nil {
 		return nil, err
 	}
-	q, err := dnsmsg.NewBuilder().
+	q, err := wire.NewBuilder().
 		ID(id).
-		Question(dnsmsg.NewQuestion(zone, rrtype.IXFR)).
-		Authority(dnsmsg.NewRecord(zone, time.Second, clientSOA)).
+		Question(wire.NewQuestion(zone, rrtype.IXFR)).
+		Authority(wire.NewRecord(zone, time.Second, clientSOA)).
 		Build()
 	if err != nil {
 		return nil, err
@@ -282,8 +281,8 @@ func (t *transfer) nextIncremental(ctx context.Context) (Event, error) {
 		return nil, io.EOF
 	}
 
-	var removed []dnsmsg.Record
-	var soaNew dnsmsg.Record
+	var removed []wire.Record
+	var soaNew wire.Record
 	for {
 		rec, err := t.reader.Read(ctx)
 		if err != nil {
@@ -297,7 +296,7 @@ func (t *transfer) nextIncremental(ctx context.Context) (Event, error) {
 	}
 	soaNewSerial := soaNew.RData().(rdata.SOA).Serial()
 
-	var added []dnsmsg.Record
+	var added []wire.Record
 	for {
 		rec, err := t.reader.Read(ctx)
 		if err == io.EOF {
@@ -321,13 +320,13 @@ func (t *transfer) nextIncremental(ctx context.Context) (Event, error) {
 // interpretation of a record they peeked.
 type recReader struct {
 	stream   transport.MessageStream
-	curMsg   dnsmsg.Message
+	curMsg   wire.Message
 	curIdx   int
-	pushback []dnsmsg.Record
+	pushback []wire.Record
 	msgEOF   bool
 }
 
-func (rr *recReader) Read(ctx context.Context) (dnsmsg.Record, error) {
+func (rr *recReader) Read(ctx context.Context) (wire.Record, error) {
 	if len(rr.pushback) > 0 {
 		rec := rr.pushback[0]
 		rr.pushback = rr.pushback[1:]
@@ -350,7 +349,7 @@ func (rr *recReader) Read(ctx context.Context) (dnsmsg.Record, error) {
 			}
 			return nil, err
 		}
-		if rcode := msg.Flags().RCODE(); rcode != dnsmsg.RCODENoError {
+		if rcode := msg.Flags().RCODE(); rcode != wire.RCODENoError {
 			return nil, fmt.Errorf("ixfr: %s", rcode)
 		}
 		rr.curMsg = msg
@@ -358,7 +357,7 @@ func (rr *recReader) Read(ctx context.Context) (dnsmsg.Record, error) {
 	}
 }
 
-func (rr *recReader) Push(rec dnsmsg.Record) {
+func (rr *recReader) Push(rec wire.Record) {
 	rr.pushback = append(rr.pushback, rec)
 }
 

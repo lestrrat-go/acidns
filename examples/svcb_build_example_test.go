@@ -4,8 +4,8 @@ import (
 	"fmt"
 	"net/netip"
 
-	"github.com/lestrrat-go/acidns/dnsmsg/rdata"
-	"github.com/lestrrat-go/acidns/dnsname"
+	"github.com/lestrrat-go/acidns/wire"
+	"github.com/lestrrat-go/acidns/wire/rdata"
 )
 
 func Example_svcb_build() {
@@ -23,7 +23,7 @@ func Example_svcb_build() {
 		return
 	}
 
-	rr := rdata.NewHTTPS(1, dnsname.MustParse("svc.example.com"),
+	rr := rdata.NewHTTPS(1, wire.MustParseName("svc.example.com"),
 		alpn,
 		rdata.NewSvcParamPort(443),
 		ipv4,

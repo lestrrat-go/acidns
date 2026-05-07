@@ -19,11 +19,10 @@ import (
 
 	"github.com/lestrrat-go/acidns/dnsclient/transport/tcp"
 	"github.com/lestrrat-go/acidns/dnsclient/transport/udp"
-	"github.com/lestrrat-go/acidns/dnsmsg"
-	"github.com/lestrrat-go/acidns/dnsmsg/rdata"
-	"github.com/lestrrat-go/acidns/dnsmsg/rrtype"
-	"github.com/lestrrat-go/acidns/dnsname"
 	"github.com/lestrrat-go/acidns/dnsserver"
+	"github.com/lestrrat-go/acidns/wire"
+	"github.com/lestrrat-go/acidns/wire/rdata"
+	"github.com/lestrrat-go/acidns/wire/rrtype"
 )
 
 // ErrIterationLimit is returned when the recursive resolver fails to reach
@@ -36,7 +35,7 @@ var ErrIterationLimit = errors.New("recursive: iteration limit reached")
 // from tests.
 type Recursive interface {
 	dnsserver.Handler
-	Resolve(ctx context.Context, name dnsname.Name, t rrtype.Type) (Entry, error)
+	Resolve(ctx context.Context, name wire.Name, t rrtype.Type) (Entry, error)
 }
 
 // Option configures a Recursive at construction.
@@ -75,7 +74,7 @@ func WithMaxIterations(n int) Option {
 // a Dialer that rewrites addresses, applies network-namespacing, or
 // captures traffic.
 type Dialer interface {
-	Exchange(ctx context.Context, server netip.AddrPort, q dnsmsg.Message) (dnsmsg.Message, error)
+	Exchange(ctx context.Context, server netip.AddrPort, q wire.Message) (wire.Message, error)
 }
 
 // WithDialer sets a custom Dialer.
@@ -120,7 +119,7 @@ func DefaultDialer() Dialer { return defaultDialer{} }
 // defaultDialer dials UDP first and retries over TCP on TC=1.
 type defaultDialer struct{}
 
-func (defaultDialer) Exchange(ctx context.Context, server netip.AddrPort, q dnsmsg.Message) (dnsmsg.Message, error) {
+func (defaultDialer) Exchange(ctx context.Context, server netip.AddrPort, q wire.Message) (wire.Message, error) {
 	uex, err := udp.New(server)
 	if err != nil {
 		return nil, err
@@ -142,15 +141,15 @@ func (defaultDialer) Exchange(ctx context.Context, server netip.AddrPort, q dnsm
 }
 
 // ServeDNS implements dnsserver.Handler.
-func (r *recursive) ServeDNS(ctx context.Context, w dnsserver.ResponseWriter, q dnsmsg.Message) {
-	b := dnsmsg.NewBuilder().
+func (r *recursive) ServeDNS(ctx context.Context, w dnsserver.ResponseWriter, q wire.Message) {
+	b := wire.NewBuilder().
 		ID(q.ID()).
 		Response(true).
 		RecursionDesired(q.Flags().RecursionDesired()).
 		RecursionAvailable(true)
 
 	if len(q.Questions()) == 0 {
-		_ = w.WriteMsg(must(b.RCODE(dnsmsg.RCODEFormErr).Build()))
+		_ = w.WriteMsg(must(b.RCODE(wire.RCODEFormErr).Build()))
 		return
 	}
 	question := q.Questions()[0]
@@ -158,7 +157,7 @@ func (r *recursive) ServeDNS(ctx context.Context, w dnsserver.ResponseWriter, q 
 
 	entry, err := r.Resolve(ctx, question.Name(), question.Type())
 	if err != nil {
-		_ = w.WriteMsg(must(b.RCODE(dnsmsg.RCODEServFail).Build()))
+		_ = w.WriteMsg(must(b.RCODE(wire.RCODEServFail).Build()))
 		return
 	}
 	for _, rec := range entry.Answer {
@@ -170,26 +169,26 @@ func (r *recursive) ServeDNS(ctx context.Context, w dnsserver.ResponseWriter, q 
 	for _, rec := range entry.Additional {
 		b = b.Additional(rec)
 	}
-	if entry.RCODE != dnsmsg.RCODENoError {
+	if entry.RCODE != wire.RCODENoError {
 		b = b.RCODE(entry.RCODE)
 	}
 	_ = w.WriteMsg(must(b.Build()))
 }
 
-func must(m dnsmsg.Message, err error) dnsmsg.Message {
+func must(m wire.Message, err error) wire.Message {
 	if err != nil {
-		fb, _ := dnsmsg.NewBuilder().Response(true).RCODE(dnsmsg.RCODEServFail).Build()
+		fb, _ := wire.NewBuilder().Response(true).RCODE(wire.RCODEServFail).Build()
 		return fb
 	}
 	return m
 }
 
 // Resolve returns a cached or freshly-iterated entry for (name, t).
-func (r *recursive) Resolve(ctx context.Context, name dnsname.Name, t rrtype.Type) (Entry, error) {
+func (r *recursive) Resolve(ctx context.Context, name wire.Name, t rrtype.Type) (Entry, error) {
 	return r.resolveDepth(ctx, name, t, 0)
 }
 
-func (r *recursive) resolveDepth(ctx context.Context, name dnsname.Name, t rrtype.Type, depth int) (Entry, error) {
+func (r *recursive) resolveDepth(ctx context.Context, name wire.Name, t rrtype.Type, depth int) (Entry, error) {
 	if depth >= r.maxDepth {
 		return Entry{}, fmt.Errorf("recursive: depth limit reached for %s", name)
 	}
@@ -234,16 +233,16 @@ func (r *recursive) resolveDepth(ctx context.Context, name dnsname.Name, t rrtyp
 	return Entry{}, ErrIterationLimit
 }
 
-func (r *recursive) queryAny(ctx context.Context, servers []netip.AddrPort, name dnsname.Name, t rrtype.Type) (dnsmsg.Message, error) {
+func (r *recursive) queryAny(ctx context.Context, servers []netip.AddrPort, name wire.Name, t rrtype.Type) (wire.Message, error) {
 	id, err := randomID()
 	if err != nil {
 		return nil, err
 	}
-	q, err := dnsmsg.NewBuilder().
+	q, err := wire.NewBuilder().
 		ID(id).
 		// RD=0 — we are doing the recursion ourselves.
-		Question(dnsmsg.NewQuestion(name, t)).
-		EDNS(dnsmsg.NewEDNSBuilder().UDPSize(1232).Build()).
+		Question(wire.NewQuestion(name, t)).
+		EDNS(wire.NewEDNSBuilder().UDPSize(1232).Build()).
 		Build()
 	if err != nil {
 		return nil, err
@@ -269,10 +268,10 @@ func (r *recursive) queryAny(ctx context.Context, servers []netip.AddrPort, name
 // serversFromReferral picks the addresses to query next. It prefers in-message
 // glue (additional section) but falls back to recursively resolving the NS
 // targets for out-of-bailiwick delegations.
-func (r *recursive) serversFromReferral(ctx context.Context, resp dnsmsg.Message, depth int) ([]netip.AddrPort, error) {
+func (r *recursive) serversFromReferral(ctx context.Context, resp wire.Message, depth int) ([]netip.AddrPort, error) {
 	// First, try glue.
 	var glued []netip.AddrPort
-	var ungluedNS []dnsname.Name
+	var ungluedNS []wire.Name
 	for _, auth := range resp.Authorities() {
 		if auth.Type() != rrtype.NS {
 			continue
@@ -303,7 +302,7 @@ func (r *recursive) serversFromReferral(ctx context.Context, resp dnsmsg.Message
 	return out, nil
 }
 
-func glueFor(target dnsname.Name, additional []dnsmsg.Record) []netip.AddrPort {
+func glueFor(target wire.Name, additional []wire.Record) []netip.AddrPort {
 	var out []netip.AddrPort
 	for _, add := range additional {
 		if !add.Name().Equal(target) {
@@ -319,7 +318,7 @@ func glueFor(target dnsname.Name, additional []dnsmsg.Record) []netip.AddrPort {
 	return out
 }
 
-func hasAnswerFor(resp dnsmsg.Message, name dnsname.Name, t rrtype.Type) bool {
+func hasAnswerFor(resp wire.Message, name wire.Name, t rrtype.Type) bool {
 	for _, rec := range resp.Answers() {
 		if rec.Type() == t && rec.Name().Equal(name) {
 			return true
@@ -331,7 +330,7 @@ func hasAnswerFor(resp dnsmsg.Message, name dnsname.Name, t rrtype.Type) bool {
 	return false
 }
 
-func entryFromResponse(resp dnsmsg.Message) Entry {
+func entryFromResponse(resp wire.Message) Entry {
 	ttl := minTTL(60*time.Second, resp.Answers(), resp.Authorities())
 	// RFC 2308 §5: negative responses (NXDOMAIN or NODATA — i.e. NOERROR
 	// with no answers) are cached for at most the SOA MINIMUM field and the
@@ -343,9 +342,9 @@ func entryFromResponse(resp dnsmsg.Message) Entry {
 		}
 	}
 	return Entry{
-		Answer:     append([]dnsmsg.Record(nil), resp.Answers()...),
-		Authority:  append([]dnsmsg.Record(nil), resp.Authorities()...),
-		Additional: append([]dnsmsg.Record(nil), resp.Additionals()...),
+		Answer:     append([]wire.Record(nil), resp.Answers()...),
+		Authority:  append([]wire.Record(nil), resp.Authorities()...),
+		Additional: append([]wire.Record(nil), resp.Additionals()...),
 		RCODE:      resp.Flags().RCODE(),
 		AA:         resp.Flags().Authoritative(),
 		ExpiresAt:  time.Now().Add(ttl),
@@ -354,7 +353,7 @@ func entryFromResponse(resp dnsmsg.Message) Entry {
 
 // negativeCacheTTL implements RFC 2308 §5: returns the smaller of the SOA
 // rdata's MINIMUM field and the SOA RR's TTL, or 0 if no SOA is present.
-func negativeCacheTTL(authority []dnsmsg.Record) time.Duration {
+func negativeCacheTTL(authority []wire.Record) time.Duration {
 	for _, r := range authority {
 		if r.Type() != rrtype.SOA {
 			continue

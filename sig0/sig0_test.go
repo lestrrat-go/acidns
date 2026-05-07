@@ -9,24 +9,23 @@ import (
 	"testing"
 	"time"
 
-	"github.com/lestrrat-go/acidns/dnsmsg"
-	"github.com/lestrrat-go/acidns/dnsmsg/rdata"
-	"github.com/lestrrat-go/acidns/dnsmsg/rrtype"
-	"github.com/lestrrat-go/acidns/dnsname"
 	"github.com/lestrrat-go/acidns/sig0"
+	"github.com/lestrrat-go/acidns/wire"
+	"github.com/lestrrat-go/acidns/wire/rdata"
+	"github.com/lestrrat-go/acidns/wire/rrtype"
 	"github.com/stretchr/testify/require"
 )
 
 func mkMessage(t *testing.T) []byte {
 	t.Helper()
-	m, err := dnsmsg.NewBuilder().
+	m, err := wire.NewBuilder().
 		ID(0xbeef).
-		Question(dnsmsg.NewQuestion(dnsname.MustParse("example.com"), rrtype.A)).
+		Question(wire.NewQuestion(wire.MustParseName("example.com"), rrtype.A)).
 		Build()
 	require.NoError(t, err)
-	wire, err := dnsmsg.Marshal(m)
+	msg, err := wire.Marshal(m)
 	require.NoError(t, err)
-	return wire
+	return msg
 }
 
 func TestSignVerifyECDSAP256(t *testing.T) {
@@ -35,11 +34,11 @@ func TestSignVerifyECDSAP256(t *testing.T) {
 	require.NoError(t, err)
 	pub := append(priv.PublicKey.X.FillBytes(make([]byte, 32)), priv.PublicKey.Y.FillBytes(make([]byte, 32))...)
 
-	signer := dnsname.MustParse("test.signer")
-	wire := mkMessage(t)
+	signer := wire.MustParseName("test.signer")
+	msg := mkMessage(t)
 	now := time.Now().Truncate(time.Second).UTC()
 
-	signed, err := sig0.Sign(wire, signer, rdata.AlgECDSAP256SHA256, 1234,
+	signed, err := sig0.Sign(msg, signer, rdata.AlgECDSAP256SHA256, 1234,
 		func(payload []byte) ([]byte, error) {
 			h := sha256.Sum256(payload)
 			r, s, err := ecdsa.Sign(rand.Reader, priv, h[:])
@@ -56,7 +55,7 @@ func TestSignVerifyECDSAP256(t *testing.T) {
 	body, err := sig0.Verify(signed, rdata.AlgECDSAP256SHA256, pub, signer, now.Add(30*time.Minute))
 	require.NoError(t, err)
 
-	m, err := dnsmsg.Unmarshal(body)
+	m, err := wire.Unmarshal(body)
 	require.NoError(t, err)
 	require.Equal(t, uint16(0xbeef), m.ID())
 }
@@ -66,10 +65,10 @@ func TestSignVerifyED25519(t *testing.T) {
 	pub, priv, err := ed25519.GenerateKey(rand.Reader)
 	require.NoError(t, err)
 
-	signer := dnsname.MustParse("test.signer")
-	wire := mkMessage(t)
+	signer := wire.MustParseName("test.signer")
+	msg := mkMessage(t)
 	now := time.Now().Truncate(time.Second).UTC()
-	signed, err := sig0.Sign(wire, signer, rdata.AlgED25519, 5678,
+	signed, err := sig0.Sign(msg, signer, rdata.AlgED25519, 5678,
 		func(payload []byte) ([]byte, error) {
 			return ed25519.Sign(priv, payload), nil
 		}, now, time.Hour)
@@ -82,10 +81,10 @@ func TestVerifyExpiredFails(t *testing.T) {
 	t.Parallel()
 	pub, priv, err := ed25519.GenerateKey(rand.Reader)
 	require.NoError(t, err)
-	signer := dnsname.MustParse("s")
-	wire := mkMessage(t)
+	signer := wire.MustParseName("s")
+	msg := mkMessage(t)
 	signedAt := time.Now().Truncate(time.Second).UTC()
-	signed, err := sig0.Sign(wire, signer, rdata.AlgED25519, 1, func(p []byte) ([]byte, error) {
+	signed, err := sig0.Sign(msg, signer, rdata.AlgED25519, 1, func(p []byte) ([]byte, error) {
 		return ed25519.Sign(priv, p), nil
 	}, signedAt, time.Minute)
 	require.NoError(t, err)
@@ -98,10 +97,10 @@ func TestVerifyTamperedFails(t *testing.T) {
 	t.Parallel()
 	pub, priv, err := ed25519.GenerateKey(rand.Reader)
 	require.NoError(t, err)
-	signer := dnsname.MustParse("s")
-	wire := mkMessage(t)
+	signer := wire.MustParseName("s")
+	msg := mkMessage(t)
 	now := time.Now().Truncate(time.Second).UTC()
-	signed, err := sig0.Sign(wire, signer, rdata.AlgED25519, 1, func(p []byte) ([]byte, error) {
+	signed, err := sig0.Sign(msg, signer, rdata.AlgED25519, 1, func(p []byte) ([]byte, error) {
 		return ed25519.Sign(priv, p), nil
 	}, now, time.Hour)
 	require.NoError(t, err)

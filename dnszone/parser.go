@@ -8,18 +8,17 @@ import (
 	"strings"
 	"time"
 
-	"github.com/lestrrat-go/acidns/dnsmsg"
-	"github.com/lestrrat-go/acidns/dnsmsg/rdata"
-	"github.com/lestrrat-go/acidns/dnsmsg/rrtype"
-	"github.com/lestrrat-go/acidns/dnsname"
+	"github.com/lestrrat-go/acidns/wire"
+	"github.com/lestrrat-go/acidns/wire/rdata"
+	"github.com/lestrrat-go/acidns/wire/rrtype"
 )
 
 type parser struct {
 	lex        *lexer
-	origin     dnsname.Name
+	origin     wire.Name
 	defaultTTL int64
-	prevName   dnsname.Name
-	records    []dnsmsg.Record
+	prevName   wire.Name
+	records    []wire.Record
 }
 
 func newParser(r io.Reader, c config) *parser {
@@ -141,37 +140,37 @@ func (p *parser) handleLine(fields []fieldTok, leadingWS bool) error {
 	if err != nil {
 		return fmt.Errorf("line %d: %w", fields[0].line, err)
 	}
-	rec := dnsmsg.NewRecordClass(owner, class, time.Duration(ttl)*time.Second, rd)
+	rec := wire.NewRecordClass(owner, class, time.Duration(ttl)*time.Second, rd)
 	p.records = append(p.records, rec)
 	p.prevName = owner
 	return nil
 }
 
-func ownerOrPrev(tok *fieldTok, prev dnsname.Name) string {
+func ownerOrPrev(tok *fieldTok, prev wire.Name) string {
 	if tok == nil {
 		return ""
 	}
 	return tok.text
 }
 
-func (p *parser) resolveName(s string) (dnsname.Name, error) {
+func (p *parser) resolveName(s string) (wire.Name, error) {
 	if s == "" {
 		return p.prevName, nil
 	}
 	if s == "@" {
 		if !p.origin.IsValid() {
-			return dnsname.Name{}, fmt.Errorf("@ used before $ORIGIN")
+			return wire.Name{}, fmt.Errorf("@ used before $ORIGIN")
 		}
 		return p.origin, nil
 	}
 	if strings.HasSuffix(s, ".") {
-		return dnsname.Parse(s)
+		return wire.ParseName(s)
 	}
 	if !p.origin.IsValid() {
-		return dnsname.Name{}, fmt.Errorf("relative name %q with no $ORIGIN", s)
+		return wire.Name{}, fmt.Errorf("relative name %q with no $ORIGIN", s)
 	}
 	full := s + "." + p.origin.String()
-	return dnsname.Parse(full)
+	return wire.ParseName(full)
 }
 
 func (p *parser) handleDirective(fields []fieldTok) error {
@@ -180,7 +179,7 @@ func (p *parser) handleDirective(fields []fieldTok) error {
 		if len(fields) != 2 {
 			return fmt.Errorf("line %d: $ORIGIN needs one argument", fields[0].line)
 		}
-		n, err := dnsname.Parse(fields[1].text)
+		n, err := wire.ParseName(fields[1].text)
 		if err != nil {
 			return fmt.Errorf("line %d: $ORIGIN: %w", fields[0].line, err)
 		}

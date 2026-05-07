@@ -15,7 +15,7 @@ import (
 
 	"github.com/lestrrat-go/acidns/dnsclient/transport"
 	"github.com/lestrrat-go/acidns/dnsclient/transport/internal/streamframe"
-	"github.com/lestrrat-go/acidns/dnsmsg"
+	"github.com/lestrrat-go/acidns/wire"
 )
 
 // Option configures a DoT Exchanger.
@@ -84,7 +84,7 @@ func New(addr netip.AddrPort, opts ...Option) (transport.Exchanger, error) {
 	return &exchanger{addr: addr, timeout: c.timeout, tlsConfig: tcfg}, nil
 }
 
-func (e *exchanger) Exchange(ctx context.Context, q dnsmsg.Message) (dnsmsg.Message, error) {
+func (e *exchanger) Exchange(ctx context.Context, q wire.Message) (wire.Message, error) {
 	d := tls.Dialer{Config: e.tlsConfig, NetDialer: &net.Dialer{}}
 	conn, err := d.DialContext(ctx, "tcp", e.addr.String())
 	if err != nil {
@@ -96,7 +96,7 @@ func (e *exchanger) Exchange(ctx context.Context, q dnsmsg.Message) (dnsmsg.Mess
 // Stream sends q over a fresh TLS connection and returns a MessageStream
 // from which the caller pulls responses. Implements XoT (RFC 9103) when
 // q is an AXFR/IXFR query.
-func (e *exchanger) Stream(ctx context.Context, q dnsmsg.Message) (transport.MessageStream, error) {
+func (e *exchanger) Stream(ctx context.Context, q wire.Message) (transport.MessageStream, error) {
 	d := tls.Dialer{Config: e.tlsConfig, NetDialer: &net.Dialer{}}
 	conn, err := d.DialContext(ctx, "tcp", e.addr.String())
 	if err != nil {

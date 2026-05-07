@@ -10,11 +10,10 @@ import (
 
 	"github.com/lestrrat-go/acidns/dnsclient/notify"
 	"github.com/lestrrat-go/acidns/dnsclient/transport/udp"
-	"github.com/lestrrat-go/acidns/dnsmsg"
-	"github.com/lestrrat-go/acidns/dnsname"
 	"github.com/lestrrat-go/acidns/dnsserver"
 	"github.com/lestrrat-go/acidns/dnsserver/authoritative"
 	"github.com/lestrrat-go/acidns/dnszone"
+	"github.com/lestrrat-go/acidns/wire"
 	"github.com/stretchr/testify/require"
 )
 
@@ -46,17 +45,17 @@ func TestSendNotifyAcks(t *testing.T) {
 	t.Parallel()
 
 	var fired atomic.Int32
-	addr := startSecondary(t, func(_ dnsmsg.Question, _ dnsserver.ResponseWriter) {
+	addr := startSecondary(t, func(_ wire.Question, _ dnsserver.ResponseWriter) {
 		fired.Add(1)
 	})
 
 	ex, err := udp.New(addr)
 	require.NoError(t, err)
-	resp, err := notify.Send(t.Context(), ex, dnsname.MustParse("example.com"))
+	resp, err := notify.Send(t.Context(), ex, wire.MustParseName("example.com"))
 	require.NoError(t, err)
-	require.Equal(t, dnsmsg.OpcodeNotify, resp.Flags().Opcode())
+	require.Equal(t, wire.OpcodeNotify, resp.Flags().Opcode())
 	require.True(t, resp.Flags().Response())
-	require.Equal(t, dnsmsg.RCODENoError, resp.Flags().RCODE())
+	require.Equal(t, wire.RCODENoError, resp.Flags().RCODE())
 
 	// Give the handler time to fire (it runs after WriteMsg returns).
 	require.Eventually(t, func() bool { return fired.Load() == 1 },
@@ -68,7 +67,7 @@ func TestNotifyForUnservedZoneNotAuth(t *testing.T) {
 	addr := startSecondary(t, nil)
 	ex, err := udp.New(addr)
 	require.NoError(t, err)
-	resp, err := notify.Send(t.Context(), ex, dnsname.MustParse("example.org"))
+	resp, err := notify.Send(t.Context(), ex, wire.MustParseName("example.org"))
 	require.NoError(t, err)
-	require.Equal(t, dnsmsg.RCODENotAuth, resp.Flags().RCODE())
+	require.Equal(t, wire.RCODENotAuth, resp.Flags().RCODE())
 }

@@ -10,11 +10,10 @@ import (
 
 	"github.com/lestrrat-go/acidns/dnsclient/notify"
 	"github.com/lestrrat-go/acidns/dnsclient/transport/udp"
-	"github.com/lestrrat-go/acidns/dnsmsg"
-	"github.com/lestrrat-go/acidns/dnsname"
 	"github.com/lestrrat-go/acidns/dnsserver"
 	"github.com/lestrrat-go/acidns/dnsserver/authoritative"
 	"github.com/lestrrat-go/acidns/dnszone"
+	"github.com/lestrrat-go/acidns/wire"
 )
 
 func Example_notify_send() {
@@ -31,7 +30,7 @@ ns1 IN  A    192.0.2.10
 `))
 	h, err := authoritative.New(
 		authoritative.WithZone(z),
-		authoritative.WithNotifyHandler(func(_ dnsmsg.Question, _ dnsserver.ResponseWriter) {
+		authoritative.WithNotifyHandler(func(_ wire.Question, _ dnsserver.ResponseWriter) {
 			fired.Add(1)
 		}),
 	)
@@ -54,7 +53,7 @@ ns1 IN  A    192.0.2.10
 		fmt.Println("dial:", err)
 		return
 	}
-	resp, err := notify.Send(ctx, ex, dnsname.MustParse("example.com"))
+	resp, err := notify.Send(ctx, ex, wire.MustParseName("example.com"))
 	if err != nil {
 		fmt.Println("send:", err)
 		return

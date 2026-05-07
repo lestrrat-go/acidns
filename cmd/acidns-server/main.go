@@ -14,11 +14,11 @@ import (
 	"strings"
 	"syscall"
 
-	"github.com/lestrrat-go/acidns/dnsmsg"
 	"github.com/lestrrat-go/acidns/dnsserver"
 	"github.com/lestrrat-go/acidns/dnsserver/authoritative"
 	"github.com/lestrrat-go/acidns/dnsserver/recursive"
 	"github.com/lestrrat-go/acidns/dnszone"
+	"github.com/lestrrat-go/acidns/wire"
 )
 
 func main() {
@@ -160,7 +160,7 @@ type hybrid struct {
 	auth, rec dnsserver.Handler
 }
 
-func (h hybrid) ServeDNS(ctx context.Context, w dnsserver.ResponseWriter, q dnsmsg.Message) {
+func (h hybrid) ServeDNS(ctx context.Context, w dnsserver.ResponseWriter, q wire.Message) {
 	rec := &peekingWriter{ResponseWriter: w}
 	h.auth.ServeDNS(ctx, rec, q)
 	if rec.captured == nil {
@@ -168,7 +168,7 @@ func (h hybrid) ServeDNS(ctx context.Context, w dnsserver.ResponseWriter, q dnsm
 	}
 	// If the authoritative side returned REFUSED (out of zone), try
 	// the recursive resolver.
-	if rec.captured.Flags().RCODE() == dnsmsg.RCODERefused {
+	if rec.captured.Flags().RCODE() == wire.RCODERefused {
 		h.rec.ServeDNS(ctx, w, q)
 		return
 	}
@@ -177,10 +177,10 @@ func (h hybrid) ServeDNS(ctx context.Context, w dnsserver.ResponseWriter, q dnsm
 
 type peekingWriter struct {
 	dnsserver.ResponseWriter
-	captured dnsmsg.Message
+	captured wire.Message
 }
 
-func (p *peekingWriter) WriteMsg(m dnsmsg.Message) error {
+func (p *peekingWriter) WriteMsg(m wire.Message) error {
 	p.captured = m
 	return nil
 }

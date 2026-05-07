@@ -12,10 +12,9 @@ import (
 	"time"
 
 	"github.com/lestrrat-go/acidns/dnsclient/transport/doh"
-	"github.com/lestrrat-go/acidns/dnsmsg"
-	"github.com/lestrrat-go/acidns/dnsmsg/rdata"
-	"github.com/lestrrat-go/acidns/dnsmsg/rrtype"
-	"github.com/lestrrat-go/acidns/dnsname"
+	"github.com/lestrrat-go/acidns/wire"
+	"github.com/lestrrat-go/acidns/wire/rdata"
+	"github.com/lestrrat-go/acidns/wire/rrtype"
 	"github.com/stretchr/testify/require"
 )
 
@@ -26,7 +25,7 @@ func makeServer(t *testing.T, expectedMethod string) *httptest.Server {
 			http.Error(w, "method", http.StatusMethodNotAllowed)
 			return
 		}
-		var wire []byte
+		var msg []byte
 		switch r.Method {
 		case http.MethodPost:
 			b, err := io.ReadAll(r.Body)
@@ -34,28 +33,28 @@ func makeServer(t *testing.T, expectedMethod string) *httptest.Server {
 				http.Error(w, err.Error(), 500)
 				return
 			}
-			wire = b
+			msg = b
 		case http.MethodGet:
 			dec, err := base64.RawURLEncoding.DecodeString(r.URL.Query().Get("dns"))
 			if err != nil {
 				http.Error(w, err.Error(), 400)
 				return
 			}
-			wire = dec
+			msg = dec
 		}
-		req, err := dnsmsg.Unmarshal(wire)
+		req, err := wire.Unmarshal(msg)
 		if err != nil {
 			http.Error(w, err.Error(), 400)
 			return
 		}
-		resp, _ := dnsmsg.NewBuilder().
+		resp, _ := wire.NewBuilder().
 			ID(req.ID()).
 			Response(true).
 			Question(req.Questions()[0]).
-			Answer(dnsmsg.NewRecord(req.Questions()[0].Name(), time.Minute,
+			Answer(wire.NewRecord(req.Questions()[0].Name(), time.Minute,
 				rdata.NewA(netip.MustParseAddr("198.51.100.99")))).
 			Build()
-		out, _ := dnsmsg.Marshal(resp)
+		out, _ := wire.Marshal(resp)
 		w.Header().Set("Content-Type", "application/dns-message")
 		w.Write(out)
 	}))
@@ -69,10 +68,10 @@ func TestDoHPost(t *testing.T) {
 	ex, err := doh.New(srv.URL + "/dns-query")
 	require.NoError(t, err)
 
-	q, _ := dnsmsg.NewBuilder().
+	q, _ := wire.NewBuilder().
 		ID(0x55aa).
 		RecursionDesired(true).
-		Question(dnsmsg.NewQuestion(dnsname.MustParse("example.com"), rrtype.A)).
+		Question(wire.NewQuestion(wire.MustParseName("example.com"), rrtype.A)).
 		Build()
 	resp, err := ex.Exchange(t.Context(), q)
 	require.NoError(t, err)
@@ -88,10 +87,10 @@ func TestDoHGet(t *testing.T) {
 	ex, err := doh.New(srv.URL+"/dns-query", doh.WithMethod(doh.MethodGET))
 	require.NoError(t, err)
 
-	q, _ := dnsmsg.NewBuilder().
+	q, _ := wire.NewBuilder().
 		ID(0xcafe).
 		RecursionDesired(true).
-		Question(dnsmsg.NewQuestion(dnsname.MustParse("example.com"), rrtype.A)).
+		Question(wire.NewQuestion(wire.MustParseName("example.com"), rrtype.A)).
 		Build()
 	resp, err := ex.Exchange(t.Context(), q)
 	require.NoError(t, err)
@@ -108,9 +107,9 @@ func TestDoHHTTPError(t *testing.T) {
 	ex, err := doh.New(srv.URL)
 	require.NoError(t, err)
 
-	q, _ := dnsmsg.NewBuilder().
+	q, _ := wire.NewBuilder().
 		ID(1).
-		Question(dnsmsg.NewQuestion(dnsname.MustParse("example.com"), rrtype.A)).
+		Question(wire.NewQuestion(wire.MustParseName("example.com"), rrtype.A)).
 		Build()
 	_, err = ex.Exchange(t.Context(), q)
 	require.Error(t, err)
@@ -129,9 +128,9 @@ func TestDoHContextCancel(t *testing.T) {
 	ex, err := doh.New(srv.URL)
 	require.NoError(t, err)
 
-	q, _ := dnsmsg.NewBuilder().
+	q, _ := wire.NewBuilder().
 		ID(1).
-		Question(dnsmsg.NewQuestion(dnsname.MustParse("example.com"), rrtype.A)).
+		Question(wire.NewQuestion(wire.MustParseName("example.com"), rrtype.A)).
 		Build()
 
 	ctx, cancel := context.WithTimeout(t.Context(), 50*time.Millisecond)

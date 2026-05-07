@@ -6,22 +6,21 @@ import (
 	"testing"
 	"time"
 
-	"github.com/lestrrat-go/acidns/dnsmsg"
-	"github.com/lestrrat-go/acidns/dnsmsg/rdata"
-	"github.com/lestrrat-go/acidns/dnsmsg/rrtype"
-	"github.com/lestrrat-go/acidns/dnsname"
 	"github.com/lestrrat-go/acidns/dnsserver"
 	"github.com/lestrrat-go/acidns/dnsserver/ratelimit"
+	"github.com/lestrrat-go/acidns/wire"
+	"github.com/lestrrat-go/acidns/wire/rdata"
+	"github.com/lestrrat-go/acidns/wire/rrtype"
 	"github.com/stretchr/testify/require"
 )
 
 type fakeWriter struct {
 	src      netip.AddrPort
-	captured dnsmsg.Message
+	captured wire.Message
 	written  bool
 }
 
-func (w *fakeWriter) WriteMsg(m dnsmsg.Message) error {
+func (w *fakeWriter) WriteMsg(m wire.Message) error {
 	w.captured = m
 	w.written = true
 	return nil
@@ -31,10 +30,10 @@ func (w *fakeWriter) LocalAddr() netip.AddrPort  { return netip.AddrPort{} }
 func (w *fakeWriter) Network() string            { return "udp" }
 
 func mkInner() dnsserver.Handler {
-	return dnsserver.HandlerFunc(func(_ context.Context, w dnsserver.ResponseWriter, q dnsmsg.Message) {
-		ans := dnsmsg.NewRecord(q.Questions()[0].Name(), time.Minute,
+	return dnsserver.HandlerFunc(func(_ context.Context, w dnsserver.ResponseWriter, q wire.Message) {
+		ans := wire.NewRecord(q.Questions()[0].Name(), time.Minute,
 			rdata.NewA(netip.MustParseAddr("203.0.113.1")))
-		resp, _ := dnsmsg.NewBuilder().
+		resp, _ := wire.NewBuilder().
 			ID(q.ID()).
 			Response(true).
 			Question(q.Questions()[0]).
@@ -44,11 +43,11 @@ func mkInner() dnsserver.Handler {
 	})
 }
 
-func mkQuery(t *testing.T) dnsmsg.Message {
+func mkQuery(t *testing.T) wire.Message {
 	t.Helper()
-	q, err := dnsmsg.NewBuilder().
+	q, err := wire.NewBuilder().
 		ID(1).
-		Question(dnsmsg.NewQuestion(dnsname.MustParse("example.com"), rrtype.A)).
+		Question(wire.NewQuestion(wire.MustParseName("example.com"), rrtype.A)).
 		Build()
 	require.NoError(t, err)
 	return q
@@ -65,13 +64,13 @@ func TestRateLimitBurstThenRefuse(t *testing.T) {
 	for i := 0; i < 3; i++ {
 		w := &fakeWriter{src: netip.MustParseAddrPort("198.51.100.5:1000")}
 		h.ServeDNS(context.Background(), w, mkQuery(t))
-		require.Equal(t, dnsmsg.RCODENoError, w.captured.Flags().RCODE(),
+		require.Equal(t, wire.RCODENoError, w.captured.Flags().RCODE(),
 			"first %d should pass through", i+1)
 	}
 
 	w := &fakeWriter{src: netip.MustParseAddrPort("198.51.100.5:1000")}
 	h.ServeDNS(context.Background(), w, mkQuery(t))
-	require.Equal(t, dnsmsg.RCODERefused, w.captured.Flags().RCODE())
+	require.Equal(t, wire.RCODERefused, w.captured.Flags().RCODE())
 }
 
 func TestRateLimitPerSourceIndependent(t *testing.T) {
@@ -80,13 +79,13 @@ func TestRateLimitPerSourceIndependent(t *testing.T) {
 
 	w1 := &fakeWriter{src: netip.MustParseAddrPort("203.0.113.1:1")}
 	h.ServeDNS(context.Background(), w1, mkQuery(t))
-	require.Equal(t, dnsmsg.RCODENoError, w1.captured.Flags().RCODE())
+	require.Equal(t, wire.RCODENoError, w1.captured.Flags().RCODE())
 
 	// First query from a different source must succeed regardless of the
 	// other's exhausted bucket.
 	w2 := &fakeWriter{src: netip.MustParseAddrPort("203.0.113.2:1")}
 	h.ServeDNS(context.Background(), w2, mkQuery(t))
-	require.Equal(t, dnsmsg.RCODENoError, w2.captured.Flags().RCODE())
+	require.Equal(t, wire.RCODENoError, w2.captured.Flags().RCODE())
 }
 
 func TestRateLimitDrop(t *testing.T) {
@@ -114,11 +113,11 @@ func TestRateLimitGroupPrefix(t *testing.T) {
 
 	w1 := &fakeWriter{src: netip.MustParseAddrPort("198.51.100.1:1")}
 	h.ServeDNS(context.Background(), w1, mkQuery(t))
-	require.Equal(t, dnsmsg.RCODENoError, w1.captured.Flags().RCODE())
+	require.Equal(t, wire.RCODENoError, w1.captured.Flags().RCODE())
 
 	w2 := &fakeWriter{src: netip.MustParseAddrPort("198.51.100.2:1")}
 	h.ServeDNS(context.Background(), w2, mkQuery(t))
-	require.Equal(t, dnsmsg.RCODERefused, w2.captured.Flags().RCODE(),
+	require.Equal(t, wire.RCODERefused, w2.captured.Flags().RCODE(),
 		"second source in same /24 should share the exhausted bucket")
 }
 
@@ -131,16 +130,16 @@ func TestRateLimitRefillOverTime(t *testing.T) {
 
 	w1 := &fakeWriter{src: netip.MustParseAddrPort("203.0.113.20:1")}
 	h.ServeDNS(context.Background(), w1, mkQuery(t)) // burst
-	require.Equal(t, dnsmsg.RCODENoError, w1.captured.Flags().RCODE())
+	require.Equal(t, wire.RCODENoError, w1.captured.Flags().RCODE())
 
 	w2 := &fakeWriter{src: netip.MustParseAddrPort("203.0.113.20:1")}
 	h.ServeDNS(context.Background(), w2, mkQuery(t)) // immediately after
-	require.Equal(t, dnsmsg.RCODERefused, w2.captured.Flags().RCODE())
+	require.Equal(t, wire.RCODERefused, w2.captured.Flags().RCODE())
 
 	time.Sleep(40 * time.Millisecond) // 50qps → 2 tokens accumulated
 
 	w3 := &fakeWriter{src: netip.MustParseAddrPort("203.0.113.20:1")}
 	h.ServeDNS(context.Background(), w3, mkQuery(t))
-	require.Equal(t, dnsmsg.RCODENoError, w3.captured.Flags().RCODE(),
+	require.Equal(t, wire.RCODENoError, w3.captured.Flags().RCODE(),
 		"after refill the bucket should permit again")
 }

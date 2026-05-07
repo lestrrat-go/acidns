@@ -4,7 +4,7 @@ import (
 	"testing"
 
 	"github.com/lestrrat-go/acidns/dnsclient/specialuse"
-	"github.com/lestrrat-go/acidns/dnsname"
+	"github.com/lestrrat-go/acidns/wire"
 	"github.com/stretchr/testify/require"
 )
 
@@ -25,7 +25,7 @@ func TestFor(t *testing.T) {
 	}
 	for name, want := range cases {
 		t.Run(name, func(t *testing.T) {
-			n := dnsname.MustParse(name)
+			n := wire.MustParseName(name)
 			require.Equal(t, want, specialuse.For(n))
 		})
 	}

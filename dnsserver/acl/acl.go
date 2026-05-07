@@ -12,8 +12,8 @@ import (
 	"context"
 	"net/netip"
 
-	"github.com/lestrrat-go/acidns/dnsmsg"
 	"github.com/lestrrat-go/acidns/dnsserver"
+	"github.com/lestrrat-go/acidns/wire"
 )
 
 // Option configures the ACL.
@@ -56,7 +56,7 @@ func New(inner dnsserver.Handler, opts ...Option) dnsserver.Handler {
 	return &acl{inner: inner, allow: c.allow, deny: c.deny}
 }
 
-func (a *acl) ServeDNS(ctx context.Context, w dnsserver.ResponseWriter, q dnsmsg.Message) {
+func (a *acl) ServeDNS(ctx context.Context, w dnsserver.ResponseWriter, q wire.Message) {
 	src := w.RemoteAddr().Addr()
 	if !a.permit(src) {
 		a.refuse(w, q)
@@ -82,12 +82,12 @@ func (a *acl) permit(src netip.Addr) bool {
 	return false
 }
 
-func (a *acl) refuse(w dnsserver.ResponseWriter, q dnsmsg.Message) {
-	b := dnsmsg.NewBuilder().
+func (a *acl) refuse(w dnsserver.ResponseWriter, q wire.Message) {
+	b := wire.NewBuilder().
 		ID(q.ID()).
 		Response(true).
 		RecursionDesired(q.Flags().RecursionDesired()).
-		RCODE(dnsmsg.RCODERefused)
+		RCODE(wire.RCODERefused)
 	if len(q.Questions()) > 0 {
 		b = b.Question(q.Questions()[0])
 	}

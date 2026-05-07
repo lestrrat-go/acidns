@@ -5,22 +5,21 @@ import (
 	"net/netip"
 	"time"
 
-	"github.com/lestrrat-go/acidns/dnsmsg"
-	"github.com/lestrrat-go/acidns/dnsmsg/rdata"
-	"github.com/lestrrat-go/acidns/dnsname"
+	"github.com/lestrrat-go/acidns/wire"
+	"github.com/lestrrat-go/acidns/wire/rdata"
 )
 
 func Example_rrset_group() {
 	// GroupRecords partitions a flat record list into RRsets per RFC 2181.
 	// Mixed TTLs harmonise to the minimum (§5.2).
-	name := dnsname.MustParse("example.com")
-	records := []dnsmsg.Record{
-		dnsmsg.NewRecord(name, 60*time.Second, rdata.NewA(netip.MustParseAddr("192.0.2.1"))),
-		dnsmsg.NewRecord(name, 30*time.Second, rdata.NewA(netip.MustParseAddr("192.0.2.2"))),
-		dnsmsg.NewRecord(name, 60*time.Second, rdata.NewAAAA(netip.MustParseAddr("2001:db8::1"))),
+	name := wire.MustParseName("example.com")
+	records := []wire.Record{
+		wire.NewRecord(name, 60*time.Second, rdata.NewA(netip.MustParseAddr("192.0.2.1"))),
+		wire.NewRecord(name, 30*time.Second, rdata.NewA(netip.MustParseAddr("192.0.2.2"))),
+		wire.NewRecord(name, 60*time.Second, rdata.NewAAAA(netip.MustParseAddr("2001:db8::1"))),
 	}
 
-	groups, err := dnsmsg.GroupRecords(records)
+	groups, err := wire.GroupRecords(records)
 	if err != nil {
 		fmt.Println("group:", err)
 		return

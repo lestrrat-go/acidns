@@ -4,11 +4,11 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/lestrrat-go/acidns/dnsmsg"
-	"github.com/lestrrat-go/acidns/dnsmsg/rdata"
-	"github.com/lestrrat-go/acidns/dnsmsg/rrtype"
 	"github.com/lestrrat-go/acidns/dnsserver/authoritative"
 	"github.com/lestrrat-go/acidns/dnszone"
+	"github.com/lestrrat-go/acidns/wire"
+	"github.com/lestrrat-go/acidns/wire/rdata"
+	"github.com/lestrrat-go/acidns/wire/rrtype"
 	"github.com/stretchr/testify/require"
 )
 
@@ -36,7 +36,7 @@ func TestWildcardMatch(t *testing.T) {
 	t.Parallel()
 	a := newWildcardAuth(t)
 	resp := ask(t, a, "anything.example.com", rrtype.A)
-	require.Equal(t, dnsmsg.RCODENoError, resp.Flags().RCODE())
+	require.Equal(t, wire.RCODENoError, resp.Flags().RCODE())
 	require.Equal(t, 1, len(resp.Answers()))
 	got := resp.Answers()[0]
 	require.Equal(t, "anything.example.com.", got.Name().String(),
@@ -49,7 +49,7 @@ func TestWildcardTypeMiss(t *testing.T) {
 	a := newWildcardAuth(t)
 	// Wildcard has A and TXT but not AAAA — query for AAAA → NODATA.
 	resp := ask(t, a, "anything.example.com", rrtype.AAAA)
-	require.Equal(t, dnsmsg.RCODENoError, resp.Flags().RCODE())
+	require.Equal(t, wire.RCODENoError, resp.Flags().RCODE())
 	require.Equal(t, 0, len(resp.Answers()))
 	require.Equal(t, 1, len(resp.Authorities()))
 	require.Equal(t, rrtype.SOA, resp.Authorities()[0].Type())
@@ -71,7 +71,7 @@ func TestWildcardBlockedByEmptyNonTerminal(t *testing.T) {
 	// encloser is deep.example.com, and *.deep.example.com doesn't exist
 	// → NXDOMAIN.
 	resp := ask(t, a, "weird.deep.example.com", rrtype.A)
-	require.Equal(t, dnsmsg.RCODENXDomain, resp.Flags().RCODE())
+	require.Equal(t, wire.RCODENXDomain, resp.Flags().RCODE())
 }
 
 func TestEmptyNonTerminalNODATA(t *testing.T) {
@@ -79,7 +79,7 @@ func TestEmptyNonTerminalNODATA(t *testing.T) {
 	a := newWildcardAuth(t)
 	// "deep.example.com" itself — exists as empty non-terminal — NODATA.
 	resp := ask(t, a, "deep.example.com", rrtype.A)
-	require.Equal(t, dnsmsg.RCODENoError, resp.Flags().RCODE())
+	require.Equal(t, wire.RCODENoError, resp.Flags().RCODE())
 	require.Equal(t, 0, len(resp.Answers()))
 	require.Equal(t, 1, len(resp.Authorities()))
 }

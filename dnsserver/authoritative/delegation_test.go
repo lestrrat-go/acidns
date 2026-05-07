@@ -4,11 +4,11 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/lestrrat-go/acidns/dnsmsg"
-	"github.com/lestrrat-go/acidns/dnsmsg/rdata"
-	"github.com/lestrrat-go/acidns/dnsmsg/rrtype"
 	"github.com/lestrrat-go/acidns/dnsserver/authoritative"
 	"github.com/lestrrat-go/acidns/dnszone"
+	"github.com/lestrrat-go/acidns/wire"
+	"github.com/lestrrat-go/acidns/wire/rdata"
+	"github.com/lestrrat-go/acidns/wire/rrtype"
 	"github.com/stretchr/testify/require"
 )
 
@@ -45,7 +45,7 @@ func TestDelegationReferralWithGlue(t *testing.T) {
 	a := newDelegationAuth(t)
 	resp := ask(t, a, "host.sub.example.com", rrtype.A)
 
-	require.Equal(t, dnsmsg.RCODENoError, resp.Flags().RCODE())
+	require.Equal(t, wire.RCODENoError, resp.Flags().RCODE())
 	require.False(t, resp.Flags().Authoritative(), "AA must be 0 for downward referrals")
 	require.Equal(t, 0, len(resp.Answers()))
 

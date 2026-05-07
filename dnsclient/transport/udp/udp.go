@@ -15,7 +15,7 @@ import (
 	"time"
 
 	"github.com/lestrrat-go/acidns/dnsclient/transport"
-	"github.com/lestrrat-go/acidns/dnsmsg"
+	"github.com/lestrrat-go/acidns/wire"
 )
 
 // Option configures a UDP Exchanger.
@@ -60,8 +60,8 @@ func New(addr netip.AddrPort, opts ...Option) (transport.Exchanger, error) {
 	return &exchanger{addr: addr, timeout: c.timeout, bufsize: c.bufferSize}, nil
 }
 
-func (e *exchanger) Exchange(ctx context.Context, q dnsmsg.Message) (dnsmsg.Message, error) {
-	wire, err := dnsmsg.Marshal(q)
+func (e *exchanger) Exchange(ctx context.Context, q wire.Message) (wire.Message, error) {
+	msg, err := wire.Marshal(q)
 	if err != nil {
 		return nil, fmt.Errorf("udp: marshal query: %w", err)
 	}
@@ -90,7 +90,7 @@ func (e *exchanger) Exchange(ctx context.Context, q dnsmsg.Message) (dnsmsg.Mess
 		}
 	}()
 
-	if _, err := conn.Write(wire); err != nil {
+	if _, err := conn.Write(msg); err != nil {
 		return nil, fmt.Errorf("udp: write: %w", err)
 	}
 
@@ -103,7 +103,7 @@ func (e *exchanger) Exchange(ctx context.Context, q dnsmsg.Message) (dnsmsg.Mess
 			}
 			return nil, fmt.Errorf("udp: read: %w", err)
 		}
-		resp, err := dnsmsg.Unmarshal(buf[:n])
+		resp, err := wire.Unmarshal(buf[:n])
 		if err != nil {
 			// Malformed datagrams are dropped silently per RFC 1035 §7.3
 			// (server is misbehaving) — but only if there's still time.

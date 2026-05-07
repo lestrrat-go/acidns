@@ -10,10 +10,9 @@ import (
 
 	"github.com/lestrrat-go/acidns/dnsclient"
 	"github.com/lestrrat-go/acidns/dnsclient/transport/udp"
-	"github.com/lestrrat-go/acidns/dnsmsg"
-	"github.com/lestrrat-go/acidns/dnsmsg/rdata"
-	"github.com/lestrrat-go/acidns/dnsmsg/rrtype"
-	"github.com/lestrrat-go/acidns/dnsname"
+	"github.com/lestrrat-go/acidns/wire"
+	"github.com/lestrrat-go/acidns/wire/rdata"
+	"github.com/lestrrat-go/acidns/wire/rrtype"
 	"github.com/stretchr/testify/require"
 )
 
@@ -37,7 +36,7 @@ func startSearchServer(t *testing.T, wanted string) (netip.AddrPort, func() []st
 			if err != nil {
 				return
 			}
-			req, err := dnsmsg.Unmarshal(buf[:n])
+			req, err := wire.Unmarshal(buf[:n])
 			if err != nil || len(req.Questions()) == 0 {
 				continue
 			}
@@ -47,21 +46,21 @@ func startSearchServer(t *testing.T, wanted string) (netip.AddrPort, func() []st
 			cur = append(cur, q.Name().String())
 			queriedAtomic.Store(&cur)
 
-			b := dnsmsg.NewBuilder().
+			b := wire.NewBuilder().
 				ID(req.ID()).
 				Response(true).
 				RecursionAvailable(true).
 				Question(q)
 			if q.Name().String() == wanted {
 				if q.Type() == rrtype.A {
-					b = b.Answer(dnsmsg.NewRecord(q.Name(), time.Minute,
+					b = b.Answer(wire.NewRecord(q.Name(), time.Minute,
 						rdata.NewA(netip.MustParseAddr("192.0.2.1"))))
 				}
 			} else {
-				b = b.RCODE(dnsmsg.RCODENXDomain)
+				b = b.RCODE(wire.RCODENXDomain)
 			}
 			resp, _ := b.Build()
-			wire, _ := dnsmsg.Marshal(resp)
+			wire, _ := wire.Marshal(resp)
 			pc.WriteTo(wire, src)
 		}
 	}()
@@ -79,7 +78,7 @@ func TestSearchListSuffixed(t *testing.T) {
 	ex, _ := udp.New(addr)
 	r, err := dnsclient.New(
 		dnsclient.WithExchanger(ex),
-		dnsclient.WithSearchList(dnsname.MustParse("example.com")),
+		dnsclient.WithSearchList(wire.MustParseName("example.com")),
 		dnsclient.WithNdots(2),
 	)
 	require.NoError(t, err)
@@ -102,7 +101,7 @@ func TestSearchListAbsoluteSkipsSearch(t *testing.T) {
 	ex, _ := udp.New(addr)
 	r, err := dnsclient.New(
 		dnsclient.WithExchanger(ex),
-		dnsclient.WithSearchList(dnsname.MustParse("example.com")),
+		dnsclient.WithSearchList(wire.MustParseName("example.com")),
 		dnsclient.WithNdots(2),
 	)
 	require.NoError(t, err)
@@ -125,7 +124,7 @@ func TestSearchListNdotsAbsoluteFirst(t *testing.T) {
 	ex, _ := udp.New(addr)
 	r, err := dnsclient.New(
 		dnsclient.WithExchanger(ex),
-		dnsclient.WithSearchList(dnsname.MustParse("example.com")),
+		dnsclient.WithSearchList(wire.MustParseName("example.com")),
 		dnsclient.WithNdots(1), // a.b.c has 2 dots ≥ ndots → try absolute first
 	)
 	require.NoError(t, err)

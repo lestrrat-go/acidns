@@ -9,9 +9,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/lestrrat-go/acidns/dnsmsg/rdata"
-	"github.com/lestrrat-go/acidns/dnsname"
 	"github.com/lestrrat-go/acidns/sig0"
+	"github.com/lestrrat-go/acidns/wire"
+	"github.com/lestrrat-go/acidns/wire/rdata"
 	"github.com/stretchr/testify/require"
 )
 
@@ -26,11 +26,11 @@ func TestSignVerifyRSASHA256(t *testing.T) {
 	pubWire = append(pubWire, expBytes...)
 	pubWire = append(pubWire, priv.N.Bytes()...)
 
-	signer := dnsname.MustParse("test.signer")
-	wire := mkMessage(t)
+	signer := wire.MustParseName("test.signer")
+	msg := mkMessage(t)
 	now := time.Now().Truncate(time.Second).UTC()
 
-	signed, err := sig0.Sign(wire, signer, rdata.AlgRSASHA256, 1234,
+	signed, err := sig0.Sign(msg, signer, rdata.AlgRSASHA256, 1234,
 		func(payload []byte) ([]byte, error) {
 			h := sha256.Sum256(payload)
 			return rsa.SignPKCS1v15(rand.Reader, priv, crypto.SHA256, h[:])
@@ -43,9 +43,9 @@ func TestSignVerifyRSASHA256(t *testing.T) {
 
 func TestVerifyUnsupportedAlgorithm(t *testing.T) {
 	t.Parallel()
-	wire := mkMessage(t)
-	signer := dnsname.MustParse("s")
-	signed, err := sig0.Sign(wire, signer, rdata.DNSSECAlgorithm(99), 1,
+	msg := mkMessage(t)
+	signer := wire.MustParseName("s")
+	signed, err := sig0.Sign(msg, signer, rdata.DNSSECAlgorithm(99), 1,
 		func(p []byte) ([]byte, error) { return []byte{1, 2, 3}, nil },
 		time.Now(), time.Hour)
 	require.NoError(t, err)

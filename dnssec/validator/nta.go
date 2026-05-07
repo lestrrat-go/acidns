@@ -20,7 +20,7 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/lestrrat-go/acidns/dnsname"
+	"github.com/lestrrat-go/acidns/wire"
 )
 
 // NTAStore is a runtime-mutable registry of Negative Trust Anchors. An
@@ -36,7 +36,7 @@ type NTAStore struct {
 
 // NewNTAStore constructs an empty NTA registry pre-loaded with the given
 // names.
-func NewNTAStore(initial ...dnsname.Name) *NTAStore {
+func NewNTAStore(initial ...wire.Name) *NTAStore {
 	s := &NTAStore{set: make(map[string]struct{})}
 	for _, n := range initial {
 		s.Add(n)
@@ -45,7 +45,7 @@ func NewNTAStore(initial ...dnsname.Name) *NTAStore {
 }
 
 // Add registers an NTA. Returns true if the entry was newly added.
-func (s *NTAStore) Add(n dnsname.Name) bool {
+func (s *NTAStore) Add(n wire.Name) bool {
 	if !n.IsValid() {
 		return false
 	}
@@ -60,7 +60,7 @@ func (s *NTAStore) Add(n dnsname.Name) bool {
 }
 
 // Remove deletes an NTA. Returns true if an entry existed.
-func (s *NTAStore) Remove(n dnsname.Name) bool {
+func (s *NTAStore) Remove(n wire.Name) bool {
 	if !n.IsValid() {
 		return false
 	}
@@ -75,12 +75,12 @@ func (s *NTAStore) Remove(n dnsname.Name) bool {
 }
 
 // Names returns a snapshot of the configured NTAs.
-func (s *NTAStore) Names() []dnsname.Name {
+func (s *NTAStore) Names() []wire.Name {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
-	out := make([]dnsname.Name, 0, len(s.set))
+	out := make([]wire.Name, 0, len(s.set))
 	for k := range s.set {
-		n, err := dnsname.Parse(k)
+		n, err := wire.ParseName(k)
 		if err == nil {
 			out = append(out, n)
 		}
@@ -90,7 +90,7 @@ func (s *NTAStore) Names() []dnsname.Name {
 
 // Covers reports whether n falls under any registered NTA. The empty
 // store always reports false.
-func (s *NTAStore) Covers(n dnsname.Name) bool {
+func (s *NTAStore) Covers(n wire.Name) bool {
 	if !n.IsValid() {
 		return false
 	}

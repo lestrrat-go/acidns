@@ -7,11 +7,10 @@ import (
 	"net/netip"
 	"time"
 
-	"github.com/lestrrat-go/acidns/dnsmsg"
-	"github.com/lestrrat-go/acidns/dnsmsg/rdata"
-	"github.com/lestrrat-go/acidns/dnsmsg/rrtype"
-	"github.com/lestrrat-go/acidns/dnsname"
 	"github.com/lestrrat-go/acidns/dnssec"
+	"github.com/lestrrat-go/acidns/wire"
+	"github.com/lestrrat-go/acidns/wire/rdata"
+	"github.com/lestrrat-go/acidns/wire/rrtype"
 )
 
 func Example_dnssec_verify() {
@@ -25,14 +24,14 @@ func Example_dnssec_verify() {
 	key := rdata.NewDNSKEY(257, 3, rdata.AlgED25519, pub)
 
 	// The RRset we'll sign.
-	set := []dnsmsg.Record{
-		dnsmsg.NewRecord(dnsname.MustParse("www.example.com"), time.Hour,
+	set := []wire.Record{
+		wire.NewRecord(wire.MustParseName("www.example.com"), time.Hour,
 			rdata.NewA(netip.MustParseAddr("192.0.2.1"))),
 	}
 
 	// Build an RRSIG skeleton (no signature yet), compute the canonical
 	// signed data, then sign it.
-	signer := dnsname.MustParse("example.com")
+	signer := wire.MustParseName("example.com")
 	exp := time.Now().Add(time.Hour).UTC().Truncate(time.Second)
 	inc := time.Now().Add(-time.Hour).UTC().Truncate(time.Second)
 	skel := rdata.NewRRSIG(rrtype.A, rdata.AlgED25519, 3, time.Hour,

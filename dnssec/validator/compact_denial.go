@@ -1,8 +1,8 @@
 package validator
 
 import (
-	"github.com/lestrrat-go/acidns/dnsmsg/rdata"
-	"github.com/lestrrat-go/acidns/dnsmsg/rrtype"
+	"github.com/lestrrat-go/acidns/wire/rdata"
+	"github.com/lestrrat-go/acidns/wire/rrtype"
 )
 
 // IsCompactNXDOMAIN returns true if nsec carries the NXNAME pseudo-type in

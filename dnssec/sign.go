@@ -6,23 +6,22 @@ import (
 	"crypto/sha512"
 	"fmt"
 
-	"github.com/lestrrat-go/acidns/dnsmsg"
-	"github.com/lestrrat-go/acidns/dnsmsg/rdata"
-	"github.com/lestrrat-go/acidns/dnsname"
+	"github.com/lestrrat-go/acidns/wire"
+	"github.com/lestrrat-go/acidns/wire/rdata"
 )
 
 // SignedData returns the canonical RRSIG signed-data payload for set under
 // rrsig (RFC 4034 §3.1.8.1): the RRSIG fields with an empty signature
 // followed by the canonicalised RRset. Callers feed this into the chosen
 // signature algorithm; cf. Verify which performs the matching check.
-func SignedData(set []dnsmsg.Record, rrsig rdata.RRSIG) ([]byte, error) {
+func SignedData(set []wire.Record, rrsig rdata.RRSIG) ([]byte, error) {
 	return signedData(set, rrsig)
 }
 
 // DSDigest computes the DS rdata digest field for owner/key under the
 // requested digest type (RFC 4034 §5.1.4 / RFC 4509). Returns an error if
 // the digest type is unsupported.
-func DSDigest(owner dnsname.Name, key rdata.DNSKEY, dt rdata.DSDigestType) ([]byte, error) {
+func DSDigest(owner wire.Name, key rdata.DNSKEY, dt rdata.DSDigestType) ([]byte, error) {
 	data := append([]byte(nil), owner.AppendWire(nil)...)
 	data = append(data, dnskeyWire(key)...)
 	switch dt {

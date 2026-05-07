@@ -14,11 +14,10 @@ import (
 	"testing"
 	"time"
 
-	"github.com/lestrrat-go/acidns/dnsmsg"
-	"github.com/lestrrat-go/acidns/dnsmsg/rdata"
-	"github.com/lestrrat-go/acidns/dnsmsg/rrtype"
-	"github.com/lestrrat-go/acidns/dnsname"
 	"github.com/lestrrat-go/acidns/dnssec"
+	"github.com/lestrrat-go/acidns/wire"
+	"github.com/lestrrat-go/acidns/wire/rdata"
+	"github.com/lestrrat-go/acidns/wire/rrtype"
 	"github.com/stretchr/testify/require"
 )
 
@@ -26,8 +25,8 @@ import (
 // (cleartext) payload bytes alongside the resulting RRSIG.
 type signFn func(payload []byte) ([]byte, error)
 
-func makeRRSIG(t *testing.T, set []dnsmsg.Record, alg rdata.DNSSECAlgorithm,
-	keyTag uint16, signer dnsname.Name, sign signFn) rdata.RRSIG {
+func makeRRSIG(t *testing.T, set []wire.Record, alg rdata.DNSSECAlgorithm,
+	keyTag uint16, signer wire.Name, sign signFn) rdata.RRSIG {
 	t.Helper()
 	if len(set) == 0 {
 		t.Fatal("empty set")
@@ -46,10 +45,10 @@ func makeRRSIG(t *testing.T, set []dnsmsg.Record, alg rdata.DNSSECAlgorithm,
 		origTTL, exp, inc, keyTag, signer, sig)
 }
 
-func mkARRSet(name string, ip string) []dnsmsg.Record {
-	n := dnsname.MustParse(name)
-	r := dnsmsg.NewRecord(n, time.Hour, rdata.NewA(netip.MustParseAddr(ip)))
-	return []dnsmsg.Record{r}
+func mkARRSet(name string, ip string) []wire.Record {
+	n := wire.MustParseName(name)
+	r := wire.NewRecord(n, time.Hour, rdata.NewA(netip.MustParseAddr(ip)))
+	return []wire.Record{r}
 }
 
 func TestVerifyECDSAP256(t *testing.T) {
@@ -60,7 +59,7 @@ func TestVerifyECDSAP256(t *testing.T) {
 	pub := append(priv.PublicKey.X.FillBytes(make([]byte, 32)), priv.PublicKey.Y.FillBytes(make([]byte, 32))...)
 	key := rdata.NewDNSKEY(257, 3, rdata.AlgECDSAP256SHA256, pub)
 
-	signer := dnsname.MustParse("example.com")
+	signer := wire.MustParseName("example.com")
 	sign := func(payload []byte) ([]byte, error) {
 		h := sha256.Sum256(payload)
 		r, s, err := ecdsa.Sign(rand.Reader, priv, h[:])
@@ -89,7 +88,7 @@ func TestVerifyECDSAP384(t *testing.T) {
 	pub := append(priv.PublicKey.X.FillBytes(make([]byte, 48)), priv.PublicKey.Y.FillBytes(make([]byte, 48))...)
 	key := rdata.NewDNSKEY(257, 3, rdata.AlgECDSAP384SHA384, pub)
 
-	signer := dnsname.MustParse("example.com")
+	signer := wire.MustParseName("example.com")
 	sign := func(payload []byte) ([]byte, error) {
 		h := sha512.Sum384(payload)
 		r, s, err := ecdsa.Sign(rand.Reader, priv, h[:])
@@ -114,7 +113,7 @@ func TestVerifyED25519(t *testing.T) {
 
 	key := rdata.NewDNSKEY(257, 3, rdata.AlgED25519, pub)
 
-	signer := dnsname.MustParse("example.com")
+	signer := wire.MustParseName("example.com")
 	sign := func(payload []byte) ([]byte, error) {
 		return ed25519.Sign(priv, payload), nil
 	}
@@ -137,7 +136,7 @@ func TestVerifyRSASHA256(t *testing.T) {
 	pubWire = append(pubWire, priv.N.Bytes()...)
 	key := rdata.NewDNSKEY(257, 3, rdata.AlgRSASHA256, pubWire)
 
-	signer := dnsname.MustParse("example.com")
+	signer := wire.MustParseName("example.com")
 	sign := func(payload []byte) ([]byte, error) {
 		h := sha256.Sum256(payload)
 		return rsa.SignPKCS1v15(rand.Reader, priv, sha256Hasher, h[:])
@@ -187,7 +186,7 @@ func TestVerifyDS(t *testing.T) {
 		pub[i] = byte(0xcc ^ i)
 	}
 	key := rdata.NewDNSKEY(257, 3, rdata.AlgED25519, pub)
-	owner := dnsname.MustParse("example.com")
+	owner := wire.MustParseName("example.com")
 
 	// Build the digest by hand: sha256(owner | dnskey rdata)
 	var data []byte
@@ -214,7 +213,7 @@ func TestUnsupportedAlgorithm(t *testing.T) {
 	t.Parallel()
 	pub := make([]byte, 32)
 	key := rdata.NewDNSKEY(257, 3, rdata.DNSSECAlgorithm(99), pub)
-	signer := dnsname.MustParse("example.com")
+	signer := wire.MustParseName("example.com")
 	rrsig := rdata.NewRRSIG(rrtype.A, rdata.DNSSECAlgorithm(99), 3,
 		time.Hour, time.Now().Add(time.Hour), time.Now().Add(-time.Hour),
 		dnssec.KeyTag(key), signer, []byte{0xaa})

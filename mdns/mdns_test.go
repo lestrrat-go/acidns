@@ -5,11 +5,10 @@ import (
 	"testing"
 	"time"
 
-	"github.com/lestrrat-go/acidns/dnsmsg"
-	"github.com/lestrrat-go/acidns/dnsmsg/rdata"
-	"github.com/lestrrat-go/acidns/dnsmsg/rrtype"
-	"github.com/lestrrat-go/acidns/dnsname"
 	"github.com/lestrrat-go/acidns/mdns"
+	"github.com/lestrrat-go/acidns/wire"
+	"github.com/lestrrat-go/acidns/wire/rdata"
+	"github.com/lestrrat-go/acidns/wire/rrtype"
 	"github.com/stretchr/testify/require"
 )
 
@@ -27,21 +26,21 @@ func TestBuildBrowseQuery(t *testing.T) {
 func TestParseBrowseResponse(t *testing.T) {
 	t.Parallel()
 
-	svcType := dnsname.MustParse("_http._tcp.local")
-	instance := dnsname.MustParse("My Printer._http._tcp.local")
-	host := dnsname.MustParse("printer.local")
+	svcType := wire.MustParseName("_http._tcp.local")
+	instance := wire.MustParseName("My Printer._http._tcp.local")
+	host := wire.MustParseName("printer.local")
 
 	txt, _ := rdata.NewTXT("path=/admin", "model=acidns-bench")
 	srv := rdata.NewSRV(0, 0, 80, host)
 	a := rdata.NewA(netip.MustParseAddr("192.0.2.50"))
 
-	resp, err := dnsmsg.NewBuilder().
+	resp, err := wire.NewBuilder().
 		ID(0).
 		Response(true).
-		Answer(dnsmsg.NewRecord(svcType, time.Minute, rdata.NewPTR(instance))).
-		Answer(dnsmsg.NewRecord(instance, time.Minute, srv)).
-		Answer(dnsmsg.NewRecord(instance, time.Minute, txt)).
-		Additional(dnsmsg.NewRecord(host, time.Minute, a)).
+		Answer(wire.NewRecord(svcType, time.Minute, rdata.NewPTR(instance))).
+		Answer(wire.NewRecord(instance, time.Minute, srv)).
+		Answer(wire.NewRecord(instance, time.Minute, txt)).
+		Additional(wire.NewRecord(host, time.Minute, a)).
 		Build()
 	require.NoError(t, err)
 
@@ -63,7 +62,7 @@ func TestParseBrowseResponse(t *testing.T) {
 
 func TestParseBrowseResponseEmpty(t *testing.T) {
 	t.Parallel()
-	resp, _ := dnsmsg.NewBuilder().ID(0).Response(true).Build()
+	resp, _ := wire.NewBuilder().ID(0).Response(true).Build()
 	require.Equal(t, 0, len(mdns.ParseBrowseResponse(resp)))
 }
 

@@ -32,7 +32,7 @@ func TestPaddingPackUnpack(t *testing.T) {
 	require.Len(t, pad.Data, 16)
 
 	m := &dso.Message{
-		Primary: dso.NewKeepAlive(30*time.Second, 5*time.Second),
+		Primary:    dso.NewKeepAlive(30*time.Second, 5*time.Second),
 		Additional: []dso.TLV{pad},
 	}
 	wire, err := m.Pack()

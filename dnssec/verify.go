@@ -14,9 +14,8 @@ import (
 	"hash"
 	"math/big"
 
-	"github.com/lestrrat-go/acidns/dnsmsg"
-	"github.com/lestrrat-go/acidns/dnsmsg/rdata"
-	"github.com/lestrrat-go/acidns/dnsname"
+	"github.com/lestrrat-go/acidns/wire"
+	"github.com/lestrrat-go/acidns/wire/rdata"
 )
 
 // ErrSignatureMismatch is returned when an RRSIG fails verification.
@@ -29,7 +28,7 @@ var ErrUnsupportedAlgorithm = errors.New("dnssec: unsupported algorithm")
 // Verify checks rrsig over set using key. It returns nil on success and a
 // concrete error on any failure (algorithm mismatch, key tag mismatch,
 // signature decode failure, or hash/signature mismatch).
-func Verify(set []dnsmsg.Record, rrsig rdata.RRSIG, key rdata.DNSKEY) error {
+func Verify(set []wire.Record, rrsig rdata.RRSIG, key rdata.DNSKEY) error {
 	if rrsig.Algorithm() != key.Algorithm() {
 		return fmt.Errorf("%w: rrsig alg %d vs dnskey alg %d",
 			ErrSignatureMismatch, rrsig.Algorithm(), key.Algorithm())
@@ -131,7 +130,7 @@ func verifyECDSA(curve elliptic.Curve, size int, h func() hash.Hash, data, pub, 
 
 // VerifyDS checks that ds matches the digest of (canonical owner ||
 // dnskey rdata) for the supplied DNSKEY.
-func VerifyDS(owner dnsname.Name, ds rdata.DS, key rdata.DNSKEY) error {
+func VerifyDS(owner wire.Name, ds rdata.DS, key rdata.DNSKEY) error {
 	if ds.KeyTag() != KeyTag(key) {
 		return fmt.Errorf("%w: DS key tag mismatch", ErrSignatureMismatch)
 	}

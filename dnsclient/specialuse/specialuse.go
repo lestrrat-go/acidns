@@ -8,8 +8,8 @@ import (
 	"net/netip"
 	"strings"
 
-	"github.com/lestrrat-go/acidns/dnsmsg/rrtype"
-	"github.com/lestrrat-go/acidns/dnsname"
+	"github.com/lestrrat-go/acidns/wire"
+	"github.com/lestrrat-go/acidns/wire/rrtype"
 )
 
 // Disposition describes how a Resolver should treat a special-use name.
@@ -36,7 +36,7 @@ const (
 // Per RFC 6761 §6.5, application software SHOULD NOT special-case
 // "example", "example.com", "example.net", or "example.org" — those are
 // reserved against future allocation but otherwise resolve normally.
-func For(n dnsname.Name) Disposition {
+func For(n wire.Name) Disposition {
 	if !n.IsValid() {
 		return Pass
 	}

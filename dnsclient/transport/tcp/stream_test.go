@@ -8,9 +8,8 @@ import (
 
 	"github.com/lestrrat-go/acidns/dnsclient/transport"
 	"github.com/lestrrat-go/acidns/dnsclient/transport/tcp"
-	"github.com/lestrrat-go/acidns/dnsmsg"
-	"github.com/lestrrat-go/acidns/dnsmsg/rrtype"
-	"github.com/lestrrat-go/acidns/dnsname"
+	"github.com/lestrrat-go/acidns/wire"
+	"github.com/lestrrat-go/acidns/wire/rrtype"
 	"github.com/stretchr/testify/require"
 )
 
@@ -20,9 +19,9 @@ func TestTCPStream(t *testing.T) {
 	ex, err := tcp.New(addr, tcp.WithTimeout(2*time.Second))
 	require.NoError(t, err)
 
-	q, err := dnsmsg.NewBuilder().
+	q, err := wire.NewBuilder().
 		ID(0xc0de).
-		Question(dnsmsg.NewQuestion(dnsname.MustParse("example.com"), rrtype.A)).
+		Question(wire.NewQuestion(wire.MustParseName("example.com"), rrtype.A)).
 		Build()
 	require.NoError(t, err)
 
@@ -46,8 +45,8 @@ func TestTCPDialFailure(t *testing.T) {
 	t.Parallel()
 	ex, err := tcp.New(netip.MustParseAddrPort("127.0.0.1:1"))
 	require.NoError(t, err)
-	q, _ := dnsmsg.NewBuilder().ID(1).
-		Question(dnsmsg.NewQuestion(dnsname.MustParse("example.com"), rrtype.A)).
+	q, _ := wire.NewBuilder().ID(1).
+		Question(wire.NewQuestion(wire.MustParseName("example.com"), rrtype.A)).
 		Build()
 	ctx, cancel := context.WithTimeout(t.Context(), 200*time.Millisecond)
 	defer cancel()

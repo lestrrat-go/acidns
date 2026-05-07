@@ -4,21 +4,21 @@ import (
 	"fmt"
 	"net/netip"
 
-	"github.com/lestrrat-go/acidns/dnsmsg"
+	"github.com/lestrrat-go/acidns/wire"
 )
 
 func Example_edns_options() {
 	// Build an OPT pseudo-RR with several EDNS options. Each helper has
 	// a typed constructor and a typed parser.
-	cookie := dnsmsg.NewClientCookie([8]byte{0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08})
-	ecs, err := dnsmsg.NewClientSubnet(netip.MustParsePrefix("192.0.2.0/24"), 0)
+	cookie := wire.NewClientCookie([8]byte{0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08})
+	ecs, err := wire.NewClientSubnet(netip.MustParsePrefix("192.0.2.0/24"), 0)
 	if err != nil {
 		fmt.Println("ecs:", err)
 		return
 	}
-	ede := dnsmsg.NewExtendedError(dnsmsg.ExtendedErrorDNSSECBogus, "RRSIG expired")
+	ede := wire.NewExtendedError(wire.ExtendedErrorDNSSECBogus, "RRSIG expired")
 
-	opt := dnsmsg.NewEDNSBuilder().
+	opt := wire.NewEDNSBuilder().
 		UDPSize(1232).
 		DO(true).
 		Option(cookie).
@@ -30,13 +30,13 @@ func Example_edns_options() {
 	fmt.Println("UDP size:", opt.UDPSize())
 	for _, o := range opt.Options() {
 		switch o.Code() {
-		case dnsmsg.EDNSOptionCookie:
+		case wire.EDNSOptionCookie:
 			fmt.Println("cookie option present")
-		case dnsmsg.EDNSOptionClientSubnet:
-			pfx, scope, _ := dnsmsg.ClientSubnet(o)
+		case wire.EDNSOptionClientSubnet:
+			pfx, scope, _ := wire.ClientSubnet(o)
 			fmt.Println("client-subnet:", pfx, "scope:", scope)
-		case dnsmsg.EDNSOptionExtendedDNS:
-			code, text, _ := dnsmsg.ExtendedError(o)
+		case wire.EDNSOptionExtendedDNS:
+			code, text, _ := wire.ExtendedError(o)
 			fmt.Println("ede:", code, text)
 		}
 	}

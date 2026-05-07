@@ -18,14 +18,14 @@ import (
 	"strings"
 
 	"github.com/lestrrat-go/acidns/dnsclient"
-	"github.com/lestrrat-go/acidns/dnsmsg/rdata"
-	"github.com/lestrrat-go/acidns/dnsmsg/rrtype"
-	"github.com/lestrrat-go/acidns/dnsname"
+	"github.com/lestrrat-go/acidns/wire"
+	"github.com/lestrrat-go/acidns/wire/rdata"
+	"github.com/lestrrat-go/acidns/wire/rrtype"
 )
 
 // ResolverDomain is the special name clients query to discover designated
 // resolvers (RFC 9462 §4).
-var ResolverDomain = dnsname.MustParse("_dns.resolver.arpa")
+var ResolverDomain = wire.MustParseName("_dns.resolver.arpa")
 
 // Protocol identifies the encrypted transport an endpoint advertises.
 type Protocol uint8
@@ -51,14 +51,14 @@ func (p Protocol) String() string {
 
 // Endpoint is one designated-resolver alternative.
 type Endpoint struct {
-	Priority   uint16
-	Target     dnsname.Name
-	Protocol   Protocol
-	ALPN       []string
-	Port       uint16 // 0 when unspecified
-	DOHPath    string // empty for non-DoH endpoints
-	IPv4Hints  []netip.Addr
-	IPv6Hints  []netip.Addr
+	Priority  uint16
+	Target    wire.Name
+	Protocol  Protocol
+	ALPN      []string
+	Port      uint16 // 0 when unspecified
+	DOHPath   string // empty for non-DoH endpoints
+	IPv4Hints []netip.Addr
+	IPv6Hints []netip.Addr
 }
 
 // Discover queries _dns.resolver.arpa via r and returns the Endpoints sorted

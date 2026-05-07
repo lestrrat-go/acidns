@@ -9,13 +9,12 @@ import (
 	"time"
 
 	"github.com/lestrrat-go/acidns/dnsclient"
-	"github.com/lestrrat-go/acidns/dnsmsg"
-	"github.com/lestrrat-go/acidns/dnsmsg/rdata"
-	"github.com/lestrrat-go/acidns/dnsmsg/rrtype"
-	"github.com/lestrrat-go/acidns/dnsname"
 	"github.com/lestrrat-go/acidns/dnsserver"
 	"github.com/lestrrat-go/acidns/dnsserver/authoritative"
 	"github.com/lestrrat-go/acidns/dnszone"
+	"github.com/lestrrat-go/acidns/wire"
+	"github.com/lestrrat-go/acidns/wire/rdata"
+	"github.com/lestrrat-go/acidns/wire/rrtype"
 	"github.com/stretchr/testify/require"
 )
 
@@ -83,9 +82,9 @@ func TestE2EAuthoritativeOverUDPAndTCP(t *testing.T) {
 	})
 
 	t.Run("Resolve MX mail", func(t *testing.T) {
-		ans, err := r.Resolve(ctx, dnsname.MustParse("mail.example.com"), rrtype.MX)
+		ans, err := r.Resolve(ctx, wire.MustParseName("mail.example.com"), rrtype.MX)
 		require.NoError(t, err)
-		require.Equal(t, dnsmsg.RCODENoError, ans.RCODE())
+		require.Equal(t, wire.RCODENoError, ans.RCODE())
 		require.True(t, ans.Authoritative())
 		require.Equal(t, 1, len(ans.Records()))
 		mx := ans.Records()[0].RData().(rdata.MX)
@@ -93,7 +92,7 @@ func TestE2EAuthoritativeOverUDPAndTCP(t *testing.T) {
 	})
 
 	t.Run("NXDOMAIN", func(t *testing.T) {
-		_, err := r.Resolve(ctx, dnsname.MustParse("nope.example.com"), rrtype.A)
+		_, err := r.Resolve(ctx, wire.MustParseName("nope.example.com"), rrtype.A)
 		require.ErrorIs(t, err, dnsclient.ErrNXDOMAIN)
 		var rerr *dnsclient.RCodeError
 		require.ErrorAs(t, err, &rerr)
@@ -101,17 +100,17 @@ func TestE2EAuthoritativeOverUDPAndTCP(t *testing.T) {
 	})
 
 	t.Run("NODATA", func(t *testing.T) {
-		ans, err := r.Resolve(ctx, dnsname.MustParse("ns1.example.com"), rrtype.AAAA)
+		ans, err := r.Resolve(ctx, wire.MustParseName("ns1.example.com"), rrtype.AAAA)
 		require.NoError(t, err)
-		require.Equal(t, dnsmsg.RCODENoError, ans.RCODE())
+		require.Equal(t, wire.RCODENoError, ans.RCODE())
 		require.Equal(t, 0, len(ans.Records()))
 		require.Equal(t, 1, len(ans.Raw().Authorities()))
 	})
 
 	t.Run("CNAME chase", func(t *testing.T) {
-		ans, err := r.Resolve(ctx, dnsname.MustParse("alias.example.com"), rrtype.A)
+		ans, err := r.Resolve(ctx, wire.MustParseName("alias.example.com"), rrtype.A)
 		require.NoError(t, err)
-		require.Equal(t, dnsmsg.RCODENoError, ans.RCODE())
+		require.Equal(t, wire.RCODENoError, ans.RCODE())
 		// Records() is filtered to QTYPE matches (A only); the raw response
 		// contains the CNAME hop too.
 		require.Equal(t, 2, len(ans.Records()))
@@ -119,7 +118,7 @@ func TestE2EAuthoritativeOverUDPAndTCP(t *testing.T) {
 	})
 
 	t.Run("REFUSED out-of-zone", func(t *testing.T) {
-		_, err := r.Resolve(ctx, dnsname.MustParse("example.org"), rrtype.A)
+		_, err := r.Resolve(ctx, wire.MustParseName("example.org"), rrtype.A)
 		require.ErrorIs(t, err, dnsclient.ErrRefused)
 	})
 }

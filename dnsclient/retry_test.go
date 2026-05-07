@@ -8,10 +8,9 @@ import (
 	"time"
 
 	"github.com/lestrrat-go/acidns/dnsclient"
-	"github.com/lestrrat-go/acidns/dnsmsg"
-	"github.com/lestrrat-go/acidns/dnsmsg/rdata"
-	"github.com/lestrrat-go/acidns/dnsmsg/rrtype"
-	"github.com/lestrrat-go/acidns/dnsname"
+	"github.com/lestrrat-go/acidns/wire"
+	"github.com/lestrrat-go/acidns/wire/rdata"
+	"github.com/lestrrat-go/acidns/wire/rrtype"
 	"github.com/stretchr/testify/require"
 )
 
@@ -70,8 +69,8 @@ func TestRetryRespectsContext(t *testing.T) {
 
 // Suppress unused import warning when running this file standalone.
 var (
-	_ = dnsmsg.NewBuilder
+	_ = wire.NewBuilder
 	_ rdata.A
 	_ = rrtype.A
-	_ = dnsname.MustParse
+	_ = wire.MustParseName
 )

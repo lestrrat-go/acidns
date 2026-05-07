@@ -6,10 +6,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/lestrrat-go/acidns/dnsmsg"
-	"github.com/lestrrat-go/acidns/dnsmsg/rdata"
-	"github.com/lestrrat-go/acidns/dnsmsg/rrtype"
-	"github.com/lestrrat-go/acidns/dnsname"
+	"github.com/lestrrat-go/acidns/wire"
+	"github.com/lestrrat-go/acidns/wire/rdata"
+	"github.com/lestrrat-go/acidns/wire/rrtype"
 	"github.com/stretchr/testify/require"
 )
 
@@ -67,7 +66,7 @@ func TestFormatRDataAAAA(t *testing.T) {
 
 func TestFormatRDataMX(t *testing.T) {
 	t.Parallel()
-	rd := rdata.NewMX(10, dnsname.MustParse("mail.example.com"))
+	rd := rdata.NewMX(10, wire.MustParseName("mail.example.com"))
 	require.Equal(t, "10 mail.example.com.", formatRData(rd))
 }
 
@@ -83,8 +82,8 @@ func TestFormatRDataTXT(t *testing.T) {
 func TestFormatRDataSOA(t *testing.T) {
 	t.Parallel()
 	rd := rdata.NewSOA(
-		dnsname.MustParse("ns.example.com"),
-		dnsname.MustParse("hm.example.com"),
+		wire.MustParseName("ns.example.com"),
+		wire.MustParseName("hm.example.com"),
 		1, time.Hour, time.Hour, time.Hour, time.Hour,
 	)
 	got := formatRData(rd)
@@ -109,8 +108,8 @@ func TestFormatRDataUnknown(t *testing.T) {
 
 func TestFormatRecord(t *testing.T) {
 	t.Parallel()
-	rec := dnsmsg.NewRecord(
-		dnsname.MustParse("example.com"),
+	rec := wire.NewRecord(
+		wire.MustParseName("example.com"),
 		300*time.Second,
 		rdata.NewA(netip.MustParseAddr("192.0.2.1")),
 	)
@@ -165,19 +164,19 @@ func TestBuildResolverInvalidServer(t *testing.T) {
 
 func TestFormatRDataCNAME(t *testing.T) {
 	t.Parallel()
-	rd := rdata.NewCNAME(dnsname.MustParse("alias.example.com"))
+	rd := rdata.NewCNAME(wire.MustParseName("alias.example.com"))
 	require.Contains(t, formatRData(rd), "alias.example.com")
 }
 
 func TestFormatRDataNS(t *testing.T) {
 	t.Parallel()
-	rd := rdata.NewNS(dnsname.MustParse("ns.example.com"))
+	rd := rdata.NewNS(wire.MustParseName("ns.example.com"))
 	require.Contains(t, formatRData(rd), "ns.example.com")
 }
 
 func TestFormatRDataPTR(t *testing.T) {
 	t.Parallel()
-	rd := rdata.NewPTR(dnsname.MustParse("h.example.com"))
+	rd := rdata.NewPTR(wire.MustParseName("h.example.com"))
 	require.Contains(t, formatRData(rd), "h.example.com")
 }
 
@@ -185,13 +184,13 @@ func TestFormatRDataSVCB(t *testing.T) {
 	t.Parallel()
 	alpn, err := rdata.NewSvcParamALPN("h2")
 	require.NoError(t, err)
-	rd := rdata.NewSVCB(1, dnsname.MustParse("svc.example.com"), alpn)
+	rd := rdata.NewSVCB(1, wire.MustParseName("svc.example.com"), alpn)
 	got := formatRData(rd)
 	require.Contains(t, got, "svc.example.com")
 }
 
 func TestFormatRDataHTTPS(t *testing.T) {
 	t.Parallel()
-	rd := rdata.NewHTTPS(1, dnsname.MustParse("h.example.com"))
+	rd := rdata.NewHTTPS(1, wire.MustParseName("h.example.com"))
 	require.Contains(t, formatRData(rd), "h.example.com")
 }

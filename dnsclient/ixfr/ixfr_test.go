@@ -11,11 +11,11 @@ import (
 	"github.com/lestrrat-go/acidns/dnsclient/ixfr"
 	"github.com/lestrrat-go/acidns/dnsclient/transport"
 	"github.com/lestrrat-go/acidns/dnsclient/transport/tcp"
-	"github.com/lestrrat-go/acidns/dnsmsg/rdata"
-	"github.com/lestrrat-go/acidns/dnsname"
 	"github.com/lestrrat-go/acidns/dnsserver"
 	"github.com/lestrrat-go/acidns/dnsserver/authoritative"
 	"github.com/lestrrat-go/acidns/dnszone"
+	"github.com/lestrrat-go/acidns/wire"
+	"github.com/lestrrat-go/acidns/wire/rdata"
 	"github.com/stretchr/testify/require"
 )
 
@@ -44,8 +44,8 @@ func TestTransferAXFRFallback(t *testing.T) {
 
 	// Ask for the zone with a stale serial — server falls back to AXFR.
 	clientSOA := rdata.NewSOA(
-		dnsname.MustParse("ns1.example.com"),
-		dnsname.MustParse("hm.example.com"),
+		wire.MustParseName("ns1.example.com"),
+		wire.MustParseName("hm.example.com"),
 		1, 7200*time.Second, 3600*time.Second, 1209600*time.Second, 60*time.Second)
 
 	xferCtx, xcancel := context.WithTimeout(t.Context(), 5*time.Second)
@@ -56,7 +56,7 @@ func TestTransferAXFRFallback(t *testing.T) {
 	sx, ok := ex.(transport.StreamExchanger)
 	require.True(t, ok, "tcp exchanger must implement StreamExchanger")
 
-	xfer, err := ixfr.Start(xferCtx, sx, dnsname.MustParse("example.com"), clientSOA)
+	xfer, err := ixfr.Start(xferCtx, sx, wire.MustParseName("example.com"), clientSOA)
 	require.NoError(t, err)
 	defer xfer.Close()
 

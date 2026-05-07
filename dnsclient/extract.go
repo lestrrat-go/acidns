@@ -3,10 +3,9 @@ package dnsclient
 import (
 	"context"
 
-	"github.com/lestrrat-go/acidns/dnsmsg"
-	"github.com/lestrrat-go/acidns/dnsmsg/rdata"
-	"github.com/lestrrat-go/acidns/dnsmsg/rrtype"
-	"github.com/lestrrat-go/acidns/dnsname"
+	"github.com/lestrrat-go/acidns/wire"
+	"github.com/lestrrat-go/acidns/wire/rdata"
+	"github.com/lestrrat-go/acidns/wire/rrtype"
 )
 
 // ResolveAs queries r for (name, t) and returns the rdata of every matching
@@ -20,7 +19,7 @@ import (
 // satisfaction is structural — see the rdata-dispatch convention. Callers
 // MUST pass the rrtype.Type that corresponds to T (e.g. rdata.MX paired with
 // rrtype.MX).
-func ResolveAs[T rdata.RData](ctx context.Context, r Resolver, name dnsname.Name, t rrtype.Type) ([]T, error) {
+func ResolveAs[T rdata.RData](ctx context.Context, r Resolver, name wire.Name, t rrtype.Type) ([]T, error) {
 	ans, err := r.Resolve(ctx, name, t)
 	if err != nil {
 		return nil, err
@@ -32,7 +31,7 @@ func ResolveAs[T rdata.RData](ctx context.Context, r Resolver, name dnsname.Name
 // T. Records whose Type() does not match t are skipped — the Type() check
 // MUST come before the assertion because rdata.A and rdata.AAAA share a
 // method set, rdata.CNAME and rdata.SVCB share Target(), etc.
-func Extract[T rdata.RData](records []dnsmsg.Record, t rrtype.Type) []T {
+func Extract[T rdata.RData](records []wire.Record, t rrtype.Type) []T {
 	out := make([]T, 0, len(records))
 	for _, rec := range records {
 		if rec.Type() != t {

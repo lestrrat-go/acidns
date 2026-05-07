@@ -13,9 +13,9 @@ import (
 	"time"
 
 	"github.com/lestrrat-go/acidns/dnsclient"
-	"github.com/lestrrat-go/acidns/dnsmsg/rdata"
-	"github.com/lestrrat-go/acidns/dnsmsg/rrtype"
-	"github.com/lestrrat-go/acidns/dnsname"
+	"github.com/lestrrat-go/acidns/wire"
+	"github.com/lestrrat-go/acidns/wire/rdata"
+	"github.com/lestrrat-go/acidns/wire/rrtype"
 )
 
 func main() {
@@ -51,7 +51,7 @@ func main() {
 		fmt.Fprintf(os.Stderr, "unknown RR type: %s\n", *rrType)
 		os.Exit(2)
 	}
-	name, err := dnsname.Parse(host)
+	name, err := wire.ParseName(host)
 	check(err)
 
 	ans, err := r.Resolve(ctx, name, t)

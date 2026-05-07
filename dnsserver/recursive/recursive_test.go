@@ -7,14 +7,13 @@ import (
 	"testing"
 	"time"
 
-	"github.com/lestrrat-go/acidns/dnsmsg"
-	"github.com/lestrrat-go/acidns/dnsmsg/rdata"
-	"github.com/lestrrat-go/acidns/dnsmsg/rrtype"
-	"github.com/lestrrat-go/acidns/dnsname"
 	"github.com/lestrrat-go/acidns/dnsserver"
 	"github.com/lestrrat-go/acidns/dnsserver/authoritative"
 	"github.com/lestrrat-go/acidns/dnsserver/recursive"
 	"github.com/lestrrat-go/acidns/dnszone"
+	"github.com/lestrrat-go/acidns/wire"
+	"github.com/lestrrat-go/acidns/wire/rdata"
+	"github.com/lestrrat-go/acidns/wire/rrtype"
 	"github.com/stretchr/testify/require"
 )
 
@@ -53,9 +52,9 @@ www IN  A    192.0.2.42
 	r := recursive.New(recursive.WithRoots(childAddr))
 	ctx, cancel := context.WithTimeout(t.Context(), 5*time.Second)
 	defer cancel()
-	entry, err := r.Resolve(ctx, dnsname.MustParse("www.example.com"), rrtype.A)
+	entry, err := r.Resolve(ctx, wire.MustParseName("www.example.com"), rrtype.A)
 	require.NoError(t, err)
-	require.Equal(t, dnsmsg.RCODENoError, entry.RCODE)
+	require.Equal(t, wire.RCODENoError, entry.RCODE)
 	require.True(t, entry.AA)
 	require.Equal(t, 1, len(entry.Answer))
 	a := entry.Answer[0].RData().(rdata.A)
@@ -79,13 +78,13 @@ www IN  A    192.0.2.55
 
 	// Root handler: a small in-process Handler that returns a fixed
 	// referral pointing at ns1.example.com with 127.0.0.1 as glue.
-	rootHandler := dnsserver.HandlerFunc(func(_ context.Context, w dnsserver.ResponseWriter, q dnsmsg.Message) {
+	rootHandler := dnsserver.HandlerFunc(func(_ context.Context, w dnsserver.ResponseWriter, q wire.Message) {
 		question := q.Questions()[0]
-		ns := dnsmsg.NewRecord(dnsname.MustParse("example.com"), 60*time.Second,
-			rdata.NewNS(dnsname.MustParse("ns1.example.com")))
-		glue := dnsmsg.NewRecord(dnsname.MustParse("ns1.example.com"), 60*time.Second,
+		ns := wire.NewRecord(wire.MustParseName("example.com"), 60*time.Second,
+			rdata.NewNS(wire.MustParseName("ns1.example.com")))
+		glue := wire.NewRecord(wire.MustParseName("ns1.example.com"), 60*time.Second,
 			rdata.NewA(netip.MustParseAddr("127.0.0.1")))
-		resp, _ := dnsmsg.NewBuilder().
+		resp, _ := wire.NewBuilder().
 			ID(q.ID()).
 			Response(true).
 			Question(question).
@@ -115,9 +114,9 @@ www IN  A    192.0.2.55
 	)
 	ctx, cancel := context.WithTimeout(t.Context(), 5*time.Second)
 	defer cancel()
-	entry, err := r.Resolve(ctx, dnsname.MustParse("www.example.com"), rrtype.A)
+	entry, err := r.Resolve(ctx, wire.MustParseName("www.example.com"), rrtype.A)
 	require.NoError(t, err)
-	require.Equal(t, dnsmsg.RCODENoError, entry.RCODE)
+	require.Equal(t, wire.RCODENoError, entry.RCODE)
 	require.True(t, entry.AA)
 	require.Equal(t, 1, len(entry.Answer))
 	require.Equal(t, "192.0.2.55", entry.Answer[0].RData().(rdata.A).Addr().String())
@@ -127,7 +126,7 @@ type portRewriteDialer struct {
 	rewrites map[netip.AddrPort]netip.AddrPort
 }
 
-func (d portRewriteDialer) Exchange(ctx context.Context, server netip.AddrPort, q dnsmsg.Message) (dnsmsg.Message, error) {
+func (d portRewriteDialer) Exchange(ctx context.Context, server netip.AddrPort, q wire.Message) (wire.Message, error) {
 	if mapped, ok := d.rewrites[server]; ok {
 		server = mapped
 	}
@@ -147,9 +146,9 @@ www IN  A    192.0.2.42
 	ctx, cancel := context.WithTimeout(t.Context(), 5*time.Second)
 	defer cancel()
 
-	a, err := r.Resolve(ctx, dnsname.MustParse("www.example.com"), rrtype.A)
+	a, err := r.Resolve(ctx, wire.MustParseName("www.example.com"), rrtype.A)
 	require.NoError(t, err)
-	b, err := r.Resolve(ctx, dnsname.MustParse("www.example.com"), rrtype.A)
+	b, err := r.Resolve(ctx, wire.MustParseName("www.example.com"), rrtype.A)
 	require.NoError(t, err)
 	require.Equal(t, a.ExpiresAt, b.ExpiresAt, "second lookup must come from cache")
 }
@@ -165,9 +164,9 @@ ns1 IN  A    192.0.2.10
 	r := recursive.New(recursive.WithRoots(addr))
 	ctx, cancel := context.WithTimeout(t.Context(), 5*time.Second)
 	defer cancel()
-	entry, err := r.Resolve(ctx, dnsname.MustParse("nope.example.com"), rrtype.A)
+	entry, err := r.Resolve(ctx, wire.MustParseName("nope.example.com"), rrtype.A)
 	require.NoError(t, err)
-	require.Equal(t, dnsmsg.RCODENXDomain, entry.RCODE)
+	require.Equal(t, wire.RCODENXDomain, entry.RCODE)
 	// SOA MINIMUM is 5s, the smallest cap so negative TTL must be ≤ 5s.
 	require.LessOrEqual(t, time.Until(entry.ExpiresAt), 5*time.Second+time.Second)
 }
@@ -186,9 +185,9 @@ www  IN A   192.0.2.20
 	defer cancel()
 	// www has A but not AAAA — NODATA. SOA MINIMUM=7s caps the negative
 	// cache TTL even though everything else (TTL=600) is much higher.
-	entry, err := r.Resolve(ctx, dnsname.MustParse("www.example.com"), rrtype.AAAA)
+	entry, err := r.Resolve(ctx, wire.MustParseName("www.example.com"), rrtype.AAAA)
 	require.NoError(t, err)
-	require.Equal(t, dnsmsg.RCODENoError, entry.RCODE)
+	require.Equal(t, wire.RCODENoError, entry.RCODE)
 	require.Equal(t, 0, len(entry.Answer))
 	require.LessOrEqual(t, time.Until(entry.ExpiresAt), 8*time.Second)
 }

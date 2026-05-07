@@ -1,5 +1,5 @@
 // Package dnscrypt implements the DNSCrypt v2 protocol — an encrypted
-// transport for DNS queries between a client and a resolver. The wire
+// transport for DNS queries between a client and a resolver. The msg
 // format is the format documented at https://dnscrypt.info/protocol
 // (DNSCrypt is not standardised by any RFC; the protocol is defined by
 // its reference implementation).
@@ -32,7 +32,7 @@ import (
 	"golang.org/x/crypto/curve25519"
 
 	"github.com/lestrrat-go/acidns/dnsclient/transport"
-	"github.com/lestrrat-go/acidns/dnsmsg"
+	"github.com/lestrrat-go/acidns/wire"
 )
 
 // Certificate magic values.
@@ -61,7 +61,7 @@ var (
 	ErrPlainTextTooShort    = errors.New("dnscrypt: response too short")
 )
 
-// Cert is a parsed DNSCrypt certificate (124 bytes on the wire).
+// Cert is a parsed DNSCrypt certificate (124 bytes on the msg).
 type Cert struct {
 	ESVersion     ESVersion
 	ProtocolMinor uint16
@@ -119,7 +119,7 @@ func (c *Cert) Verify(providerPK ed25519.PublicKey, now time.Time) error {
 	return nil
 }
 
-// EncodeCert serialises c back to wire form. Useful for tests that
+// EncodeCert serialises c back to msg form. Useful for tests that
 // build a fake responder.
 func EncodeCert(c *Cert) []byte {
 	out := make([]byte, 124)
@@ -292,8 +292,8 @@ func New(addr netip.AddrPort, cert *Cert, opts ...Option) (transport.Exchanger, 
 }
 
 // Exchange encrypts q, sends it via UDP, and decrypts the response.
-func (e *exchanger) Exchange(ctx context.Context, q dnsmsg.Message) (dnsmsg.Message, error) {
-	wire, err := dnsmsg.Marshal(q)
+func (e *exchanger) Exchange(ctx context.Context, q wire.Message) (wire.Message, error) {
+	msg, err := wire.Marshal(q)
 	if err != nil {
 		return nil, fmt.Errorf("dnscrypt: marshal: %w", err)
 	}
@@ -314,7 +314,7 @@ func (e *exchanger) Exchange(ctx context.Context, q dnsmsg.Message) (dnsmsg.Mess
 		return nil, err
 	}
 
-	enc, err := Encrypt(e.cert, clientPK, clientSK, nonce, wire)
+	enc, err := Encrypt(e.cert, clientPK, clientSK, nonce, msg)
 	if err != nil {
 		return nil, err
 	}
@@ -343,5 +343,5 @@ func (e *exchanger) Exchange(ctx context.Context, q dnsmsg.Message) (dnsmsg.Mess
 	if err != nil {
 		return nil, err
 	}
-	return dnsmsg.Unmarshal(plain)
+	return wire.Unmarshal(plain)
 }
