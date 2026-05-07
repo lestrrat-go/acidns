@@ -158,43 +158,88 @@ func (a *authoritative) ServeDNS(ctx context.Context, w acidns.ResponseWriter, q
 	_ = w.WriteMsg(resp)
 }
 
-// serveAXFR implements RFC 5936 single-message AXFR. The full zone fits in
-// one DNS message for our intended scale; multi-message streaming can be
-// added later by emitting multiple WriteMsg calls.
+// axfrChunkBudget is the soft cap on per-message body size used by the
+// AXFR streamer. Conservatively below the 65535 framing limit and below
+// most middleboxes' single-frame thresholds; tuned to keep packets small
+// enough that a slow link delivers progress between idle timeouts.
+const axfrChunkBudget = 16 * 1024
+
+// serveAXFR implements RFC 5936 AXFR. The zone is streamed across one or
+// more DNS messages on the same TCP connection: the first message starts
+// with the apex SOA, subsequent messages carry continuation records, and
+// the final message ends with the apex SOA. Each message is a complete,
+// self-framed DNS response with AA=1; per RFC 5936 §2.2 a receiver
+// reassembles the zone by concatenating answer sections in arrival order.
 func (a *authoritative) serveAXFR(w acidns.ResponseWriter, q wire.Message) {
 	question := q.Questions()[0]
-	b := wire.NewBuilder().
-		ID(q.ID()).
-		Response(true).
-		RecursionDesired(q.Flags().RecursionDesired()).
-		Question(question)
+	header := func() wire.Builder {
+		return wire.NewBuilder().
+			ID(q.ID()).
+			Response(true).
+			RecursionDesired(q.Flags().RecursionDesired()).
+			Question(question)
+	}
 
 	// AXFR over UDP is not allowed.
 	if w.Network() != "tcp" {
-		_ = w.WriteMsg(mustBuild(b.RCODE(wire.RCODERefused)))
+		_ = w.WriteMsg(mustBuild(header().RCODE(wire.RCODERefused)))
 		return
 	}
 
 	zone := a.findZone(question.Name())
 	if zone == nil {
-		_ = w.WriteMsg(mustBuild(b.RCODE(wire.RCODERefused)))
+		_ = w.WriteMsg(mustBuild(header().RCODE(wire.RCODERefused)))
 		return
 	}
 	if !zone.origin.Equal(question.Name()) {
 		// AXFR target must equal a zone's apex.
-		_ = w.WriteMsg(mustBuild(b.RCODE(wire.RCODENotAuth)))
+		_ = w.WriteMsg(mustBuild(header().RCODE(wire.RCODENotAuth)))
 		return
 	}
 
-	b = b.Authoritative(true).Answer(zone.soaRec)
+	b := header().Authoritative(true).Answer(zone.soaRec)
+	soaSize := estimateRecordSize(zone.soaRec)
+	used := soaSize
+
+	flush := func() bool {
+		if err := w.WriteMsg(mustBuild(b)); err != nil {
+			return false
+		}
+		b = header().Authoritative(true)
+		used = 0
+		return true
+	}
+
 	for _, rec := range zone.allRecordsOrdered() {
 		if rec.Type() == rrtype.SOA {
 			continue // skip the apex SOA (added at the boundaries)
 		}
+		recSize := estimateRecordSize(rec)
+		// Reserve room for the trailing SOA so we never have to spill it
+		// into a tiny third message after a record-budget flush.
+		if used > 0 && used+recSize+soaSize > axfrChunkBudget {
+			if !flush() {
+				return
+			}
+		}
 		b = b.Answer(rec)
+		used += recSize
+	}
+	if used+soaSize > axfrChunkBudget {
+		if !flush() {
+			return
+		}
 	}
 	b = b.Answer(zone.soaRec)
 	_ = w.WriteMsg(mustBuild(b))
+}
+
+// estimateRecordSize returns an upper-bound on the wire size of rec
+// before name compression. Real on-the-wire size is ≤ this estimate,
+// which keeps the AXFR chunker comfortably under axfrChunkBudget.
+func estimateRecordSize(rec wire.Record) int {
+	const fixedHeader = 10 // type(2) + class(2) + ttl(4) + rdlen(2)
+	return rec.Name().WireLen() + fixedHeader + len(rdata.Pack(rec.RData()))
 }
 
 func (a *authoritative) answer(q wire.Message) wire.Message {
