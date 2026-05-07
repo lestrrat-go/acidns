@@ -69,6 +69,7 @@ acidns/                root: high-level convenience layer + UDP/TCP exchangers +
 
   authoritative/       master-file-backed authoritative server
   chaos/               RFC 4892 id.server / hostname.bind handler
+  forward/             caching DNS forwarder (UDP-with-TCP-fallback or DoT upstream)
   recursive/           iterative recursive resolver + cache
 
   internal/streamframe/  RFC 1035 §4.2.2 length-framed TCP/DoT/DoQ codec
