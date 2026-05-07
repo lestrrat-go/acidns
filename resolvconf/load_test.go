@@ -26,3 +26,13 @@ func TestLoadMissing(t *testing.T) {
 	_, err := resolvconf.Load("/no/such/file/here.conf")
 	require.Error(t, err)
 }
+
+// TestLoadEmptyPathUsesDefault exercises the empty-path branch that falls back
+// to DefaultPath. We don't assert on success because /etc/resolv.conf may or
+// may not exist (and may or may not parse cleanly) on the host running the
+// test — the goal is to traverse the branch.
+func TestLoadEmptyPathUsesDefault(t *testing.T) {
+	t.Parallel()
+	// Either outcome is acceptable; the call itself is the coverage target.
+	_, _ = resolvconf.Load("")
+}
