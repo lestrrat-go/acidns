@@ -630,7 +630,7 @@ func TestQueryTimeoutAppliesWhenNoDeadline(t *testing.T) {
 
 	q := clientQuery(t, "example.com", rrtype.A)
 	w := &captureWriter{}
-	h.ServeDNS(context.Background(), w, q) // no deadline on parent
+	h.ServeDNS(t.Context(), w, q) // no deadline on parent
 	require.True(t, sawDeadline.Load(), "WithQueryTimeout should attach a deadline to upstream context")
 }
 
@@ -661,7 +661,7 @@ func TestExistingDeadlineNotOverridden(t *testing.T) {
 	)
 	require.NoError(t, err)
 
-	ctx, cancel := context.WithDeadline(context.Background(), time.Now().Add(2*time.Second))
+	ctx, cancel := context.WithDeadline(t.Context(), time.Now().Add(2*time.Second))
 	defer cancel()
 
 	w := &captureWriter{}

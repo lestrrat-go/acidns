@@ -39,7 +39,7 @@ func TestChaosIDServer(t *testing.T) {
 	t.Parallel()
 	h := chaos.New(chaos.WithIdentifier("ns1.example.net"))
 	w := &captureWriter{}
-	h.ServeDNS(context.Background(), w, mustQuery(t, "id.server.", rrtype.ClassCH))
+	h.ServeDNS(t.Context(), w, mustQuery(t, "id.server.", rrtype.ClassCH))
 
 	require.NotNil(t, w.resp)
 	require.True(t, w.resp.Flags().Response())
@@ -53,7 +53,7 @@ func TestChaosHostnameBindAlias(t *testing.T) {
 	t.Parallel()
 	h := chaos.New(chaos.WithIdentifier("alpha"))
 	w := &captureWriter{}
-	h.ServeDNS(context.Background(), w, mustQuery(t, "hostname.bind.", rrtype.ClassCH))
+	h.ServeDNS(t.Context(), w, mustQuery(t, "hostname.bind.", rrtype.ClassCH))
 	txt := w.resp.Answers()[0].RData().(rdata.TXT)
 	require.Equal(t, []string{"alpha"}, txt.Strings())
 }
@@ -62,7 +62,7 @@ func TestChaosVersion(t *testing.T) {
 	t.Parallel()
 	h := chaos.New(chaos.WithVersion("acidns/dev"))
 	w := &captureWriter{}
-	h.ServeDNS(context.Background(), w, mustQuery(t, "version.bind.", rrtype.ClassCH))
+	h.ServeDNS(t.Context(), w, mustQuery(t, "version.bind.", rrtype.ClassCH))
 	txt := w.resp.Answers()[0].RData().(rdata.TXT)
 	require.Equal(t, []string{"acidns/dev"}, txt.Strings())
 }
@@ -77,7 +77,7 @@ func TestChaosDelegatesOnNonChaos(t *testing.T) {
 	})
 	h := chaos.New(chaos.WithIdentifier("foo"), chaos.WithNext(next))
 	w := &captureWriter{}
-	h.ServeDNS(context.Background(), w, mustQuery(t, "example.com.", rrtype.ClassIN))
+	h.ServeDNS(t.Context(), w, mustQuery(t, "example.com.", rrtype.ClassIN))
 	require.True(t, delegated)
 }
 
@@ -85,7 +85,7 @@ func TestChaosRefusesWithoutNext(t *testing.T) {
 	t.Parallel()
 	h := chaos.New(chaos.WithIdentifier("foo"))
 	w := &captureWriter{}
-	h.ServeDNS(context.Background(), w, mustQuery(t, "example.com.", rrtype.ClassIN))
+	h.ServeDNS(t.Context(), w, mustQuery(t, "example.com.", rrtype.ClassIN))
 	require.Equal(t, wire.RCODERefused, w.resp.Flags().RCODE())
 }
 
@@ -93,7 +93,7 @@ func TestChaosVersionServerAlias(t *testing.T) {
 	t.Parallel()
 	h := chaos.New(chaos.WithVersion("1.2.3"))
 	w := &captureWriter{}
-	h.ServeDNS(context.Background(), w, mustQuery(t, "version.server.", rrtype.ClassCH))
+	h.ServeDNS(t.Context(), w, mustQuery(t, "version.server.", rrtype.ClassCH))
 	require.NotNil(t, w.resp)
 	require.Len(t, w.resp.Answers(), 1)
 	txt := w.resp.Answers()[0].RData().(rdata.TXT)
@@ -104,7 +104,7 @@ func TestChaosCaseInsensitiveName(t *testing.T) {
 	t.Parallel()
 	h := chaos.New(chaos.WithIdentifier("upper"))
 	w := &captureWriter{}
-	h.ServeDNS(context.Background(), w, mustQuery(t, "ID.SERVER.", rrtype.ClassCH))
+	h.ServeDNS(t.Context(), w, mustQuery(t, "ID.SERVER.", rrtype.ClassCH))
 	require.NotNil(t, w.resp)
 	require.Len(t, w.resp.Answers(), 1)
 	txt := w.resp.Answers()[0].RData().(rdata.TXT)
@@ -126,7 +126,7 @@ func TestChaosWrongTypePassesThrough(t *testing.T) {
 		Question(wire.NewQuestionClass(wire.MustParseName("id.server."), rrtype.A, rrtype.ClassCH)).
 		Build()
 	require.NoError(t, err)
-	h.ServeDNS(context.Background(), w, q)
+	h.ServeDNS(t.Context(), w, q)
 	require.True(t, delegated)
 }
 
@@ -140,7 +140,7 @@ func TestChaosNonChaosClassWithMatchingNamePassesThrough(t *testing.T) {
 	})
 	h := chaos.New(chaos.WithIdentifier("foo"), chaos.WithNext(next))
 	w := &captureWriter{}
-	h.ServeDNS(context.Background(), w, mustQuery(t, "id.server.", rrtype.ClassIN))
+	h.ServeDNS(t.Context(), w, mustQuery(t, "id.server.", rrtype.ClassIN))
 	require.True(t, delegated)
 }
 
@@ -148,7 +148,7 @@ func TestChaosUnknownChaosNameRefused(t *testing.T) {
 	t.Parallel()
 	h := chaos.New(chaos.WithIdentifier("foo"))
 	w := &captureWriter{}
-	h.ServeDNS(context.Background(), w, mustQuery(t, "trustanchor.server.", rrtype.ClassCH))
+	h.ServeDNS(t.Context(), w, mustQuery(t, "trustanchor.server.", rrtype.ClassCH))
 	require.NotNil(t, w.resp)
 	require.Equal(t, wire.RCODERefused, w.resp.Flags().RCODE())
 	require.Empty(t, w.resp.Answers())
@@ -159,7 +159,7 @@ func TestChaosIDDisabledFallsThrough(t *testing.T) {
 	// no WithIdentifier → id.server lookup returns ok=false → refused
 	h := chaos.New(chaos.WithVersion("only-version"))
 	w := &captureWriter{}
-	h.ServeDNS(context.Background(), w, mustQuery(t, "id.server.", rrtype.ClassCH))
+	h.ServeDNS(t.Context(), w, mustQuery(t, "id.server.", rrtype.ClassCH))
 	require.NotNil(t, w.resp)
 	require.Equal(t, wire.RCODERefused, w.resp.Flags().RCODE())
 }
@@ -175,7 +175,7 @@ func TestChaosVersionDisabledFallsThrough(t *testing.T) {
 	})
 	h := chaos.New(chaos.WithIdentifier("only-id"), chaos.WithNext(next))
 	w := &captureWriter{}
-	h.ServeDNS(context.Background(), w, mustQuery(t, "version.bind.", rrtype.ClassCH))
+	h.ServeDNS(t.Context(), w, mustQuery(t, "version.bind.", rrtype.ClassCH))
 	require.True(t, delegated)
 }
 
@@ -185,7 +185,7 @@ func TestChaosNoQuestionRefused(t *testing.T) {
 	w := &captureWriter{}
 	q, err := wire.NewBuilder().ID(7).Build()
 	require.NoError(t, err)
-	h.ServeDNS(context.Background(), w, q)
+	h.ServeDNS(t.Context(), w, q)
 	require.NotNil(t, w.resp)
 	require.Equal(t, wire.RCODERefused, w.resp.Flags().RCODE())
 }
@@ -206,6 +206,6 @@ func TestChaosMultiQuestionDelegates(t *testing.T) {
 		Question(wire.NewQuestionClass(wire.MustParseName("hostname.bind."), rrtype.TXT, rrtype.ClassCH)).
 		Build()
 	require.NoError(t, err)
-	h.ServeDNS(context.Background(), w, q)
+	h.ServeDNS(t.Context(), w, q)
 	require.True(t, delegated)
 }

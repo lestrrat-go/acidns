@@ -144,7 +144,7 @@ func TestEmptyQuestionsFormErr(t *testing.T) {
 	q, err := wire.NewBuilder().ID(7).Build()
 	require.NoError(t, err)
 	w := &inProcWriter{}
-	a.ServeDNS(context.Background(), w, q)
+	a.ServeDNS(t.Context(), w, q)
 	require.NotNil(t, w.resp)
 	require.Equal(t, wire.RCODEFormErr, w.resp.Flags().RCODE())
 }
@@ -159,7 +159,7 @@ func TestAXFRAtNonApexNotAuth(t *testing.T) {
 		Build()
 	require.NoError(t, err)
 	w := &inProcWriter{network: "tcp"}
-	a.ServeDNS(context.Background(), w, q)
+	a.ServeDNS(t.Context(), w, q)
 	require.Equal(t, wire.RCODENotAuth, w.resp.Flags().RCODE())
 }
 
@@ -173,7 +173,7 @@ func TestIXFRFallsBackToAXFR(t *testing.T) {
 		Build()
 	require.NoError(t, err)
 	w := &inProcWriter{network: "tcp"}
-	a.ServeDNS(context.Background(), w, q)
+	a.ServeDNS(t.Context(), w, q)
 	require.NotNil(t, w.resp)
 	require.Equal(t, wire.RCODENoError, w.resp.Flags().RCODE())
 	require.True(t, w.resp.Flags().Authoritative())
@@ -262,7 +262,7 @@ func TestNotifyEmptyQuestionsFormErr(t *testing.T) {
 		Build()
 	require.NoError(t, err)
 	w := &inProcWriter{}
-	a.ServeDNS(context.Background(), w, q)
+	a.ServeDNS(t.Context(), w, q)
 	require.NotNil(t, w.resp)
 	require.Equal(t, wire.RCODEFormErr, w.resp.Flags().RCODE())
 }
@@ -277,7 +277,7 @@ func TestUpdateEmptyQuestionsFormErr(t *testing.T) {
 		Build()
 	require.NoError(t, err)
 	w := &inProcWriter{}
-	a.ServeDNS(context.Background(), w, q)
+	a.ServeDNS(t.Context(), w, q)
 	require.NotNil(t, w.resp)
 	require.Equal(t, wire.RCODEFormErr, w.resp.Flags().RCODE())
 }
@@ -293,7 +293,7 @@ func TestUpdateZoneNotSOA(t *testing.T) {
 		Build()
 	require.NoError(t, err)
 	w := &inProcWriter{}
-	a.ServeDNS(context.Background(), w, q)
+	a.ServeDNS(t.Context(), w, q)
 	require.Equal(t, wire.RCODEFormErr, w.resp.Flags().RCODE())
 }
 

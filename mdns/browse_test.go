@@ -172,14 +172,16 @@ func canonicalBrowseResponse(t *testing.T) []byte {
 	return buf
 }
 
+func withConn(pc net.PacketConn) mdns.BrowseOption {
+	return mdns.WithBrowseConn(func() (net.PacketConn, error) { return pc, nil })
+}
+
 func TestBrowseSuccess(t *testing.T) {
 	t.Parallel()
 	pc := newFakePacketConn()
 	pc.push(canonicalBrowseResponse(t))
-	restore := mdns.SetOpenConn(func() (net.PacketConn, error) { return pc, nil })
-	defer restore()
 
-	services, err := mdns.Browse(t.Context(), "_http._tcp", 200*time.Millisecond)
+	services, err := mdns.Browse(t.Context(), "_http._tcp", 200*time.Millisecond, withConn(pc))
 	require.NoError(t, err)
 	require.Equal(t, 1, len(services))
 	require.Equal(t, "test", services[0].Instance)
@@ -198,10 +200,8 @@ func TestBrowseSuccess(t *testing.T) {
 func TestBrowseNoResponse(t *testing.T) {
 	t.Parallel()
 	pc := newFakePacketConn()
-	restore := mdns.SetOpenConn(func() (net.PacketConn, error) { return pc, nil })
-	defer restore()
 
-	_, err := mdns.Browse(t.Context(), "_http._tcp", 30*time.Millisecond)
+	_, err := mdns.Browse(t.Context(), "_http._tcp", 30*time.Millisecond, withConn(pc))
 	require.ErrorIs(t, err, mdns.ErrNoResponse)
 }
 
@@ -214,10 +214,9 @@ func TestBrowseInvalidServiceName(t *testing.T) {
 func TestBrowseOpenError(t *testing.T) {
 	t.Parallel()
 	wantErr := errors.New("boom")
-	restore := mdns.SetOpenConn(func() (net.PacketConn, error) { return nil, wantErr })
-	defer restore()
+	open := mdns.WithBrowseConn(func() (net.PacketConn, error) { return nil, wantErr })
 
-	_, err := mdns.Browse(t.Context(), "_http._tcp", 10*time.Millisecond)
+	_, err := mdns.Browse(t.Context(), "_http._tcp", 10*time.Millisecond, open)
 	require.ErrorIs(t, err, wantErr)
 }
 
@@ -225,10 +224,8 @@ func TestBrowseWriteError(t *testing.T) {
 	t.Parallel()
 	pc := newFakePacketConn()
 	pc.writeErr = errors.New("write failed")
-	restore := mdns.SetOpenConn(func() (net.PacketConn, error) { return pc, nil })
-	defer restore()
 
-	_, err := mdns.Browse(t.Context(), "_http._tcp", 50*time.Millisecond)
+	_, err := mdns.Browse(t.Context(), "_http._tcp", 50*time.Millisecond, withConn(pc))
 	require.Error(t, err)
 }
 
@@ -238,10 +235,8 @@ func TestBrowseIgnoresMalformedPackets(t *testing.T) {
 	// Garbage first, then a valid response.
 	pc.push([]byte{0xff, 0xff, 0x00})
 	pc.push(canonicalBrowseResponse(t))
-	restore := mdns.SetOpenConn(func() (net.PacketConn, error) { return pc, nil })
-	defer restore()
 
-	services, err := mdns.Browse(t.Context(), "_http._tcp", 200*time.Millisecond)
+	services, err := mdns.Browse(t.Context(), "_http._tcp", 200*time.Millisecond, withConn(pc))
 	require.NoError(t, err)
 	require.Equal(t, 1, len(services))
 }
@@ -252,16 +247,11 @@ func TestBrowseContextCancelTriggersDeadline(t *testing.T) {
 	// Enqueue a real response so the call returns success once cancel
 	// trips the deadline.
 	pc.push(canonicalBrowseResponse(t))
-	restore := mdns.SetOpenConn(func() (net.PacketConn, error) { return pc, nil })
-	defer restore()
 
 	ctx, cancel := context.WithCancel(t.Context())
-	go func() {
-		time.Sleep(20 * time.Millisecond)
-		cancel()
-	}()
-	// Long timeout so cancel is what stops Browse.
-	services, err := mdns.Browse(ctx, "_http._tcp", 5*time.Second)
+	cancel()
+	// Long timeout so the canceled ctx is what stops Browse.
+	services, err := mdns.Browse(ctx, "_http._tcp", 5*time.Second, withConn(pc))
 	require.NoError(t, err)
 	require.Equal(t, 1, len(services))
 }
@@ -270,13 +260,11 @@ func TestBrowseContextDeadlineBeforeTimeout(t *testing.T) {
 	t.Parallel()
 	pc := newFakePacketConn()
 	pc.push(canonicalBrowseResponse(t))
-	restore := mdns.SetOpenConn(func() (net.PacketConn, error) { return pc, nil })
-	defer restore()
 
 	ctx, cancel := context.WithTimeout(t.Context(), 30*time.Millisecond)
 	defer cancel()
 	// Browse has 5s timeout but ctx deadline is sooner.
-	services, err := mdns.Browse(ctx, "_http._tcp", 5*time.Second)
+	services, err := mdns.Browse(ctx, "_http._tcp", 5*time.Second, withConn(pc))
 	require.NoError(t, err)
 	require.Equal(t, 1, len(services))
 }

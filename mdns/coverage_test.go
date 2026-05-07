@@ -143,13 +143,10 @@ func TestAnnounceCancelDuringAnnounceWait(t *testing.T) {
 	)
 	require.NoError(t, err)
 
-	ctx, cancel := context.WithCancel(t.Context())
-	go func() {
-		time.Sleep(20 * time.Millisecond)
-		cancel()
-	}()
+	ctx, cancel := context.WithTimeout(t.Context(), 20*time.Millisecond)
+	defer cancel()
 	err = a.Announce(ctx, samplePublication())
-	require.ErrorIs(t, err, context.Canceled)
+	require.ErrorIs(t, err, context.DeadlineExceeded)
 }
 
 // recvErrTransport returns a non-context error from Recv so we can

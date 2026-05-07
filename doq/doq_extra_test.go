@@ -83,12 +83,12 @@ func startCustomDoQ(t *testing.T, hook serverHook) (netip.AddrPort, *tls.Config)
 
 	go func() {
 		for {
-			conn, err := ln.Accept(context.Background())
+			conn, err := ln.Accept(t.Context())
 			if err != nil {
 				return
 			}
 			go func(c *quic.Conn) {
-				stream, err := c.AcceptStream(context.Background())
+				stream, err := c.AcceptStream(t.Context())
 				if err != nil {
 					return
 				}
@@ -406,20 +406,10 @@ func TestStreamContextCancelDuringNext(t *testing.T) {
 	require.NoError(t, err)
 	defer stream.Close()
 
-	nextCtx, nextCancel := context.WithCancel(t.Context())
-	errCh := make(chan error, 1)
-	go func() {
-		_, err := stream.Next(nextCtx)
-		errCh <- err
-	}()
-	time.Sleep(50 * time.Millisecond)
-	nextCancel()
-	select {
-	case err := <-errCh:
-		require.Error(t, err)
-	case <-time.After(3 * time.Second):
-		t.Fatal("Next did not return after context cancellation")
-	}
+	nextCtx, nextCancel := context.WithTimeout(t.Context(), 50*time.Millisecond)
+	defer nextCancel()
+	_, err = stream.Next(nextCtx)
+	require.Error(t, err)
 }
 
 // TestStreamDialFailureClosed verifies that calling Stream against a port
@@ -495,7 +485,7 @@ func startRefusingDoQ(t *testing.T) (netip.AddrPort, *tls.Config) {
 
 	go func() {
 		for {
-			conn, err := ln.Accept(context.Background())
+			conn, err := ln.Accept(t.Context())
 			if err != nil {
 				return
 			}
@@ -625,7 +615,7 @@ func startStreamStarvedDoQ(t *testing.T) (netip.AddrPort, *tls.Config) {
 
 	go func() {
 		for {
-			conn, err := ln.Accept(context.Background())
+			conn, err := ln.Accept(t.Context())
 			if err != nil {
 				return
 			}
@@ -754,7 +744,7 @@ func TestExchangeBrokenAfterDial(t *testing.T) {
 	t.Cleanup(func() { close(done) })
 	go func() {
 		for {
-			conn, err := ln.Accept(context.Background())
+			conn, err := ln.Accept(t.Context())
 			if err != nil {
 				return
 			}

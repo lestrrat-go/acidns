@@ -21,18 +21,10 @@ func TestSecretPoolAutoRotation(t *testing.T) {
 	first := append([]byte(nil), pool.Current()...)
 	require.NotEmpty(t, first)
 
-	deadline := time.Now().Add(2 * time.Second)
-	for time.Now().Before(deadline) {
-		cur := pool.Current()
-		if string(cur) != string(first) {
-			// Verify that All() now contains both current and previous.
-			all := pool.All()
-			require.GreaterOrEqual(t, len(all), 2)
-			return
-		}
-		time.Sleep(5 * time.Millisecond)
-	}
-	t.Fatal("secret pool did not rotate within deadline")
+	require.Eventually(t, func() bool {
+		return string(pool.Current()) != string(first)
+	}, 2*time.Second, 5*time.Millisecond, "secret pool did not rotate within deadline")
+	require.GreaterOrEqual(t, len(pool.All()), 2)
 }
 
 // TestSecretPoolCancelStopsRotation verifies that the cancel function

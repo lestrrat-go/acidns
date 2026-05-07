@@ -136,10 +136,38 @@ func ParseBrowseResponse(m wire.Message) []Service {
 	return out
 }
 
+// BrowseOption configures Browse.
+type BrowseOption interface {
+	applyBrowse(*browseConfig)
+}
+
+type browseOptionFunc func(*browseConfig)
+
+func (f browseOptionFunc) applyBrowse(c *browseConfig) { f(c) }
+
+type browseConfig struct {
+	openConn func() (net.PacketConn, error)
+}
+
+// WithBrowseConn injects the function used to open the listening
+// socket. The default opens the IPv4 mDNS multicast group on udp4. Tests
+// pass an in-process [net.PacketConn] factory to avoid binding the real
+// multicast group.
+func WithBrowseConn(open func() (net.PacketConn, error)) BrowseOption {
+	return browseOptionFunc(func(c *browseConfig) { c.openConn = open })
+}
+
 // Browse sends a multicast PTR query for the named service type and
 // collects responses for at most timeout. It deduplicates services by
 // (instance, type) across responses.
-func Browse(ctx context.Context, service string, timeout time.Duration) ([]Service, error) {
+func Browse(ctx context.Context, service string, timeout time.Duration, opts ...BrowseOption) ([]Service, error) {
+	cfg := browseConfig{
+		openConn: func() (net.PacketConn, error) { return openMulticast() },
+	}
+	for _, opt := range opts {
+		opt.applyBrowse(&cfg)
+	}
+
 	q, err := BuildBrowseQuery(service)
 	if err != nil {
 		return nil, err
@@ -149,7 +177,7 @@ func Browse(ctx context.Context, service string, timeout time.Duration) ([]Servi
 		return nil, err
 	}
 
-	conn, err := openConn()
+	conn, err := cfg.openConn()
 	if err != nil {
 		return nil, err
 	}
@@ -201,11 +229,6 @@ func Browse(ctx context.Context, service string, timeout time.Duration) ([]Servi
 	}
 	return out, nil
 }
-
-// openConn opens the network connection used by Browse. It is a package
-// variable so tests can swap it for an in-process loopback PacketConn —
-// CI cannot reliably bind the real multicast group.
-var openConn = func() (net.PacketConn, error) { return openMulticast() }
 
 func openMulticast() (*net.UDPConn, error) {
 	addr := &net.UDPAddr{IP: net.ParseIP(GroupV4), Port: Port}
