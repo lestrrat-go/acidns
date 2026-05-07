@@ -267,7 +267,7 @@ func TestExchangeDialFailure(t *testing.T) {
 	ctx, cancel := context.WithCancel(t.Context())
 	cancel()
 	_, err = ex.Exchange(ctx, q)
-	require.Error(t, err)
+	require.ErrorIs(t, err, context.Canceled)
 }
 
 // TestExchangeReadTimeout drives the read-failure path: peer accepts the
@@ -397,5 +397,7 @@ func TestExchangeUnmarshalFailure(t *testing.T) {
 	ctx, cancel := context.WithTimeout(t.Context(), 2*time.Second)
 	defer cancel()
 	_, err = ex.Exchange(ctx, q)
-	require.Error(t, err)
+	// Server replies with junk plaintext (2 bytes) — wire.Unmarshal will
+	// fail with ErrInvalidMessage. The dnscrypt layer wraps it.
+	require.ErrorContains(t, err, "header too short")
 }

@@ -18,6 +18,7 @@ import (
 	"github.com/lestrrat-go/acidns/sig0"
 	"github.com/lestrrat-go/acidns/wire"
 	"github.com/lestrrat-go/acidns/wire/rdata"
+	"github.com/lestrrat-go/acidns/wire/wirebb"
 	"github.com/stretchr/testify/require"
 )
 
@@ -99,7 +100,7 @@ func TestSignMsgTooShort(t *testing.T) {
 	_, err := sig0.Sign([]byte{1, 2, 3}, wire.MustParseName("s"), rdata.AlgED25519, 1,
 		func([]byte) ([]byte, error) { return nil, nil },
 		time.Now(), time.Hour)
-	require.Error(t, err)
+	require.ErrorContains(t, err, "msg too short")
 }
 
 func TestSignCallbackError(t *testing.T) {
@@ -115,7 +116,7 @@ func TestSignCallbackError(t *testing.T) {
 func TestVerifyMsgTooShort(t *testing.T) {
 	t.Parallel()
 	_, err := sig0.Verify([]byte{1}, rdata.AlgED25519, nil, wire.MustParseName("s"), time.Now())
-	require.Error(t, err)
+	require.ErrorContains(t, err, "msg too short")
 }
 
 func TestVerifyNoSIGRecord(t *testing.T) {
@@ -137,8 +138,7 @@ func TestVerifySignerMismatch(t *testing.T) {
 	}, now, time.Hour)
 	require.NoError(t, err)
 	_, err = sig0.Verify(signed, rdata.AlgED25519, pub, wire.MustParseName("bob.example"), now)
-	require.Error(t, err)
-	require.Contains(t, err.Error(), "signer mismatch")
+	require.ErrorContains(t, err, "signer mismatch")
 }
 
 func TestVerifyAlgorithmMismatch(t *testing.T) {
@@ -267,7 +267,7 @@ func TestVerifyRSAParseError(t *testing.T) {
 
 	// Empty pubkey → parseRSAPublic returns "too short".
 	_, err = sig0.Verify(signed, rdata.AlgRSASHA256, nil, signer, now)
-	require.Error(t, err)
+	require.ErrorContains(t, err, "rsa pubkey too short")
 }
 
 func TestVerifyRSABadSignature(t *testing.T) {
@@ -330,7 +330,7 @@ func TestVerifyRSASHA512ParseError(t *testing.T) {
 	require.NoError(t, err)
 
 	_, err = sig0.Verify(signed, rdata.AlgRSASHA512, nil, signer, now)
-	require.Error(t, err)
+	require.ErrorContains(t, err, "rsa pubkey too short")
 }
 
 func TestVerifyRSALongExpForm(t *testing.T) {
@@ -379,6 +379,9 @@ func TestVerifyTruncatedRRHeader(t *testing.T) {
 		binary.BigEndian.PutUint16(short[10:12], 1)
 	}
 	_, err := sig0.Verify(short, rdata.AlgED25519, make([]byte, 32), wire.MustParseName("s"), time.Now())
+	// Truncation can land on owner-name parse, RR-header parse, or the
+	// SIG-fixed-prefix guard depending on the slice length; all are reported
+	// as "sig0: ..." but no shared sentinel exists, so we accept any error.
 	require.Error(t, err)
 }
 
@@ -388,7 +391,7 @@ func TestVerifyTruncatedRdata(t *testing.T) {
 	// Drop the trailing signature bytes — rdata length still claims original size.
 	chopped := append([]byte(nil), signed[:len(signed)-20]...)
 	_, err := sig0.Verify(chopped, rdata.AlgED25519, make([]byte, 32), wire.MustParseName("s"), time.Now())
-	require.Error(t, err)
+	require.ErrorContains(t, err, "truncated")
 }
 
 func TestVerifyTruncatedSIGHeader(t *testing.T) {
@@ -405,7 +408,7 @@ func TestVerifyTruncatedSIGHeader(t *testing.T) {
 	rr = append(rr, 0, 0, 0, 0, 0)
 	msg := append(hdr, rr...)
 	_, err := sig0.Verify(msg, rdata.AlgED25519, make([]byte, 32), wire.MustParseName("s"), time.Now())
-	require.Error(t, err)
+	require.ErrorContains(t, err, "truncated SIG header")
 }
 
 func TestVerifyWrongRRType(t *testing.T) {
@@ -432,7 +435,7 @@ func TestVerifyTruncatedQuestion(t *testing.T) {
 	binary.BigEndian.PutUint16(hdr[10:12], 1) // arcount = 1 to bypass early SIG check
 	msg := append(hdr, 0)                     // root name only — no QTYPE/QCLASS
 	_, err := sig0.Verify(msg, rdata.AlgED25519, make([]byte, 32), wire.MustParseName("s"), time.Now())
-	require.Error(t, err)
+	require.ErrorContains(t, err, "truncated question")
 }
 
 func TestVerifyTruncatedRRBody(t *testing.T) {
@@ -448,7 +451,7 @@ func TestVerifyTruncatedRRBody(t *testing.T) {
 	rr = append(rr, 0, 0)
 	msg := append(hdr, rr...)
 	_, err := sig0.Verify(msg, rdata.AlgED25519, make([]byte, 32), wire.MustParseName("s"), time.Now())
-	require.Error(t, err)
+	require.ErrorContains(t, err, "truncated rr body")
 }
 
 func TestVerifyOwnerParseError(t *testing.T) {
@@ -459,7 +462,8 @@ func TestVerifyOwnerParseError(t *testing.T) {
 	// label length 64 (>63) is invalid → DecodeName fails.
 	msg := append(hdr, 0xff, 0x00)
 	_, err := sig0.Verify(msg, rdata.AlgED25519, make([]byte, 32), wire.MustParseName("s"), time.Now())
-	require.Error(t, err)
+	// findLastRROffset's DecodeName surfaces the wirebb error directly.
+	require.ErrorIs(t, err, wirebb.ErrInvalidName)
 }
 
 func TestVerifySignerParseError(t *testing.T) {
@@ -482,7 +486,7 @@ func TestVerifySignerParseError(t *testing.T) {
 	rr = append(rr, rdataBytes...)
 	msg := append(hdr, rr...)
 	_, err := sig0.Verify(msg, rdata.AlgED25519, make([]byte, 32), wire.MustParseName("s"), time.Now())
-	require.Error(t, err)
+	require.ErrorContains(t, err, "parse signer")
 }
 
 func TestVerifySignerOverrunsRdata(t *testing.T) {
@@ -508,7 +512,7 @@ func TestVerifySignerOverrunsRdata(t *testing.T) {
 	rr = append(rr, rdataBytes...)
 	msg := append(hdr, rr...)
 	_, err := sig0.Verify(msg, rdata.AlgED25519, make([]byte, 32), wire.MustParseName("s"), time.Now())
-	require.Error(t, err)
+	require.ErrorContains(t, err, "signer overruns rdata")
 }
 
 // --- parseRSAPublic edge cases via verifySignature ---
@@ -517,7 +521,7 @@ func TestVerifyRSAEmptyPubkey(t *testing.T) {
 	t.Parallel()
 	signed := mustRSASigned(t, rdata.AlgRSASHA256)
 	_, err := sig0.Verify(signed, rdata.AlgRSASHA256, []byte{}, wire.MustParseName("s"), time.Now())
-	require.Error(t, err)
+	require.ErrorContains(t, err, "rsa pubkey too short")
 }
 
 func TestVerifyRSALongFormTruncated(t *testing.T) {
@@ -525,7 +529,7 @@ func TestVerifyRSALongFormTruncated(t *testing.T) {
 	signed := mustRSASigned(t, rdata.AlgRSASHA256)
 	// b[0]==0 but only 2 bytes total → "rsa pubkey truncated".
 	_, err := sig0.Verify(signed, rdata.AlgRSASHA256, []byte{0, 0}, wire.MustParseName("s"), time.Now())
-	require.Error(t, err)
+	require.ErrorContains(t, err, "rsa pubkey truncated")
 }
 
 func TestVerifyRSATruncatedExp(t *testing.T) {
@@ -533,7 +537,7 @@ func TestVerifyRSATruncatedExp(t *testing.T) {
 	signed := mustRSASigned(t, rdata.AlgRSASHA256)
 	// explen = 5 but only 1 exp byte present.
 	_, err := sig0.Verify(signed, rdata.AlgRSASHA256, []byte{5, 1}, wire.MustParseName("s"), time.Now())
-	require.Error(t, err)
+	require.ErrorContains(t, err, "rsa truncated exp")
 }
 
 func TestVerifyRSAExponentTooLarge(t *testing.T) {
@@ -542,7 +546,7 @@ func TestVerifyRSAExponentTooLarge(t *testing.T) {
 	// 9-byte exponent overflows int64 ⇒ "rsa exponent too large".
 	pub := []byte{9, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0x01, 0x02}
 	_, err := sig0.Verify(signed, rdata.AlgRSASHA256, pub, wire.MustParseName("s"), time.Now())
-	require.Error(t, err)
+	require.ErrorContains(t, err, "rsa exponent too large")
 }
 
 func mustRSASigned(t *testing.T, alg rdata.DNSSECAlgorithm) []byte {

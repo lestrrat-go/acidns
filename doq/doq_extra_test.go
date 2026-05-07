@@ -182,8 +182,9 @@ func TestExchangeFallbackTimeout(t *testing.T) {
 
 	q := buildQuery(t, 1)
 	// Use a plain context with no deadline; the fallback timeout is what
-	// must abort the exchange. t.Context() is already cancelled when the
-	// test ends, but during the run it has no deadline.
+	// must abort the exchange. Surfaces as either "i/o timeout" or
+	// context.DeadlineExceeded depending on which signal fires first in
+	// the QUIC stack, so we keep the assertion generic.
 	_, err = ex.Exchange(t.Context(), q)
 	require.Error(t, err)
 }
@@ -373,7 +374,8 @@ func TestStreamMultipleResponses(t *testing.T) {
 		require.NoError(t, err)
 		require.Equal(t, q.ID(), resp.ID())
 	}
-	// Fourth read either errors (EOF) or trips the read deadline.
+	// Fourth read either errors (EOF) or trips the read deadline; the QUIC
+	// state-machine race makes the precise error non-deterministic.
 	_, err = stream.Next(ctx)
 	require.Error(t, err)
 
@@ -436,6 +438,9 @@ func TestStreamDialFailureWithDeadline(t *testing.T) {
 	ctx, cancel := context.WithTimeout(t.Context(), 200*time.Millisecond)
 	defer cancel()
 	_, err = se.Stream(ctx, q)
+	// Dial against an unbound port can surface as ECONNREFUSED, "no
+	// recent network activity", or context.DeadlineExceeded depending on
+	// which signal arrives first; all of those are valid failures.
 	require.Error(t, err)
 }
 
@@ -543,6 +548,9 @@ func TestExchangeStreamRefusedAtOpen(t *testing.T) {
 			break
 		}
 	}
+	// QUIC tear-down races (handshake-side close vs stream-side close) make
+	// the resulting error non-deterministic; retry-loop above guarantees one
+	// branch trips, so any error here is acceptable.
 	require.Error(t, lastErr)
 }
 
@@ -566,6 +574,9 @@ func TestExchangeStreamRefusedAfterOpen(t *testing.T) {
 			break
 		}
 	}
+	// QUIC tear-down races (handshake-side close vs stream-side close) make
+	// the resulting error non-deterministic; retry-loop above guarantees one
+	// branch trips, so any error here is acceptable.
 	require.Error(t, lastErr)
 }
 
@@ -597,6 +608,7 @@ func TestStreamRefusedAtOpen(t *testing.T) {
 		}
 		s.Close()
 	}
+	// QUIC tear-down race: any error from the open/read sequence is acceptable.
 	require.Error(t, lastErr)
 }
 
@@ -629,6 +641,7 @@ func TestStreamRefusedAfterOpen(t *testing.T) {
 		}
 		s.Close()
 	}
+	// QUIC tear-down race: any error from the open/read sequence is acceptable.
 	require.Error(t, lastErr)
 }
 

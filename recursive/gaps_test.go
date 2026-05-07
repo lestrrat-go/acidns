@@ -250,7 +250,7 @@ func TestEmptyReferral(t *testing.T) {
 	rctx, cancel := context.WithTimeout(t.Context(), 2*time.Second)
 	defer cancel()
 	_, err := r.Resolve(rctx, wire.MustParseName("www.example."), rrtype.A)
-	require.Error(t, err)
+	require.ErrorContains(t, err, "empty referral")
 }
 
 // TestAllServersLame exercises the SERVFAIL/REFUSED short-circuit when every
@@ -328,7 +328,7 @@ func TestQueryAnyAllError(t *testing.T) {
 	rctx, cancel := context.WithTimeout(t.Context(), 2*time.Second)
 	defer cancel()
 	_, err := r.Resolve(rctx, wire.MustParseName("www.example."), rrtype.A)
-	require.Error(t, err)
+	require.ErrorContains(t, err, "synthetic dial failure")
 }
 
 // TestQueryAnyContextCancelled exercises queryAny's context-cancelled exit
@@ -350,7 +350,7 @@ func TestQueryAnyContextCancelled(t *testing.T) {
 		recursive.WithDialer(dialer),
 	)
 	_, err := r.Resolve(rctx, wire.MustParseName("www.example."), rrtype.A)
-	require.Error(t, err)
+	require.ErrorIs(t, err, context.Canceled)
 }
 
 // TestServeDNSWithAuthorityAndAdditional exercises the ServeDNS branches that

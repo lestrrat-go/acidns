@@ -140,11 +140,11 @@ func TestNewAnchorRejectsInvalidInputs(t *testing.T) {
 	t.Parallel()
 	// Empty DS list rejected.
 	_, err := validator.NewAnchor(wire.RootName())
-	require.Error(t, err)
+	require.ErrorContains(t, err, "no DS records")
 
 	// Invalid name rejected (zero-value Name has IsValid == false).
 	_, err = validator.NewAnchor(wire.Name{}, rdata.NewDS(1, rdata.AlgRSASHA256, rdata.DigestSHA256, make([]byte, 32)))
-	require.Error(t, err)
+	require.ErrorContains(t, err, "invalid anchor name")
 }
 
 func TestNTAStoreRejectsInvalidName(t *testing.T) {
@@ -164,7 +164,7 @@ func TestNTAStoreRemoveAbsent(t *testing.T) {
 func TestNewWalkerNilSource(t *testing.T) {
 	t.Parallel()
 	_, err := validator.NewWalker(nil)
-	require.Error(t, err)
+	require.ErrorContains(t, err, "non-nil Source")
 }
 
 func TestWalkerInvalidQname(t *testing.T) {
@@ -173,7 +173,7 @@ func TestWalkerInvalidQname(t *testing.T) {
 	w, err := validator.NewWalker(src)
 	require.NoError(t, err)
 	_, err = w.Resolve(t.Context(), wire.Name{}, rrtype.A)
-	require.Error(t, err)
+	require.ErrorContains(t, err, "invalid qname")
 }
 
 // TestWalkerNoDataNSEC: query a name that exists with a different type so the
@@ -268,7 +268,7 @@ func TestWalkerSourceLookupError(t *testing.T) {
 	ans, err := w.Resolve(t.Context(), wire.MustParseName("example."), rrtype.A)
 	require.NoError(t, err)
 	require.Equal(t, validator.Bogus, ans.Result())
-	require.Error(t, ans.Reason())
+	require.ErrorContains(t, ans.Reason(), "dial timeout")
 }
 
 // TestWalkerSourceLookupErrorDefaultPolicy mirrors TestWalkerSourceLookupError
@@ -283,7 +283,7 @@ func TestWalkerSourceLookupErrorDefaultPolicy(t *testing.T) {
 	w, err := validator.NewWalker(src, validator.WithAnchors(a))
 	require.NoError(t, err)
 	ans, err := w.Resolve(t.Context(), wire.MustParseName("example."), rrtype.A)
-	require.Error(t, err)
+	require.ErrorContains(t, err, "dial timeout")
 	require.NotNil(t, ans)
 	require.Equal(t, validator.Bogus, ans.Result())
 }
@@ -487,7 +487,7 @@ func TestValidatorRRSIGFutureInception(t *testing.T) {
 	})
 	res, _, err := v.ValidateRRset(set, []rdata.RRSIG{sig}, []rdata.DNSKEY{key})
 	require.Equal(t, validator.Bogus, res)
-	require.Error(t, err)
+	require.ErrorContains(t, err, "inception/expiration outside now")
 }
 
 // TestValidatorVerifyDelegationNTACovers checks that a covered owner short-

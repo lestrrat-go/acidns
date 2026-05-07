@@ -66,7 +66,10 @@ func TestWalkerValidateNegativeNXDOMAINBogus(t *testing.T) {
 	ans, err := w.Resolve(t.Context(), target, rrtype.AAAA)
 	require.NoError(t, err)
 	require.Equal(t, validator.Bogus, ans.Result())
-	require.Error(t, ans.Reason())
+	// Reason can come from several validateNegative branches (no covering
+	// NSEC, NSEC3 missing RRSIG, etc.) — accept any non-nil reason and only
+	// verify the validator-namespaced prefix.
+	require.ErrorContains(t, ans.Reason(), "NSEC")
 }
 
 // nxdomainForger wraps a Source so that for the configured (qname, qtype),
@@ -226,5 +229,8 @@ func TestWalkerValidateNoDataNSECNoSigs(t *testing.T) {
 	ans, err := w.Resolve(t.Context(), target, rrtype.AAAA)
 	require.NoError(t, err)
 	require.Equal(t, validator.Bogus, ans.Result())
-	require.Error(t, ans.Reason())
+	// Reason can come from several validateNegative branches (no covering
+	// NSEC, NSEC3 missing RRSIG, etc.) — accept any non-nil reason and only
+	// verify the validator-namespaced prefix.
+	require.ErrorContains(t, ans.Reason(), "NSEC")
 }

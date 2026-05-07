@@ -155,7 +155,7 @@ func TestExchangeGETRequestError(t *testing.T) {
 
 	//nolint:staticcheck // intentionally passing nil ctx to drive error path
 	_, err = ex.Exchange(nil, newQuery(t, 0x6789))
-	require.Error(t, err)
+	require.ErrorContains(t, err, "nil Context")
 }
 
 // TestExchangePOSTRequestError covers the POST-path http.NewRequestWithContext
@@ -167,5 +167,5 @@ func TestExchangePOSTRequestError(t *testing.T) {
 
 	//nolint:staticcheck // intentionally passing nil ctx to drive error path
 	_, err = ex.Exchange(nil, newQuery(t, 0x789a))
-	require.Error(t, err)
+	require.ErrorContains(t, err, "nil Context")
 }

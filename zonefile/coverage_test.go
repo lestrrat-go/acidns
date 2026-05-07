@@ -71,7 +71,7 @@ func TestParseLexerEdgeCases(t *testing.T) {
 	t.Run("dangling backslash in quoted string", func(t *testing.T) {
 		src := "$ORIGIN example.com.\n$TTL 60\n@ IN TXT \"x\\"
 		_, err := zonefile.Parse(strings.NewReader(src))
-		require.Error(t, err)
+		require.ErrorIs(t, err, zonefile.ErrParse)
 	})
 
 	t.Run("unbalanced close paren", func(t *testing.T) {
@@ -251,7 +251,7 @@ func TestParseAtBeforeOrigin(t *testing.T) {
 	t.Parallel()
 	src := "$TTL 60\n@ IN A 192.0.2.1\n"
 	_, err := zonefile.Parse(strings.NewReader(src))
-	require.Error(t, err)
+	require.ErrorIs(t, err, zonefile.ErrParse)
 }
 
 // TestParseRelativeNoOrigin verifies a relative name without $ORIGIN.

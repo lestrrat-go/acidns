@@ -75,9 +75,9 @@ func TestBase32HexEncodeEmpty(t *testing.T) {
 func TestBase32HexDecodeInvalidChar(t *testing.T) {
 	t.Parallel()
 	_, err := validatorbb.Base32HexDecode("!")
-	require.Error(t, err)
+	require.ErrorContains(t, err, "base32hex")
 	_, err = validatorbb.Base32HexDecode("W") // beyond V
-	require.Error(t, err)
+	require.ErrorContains(t, err, "base32hex")
 }
 
 func TestBase32HexDecodeEmpty(t *testing.T) {

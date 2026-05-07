@@ -136,6 +136,9 @@ func TestDoTContextCancel(t *testing.T) {
 	ctx, cancel := context.WithTimeout(t.Context(), 100*time.Millisecond)
 	defer cancel()
 	_, err = ex.Exchange(ctx, q)
+	// TLS handshake against a plain TCP listener: surfaces as "first record
+	// does not look like a TLS handshake" or context.DeadlineExceeded
+	// depending on timing — accept either via generic check.
 	require.Error(t, err)
 }
 
@@ -241,7 +244,9 @@ func TestDoTStreamWriteError(t *testing.T) {
 		return
 	}
 	// Write may have succeeded into the kernel buffer before the peer's
-	// FIN was observed. In that case Next must report the EOF.
+	// FIN was observed. In that case Next must report the EOF — though the
+	// exact wrap (io.EOF, "use of closed network connection", "broken pipe")
+	// depends on timing, so we accept any error.
 	defer stream.Close()
 	_, nerr := stream.Next(ctx)
 	require.Error(t, nerr)

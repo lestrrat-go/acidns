@@ -157,7 +157,7 @@ func TestFromLabelsLong(t *testing.T) {
 		labels = append(labels, "aaaa")
 	}
 	_, err := wirebb.FromLabels(labels...)
-	require.Error(t, err)
+	require.ErrorIs(t, err, wirebb.ErrInvalidName)
 }
 
 func TestDecodeWireErrors(t *testing.T) {
@@ -165,38 +165,38 @@ func TestDecodeWireErrors(t *testing.T) {
 
 	t.Run("offset out of range negative", func(t *testing.T) {
 		_, _, err := wirebb.DecodeWire([]byte{0}, -1)
-		require.Error(t, err)
+		require.ErrorIs(t, err, wirebb.ErrInvalidName)
 	})
 
 	t.Run("offset out of range past end", func(t *testing.T) {
 		_, _, err := wirebb.DecodeWire([]byte{0}, 5)
-		require.Error(t, err)
+		require.ErrorIs(t, err, wirebb.ErrInvalidName)
 	})
 
 	t.Run("empty msg", func(t *testing.T) {
 		_, _, err := wirebb.DecodeWire(nil, 0)
-		require.Error(t, err)
+		require.ErrorIs(t, err, wirebb.ErrInvalidName)
 	})
 
 	t.Run("truncated label content", func(t *testing.T) {
 		// label length 7 but only 2 bytes follow.
 		buf := []byte{7, 'a', 'b'}
 		_, _, err := wirebb.DecodeWire(buf, 0)
-		require.Error(t, err)
+		require.ErrorIs(t, err, wirebb.ErrInvalidName)
 	})
 
 	t.Run("truncated pointer second byte", func(t *testing.T) {
 		// 0xc0 starts pointer but no second byte.
 		buf := []byte{0xc0}
 		_, _, err := wirebb.DecodeWire(buf, 0)
-		require.Error(t, err)
+		require.ErrorIs(t, err, wirebb.ErrInvalidName)
 	})
 
 	t.Run("self pointer", func(t *testing.T) {
 		// pointer at offset 0 pointing to offset 0.
 		buf := []byte{0xc0, 0x00}
 		_, _, err := wirebb.DecodeWire(buf, 0)
-		require.Error(t, err)
+		require.ErrorIs(t, err, wirebb.ErrInvalidName)
 	})
 
 	t.Run("name exceeds max length via labels", func(t *testing.T) {
@@ -209,7 +209,7 @@ func TestDecodeWireErrors(t *testing.T) {
 		}
 		buf = append(buf, 0)
 		_, _, err := wirebb.DecodeWire(buf, 0)
-		require.Error(t, err)
+		require.ErrorIs(t, err, wirebb.ErrInvalidName)
 	})
 
 	t.Run("case folding in decoded labels", func(t *testing.T) {
@@ -222,7 +222,7 @@ func TestDecodeWireErrors(t *testing.T) {
 	t.Run("reserved label type 0x40", func(t *testing.T) {
 		buf := []byte{0x40, 0, 0}
 		_, _, err := wirebb.DecodeWire(buf, 0)
-		require.Error(t, err)
+		require.ErrorIs(t, err, wirebb.ErrInvalidName)
 	})
 }
 
@@ -252,7 +252,7 @@ func TestDecodeWirePointerHopLimit(t *testing.T) {
 	// Decode starting from the last pointer; this chains backwards through all.
 	last := starts[len(starts)-1]
 	_, _, err := wirebb.DecodeWire(buf, last)
-	require.Error(t, err)
+	require.ErrorIs(t, err, wirebb.ErrInvalidName)
 }
 
 func TestPackerNameZero(t *testing.T) {
@@ -342,7 +342,7 @@ func TestUnpackerTruncated(t *testing.T) {
 	t.Run("bytes negative", func(t *testing.T) {
 		u := wirebb.NewUnpacker([]byte{1, 2})
 		_, err := u.Bytes(-1)
-		require.Error(t, err)
+		require.ErrorIs(t, err, wirebb.ErrTruncated)
 	})
 
 	t.Run("char string length read fails", func(t *testing.T) {
@@ -362,7 +362,7 @@ func TestUnpackerTruncated(t *testing.T) {
 		// reserved label type triggers DecodeWire error.
 		u := wirebb.NewUnpacker([]byte{0x80, 0, 0})
 		_, err := u.Name()
-		require.Error(t, err)
+		require.ErrorIs(t, err, wirebb.ErrInvalidName)
 	})
 }
 

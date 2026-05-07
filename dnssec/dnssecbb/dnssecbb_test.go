@@ -71,22 +71,22 @@ func TestParseRSAPublic(t *testing.T) {
 	t.Run("empty input", func(t *testing.T) {
 		t.Parallel()
 		_, err := dnssecbb.ParseRSAPublic(nil)
-		require.Error(t, err)
+		require.ErrorContains(t, err, "rsa pubkey too short")
 		_, err = dnssecbb.ParseRSAPublic([]byte{})
-		require.Error(t, err)
+		require.ErrorContains(t, err, "rsa pubkey too short")
 	})
 
 	t.Run("long form truncated header", func(t *testing.T) {
 		t.Parallel()
 		_, err := dnssecbb.ParseRSAPublic([]byte{0x00, 0x01})
-		require.Error(t, err)
+		require.ErrorContains(t, err, "rsa pubkey truncated")
 	})
 
 	t.Run("truncated exponent", func(t *testing.T) {
 		t.Parallel()
 		// Short form claims a 5-byte exponent but only 2 bytes follow.
 		_, err := dnssecbb.ParseRSAPublic([]byte{0x05, 0x01, 0x00})
-		require.Error(t, err)
+		require.ErrorContains(t, err, "truncated exponent")
 	})
 
 	t.Run("exponent too large", func(t *testing.T) {
@@ -96,7 +96,7 @@ func TestParseRSAPublic(t *testing.T) {
 		buf = append(buf, []byte{0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff}...)
 		buf = append(buf, []byte{0x01, 0x02, 0x03}...) // modulus
 		_, err := dnssecbb.ParseRSAPublic(buf)
-		require.Error(t, err)
+		require.ErrorContains(t, err, "rsa exponent too large")
 	})
 }
 

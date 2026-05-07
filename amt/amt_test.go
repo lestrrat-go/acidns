@@ -74,7 +74,7 @@ func TestDiscoveryName(t *testing.T) {
 		long, err := wire.ParseName(l63 + "." + l63 + "." + l63 + "." + l60)
 		require.NoError(t, err)
 		_, err = amt.DiscoveryName(long)
-		require.Error(t, err)
+		require.ErrorIs(t, err, wirebb.ErrInvalidName)
 	})
 }
 
@@ -168,6 +168,6 @@ func TestDiscover_NameOverflow(t *testing.T) {
 	require.NoError(t, err)
 	r := &fakeResolver{}
 	relays, err := amt.Discover(t.Context(), r, long)
-	require.Error(t, err)
+	require.ErrorIs(t, err, wirebb.ErrInvalidName)
 	require.Nil(t, relays)
 }

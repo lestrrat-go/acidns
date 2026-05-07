@@ -129,7 +129,7 @@ func TestVerifyTruncatedRRHeader(t *testing.T) {
 		Secret:    []byte("s"),
 	}
 	_, _, err := tsig.Verify(msg, key, time.Now(), time.Minute)
-	require.Error(t, err)
+	require.ErrorContains(t, err, "truncated rr header")
 }
 
 // TestVerifyNonTSIGRRType covers the `rrType != tsigType` branch in
@@ -177,7 +177,7 @@ func TestVerifyTruncatedTSIGAlgName(t *testing.T) {
 		Secret:    []byte("s"),
 	}
 	_, _, err := tsig.Verify(msg, key, time.Now(), time.Minute)
-	require.Error(t, err)
+	require.ErrorContains(t, err, "parse alg")
 }
 
 // TestVerifyTruncatedTimeFudgeMacSize covers the
@@ -287,7 +287,7 @@ func TestVerifyTruncatedQuestionWalk(t *testing.T) {
 		Secret:    []byte("s"),
 	}
 	_, _, err := tsig.Verify(msg, key, time.Now(), time.Minute)
-	require.Error(t, err)
+	require.ErrorContains(t, err, "truncated question")
 }
 
 // TestVerifyTruncatedRRBody covers findLastRROffset's RR body walk:
@@ -311,7 +311,7 @@ func TestVerifyTruncatedRRBody(t *testing.T) {
 		Secret:    []byte("s"),
 	}
 	_, _, err := tsig.Verify(msg, key, time.Now(), time.Minute)
-	require.Error(t, err)
+	require.ErrorContains(t, err, "truncated rr body")
 }
 
 // TestVerifyOtherDataPreservedRoundTrip covers the parseTSIGRData branch

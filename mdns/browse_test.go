@@ -12,6 +12,7 @@ import (
 	"github.com/lestrrat-go/acidns/mdns"
 	"github.com/lestrrat-go/acidns/wire"
 	"github.com/lestrrat-go/acidns/wire/rdata"
+	"github.com/lestrrat-go/acidns/wire/wirebb"
 	"github.com/stretchr/testify/require"
 )
 
@@ -208,7 +209,7 @@ func TestBrowseNoResponse(t *testing.T) {
 func TestBrowseInvalidServiceName(t *testing.T) {
 	t.Parallel()
 	_, err := mdns.Browse(t.Context(), ".", 10*time.Millisecond)
-	require.Error(t, err)
+	require.ErrorIs(t, err, wirebb.ErrInvalidName)
 }
 
 func TestBrowseOpenError(t *testing.T) {
@@ -226,7 +227,7 @@ func TestBrowseWriteError(t *testing.T) {
 	pc.writeErr = errors.New("write failed")
 
 	_, err := mdns.Browse(t.Context(), "_http._tcp", 50*time.Millisecond, withConn(pc))
-	require.Error(t, err)
+	require.ErrorContains(t, err, "write failed")
 }
 
 func TestBrowseIgnoresMalformedPackets(t *testing.T) {

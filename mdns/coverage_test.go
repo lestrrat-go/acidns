@@ -48,7 +48,7 @@ func (e *errorTransport) Recv(ctx context.Context) (wire.Message, error) {
 func TestNewAnnouncerRequiresTransport(t *testing.T) {
 	t.Parallel()
 	a, err := mdns.NewAnnouncer()
-	require.Error(t, err)
+	require.ErrorContains(t, err, "requires a Transport")
 	require.Nil(t, a)
 }
 
@@ -100,7 +100,7 @@ func TestAnnounceIncompletePublication(t *testing.T) {
 		Type:     wire.MustParseName("_http._tcp.local."),
 	}
 	err = a.Announce(t.Context(), p)
-	require.Error(t, err)
+	require.ErrorContains(t, err, "incomplete publication")
 	require.Equal(t, 0, tr.sentCount())
 }
 
@@ -114,7 +114,7 @@ func TestAnnounceProbeSendError(t *testing.T) {
 	require.NoError(t, err)
 
 	err = a.Announce(t.Context(), samplePublication())
-	require.Error(t, err)
+	require.ErrorContains(t, err, "send probe")
 }
 
 func TestAnnounceAnnouncementSendError(t *testing.T) {
@@ -129,7 +129,7 @@ func TestAnnounceAnnouncementSendError(t *testing.T) {
 	require.NoError(t, err)
 
 	err = a.Announce(t.Context(), samplePublication())
-	require.Error(t, err)
+	require.ErrorContains(t, err, "send announcement")
 }
 
 func TestAnnounceCancelDuringAnnounceWait(t *testing.T) {
@@ -177,7 +177,10 @@ func TestAnnounceListenRecvError(t *testing.T) {
 	)
 	require.NoError(t, err)
 	err = a.Announce(t.Context(), samplePublication())
-	require.Error(t, err)
+	// listenForConflict surfaces the recv error inline; the precise wrap
+	// depends on whether the goroutine is in send-probe or wait state when
+	// the recv fires, so accept any error referencing the recv message.
+	require.ErrorContains(t, err, "transport boom")
 }
 
 func TestWithdrawSendError(t *testing.T) {
@@ -192,7 +195,7 @@ func TestWithdrawSendError(t *testing.T) {
 	require.NoError(t, err)
 	require.NoError(t, a.Announce(t.Context(), samplePublication()))
 	err = a.Withdraw(t.Context())
-	require.Error(t, err)
+	require.ErrorContains(t, err, "send goodbye")
 }
 
 func TestConflictsWithSRVBranches(t *testing.T) {

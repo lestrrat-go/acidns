@@ -161,7 +161,7 @@ func TestReadFrameZeroLengthBodyTriggersUnmarshalError(t *testing.T) {
 	t.Parallel()
 	// Length 0 → empty body → wire.Unmarshal rejects header-too-short.
 	_, err := streamframe.ReadFrame(bytes.NewReader([]byte{0x00, 0x00}))
-	require.Error(t, err)
+	require.ErrorIs(t, err, wire.ErrInvalidMessage)
 }
 
 func TestReadFramePartialReadsAreLooped(t *testing.T) {
@@ -210,7 +210,7 @@ func TestExchangeWriteError(t *testing.T) {
 	require.NoError(t, c2.Close())
 
 	_, err := streamframe.Exchange(t.Context(), c1, mustQ(t, 1), 100*time.Millisecond)
-	require.Error(t, err)
+	require.ErrorIs(t, err, io.ErrClosedPipe)
 }
 
 func TestExchangeReadErrorReturnsCtxErrWhenCancelled(t *testing.T) {
@@ -242,7 +242,7 @@ func TestExchangeReadErrorWithoutCtxCancel(t *testing.T) {
 	}()
 
 	_, err := streamframe.Exchange(t.Context(), c1, mustQ(t, 3), time.Hour)
-	require.Error(t, err)
+	require.ErrorIs(t, err, io.EOF)
 	// Must NOT be a context error since ctx wasn't cancelled.
 	require.NotErrorIs(t, err, context.Canceled)
 	require.NotErrorIs(t, err, context.DeadlineExceeded)
@@ -269,7 +269,7 @@ func TestNewConnStreamWriteError(t *testing.T) {
 	require.NoError(t, c2.Close())
 
 	_, err := streamframe.NewConnStream(t.Context(), c1, mustQ(t, 1), 100*time.Millisecond)
-	require.Error(t, err)
+	require.ErrorIs(t, err, io.ErrClosedPipe)
 }
 
 func TestNewConnStreamCtxCancelClosesConn(t *testing.T) {
@@ -287,6 +287,8 @@ func TestNewConnStreamCtxCancelClosesConn(t *testing.T) {
 	// Cancel ctx, then Next should observe a cancelled context error.
 	cancel()
 	_, err = stream.Next(t.Context())
+	// Cancel races the conn close — surfaces as either context.Canceled or
+	// io.ErrClosedPipe depending on which path the read goroutine takes.
 	require.Error(t, err)
 	require.NoError(t, stream.Close())
 }

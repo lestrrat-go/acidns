@@ -45,7 +45,7 @@ func TestBuildDelegationCNAMEsRejectsTooLarge(t *testing.T) {
 	_, err := classless.BuildDelegationCNAMEs(
 		netip.MustParsePrefix("10.0.0.0/24"),
 		wire.MustParseName("foo.in-addr.arpa"), time.Minute)
-	require.Error(t, err)
+	require.ErrorContains(t, err, "outside /25../31")
 }
 
 func TestBuildDelegationCNAMEsRejectsIPv6(t *testing.T) {
@@ -53,7 +53,7 @@ func TestBuildDelegationCNAMEsRejectsIPv6(t *testing.T) {
 	_, err := classless.BuildDelegationCNAMEs(
 		netip.MustParsePrefix("2001:db8::/64"),
 		wire.MustParseName("foo.ip6.arpa"), time.Minute)
-	require.Error(t, err)
+	require.ErrorContains(t, err, "must be IPv4")
 }
 
 func TestBuildDelegationCNAMEsRejectsSlash32(t *testing.T) {
@@ -61,7 +61,7 @@ func TestBuildDelegationCNAMEsRejectsSlash32(t *testing.T) {
 	_, err := classless.BuildDelegationCNAMEs(
 		netip.MustParsePrefix("192.0.2.5/32"),
 		wire.MustParseName("foo.in-addr.arpa"), time.Minute)
-	require.Error(t, err)
+	require.ErrorContains(t, err, "outside /25../31")
 }
 
 func TestBuildDelegationCNAMEsTargetTooLong(t *testing.T) {
@@ -79,5 +79,6 @@ func TestBuildDelegationCNAMEsTargetTooLong(t *testing.T) {
 
 	_, err = classless.BuildDelegationCNAMEs(
 		netip.MustParsePrefix("192.0.2.0/27"), long, time.Minute)
-	require.Error(t, err)
+	// ParseName surfaces wirebb's "name exceeds maxNameLen" via ErrInvalidName.
+	require.ErrorContains(t, err, "name exceeds")
 }

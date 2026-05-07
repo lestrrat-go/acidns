@@ -26,7 +26,7 @@ func TestNameWrappers(t *testing.T) {
 
 	t.Run("ParseNameInvalid", func(t *testing.T) {
 		_, err := wire.ParseName(strings.Repeat("a", 64) + ".example.")
-		require.Error(t, err)
+		require.ErrorIs(t, err, wirebb.ErrInvalidName)
 	})
 
 	t.Run("MustParseName", func(t *testing.T) {
@@ -53,7 +53,7 @@ func TestNameWrappers(t *testing.T) {
 
 	t.Run("NameFromLabelsInvalid", func(t *testing.T) {
 		_, err := wire.NameFromLabels("")
-		require.Error(t, err)
+		require.ErrorIs(t, err, wirebb.ErrInvalidName)
 	})
 
 	t.Run("DecodeName", func(t *testing.T) {
@@ -73,7 +73,7 @@ func TestNameWrappers(t *testing.T) {
 	t.Run("DecodeNameInvalid", func(t *testing.T) {
 		// Truncated name.
 		_, _, err := wire.DecodeName([]byte{5, 'a', 'b'}, 0)
-		require.Error(t, err)
+		require.ErrorIs(t, err, wirebb.ErrInvalidName)
 	})
 }
 
@@ -257,14 +257,14 @@ func TestNewClientSubnetErrors(t *testing.T) {
 
 	t.Run("InvalidPrefix", func(t *testing.T) {
 		_, err := wire.NewClientSubnet(netip.Prefix{}, 0)
-		require.Error(t, err)
+		require.ErrorIs(t, err, wire.ErrInvalidMessage)
 	})
 
 	t.Run("SourceTooLong", func(t *testing.T) {
 		// /33 on a v4 address — exceeds 32-bit width.
 		bad := netip.PrefixFrom(netip.MustParseAddr("192.0.2.0"), 33)
 		_, err := wire.NewClientSubnet(bad, 0)
-		require.Error(t, err)
+		require.ErrorIs(t, err, wire.ErrInvalidMessage)
 	})
 }
 
@@ -275,11 +275,11 @@ func TestNewClientServerCookieErrors(t *testing.T) {
 	cc := [8]byte{1, 2, 3, 4, 5, 6, 7, 8}
 
 	_, err := wire.NewClientServerCookie(cc, []byte{1, 2, 3})
-	require.Error(t, err)
+	require.ErrorIs(t, err, wire.ErrInvalidCookie)
 
 	// >32 bytes server cookie also rejected.
 	_, err = wire.NewClientServerCookie(cc, make([]byte, 33))
-	require.Error(t, err)
+	require.ErrorIs(t, err, wire.ErrInvalidCookie)
 }
 
 // NewEDNSOption oversize data error.
@@ -287,7 +287,7 @@ func TestNewEDNSOptionOversize(t *testing.T) {
 	t.Parallel()
 
 	_, err := wire.NewEDNSOption(99, make([]byte, 0x10000))
-	require.Error(t, err)
+	require.ErrorIs(t, err, wire.ErrInvalidMessage)
 }
 
 // NewAlgorithmUnderstood rejects non-DAU/DHU/N3U codes.
@@ -295,7 +295,7 @@ func TestNewAlgorithmUnderstoodInvalidCode(t *testing.T) {
 	t.Parallel()
 
 	_, err := wire.NewAlgorithmUnderstood(99)
-	require.Error(t, err)
+	require.ErrorIs(t, err, wire.ErrInvalidMessage)
 }
 
 func TestNewAlgorithmUnderstoodHappyCases(t *testing.T) {
@@ -353,7 +353,7 @@ func TestBuildErrorReportNameInvalidAgent(t *testing.T) {
 		wire.ExtendedErrorOther,
 		wirebb.Name{}, // zero name → not valid
 	)
-	require.Error(t, err)
+	require.ErrorIs(t, err, wire.ErrInvalidMessage)
 }
 
 // LLQ + UpdateLease constructors smoke tests.
@@ -411,7 +411,7 @@ func TestUnmarshalTruncatedAdditionalAfterPeek(t *testing.T) {
 		192, 0, // truncated rdata
 	}
 	_, err := wire.Unmarshal(buf)
-	require.Error(t, err)
+	require.ErrorIs(t, err, wire.ErrInvalidMessage)
 }
 
 // Unmarshal: two OPT pseudo-RRs is rejected.
@@ -450,7 +450,7 @@ func TestUnmarshalDoubleOPTRejected(t *testing.T) {
 	combined[11] = 2
 
 	_, err = wire.Unmarshal(combined)
-	require.Error(t, err)
+	require.ErrorIs(t, err, wire.ErrInvalidMessage)
 }
 
 // findOPTLen finds the length of the trailing OPT pseudo-RR in a serialised
@@ -487,7 +487,7 @@ func TestMarshalRDataTooLarge(t *testing.T) {
 	require.NoError(t, err)
 
 	_, err = wire.Marshal(m)
-	require.Error(t, err)
+	require.ErrorIs(t, err, wire.ErrInvalidMessage)
 }
 
 // NewRRsetFromRDatas error paths.
@@ -496,7 +496,7 @@ func TestNewRRsetFromRDatasErrors(t *testing.T) {
 
 	t.Run("Empty", func(t *testing.T) {
 		_, err := wire.NewRRsetFromRDatas(wirebb.MustParse("x."), rrtype.ClassIN, time.Minute)
-		require.Error(t, err)
+		require.ErrorIs(t, err, wire.ErrInvalidMessage)
 	})
 
 	t.Run("Mismatch", func(t *testing.T) {
@@ -507,7 +507,7 @@ func TestNewRRsetFromRDatasErrors(t *testing.T) {
 			rdata.NewA(netip.MustParseAddr("192.0.2.1")),
 			rdata.NewAAAA(netip.MustParseAddr("2001:db8::1")),
 		)
-		require.Error(t, err)
+		require.ErrorIs(t, err, wire.ErrInvalidMessage)
 	})
 }
 
@@ -523,7 +523,7 @@ func TestUnmarshalTruncatedAuthority(t *testing.T) {
 		0, 0,
 	}
 	_, err := wire.Unmarshal(hdr)
-	require.Error(t, err)
+	require.ErrorIs(t, err, wire.ErrInvalidMessage)
 }
 
 // Unmarshal: additional whose name parses but type peek hits truncation.
@@ -541,7 +541,7 @@ func TestUnmarshalAdditionalNameOnly(t *testing.T) {
 		0,    // root name only
 	}
 	_, err := wire.Unmarshal(buf)
-	require.Error(t, err)
+	require.ErrorIs(t, err, wire.ErrInvalidMessage)
 }
 
 // Marshal: rdata oversize in Authority section.
@@ -560,7 +560,7 @@ func TestMarshalAuthorityOversize(t *testing.T) {
 	require.NoError(t, err)
 
 	_, err = wire.Marshal(m)
-	require.Error(t, err)
+	require.ErrorIs(t, err, wire.ErrInvalidMessage)
 }
 
 // Marshal: rdata oversize in Additional section.
@@ -579,7 +579,7 @@ func TestMarshalAdditionalOversize(t *testing.T) {
 	require.NoError(t, err)
 
 	_, err = wire.Marshal(m)
-	require.Error(t, err)
+	require.ErrorIs(t, err, wire.ErrInvalidMessage)
 }
 
 // Unmarshal: OPT pseudo-RR with truncated rdata (rdlen exceeds remaining).
@@ -602,7 +602,7 @@ func TestUnmarshalOPTTruncatedRDLen(t *testing.T) {
 		0, 10, // rdlen=10, no follow
 	}
 	_, err := wire.Unmarshal(buf)
-	require.Error(t, err)
+	require.ErrorIs(t, err, wire.ErrInvalidMessage)
 }
 
 // Unmarshal: OPT pseudo-RR with malformed inner option (data length exceeds
@@ -627,7 +627,7 @@ func TestUnmarshalOPTMalformedOption(t *testing.T) {
 		0, 99, 0, 99, // option code 99, declared len 99 but rdata stops here
 	}
 	_, err := wire.Unmarshal(buf)
-	require.Error(t, err)
+	require.ErrorIs(t, err, wire.ErrInvalidMessage)
 }
 
 // Builder Build error path: forces err via deliberate misconfiguration. The
@@ -675,5 +675,5 @@ func TestUnmarshalAdditionalBadName(t *testing.T) {
 		0xff, // illegal label-length top bits 11 with a non-pointer follow
 	}
 	_, err := wire.Unmarshal(buf)
-	require.Error(t, err)
+	require.ErrorIs(t, err, wire.ErrInvalidMessage)
 }

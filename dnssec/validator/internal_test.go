@@ -17,7 +17,8 @@ func TestNSEC3OwnerHashErrors(t *testing.T) {
 	// Owner whose first label is invalid base32hex returns an error.
 	bad := wire.MustParseName("zzzz!!.example.")
 	_, err := nsec3OwnerHash(bad)
-	require.Error(t, err)
+	// Surfaces the validatorbb base32hex-decode error.
+	require.ErrorContains(t, err, "base32hex")
 }
 
 func TestExtractNSEC3ParamsNoNSEC3(t *testing.T) {
@@ -119,7 +120,7 @@ func TestNSEC3OwnerHashEmptyName(t *testing.T) {
 	t.Parallel()
 	// Root name has no labels → returns the no-label error path.
 	_, err := nsec3OwnerHash(wire.RootName())
-	require.Error(t, err)
+	require.ErrorContains(t, err, "no label")
 }
 
 func TestExtractNSEC3ParamsMismatch(t *testing.T) {

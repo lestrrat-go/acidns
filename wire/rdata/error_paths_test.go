@@ -17,12 +17,19 @@ func zeroAddr() netip.Addr { return netip.Addr{} }
 func parseAddr(s string) netip.Addr { return netip.MustParseAddr(s) }
 
 // unpackErr feeds buf to rdata.Unpack with the supplied rdlen and asserts
-// that an error is returned.
+// that an error is returned. The error may be wrapped under
+// rdata.ErrInvalidRData, wirebb.ErrInvalidName, or wirebb.ErrTruncated
+// depending on which inner reader trips first; we accept any of the three.
 func unpackErr(t *testing.T, typ rrtype.Type, buf []byte, rdlen int) {
 	t.Helper()
 	u := wirebb.NewUnpacker(buf)
 	_, err := rdata.Unpack(typ, u, rdlen)
 	require.Error(t, err)
+	require.True(t,
+		errors.Is(err, rdata.ErrInvalidRData) ||
+			errors.Is(err, wirebb.ErrInvalidName) ||
+			errors.Is(err, wirebb.ErrTruncated),
+		"expected ErrInvalidRData / ErrInvalidName / ErrTruncated, got %v", err)
 }
 
 // trailingBytes appends `pad` zero bytes to a valid encoding so the outer
@@ -366,7 +373,7 @@ func TestNewSVCBParamErrors(t *testing.T) {
 	// ALPN with too-long string.
 	long := string(make([]byte, 256))
 	_, err = rdata.NewSvcParamALPN(long)
-	require.Error(t, err)
+	require.ErrorIs(t, err, rdata.ErrInvalidRData)
 }
 
 // TestNewSPFTooLong drives the over-255-byte branch of NewSPF.
@@ -383,14 +390,14 @@ func TestNewRESINFOTooLong(t *testing.T) {
 	t.Parallel()
 	too := string(make([]byte, 256))
 	_, err := rdata.NewRESINFO(too)
-	require.Error(t, err)
+	require.ErrorIs(t, err, rdata.ErrInvalidRData)
 }
 
 // TestNewURIEmpty drives the empty-target branch.
 func TestNewURIEmpty(t *testing.T) {
 	t.Parallel()
 	_, err := rdata.NewURI(1, 2, "")
-	require.Error(t, err)
+	require.ErrorIs(t, err, rdata.ErrInvalidRData)
 }
 
 // TestNewCAATooLong drives the tag-length and tag-charset error branches.
@@ -398,13 +405,13 @@ func TestNewCAAErrors(t *testing.T) {
 	t.Parallel()
 	// empty tag.
 	_, err := rdata.NewCAA(0, "", []byte("x"))
-	require.Error(t, err)
+	require.ErrorIs(t, err, rdata.ErrInvalidRData)
 	// tag > 15 bytes.
 	_, err = rdata.NewCAA(0, "abcdefghijklmnopq", []byte("x"))
-	require.Error(t, err)
+	require.ErrorIs(t, err, rdata.ErrInvalidRData)
 	// non-alnum.
 	_, err = rdata.NewCAA(0, "is sue", []byte("x"))
-	require.Error(t, err)
+	require.ErrorIs(t, err, rdata.ErrInvalidRData)
 }
 
 // TestNewHINFOTooLong drives both over-255-byte branches.
@@ -412,9 +419,9 @@ func TestNewHINFOTooLong(t *testing.T) {
 	t.Parallel()
 	too := string(make([]byte, 256))
 	_, err := rdata.NewHINFO(too, "OS")
-	require.Error(t, err)
+	require.ErrorIs(t, err, rdata.ErrInvalidRData)
 	_, err = rdata.NewHINFO("CPU", too)
-	require.Error(t, err)
+	require.ErrorIs(t, err, rdata.ErrInvalidRData)
 }
 
 // TestNewNAPTRTooLong drives the >255-byte branch of NewNAPTR.
@@ -422,7 +429,7 @@ func TestNewNAPTRTooLong(t *testing.T) {
 	t.Parallel()
 	too := string(make([]byte, 256))
 	_, err := rdata.NewNAPTR(1, 2, too, "S", "R", wirebb.MustParse("example.com"))
-	require.Error(t, err)
+	require.ErrorIs(t, err, rdata.ErrInvalidRData)
 }
 
 // TestNewX25TooLong drives the >255-byte branch.
@@ -430,7 +437,7 @@ func TestNewX25TooLong(t *testing.T) {
 	t.Parallel()
 	too := string(make([]byte, 256))
 	_, err := rdata.NewX25(too)
-	require.Error(t, err)
+	require.ErrorIs(t, err, rdata.ErrInvalidRData)
 }
 
 // TestNewISDNTooLong drives both >255-byte branches.
@@ -438,9 +445,9 @@ func TestNewISDNTooLong(t *testing.T) {
 	t.Parallel()
 	too := string(make([]byte, 256))
 	_, err := rdata.NewISDN(too, "", false)
-	require.Error(t, err)
+	require.ErrorIs(t, err, rdata.ErrInvalidRData)
 	_, err = rdata.NewISDN("ok", too, true)
-	require.Error(t, err)
+	require.ErrorIs(t, err, rdata.ErrInvalidRData)
 }
 
 // TestNewHIPTooLong drives the size-limit branches.
@@ -448,10 +455,10 @@ func TestNewHIPTooLong(t *testing.T) {
 	t.Parallel()
 	bigHit := make([]byte, 256)
 	_, err := rdata.NewHIP(rdata.HIPAlgRSA, bigHit, nil)
-	require.Error(t, err)
+	require.ErrorIs(t, err, rdata.ErrInvalidRData)
 	bigPK := make([]byte, 65536)
 	_, err = rdata.NewHIP(rdata.HIPAlgRSA, []byte{1}, bigPK)
-	require.Error(t, err)
+	require.ErrorIs(t, err, rdata.ErrInvalidRData)
 }
 
 // TestNewTKEYTooLong drives both length-limit branches.
@@ -460,10 +467,10 @@ func TestNewTKEYTooLong(t *testing.T) {
 	big := make([]byte, 65536)
 	_, err := rdata.NewTKEY(wirebb.MustParse("alg.example.com"),
 		zeroTime(), zeroTime(), rdata.TKEYModeServerAssign, 0, big, nil)
-	require.Error(t, err)
+	require.ErrorIs(t, err, rdata.ErrInvalidRData)
 	_, err = rdata.NewTKEY(wirebb.MustParse("alg.example.com"),
 		zeroTime(), zeroTime(), rdata.TKEYModeServerAssign, 0, nil, big)
-	require.Error(t, err)
+	require.ErrorIs(t, err, rdata.ErrInvalidRData)
 }
 
 // TestNewIPSECKEYAddrInvalid drives the non-IP4/IP6 branch.
@@ -478,21 +485,21 @@ func TestNewIPSECKEYAddrInvalid(t *testing.T) {
 func TestNewAMTRELAYAddrInvalid(t *testing.T) {
 	t.Parallel()
 	_, err := rdata.NewAMTRELAYAddr(0, false, zeroAddr())
-	require.Error(t, err)
+	require.ErrorIs(t, err, rdata.ErrInvalidRData)
 }
 
 // TestNewSvcParamIPv4HintBadAddr drives the not-IPv4 branch.
 func TestNewSvcParamIPv4HintBadAddr(t *testing.T) {
 	t.Parallel()
 	_, err := rdata.NewSvcParamIPv4Hint(parseAddr("::1"))
-	require.Error(t, err)
+	require.ErrorIs(t, err, rdata.ErrInvalidRData)
 }
 
 // TestNewSvcParamIPv6HintBadAddr drives the not-IPv6 branch.
 func TestNewSvcParamIPv6HintBadAddr(t *testing.T) {
 	t.Parallel()
 	_, err := rdata.NewSvcParamIPv6Hint(parseAddr("1.2.3.4"))
-	require.Error(t, err)
+	require.ErrorIs(t, err, rdata.ErrInvalidRData)
 }
 
 // TestUnpackSVCBUnknownType drives the unexpected-type default arm of

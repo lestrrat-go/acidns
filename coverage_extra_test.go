@@ -100,6 +100,8 @@ func TestUDPWriteMsgTwiceFails(t *testing.T) {
 
 	select {
 	case err := <-errCh:
+		// Error origin races between socket-closed and write-failed paths;
+		// any non-nil error is acceptable here.
 		require.Error(t, err)
 	case <-time.After(2 * time.Second):
 		t.Fatal("second WriteMsg never returned")
@@ -213,6 +215,7 @@ func TestTCPWriteMsgTooLarge(t *testing.T) {
 
 	select {
 	case got := <-errCh:
+		// Marshal-oversize vs UDP-write-too-big race: leave the error open.
 		require.Error(t, got)
 	case <-time.After(3 * time.Second):
 		t.Fatal("WriteMsg never returned an error for oversized response")
@@ -269,7 +272,7 @@ func TestKeepAliveCloseReleasesConn(t *testing.T) {
 func TestKeepAliveInvalidAddr(t *testing.T) {
 	t.Parallel()
 	_, err := acidns.NewTCPKeepAliveExchanger(netip.AddrPort{})
-	require.Error(t, err)
+	require.ErrorContains(t, err, "invalid server address")
 }
 
 // TestKeepAlivePreservesExistingOption proves ensureKeepAliveOption returns
@@ -326,6 +329,8 @@ func TestKeepAliveExchangeIOError(t *testing.T) {
 		acidns.WithTCPKeepAliveTimeout(500*time.Millisecond))
 	require.NoError(t, err)
 	_, err = ex.Exchange(t.Context(), newQuery(t, "example.com"))
+	// Connection is hard-killed mid-stream; could surface as EOF, "connection
+	// reset by peer", or a streamframe error. Leave open.
 	require.Error(t, err)
 }
 
@@ -374,7 +379,7 @@ func TestKeepAliveIDMismatch(t *testing.T) {
 	)
 	require.NoError(t, err)
 	_, err = ex.Exchange(t.Context(), newQuery(t, "example.com"))
-	require.Error(t, err)
+	require.ErrorContains(t, err, "id mismatch")
 }
 
 // TestKeepAliveDialFailure exercises the dial-error branch.
@@ -386,6 +391,7 @@ func TestKeepAliveDialFailure(t *testing.T) {
 	ctx, cancel := context.WithTimeout(t.Context(), 200*time.Millisecond)
 	defer cancel()
 	_, err = ex.Exchange(ctx, newQuery(t, "example.com"))
+	// Dial-time refusal vs deadline-exceeded races; both are acceptable.
 	require.Error(t, err)
 }
 
@@ -393,7 +399,7 @@ func TestKeepAliveDialFailure(t *testing.T) {
 func TestUDPNewInvalidAddr(t *testing.T) {
 	t.Parallel()
 	_, err := acidns.NewUDPExchanger(netip.AddrPort{})
-	require.Error(t, err)
+	require.ErrorContains(t, err, "invalid server address")
 }
 
 // TestUDPDialFailure forces the UDP dial path to fail by passing a destination
@@ -413,6 +419,7 @@ func TestUDPDialFailure(t *testing.T) {
 	// subsequent write/read will time out; either way we expect non-nil.
 	_, err = ex.Exchange(ctx, q)
 	require.Error(t, err)
+	// Intentionally generic: per the comment above, the exact origin races.
 }
 
 // TestUDPDropsMalformedThenDelivers proves the malformed-datagram branch in
@@ -557,7 +564,7 @@ func TestServersAndExchangerMutuallyExclusive(t *testing.T) {
 		acidns.WithExchanger(stub),
 		acidns.WithServers(netip.MustParseAddrPort("127.0.0.1:53")),
 	)
-	require.Error(t, err)
+	require.ErrorContains(t, err, "mutually exclusive")
 }
 
 // TestRetryEventuallySucceeds drives the retry exchanger's success-after-
@@ -646,5 +653,5 @@ func TestResolveAsBubblesError(t *testing.T) {
 	)
 	require.NoError(t, err)
 	_, err = acidns.ResolveAs[rdata.A](t.Context(), r, wire.MustParseName("example.com"))
-	require.Error(t, err)
+	require.ErrorIs(t, err, io.ErrUnexpectedEOF)
 }

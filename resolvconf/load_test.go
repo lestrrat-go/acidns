@@ -1,6 +1,8 @@
 package resolvconf_test
 
 import (
+	"errors"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"testing"
@@ -24,7 +26,7 @@ func TestLoad(t *testing.T) {
 func TestLoadMissing(t *testing.T) {
 	t.Parallel()
 	_, err := resolvconf.Load("/no/such/file/here.conf")
-	require.Error(t, err)
+	require.True(t, errors.Is(err, fs.ErrNotExist), "expected fs.ErrNotExist, got %v", err)
 }
 
 // TestLoadEmptyPathUsesDefault exercises the empty-path branch that falls back
