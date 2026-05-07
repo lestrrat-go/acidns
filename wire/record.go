@@ -45,6 +45,25 @@ func NewRecordClass(name wirebb.Name, class rrtype.Class, ttl time.Duration, rd 
 	return record{name: name, class: class, ttl: ttl, rd: rd}
 }
 
+// RDataAs asserts rec.RData() to T iff rec.Type() == t. The Type() check
+// MUST come before the assertion because rdata interface satisfaction is
+// structural — rdata.A and rdata.AAAA share a method set, rdata.CNAME and
+// rdata.SVCB share Target(), etc. Callers MUST pass the rrtype.Type that
+// corresponds to T (e.g. rdata.MX paired with rrtype.MX).
+//
+// Returns the zero T and false if rec.Type() != t or the assertion fails.
+func RDataAs[T rdata.RData](rec Record, t rrtype.Type) (T, bool) {
+	var zero T
+	if rec.Type() != t {
+		return zero, false
+	}
+	v, ok := rec.RData().(T)
+	if !ok {
+		return zero, false
+	}
+	return v, true
+}
+
 func packRecord(p *wirebb.Packer, r Record) error {
 	p.Name(r.Name())
 	p.Uint16(uint16(r.Type()))
