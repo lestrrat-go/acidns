@@ -1,10 +1,10 @@
-package dnszone_test
+package zonefile_test
 
 import (
 	"strings"
 	"testing"
 
-	"github.com/lestrrat-go/acidns/dnszone"
+	"github.com/lestrrat-go/acidns/zonefile"
 	"github.com/stretchr/testify/require"
 )
 
@@ -21,7 +21,7 @@ ptr IN  PTR  host.example.com.
 mx  IN  MX   10 mail.example.com.
 txt IN  TXT  "hello" "world"
 `
-	z, err := dnszone.Parse(strings.NewReader(src))
+	z, err := zonefile.Parse(strings.NewReader(src))
 	require.NoError(t, err)
 	require.Greater(t, len(z.Records()), 5)
 }
@@ -32,18 +32,18 @@ func TestParseQuotedTXT(t *testing.T) {
 $TTL 60
 @ IN TXT "with \"escaped\" quotes"
 `
-	_, err := dnszone.Parse(strings.NewReader(src))
+	_, err := zonefile.Parse(strings.NewReader(src))
 	require.NoError(t, err)
 }
 
 func TestParseInvalidNS(t *testing.T) {
 	t.Parallel()
-	_, err := dnszone.Parse(strings.NewReader("$ORIGIN example.com.\n$TTL 60\n@ IN NS not a name\n"))
+	_, err := zonefile.Parse(strings.NewReader("$ORIGIN example.com.\n$TTL 60\n@ IN NS not a name\n"))
 	require.Error(t, err)
 }
 
 func TestParseUnknownType(t *testing.T) {
 	t.Parallel()
-	_, err := dnszone.Parse(strings.NewReader("$ORIGIN example.com.\n$TTL 60\n@ IN UNKNOWNRRTYPE foo\n"))
+	_, err := zonefile.Parse(strings.NewReader("$ORIGIN example.com.\n$TTL 60\n@ IN UNKNOWNRRTYPE foo\n"))
 	require.Error(t, err)
 }

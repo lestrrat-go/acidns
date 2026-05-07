@@ -13,7 +13,7 @@ import (
 	"github.com/lestrrat-go/acidns/dnsclient/transport/tcp"
 	"github.com/lestrrat-go/acidns/dnsserver"
 	"github.com/lestrrat-go/acidns/authoritative"
-	"github.com/lestrrat-go/acidns/dnszone"
+	"github.com/lestrrat-go/acidns/zonefile"
 	"github.com/lestrrat-go/acidns/wire"
 	"github.com/lestrrat-go/acidns/wire/rrtype"
 	"github.com/stretchr/testify/require"
@@ -43,7 +43,7 @@ func newStreamEx(t *testing.T, addr netip.AddrPort) transport.StreamExchanger {
 func TestTransferRoundTrip(t *testing.T) {
 	t.Parallel()
 
-	z, err := dnszone.Parse(strings.NewReader(transferZone))
+	z, err := zonefile.Parse(strings.NewReader(transferZone))
 	require.NoError(t, err)
 	h, err := authoritative.New(authoritative.WithZone(z))
 	require.NoError(t, err)
@@ -89,7 +89,7 @@ func TestTransferRoundTrip(t *testing.T) {
 func TestTransferRefusedOutOfZone(t *testing.T) {
 	t.Parallel()
 
-	z, err := dnszone.Parse(strings.NewReader(transferZone))
+	z, err := zonefile.Parse(strings.NewReader(transferZone))
 	require.NoError(t, err)
 	h, _ := authoritative.New(authoritative.WithZone(z))
 	srv, err := dnsserver.ListenTCP(netip.MustParseAddrPort("127.0.0.1:0"), h)

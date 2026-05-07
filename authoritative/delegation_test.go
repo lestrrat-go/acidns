@@ -5,7 +5,7 @@ import (
 	"testing"
 
 	"github.com/lestrrat-go/acidns/authoritative"
-	"github.com/lestrrat-go/acidns/dnszone"
+	"github.com/lestrrat-go/acidns/zonefile"
 	"github.com/lestrrat-go/acidns/wire"
 	"github.com/lestrrat-go/acidns/wire/rdata"
 	"github.com/lestrrat-go/acidns/wire/rrtype"
@@ -33,7 +33,7 @@ out IN NS ns1.elsewhere.example.org.
 
 func newDelegationAuth(t *testing.T) authoritative.Authoritative {
 	t.Helper()
-	z, err := dnszone.Parse(strings.NewReader(delegationZone))
+	z, err := zonefile.Parse(strings.NewReader(delegationZone))
 	require.NoError(t, err)
 	a, err := authoritative.New(authoritative.WithZone(z))
 	require.NoError(t, err)

@@ -12,7 +12,7 @@ import (
 	"github.com/lestrrat-go/acidns/dnsclient/transport/tcp"
 	"github.com/lestrrat-go/acidns/dnsserver"
 	"github.com/lestrrat-go/acidns/authoritative"
-	"github.com/lestrrat-go/acidns/dnszone"
+	"github.com/lestrrat-go/acidns/zonefile"
 	"github.com/lestrrat-go/acidns/ixfr"
 	"github.com/lestrrat-go/acidns/wire"
 	"github.com/lestrrat-go/acidns/wire/rdata"
@@ -31,7 +31,7 @@ www IN  A    192.0.2.42
 func TestTransferAXFRFallback(t *testing.T) {
 	t.Parallel()
 
-	z, err := dnszone.Parse(strings.NewReader(ixfrZone))
+	z, err := zonefile.Parse(strings.NewReader(ixfrZone))
 	require.NoError(t, err)
 	h, err := authoritative.New(authoritative.WithZone(z))
 	require.NoError(t, err)

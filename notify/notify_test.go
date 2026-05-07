@@ -11,7 +11,7 @@ import (
 	"github.com/lestrrat-go/acidns/dnsclient/transport/udp"
 	"github.com/lestrrat-go/acidns/dnsserver"
 	"github.com/lestrrat-go/acidns/authoritative"
-	"github.com/lestrrat-go/acidns/dnszone"
+	"github.com/lestrrat-go/acidns/zonefile"
 	"github.com/lestrrat-go/acidns/notify"
 	"github.com/lestrrat-go/acidns/wire"
 	"github.com/stretchr/testify/require"
@@ -26,7 +26,7 @@ ns1 IN  A    192.0.2.10
 
 func startSecondary(t *testing.T, h authoritative.NotifyHandler) netip.AddrPort {
 	t.Helper()
-	z, err := dnszone.Parse(strings.NewReader(notifyZone))
+	z, err := zonefile.Parse(strings.NewReader(notifyZone))
 	require.NoError(t, err)
 	a, err := authoritative.New(
 		authoritative.WithZone(z),

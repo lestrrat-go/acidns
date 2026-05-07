@@ -13,7 +13,7 @@ import (
 	"github.com/lestrrat-go/acidns/dnsclient/transport/tcp"
 	"github.com/lestrrat-go/acidns/dnsserver"
 	"github.com/lestrrat-go/acidns/authoritative"
-	"github.com/lestrrat-go/acidns/dnszone"
+	"github.com/lestrrat-go/acidns/zonefile"
 	"github.com/lestrrat-go/acidns/wire"
 	"github.com/lestrrat-go/acidns/wire/rrtype"
 )
@@ -21,7 +21,7 @@ import (
 func Example_axfr_transfer() {
 	// Bring up an authoritative server over TCP — AXFR mandates a stream
 	// transport (RFC 5936). The same server can answer normal queries too.
-	z, _ := dnszone.Parse(strings.NewReader(`$ORIGIN example.com.
+	z, _ := zonefile.Parse(strings.NewReader(`$ORIGIN example.com.
 $TTL 60
 @   IN  SOA  ns1.example.com. hm.example.com. ( 1 7200 3600 1209600 60 )
 @   IN  NS   ns1.example.com.

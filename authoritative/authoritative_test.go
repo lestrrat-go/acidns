@@ -8,7 +8,7 @@ import (
 
 	"github.com/lestrrat-go/acidns/dnsserver"
 	"github.com/lestrrat-go/acidns/authoritative"
-	"github.com/lestrrat-go/acidns/dnszone"
+	"github.com/lestrrat-go/acidns/zonefile"
 	"github.com/lestrrat-go/acidns/wire"
 	"github.com/lestrrat-go/acidns/wire/rdata"
 	"github.com/lestrrat-go/acidns/wire/rrtype"
@@ -32,7 +32,7 @@ mail IN MX   10 mail.example.com.
 
 func newAuth(t *testing.T) authoritative.Authoritative {
 	t.Helper()
-	z, err := dnszone.Parse(strings.NewReader(sampleZone))
+	z, err := zonefile.Parse(strings.NewReader(sampleZone))
 	require.NoError(t, err)
 	a, err := authoritative.New(authoritative.WithZone(z))
 	require.NoError(t, err)
@@ -145,7 +145,7 @@ func TestZoneWithoutSOAFails(t *testing.T) {
 $TTL 60
 @ IN A 192.0.2.99
 `
-	z, err := dnszone.Parse(strings.NewReader(in))
+	z, err := zonefile.Parse(strings.NewReader(in))
 	require.NoError(t, err)
 	_, err = authoritative.New(authoritative.WithZone(z))
 	require.ErrorIs(t, err, authoritative.ErrNoSOA)

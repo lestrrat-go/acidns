@@ -10,7 +10,7 @@ import (
 	"github.com/lestrrat-go/acidns/dnsserver"
 	"github.com/lestrrat-go/acidns/authoritative"
 	"github.com/lestrrat-go/acidns/recursive"
-	"github.com/lestrrat-go/acidns/dnszone"
+	"github.com/lestrrat-go/acidns/zonefile"
 	"github.com/lestrrat-go/acidns/wire"
 	"github.com/lestrrat-go/acidns/wire/rdata"
 	"github.com/lestrrat-go/acidns/wire/rrtype"
@@ -22,7 +22,7 @@ import (
 // the recursive resolver against the root.
 func startAuth(t *testing.T, zoneText string) netip.AddrPort {
 	t.Helper()
-	z, err := dnszone.Parse(strings.NewReader(zoneText))
+	z, err := zonefile.Parse(strings.NewReader(zoneText))
 	require.NoError(t, err)
 	h, err := authoritative.New(authoritative.WithZone(z))
 	require.NoError(t, err)

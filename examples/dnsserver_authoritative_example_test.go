@@ -10,7 +10,7 @@ import (
 	"github.com/lestrrat-go/acidns/dnsclient"
 	"github.com/lestrrat-go/acidns/dnsserver"
 	"github.com/lestrrat-go/acidns/authoritative"
-	"github.com/lestrrat-go/acidns/dnszone"
+	"github.com/lestrrat-go/acidns/zonefile"
 	"github.com/lestrrat-go/acidns/wire"
 	"github.com/lestrrat-go/acidns/wire/rdata"
 	"github.com/lestrrat-go/acidns/wire/rrtype"
@@ -19,7 +19,7 @@ import (
 func Example_dnsserver_authoritative() {
 	// authoritative.New + dnsserver.ListenUDP boot a serving authoritative
 	// nameserver in-process. Useful for tests and toy deployments.
-	z, _ := dnszone.Parse(strings.NewReader(`$ORIGIN example.com.
+	z, _ := zonefile.Parse(strings.NewReader(`$ORIGIN example.com.
 $TTL 60
 @   IN  SOA  ns1.example.com. hm.example.com. ( 1 7200 3600 1209600 60 )
 @   IN  NS   ns1.example.com.

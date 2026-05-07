@@ -10,7 +10,7 @@ import (
 	"github.com/lestrrat-go/acidns/dnsclient/transport/udp"
 	"github.com/lestrrat-go/acidns/dnsserver"
 	"github.com/lestrrat-go/acidns/authoritative"
-	"github.com/lestrrat-go/acidns/dnszone"
+	"github.com/lestrrat-go/acidns/zonefile"
 	"github.com/lestrrat-go/acidns/update"
 	"github.com/lestrrat-go/acidns/wire"
 	"github.com/lestrrat-go/acidns/wire/rdata"
@@ -28,7 +28,7 @@ www IN  A    192.0.2.42
 
 func startUpdatable(t *testing.T) (authoritative.Authoritative, netip.AddrPort) {
 	t.Helper()
-	z, err := dnszone.Parse(strings.NewReader(updateZone))
+	z, err := zonefile.Parse(strings.NewReader(updateZone))
 	require.NoError(t, err)
 	a, err := authoritative.New(authoritative.WithZone(z))
 	require.NoError(t, err)

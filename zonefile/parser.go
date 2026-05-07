@@ -1,4 +1,4 @@
-package dnszone
+package zonefile
 
 import (
 	"fmt"

@@ -11,7 +11,7 @@ import (
 	"github.com/lestrrat-go/acidns/dnsclient"
 	"github.com/lestrrat-go/acidns/dnsserver"
 	"github.com/lestrrat-go/acidns/authoritative"
-	"github.com/lestrrat-go/acidns/dnszone"
+	"github.com/lestrrat-go/acidns/zonefile"
 	"github.com/lestrrat-go/acidns/wire"
 	"github.com/lestrrat-go/acidns/wire/rdata"
 	"github.com/lestrrat-go/acidns/wire/rrtype"
@@ -36,7 +36,7 @@ alias IN CNAME www.example.com.
 func startAuthServer(t *testing.T) (netip.AddrPort, netip.AddrPort) {
 	t.Helper()
 
-	z, err := dnszone.Parse(strings.NewReader(e2eZone))
+	z, err := zonefile.Parse(strings.NewReader(e2eZone))
 	require.NoError(t, err)
 	h, err := authoritative.New(authoritative.WithZone(z))
 	require.NoError(t, err)

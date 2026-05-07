@@ -11,7 +11,7 @@ import (
 	"github.com/lestrrat-go/acidns/axfr"
 	"github.com/lestrrat-go/acidns/dnsserver"
 	"github.com/lestrrat-go/acidns/authoritative"
-	"github.com/lestrrat-go/acidns/dnszone"
+	"github.com/lestrrat-go/acidns/zonefile"
 	"github.com/lestrrat-go/acidns/wire"
 	"github.com/lestrrat-go/acidns/wire/rrtype"
 	"github.com/stretchr/testify/require"
@@ -19,7 +19,7 @@ import (
 
 func TestStartWithTimeoutAndNewSOA(t *testing.T) {
 	t.Parallel()
-	z, err := dnszone.Parse(strings.NewReader(transferZone))
+	z, err := zonefile.Parse(strings.NewReader(transferZone))
 	require.NoError(t, err)
 	h, err := authoritative.New(authoritative.WithZone(z))
 	require.NoError(t, err)

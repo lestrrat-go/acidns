@@ -1,10 +1,10 @@
-package dnszone_test
+package zonefile_test
 
 import (
 	"strings"
 	"testing"
 
-	"github.com/lestrrat-go/acidns/dnszone"
+	"github.com/lestrrat-go/acidns/zonefile"
 	"github.com/lestrrat-go/acidns/wire"
 	"github.com/stretchr/testify/require"
 )
@@ -14,9 +14,9 @@ func TestParseWithOptions(t *testing.T) {
 	src := `@ IN A 192.0.2.1
 www IN A 192.0.2.2
 `
-	z, err := dnszone.Parse(strings.NewReader(src),
-		dnszone.WithOrigin(wire.MustParseName("example.com")),
-		dnszone.WithDefaultTTL(300),
+	z, err := zonefile.Parse(strings.NewReader(src),
+		zonefile.WithOrigin(wire.MustParseName("example.com")),
+		zonefile.WithDefaultTTL(300),
 	)
 	require.NoError(t, err)
 	require.NotNil(t, z)

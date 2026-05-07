@@ -5,7 +5,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/lestrrat-go/acidns/dnszone/classless"
+	"github.com/lestrrat-go/acidns/zonefile/classless"
 	"github.com/lestrrat-go/acidns/wire"
 	"github.com/lestrrat-go/acidns/wire/rdata"
 	"github.com/lestrrat-go/acidns/wire/rrtype"

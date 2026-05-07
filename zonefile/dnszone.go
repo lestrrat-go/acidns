@@ -8,7 +8,7 @@
 // $INCLUDE, escapes inside the SOA rname's @-encoded local part, and the
 // generic RFC 3597 \# form are intentionally out of scope for this first
 // version; they can be added without changing the surface API.
-package dnszone
+package zonefile
 
 import (
 	"errors"

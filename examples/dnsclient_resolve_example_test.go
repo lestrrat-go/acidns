@@ -11,7 +11,7 @@ import (
 	"github.com/lestrrat-go/acidns/dnsclient"
 	"github.com/lestrrat-go/acidns/dnsserver"
 	"github.com/lestrrat-go/acidns/authoritative"
-	"github.com/lestrrat-go/acidns/dnszone"
+	"github.com/lestrrat-go/acidns/zonefile"
 	"github.com/lestrrat-go/acidns/wire"
 	"github.com/lestrrat-go/acidns/wire/rdata"
 	"github.com/lestrrat-go/acidns/wire/rrtype"
@@ -21,7 +21,7 @@ import (
 // to localhost. Each server-using example wires its own copy so the example
 // reads top-to-bottom without scanning utilities.
 func startLocalNS(ctx context.Context, zoneText string) (netip.AddrPort, error) {
-	z, err := dnszone.Parse(strings.NewReader(zoneText))
+	z, err := zonefile.Parse(strings.NewReader(zoneText))
 	if err != nil {
 		return netip.AddrPort{}, err
 	}

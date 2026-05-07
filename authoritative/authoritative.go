@@ -15,7 +15,7 @@ import (
 	"sync"
 
 	"github.com/lestrrat-go/acidns/dnsserver"
-	"github.com/lestrrat-go/acidns/dnszone"
+	"github.com/lestrrat-go/acidns/zonefile"
 	"github.com/lestrrat-go/acidns/wire"
 	"github.com/lestrrat-go/acidns/wire/rdata"
 	"github.com/lestrrat-go/acidns/wire/rrtype"
@@ -34,7 +34,7 @@ const maxCNAMEChain = 8
 // implements dnsserver.Handler and exposes zone management methods.
 type Authoritative interface {
 	dnsserver.Handler
-	AddZone(z dnszone.Zone) error
+	AddZone(z zonefile.Zone) error
 	Zones() []wire.Name
 }
 
@@ -46,12 +46,12 @@ type optionFunc func(*config)
 func (f optionFunc) applyAuth(c *config) { f(c) }
 
 type config struct {
-	zones         []dnszone.Zone
+	zones         []zonefile.Zone
 	notifyHandler NotifyHandler
 }
 
 // WithZone adds z to the server's zones.
-func WithZone(z dnszone.Zone) Option {
+func WithZone(z zonefile.Zone) Option {
 	return optionFunc(func(c *config) { c.zones = append(c.zones, z) })
 }
 
@@ -85,7 +85,7 @@ func New(opts ...Option) (Authoritative, error) {
 	return a, nil
 }
 
-func (a *authoritative) AddZone(z dnszone.Zone) error {
+func (a *authoritative) AddZone(z zonefile.Zone) error {
 	soa, soaRec, ok := z.SOA()
 	if !ok {
 		return fmt.Errorf("%w: %s", ErrNoSOA, z.Origin())

@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/lestrrat-go/acidns/dnszone"
+	"github.com/lestrrat-go/acidns/zonefile"
 	"github.com/lestrrat-go/acidns/wire/rdata"
 	"github.com/lestrrat-go/acidns/wire/rrtype"
 )
@@ -19,7 +19,7 @@ ns1 IN  A    192.0.2.10
 www IN  A    192.0.2.42
 `)
 
-	z, err := dnszone.Parse(src)
+	z, err := zonefile.Parse(src)
 	if err != nil {
 		fmt.Println("parse:", err)
 		return

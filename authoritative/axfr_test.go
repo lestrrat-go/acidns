@@ -9,7 +9,7 @@ import (
 	"github.com/lestrrat-go/acidns/dnsclient/transport/tcp"
 	"github.com/lestrrat-go/acidns/dnsserver"
 	"github.com/lestrrat-go/acidns/authoritative"
-	"github.com/lestrrat-go/acidns/dnszone"
+	"github.com/lestrrat-go/acidns/zonefile"
 	"github.com/lestrrat-go/acidns/wire"
 	"github.com/lestrrat-go/acidns/wire/rrtype"
 	"github.com/stretchr/testify/require"
@@ -43,7 +43,7 @@ func TestAXFRNotAuthForOtherZone(t *testing.T) {
 func TestAXFROverTCP(t *testing.T) {
 	t.Parallel()
 
-	z, err := dnszone.Parse(strings.NewReader(sampleZone))
+	z, err := zonefile.Parse(strings.NewReader(sampleZone))
 	require.NoError(t, err)
 	h, err := authoritative.New(authoritative.WithZone(z))
 	require.NoError(t, err)

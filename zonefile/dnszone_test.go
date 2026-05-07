@@ -1,11 +1,11 @@
-package dnszone_test
+package zonefile_test
 
 import (
 	"strings"
 	"testing"
 	"time"
 
-	"github.com/lestrrat-go/acidns/dnszone"
+	"github.com/lestrrat-go/acidns/zonefile"
 	"github.com/lestrrat-go/acidns/wire"
 	"github.com/lestrrat-go/acidns/wire/rdata"
 	"github.com/lestrrat-go/acidns/wire/rrtype"
@@ -32,7 +32,7 @@ mail IN MX   10 mail.example.com.
 mail IN A    192.0.2.3
     IN  TXT  "v=spf1" "-all"
 `
-	z, err := dnszone.Parse(strings.NewReader(in))
+	z, err := zonefile.Parse(strings.NewReader(in))
 	require.NoError(t, err)
 	require.Equal(t, "example.com.", z.Origin().String())
 
@@ -72,7 +72,7 @@ $ORIGIN example.com.
 $TTL 600
 @ IN A 192.0.2.10  ; trailing
 `
-	z, err := dnszone.Parse(strings.NewReader(in))
+	z, err := zonefile.Parse(strings.NewReader(in))
 	require.NoError(t, err)
 
 	rr, ok := findRR(z.Records(), "example.com.", rrtype.A)
@@ -86,7 +86,7 @@ func TestParseRelativeName(t *testing.T) {
 $TTL 60
 sub.dom IN A 192.0.2.20
 `
-	z, err := dnszone.Parse(strings.NewReader(in))
+	z, err := zonefile.Parse(strings.NewReader(in))
 	require.NoError(t, err)
 	rr, ok := findRR(z.Records(), "sub.dom.example.com.", rrtype.A)
 	require.True(t, ok)
@@ -98,7 +98,7 @@ func TestParseExplicitTTL(t *testing.T) {
 	in := `$ORIGIN example.com.
 @ 120 IN A 192.0.2.30
 `
-	z, err := dnszone.Parse(strings.NewReader(in))
+	z, err := zonefile.Parse(strings.NewReader(in))
 	require.NoError(t, err)
 	rr, ok := findRR(z.Records(), "example.com.", rrtype.A)
 	require.True(t, ok)
@@ -117,7 +117,7 @@ func TestParseErrors(t *testing.T) {
 	}
 	for name, in := range cases {
 		t.Run(name, func(t *testing.T) {
-			_, err := dnszone.Parse(strings.NewReader(in))
+			_, err := zonefile.Parse(strings.NewReader(in))
 			require.Error(t, err)
 		})
 	}

@@ -11,7 +11,7 @@ import (
 	"github.com/lestrrat-go/acidns/dnsclient/transport/udp"
 	"github.com/lestrrat-go/acidns/dnsserver"
 	"github.com/lestrrat-go/acidns/authoritative"
-	"github.com/lestrrat-go/acidns/dnszone"
+	"github.com/lestrrat-go/acidns/zonefile"
 	"github.com/lestrrat-go/acidns/notify"
 	"github.com/lestrrat-go/acidns/wire"
 )
@@ -22,7 +22,7 @@ func Example_notify_send() {
 	// secondary would schedule an IXFR/AXFR fetch from inside this callback.
 	var fired atomic.Int32
 
-	z, _ := dnszone.Parse(strings.NewReader(`$ORIGIN example.com.
+	z, _ := zonefile.Parse(strings.NewReader(`$ORIGIN example.com.
 $TTL 60
 @   IN  SOA  ns1.example.com. hm.example.com. ( 1 2 3 4 5 )
 @   IN  NS   ns1.example.com.

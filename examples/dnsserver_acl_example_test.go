@@ -11,7 +11,7 @@ import (
 	"github.com/lestrrat-go/acidns/dnsserver"
 	"github.com/lestrrat-go/acidns/dnsserver/acl"
 	"github.com/lestrrat-go/acidns/authoritative"
-	"github.com/lestrrat-go/acidns/dnszone"
+	"github.com/lestrrat-go/acidns/zonefile"
 	"github.com/lestrrat-go/acidns/wire"
 	"github.com/lestrrat-go/acidns/wire/rrtype"
 )
@@ -19,7 +19,7 @@ import (
 func Example_dnsserver_acl() {
 	// acl.New wraps any Handler so source-IP allow/deny rules apply before
 	// the inner handler runs. Denied queries get REFUSED.
-	z, _ := dnszone.Parse(strings.NewReader(`$ORIGIN example.com.
+	z, _ := zonefile.Parse(strings.NewReader(`$ORIGIN example.com.
 $TTL 60
 @   IN  SOA  ns. hm. ( 1 2 3 4 5 )
 @   IN  NS   ns1.example.com.

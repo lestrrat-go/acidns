@@ -17,7 +17,7 @@ import (
 	"github.com/lestrrat-go/acidns/dnsserver"
 	"github.com/lestrrat-go/acidns/authoritative"
 	"github.com/lestrrat-go/acidns/recursive"
-	"github.com/lestrrat-go/acidns/dnszone"
+	"github.com/lestrrat-go/acidns/zonefile"
 	"github.com/lestrrat-go/acidns/wire"
 )
 
@@ -129,7 +129,7 @@ func buildAuthoritative(files []string) (dnsserver.Handler, error) {
 		if err != nil {
 			return nil, fmt.Errorf("open %s: %w", p, err)
 		}
-		z, err := dnszone.Parse(f)
+		z, err := zonefile.Parse(f)
 		f.Close()
 		if err != nil {
 			return nil, fmt.Errorf("parse %s: %w", p, err)
