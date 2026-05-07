@@ -1,7 +1,6 @@
 package dnssec
 
 import (
-	"errors"
 	"fmt"
 
 	"github.com/lestrrat-go/acidns/dnssec/dnssecbb"
@@ -83,6 +82,3 @@ func bytesEqual(a, b []byte) bool {
 	}
 	return true
 }
-
-// suppress unused-import warning when dnssecbb is the only consumer of errors
-var _ = errors.New
