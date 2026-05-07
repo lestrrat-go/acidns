@@ -55,3 +55,29 @@ func TestBuildDelegationCNAMEsRejectsIPv6(t *testing.T) {
 		wire.MustParseName("foo.ip6.arpa"), time.Minute)
 	require.Error(t, err)
 }
+
+func TestBuildDelegationCNAMEsRejectsSlash32(t *testing.T) {
+	t.Parallel()
+	_, err := classless.BuildDelegationCNAMEs(
+		netip.MustParsePrefix("192.0.2.5/32"),
+		wire.MustParseName("foo.in-addr.arpa"), time.Minute)
+	require.Error(t, err)
+}
+
+func TestBuildDelegationCNAMEsTargetTooLong(t *testing.T) {
+	t.Parallel()
+	// Construct a subzoneOwner whose wire form is the legal maximum
+	// (255 bytes). Each "<oct>." prefix BuildDelegationCNAMEs adds to
+	// derive the target name pushes parsing past the limit, so the
+	// target ParseName error path must trigger.
+	labels := make([]string, 0, 127)
+	for i := 0; i < 127; i++ {
+		labels = append(labels, "a")
+	}
+	long, err := wire.NameFromLabels(labels...)
+	require.NoError(t, err)
+
+	_, err = classless.BuildDelegationCNAMEs(
+		netip.MustParsePrefix("192.0.2.0/27"), long, time.Minute)
+	require.Error(t, err)
+}
