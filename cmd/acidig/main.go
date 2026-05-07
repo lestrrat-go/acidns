@@ -14,8 +14,8 @@ import (
 
 	"github.com/lestrrat-go/acidns/dnsclient"
 	"github.com/lestrrat-go/acidns/dnsclient/transport"
-	"github.com/lestrrat-go/acidns/dnsclient/transport/doh"
-	"github.com/lestrrat-go/acidns/dnsclient/transport/dot"
+	"github.com/lestrrat-go/acidns/doh"
+	"github.com/lestrrat-go/acidns/dot"
 	"github.com/lestrrat-go/acidns/dnsclient/transport/tcp"
 	"github.com/lestrrat-go/acidns/dnsclient/transport/udp"
 	"github.com/lestrrat-go/acidns/wire"

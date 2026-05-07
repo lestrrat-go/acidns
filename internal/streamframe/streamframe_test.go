@@ -8,7 +8,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/lestrrat-go/acidns/dnsclient/transport/internal/streamframe"
+	"github.com/lestrrat-go/acidns/internal/streamframe"
 	"github.com/lestrrat-go/acidns/wire"
 	"github.com/lestrrat-go/acidns/wire/rrtype"
 	"github.com/stretchr/testify/require"

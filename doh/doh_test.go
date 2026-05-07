@@ -11,7 +11,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/lestrrat-go/acidns/dnsclient/transport/doh"
+	"github.com/lestrrat-go/acidns/doh"
 	"github.com/lestrrat-go/acidns/wire"
 	"github.com/lestrrat-go/acidns/wire/rdata"
 	"github.com/lestrrat-go/acidns/wire/rrtype"

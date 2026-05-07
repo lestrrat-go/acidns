@@ -4,7 +4,7 @@ import (
 	"net/http"
 	"testing"
 
-	"github.com/lestrrat-go/acidns/dnsclient/transport/doh"
+	"github.com/lestrrat-go/acidns/doh"
 	"github.com/stretchr/testify/require"
 )
 

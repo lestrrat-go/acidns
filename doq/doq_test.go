@@ -19,7 +19,7 @@ import (
 
 	"github.com/quic-go/quic-go"
 
-	"github.com/lestrrat-go/acidns/dnsclient/transport/doq"
+	"github.com/lestrrat-go/acidns/doq"
 	"github.com/lestrrat-go/acidns/wire"
 	"github.com/lestrrat-go/acidns/wire/rdata"
 	"github.com/lestrrat-go/acidns/wire/rrtype"

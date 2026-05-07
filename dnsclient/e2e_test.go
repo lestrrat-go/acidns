@@ -8,8 +8,8 @@ import (
 	"time"
 
 	"github.com/lestrrat-go/acidns/dnsclient"
-	"github.com/lestrrat-go/acidns/dnsclient/transport/doh"
-	"github.com/lestrrat-go/acidns/dnsclient/transport/dot"
+	"github.com/lestrrat-go/acidns/doh"
+	"github.com/lestrrat-go/acidns/dot"
 	"github.com/lestrrat-go/acidns/wire"
 	"github.com/lestrrat-go/acidns/wire/rrtype"
 	"github.com/stretchr/testify/require"

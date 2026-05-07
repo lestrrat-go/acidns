@@ -15,7 +15,7 @@ import (
 	"time"
 
 	"github.com/lestrrat-go/acidns/dnsclient/transport"
-	"github.com/lestrrat-go/acidns/dnsclient/transport/internal/streamframe"
+	"github.com/lestrrat-go/acidns/internal/streamframe"
 	"github.com/lestrrat-go/acidns/wire"
 )
 
