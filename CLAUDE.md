@@ -97,8 +97,10 @@ Status legend: **Implemented** = working code with tests; **Partial** = document
 | RFC | Title | Status |
 |-----|-------|--------|
 | 1034 | Domain Names — Concepts and Facilities | Implemented (authoritative §4.3.2 lookup algorithm) |
-| 1035 | Domain Names — Implementation and Specification | Implemented (wire format, name compression §4.1.4, master files §5, TCP framing §4.2.2) |
+| 1035 | Domain Names — Implementation and Specification | Implemented (wire format, name compression §4.1.4, master files §5, TCP framing §4.2.2; typed `rdata.HINFO` §3.3.2) |
 | 1183 | Deprecated RR types | Implemented (typed `rdata.RP`/`AFSDB`/`X25`/`ISDN`/`RT`) |
+| 2230 | Key Exchange Delegation Record (KX) | Implemented (typed `rdata.KX`) |
+| 2930 | Secret Key Establishment for DNS (TKEY) | Implemented (typed `rdata.TKEY` with mode constants for server-assigned, DH, GSS-API, resolver-assigned, key-deletion) |
 | 1348 / 1706 | NSAP / NSAP-PTR | Implemented (typed `rdata.NSAP`, `rdata.NSAPPTR`) |
 | 1876 | LOC record | Implemented (typed `rdata.LOC`) |
 | 1982 | Serial Number Arithmetic | Implemented (used by IXFR comparison) |
@@ -112,12 +114,14 @@ Status legend: **Implemented** = working code with tests; **Partial** = document
 | 3597 | Handling of Unknown DNS RR Types | Implemented (TYPEnnn parsing, generic `\#` writer form) |
 | 4025 | IPSECKEY | Implemented (typed `rdata.IPSECKEY` with all gateway types) |
 | 4255 | SSHFP | Implemented (typed `rdata.SSHFP`) |
+| 4398 | Storing Certificates in DNS (CERT) | Implemented (typed `rdata.CERT` with PKIX/SPKI/PGP/IPGP/etc. type constants) |
 | 4343 | Case insensitivity | Followed (names canonicalised to lowercase wire form) |
 | 4408 | SPF record | Implemented (typed `rdata.SPF` — wire format identical to TXT) |
 | 4592 | Role of the Wildcard Label in the DNS | Implemented (authoritative wildcard synthesis with closest-encloser semantics) |
 | 4701 | DHCID | Implemented (typed `rdata.DHCID`) |
 | 4892 | id.server / hostname.bind | Implemented (`dnsserver/chaos` handler answers CHAOS-class TXT) |
 | 5205 | HIP record | Implemented (typed `rdata.HIP`) |
+| 6672 | DNAME Redirection in the DNS | Implemented (typed `rdata.DNAME` with uncompressed-target packing per §3.0) |
 | 6742 | ILNP DNS resource records | Implemented (typed `rdata.NID`/`L32`/`L64`/`LP`) |
 | 6761 | Special-Use Domain Names | Implemented (`dnsclient/specialuse`: localhost / invalid / test / onion / alt; `local` deferred to mDNS) |
 | 6762 | Multicast DNS (mDNS) | Implemented (browse + parse + service publication via `mdns/`: probe → announce → goodbye lifecycle, cache-flush bit on owned records, conflict detection during probe per §8.1) |
@@ -125,14 +129,16 @@ Status legend: **Implemented** = working code with tests; **Partial** = document
 | 6891 | Extension Mechanisms for DNS (EDNS(0)) | Implemented (OPT pseudo-RR, UDP size, DO bit, extended RCODE) |
 | 7043 | EUI48 / EUI64 | Implemented (typed `rdata.EUI48`, `rdata.EUI64`) |
 | 7314 | EDNS EXPIRE option | Implemented (typed `dnsmsg.NewEDNSExpire` + parser) |
+| 7344 | Automating DNSSEC Delegation Trust Maintenance | Implemented (typed `rdata.CDS`/`rdata.CDNSKEY`; RFC 8078 §4 delete-DS sentinel preserved) |
 | 7553 | URI record | Implemented (typed `rdata.URI`) |
-| 7766 | DNS Transport over TCP | Partial (server-side multi-query per connection + idle timeout; no client-side keepalive) |
-| 7828 | edns-tcp-keepalive | Implemented (typed `dnsmsg.NewTCPKeepalive` + parser) |
+| 7766 | DNS Transport over TCP | Implemented (server-side multi-query per connection + idle timeout; client-side persistent connection via `NewTCPKeepAliveExchanger` honoring server-advertised idle) |
+| 7828 | edns-tcp-keepalive | Implemented (typed `dnsmsg.NewTCPKeepalive` + parser; client auto-injects empty option, parses server timeout to schedule re-dial) |
+| 7929 | DNS-Based Authentication of Named Entities for OpenPGP | Implemented (typed `rdata.OPENPGPKEY`) |
 | 7871 | EDNS Client Subnet | Implemented (typed `dnsmsg.NewClientSubnet` + parser, IPv4/IPv6) |
 | 7873 / 9018 | DNS Cookies | Implemented (typed wire codec + state machine in `cookies/`: client cache with BADCOOKIE retry; server SecretPool with timed rotation; RFC 9018 server-cookie HMAC over client cookie + addr + timestamp) |
 | 8490 | DNS Stateful Operations | Partial (TLV codec + KeepAlive/RetryDelay/EncryptionPadding TLVs in `dso/`; no transport binding yet) |
 | 8499 | DNS Terminology | Followed (no master/slave terminology in code or docs — primary/secondary throughout) |
-| 8777 | DNS Reverse IP AMT Discovery | Implemented (`dnsclient/amt.Discover` — SRV `_amt._udp.<domain>` lookup, RFC 2782 ranking) |
+| 8777 | DNS Reverse IP AMT Discovery | Implemented (`dnsclient/amt.Discover` — SRV `_amt._udp.<domain>` lookup, RFC 2782 ranking; typed `rdata.AMTRELAY` with all relay-type variants and discovery flag) |
 | 8914 | Extended DNS Errors | Implemented (typed `dnsmsg.NewExtendedError` + parser, full info-code constants) |
 | 8976 | ZONEMD | Implemented (typed `rdata.ZONEMD`) |
 | 9461 | SVCB Mapping for DNS Servers | Implemented (`SvcParamDOHPath` + typed `SVCB.DOHPath()` accessor) |
@@ -150,7 +156,7 @@ Status legend: **Implemented** = working code with tests; **Partial** = document
 | 1996 | A Mechanism for Prompt Notification of Zone Changes | Implemented (`dnsclient/notify`; authoritative server ACKs and fires an optional `NotifyHandler`) |
 | 2136 | Dynamic Updates in the Domain Name System | Implemented (UPDATE opcode, prerequisites, add/delete RRset, delete record) |
 | 2317 | Classless IN-ADDR.ARPA Delegation | Implemented (helper `dnszone/classless.BuildDelegationCNAMEs`) |
-| 5936 | DNS Zone Transfer Protocol (AXFR) | Implemented (single-message AXFR, server + client) |
+| 5936 | DNS Zone Transfer Protocol (AXFR) | Implemented (multi-message streaming AXFR, server + client; server chunks at ~16 KB per message, client iterates messages until closing SOA) |
 | 7477 | Child-to-Parent Synchronization (CSYNC) | Implemented (typed `rdata.CSYNC`) |
 | 8764 | Apple's DNS Long-Lived Queries Protocol | Partial (`NewLLQ` builds the EDNS option for setup/refresh/event; full state machine not yet wired) |
 | Update Lease (`draft-sekar-dns-ul`) | DNS Update Leases | Implemented (`NewUpdateLease` builds the UL EDNS option) |
