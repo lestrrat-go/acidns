@@ -24,6 +24,7 @@ type Entry struct {
 	Additional []wire.Record
 	RCODE      wire.RCODE
 	AA         bool
+	AD         bool
 	ExpiresAt  time.Time
 }
 

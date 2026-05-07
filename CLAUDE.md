@@ -186,6 +186,24 @@ Status legend: **Implemented** = working code with tests; **Partial** = document
 | Compact Denial draft (`draft-ietf-dnsop-compact-denial-of-existence`) | Compact Denial of Existence | Partial (NXNAME pseudo-type + `validator.IsCompactNXDOMAIN` classifier; chain Walker recognises NSEC/NSEC3 denial but Compact-Denial-specific bitmap interpretation pending) |
 | DNSCrypt v2 (non-IETF) | Trusted DNS Queries | Implemented (`dnscrypt/`: cert parse + verify, X25519 + XChaCha20-Poly1305 encrypt/decrypt, transport.Exchanger) |
 
+### Recursive resolver
+
+| Aspect | Status |
+|--------|--------|
+| Iterative root → leaf walk with referrals | Implemented |
+| Glue + out-of-bailiwick NS recursion | Implemented |
+| CNAME chain following with loop detection / depth cap | Implemented |
+| Lame-server detection (REFUSED/SERVFAIL skip + retry on remaining) | Implemented |
+| Per-server smoothed RTT and failure-streak tracking | Implemented |
+| EDNS UDPSize=1232 + TC=1 → TCP fall-back | Implemented |
+| RFC 2308 §5 negative caching with SOA MINIMUM | Implemented |
+| Optional DNSSEC validation via `recursive.WithValidator` (bogus → SERVFAIL+EDE6) | Implemented |
+| Per-query timeout (`WithQueryTimeout`) | Implemented |
+| QNAME minimisation (RFC 9156) | Out of scope |
+| Aggressive NSEC caching (RFC 8198) | Out of scope |
+| Parallel A/AAAA address resolution | Out of scope |
+| Per-upstream rate limiting / priming refresh | Out of scope |
+
 ### Out of scope
 
 | RFC | Title | Reason |
