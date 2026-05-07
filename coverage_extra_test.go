@@ -347,7 +347,7 @@ func TestKeepAliveIDMismatch(t *testing.T) {
 		if err != nil {
 			return
 		}
-		defer c.Close()
+		defer func() { _ = c.Close() }()
 		var hdr [2]byte
 		if _, err := io.ReadFull(c, hdr[:]); err != nil {
 			return
@@ -429,7 +429,7 @@ func TestUDPDropsMalformedThenDelivers(t *testing.T) {
 	t.Parallel()
 	pc, err := net.ListenPacket("udp", "127.0.0.1:0")
 	require.NoError(t, err)
-	t.Cleanup(func() { pc.Close() })
+	t.Cleanup(func() { _ = pc.Close() })
 	a := pc.LocalAddr().(*net.UDPAddr)
 	addr := netip.AddrPortFrom(netip.MustParseAddr("127.0.0.1"), uint16(a.Port))
 
@@ -476,7 +476,7 @@ func TestTCFallbackOnTruncation(t *testing.T) {
 	// UDP server: always reply with TC=1 and no answers.
 	pc, err := net.ListenPacket("udp", "127.0.0.1:0")
 	require.NoError(t, err)
-	t.Cleanup(func() { pc.Close() })
+	t.Cleanup(func() { _ = pc.Close() })
 	udpAddr := pc.LocalAddr().(*net.UDPAddr)
 	go func() {
 		buf := make([]byte, 4096)
@@ -499,7 +499,7 @@ func TestTCFallbackOnTruncation(t *testing.T) {
 				continue
 			}
 			raw, _ := wire.Marshal(resp)
-			pc.WriteTo(raw, src)
+			_, _ = pc.WriteTo(raw, src)
 		}
 	}()
 
@@ -578,7 +578,7 @@ func TestRetryEventuallySucceeds(t *testing.T) {
 
 	pc, err := net.ListenPacket("udp", "127.0.0.1:0")
 	require.NoError(t, err)
-	t.Cleanup(func() { pc.Close() })
+	t.Cleanup(func() { _ = pc.Close() })
 	a := pc.LocalAddr().(*net.UDPAddr)
 	addr := netip.AddrPortFrom(netip.MustParseAddr("127.0.0.1"), uint16(a.Port))
 
@@ -606,7 +606,7 @@ func TestRetryEventuallySucceeds(t *testing.T) {
 					rdata.NewA(netip.MustParseAddr("198.51.100.50")))).
 				Build()
 			raw, _ := wire.Marshal(resp)
-			pc.WriteTo(raw, src)
+			_, _ = pc.WriteTo(raw, src)
 		}
 	}()
 

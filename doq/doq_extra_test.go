@@ -72,14 +72,14 @@ func startCustomDoQ(t *testing.T, hook serverHook) (netip.AddrPort, *tls.Config)
 
 	udpConn, err := net.ListenUDP("udp", &net.UDPAddr{IP: net.IPv4(127, 0, 0, 1), Port: 0})
 	require.NoError(t, err)
-	t.Cleanup(func() { udpConn.Close() })
+	t.Cleanup(func() { _ = udpConn.Close() })
 
 	tr := &quic.Transport{Conn: udpConn}
-	t.Cleanup(func() { tr.Close() })
+	t.Cleanup(func() { _ = tr.Close() })
 
 	ln, err := tr.Listen(srvTLS, &quic.Config{MaxIdleTimeout: 30 * time.Second})
 	require.NoError(t, err)
-	t.Cleanup(func() { ln.Close() })
+	t.Cleanup(func() { _ = ln.Close() })
 
 	go func() {
 		for {
@@ -92,7 +92,7 @@ func startCustomDoQ(t *testing.T, hook serverHook) (netip.AddrPort, *tls.Config)
 				if err != nil {
 					return
 				}
-				defer stream.Close()
+				defer func() { _ = stream.Close() }()
 				var hdr [2]byte
 				if _, err := io.ReadFull(stream, hdr[:]); err != nil {
 					return
@@ -118,8 +118,8 @@ func startCustomDoQ(t *testing.T, hook serverHook) (netip.AddrPort, *tls.Config)
 func writeFrame(stream *quic.Stream, payload []byte) {
 	var hdr [2]byte
 	binary.BigEndian.PutUint16(hdr[:], uint16(len(payload)))
-	stream.Write(hdr[:])
-	stream.Write(payload)
+	_, _ = stream.Write(hdr[:])
+	_, _ = stream.Write(payload)
 }
 
 func buildQuery(t *testing.T, id uint16) wire.Message {
@@ -173,7 +173,7 @@ func TestExchangeFallbackTimeout(t *testing.T) {
 	t.Parallel()
 	udpConn, err := net.ListenUDP("udp", &net.UDPAddr{IP: net.IPv4(127, 0, 0, 1), Port: 0})
 	require.NoError(t, err)
-	t.Cleanup(func() { udpConn.Close() })
+	t.Cleanup(func() { _ = udpConn.Close() })
 	a := udpConn.LocalAddr().(*net.UDPAddr)
 	addr := netip.AddrPortFrom(netip.MustParseAddr("127.0.0.1"), uint16(a.Port))
 
@@ -261,8 +261,8 @@ func TestExchangeReadBodyTruncated(t *testing.T) {
 		// Promise 100 bytes, send none, then close.
 		var hdr [2]byte
 		binary.BigEndian.PutUint16(hdr[:], 100)
-		stream.Write(hdr[:])
-		stream.Close()
+		_, _ = stream.Write(hdr[:])
+		_ = stream.Close()
 	})
 
 	ex, err := doq.New(addr, doq.WithTLSConfig(cfg))
@@ -281,7 +281,7 @@ func TestExchangeReadBodyTruncated(t *testing.T) {
 func TestExchangeReadLengthEOF(t *testing.T) {
 	t.Parallel()
 	addr, cfg := startCustomDoQ(t, func(t *testing.T, req wire.Message, stream *quic.Stream) {
-		stream.Close()
+		_ = stream.Close()
 	})
 
 	ex, err := doq.New(addr, doq.WithTLSConfig(cfg))
@@ -300,7 +300,7 @@ func TestStreamFallbackTimeout(t *testing.T) {
 	t.Parallel()
 	udpConn, err := net.ListenUDP("udp", &net.UDPAddr{IP: net.IPv4(127, 0, 0, 1), Port: 0})
 	require.NoError(t, err)
-	t.Cleanup(func() { udpConn.Close() })
+	t.Cleanup(func() { _ = udpConn.Close() })
 	a := udpConn.LocalAddr().(*net.UDPAddr)
 	addr := netip.AddrPortFrom(netip.MustParseAddr("127.0.0.1"), uint16(a.Port))
 
@@ -336,7 +336,7 @@ func TestStreamIDMismatch(t *testing.T) {
 	defer cancel()
 	stream, err := se.Stream(ctx, q)
 	require.NoError(t, err)
-	defer stream.Close()
+	defer func() { _ = stream.Close() }()
 	_, err = stream.Next(ctx)
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "id mismatch")
@@ -367,7 +367,7 @@ func TestStreamMultipleResponses(t *testing.T) {
 	defer cancel()
 	stream, err := se.Stream(ctx, q)
 	require.NoError(t, err)
-	defer stream.Close()
+	defer func() { _ = stream.Close() }()
 
 	for i := 0; i < 3; i++ {
 		resp, err := stream.Next(ctx)
@@ -406,7 +406,7 @@ func TestStreamContextCancelDuringNext(t *testing.T) {
 	defer dialCancel()
 	stream, err := se.Stream(dialCtx, q)
 	require.NoError(t, err)
-	defer stream.Close()
+	defer func() { _ = stream.Close() }()
 
 	nextCtx, nextCancel := context.WithTimeout(t.Context(), 50*time.Millisecond)
 	defer nextCancel()
@@ -425,7 +425,7 @@ func TestStreamDialFailureWithDeadline(t *testing.T) {
 	t.Parallel()
 	udpConn, err := net.ListenUDP("udp", &net.UDPAddr{IP: net.IPv4(127, 0, 0, 1), Port: 0})
 	require.NoError(t, err)
-	t.Cleanup(func() { udpConn.Close() })
+	t.Cleanup(func() { _ = udpConn.Close() })
 	a := udpConn.LocalAddr().(*net.UDPAddr)
 	addr := netip.AddrPortFrom(netip.MustParseAddr("127.0.0.1"), uint16(a.Port))
 
@@ -496,14 +496,14 @@ func startRefusingDoQ(t *testing.T, timing closeTiming) (netip.AddrPort, *tls.Co
 
 	udpConn, err := net.ListenUDP("udp", &net.UDPAddr{IP: net.IPv4(127, 0, 0, 1), Port: 0})
 	require.NoError(t, err)
-	t.Cleanup(func() { udpConn.Close() })
+	t.Cleanup(func() { _ = udpConn.Close() })
 
 	tr := &quic.Transport{Conn: udpConn}
-	t.Cleanup(func() { tr.Close() })
+	t.Cleanup(func() { _ = tr.Close() })
 
 	ln, err := tr.Listen(srvTLS, &quic.Config{MaxIdleTimeout: 30 * time.Second})
 	require.NoError(t, err)
-	t.Cleanup(func() { ln.Close() })
+	t.Cleanup(func() { _ = ln.Close() })
 
 	go func() {
 		for {
@@ -602,11 +602,11 @@ func TestStreamRefusedAtOpen(t *testing.T) {
 			break
 		}
 		if _, err := s.Next(ctx); err != nil {
-			s.Close()
+			_ = s.Close()
 			lastErr = err
 			break
 		}
-		s.Close()
+		_ = s.Close()
 	}
 	// QUIC tear-down race: any error from the open/read sequence is acceptable.
 	require.Error(t, lastErr)
@@ -635,11 +635,11 @@ func TestStreamRefusedAfterOpen(t *testing.T) {
 			break
 		}
 		if _, err := s.Next(ctx); err != nil {
-			s.Close()
+			_ = s.Close()
 			lastErr = err
 			break
 		}
-		s.Close()
+		_ = s.Close()
 	}
 	// QUIC tear-down race: any error from the open/read sequence is acceptable.
 	require.Error(t, lastErr)
@@ -684,10 +684,10 @@ func startStreamStarvedDoQ(t *testing.T) (netip.AddrPort, *tls.Config) {
 
 	udpConn, err := net.ListenUDP("udp", &net.UDPAddr{IP: net.IPv4(127, 0, 0, 1), Port: 0})
 	require.NoError(t, err)
-	t.Cleanup(func() { udpConn.Close() })
+	t.Cleanup(func() { _ = udpConn.Close() })
 
 	tr := &quic.Transport{Conn: udpConn}
-	t.Cleanup(func() { tr.Close() })
+	t.Cleanup(func() { _ = tr.Close() })
 
 	ln, err := tr.Listen(srvTLS, &quic.Config{
 		MaxIdleTimeout:        30 * time.Second,
@@ -695,7 +695,7 @@ func startStreamStarvedDoQ(t *testing.T) (netip.AddrPort, *tls.Config) {
 		MaxIncomingUniStreams: -1,
 	})
 	require.NoError(t, err)
-	t.Cleanup(func() { ln.Close() })
+	t.Cleanup(func() { _ = ln.Close() })
 
 	go func() {
 		for {
@@ -814,14 +814,14 @@ func TestExchangeBrokenAfterDial(t *testing.T) {
 
 	udpConn, err := net.ListenUDP("udp", &net.UDPAddr{IP: net.IPv4(127, 0, 0, 1), Port: 0})
 	require.NoError(t, err)
-	t.Cleanup(func() { udpConn.Close() })
+	t.Cleanup(func() { _ = udpConn.Close() })
 
 	tr := &quic.Transport{Conn: udpConn}
-	t.Cleanup(func() { tr.Close() })
+	t.Cleanup(func() { _ = tr.Close() })
 
 	ln, err := tr.Listen(srvTLS, &quic.Config{MaxIdleTimeout: 30 * time.Second})
 	require.NoError(t, err)
-	t.Cleanup(func() { ln.Close() })
+	t.Cleanup(func() { _ = ln.Close() })
 
 	// Accept loop: complete the handshake, then immediately tear down.
 	done := make(chan struct{})
@@ -866,7 +866,7 @@ func TestExchangeBrokenAfterDial(t *testing.T) {
 		s, err := se.Stream(ctx, q)
 		if err == nil {
 			_, _ = s.Next(ctx)
-			s.Close()
+			_ = s.Close()
 		}
 		cancel()
 	}

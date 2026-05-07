@@ -173,7 +173,7 @@ func TestReadFramePartialReadsAreLooped(t *testing.T) {
 
 	pr, pw := io.Pipe()
 	go func() {
-		defer pw.Close()
+		defer func() { _ = pw.Close() }()
 		for _, b := range buf.Bytes() {
 			_, _ = pw.Write([]byte{b})
 		}
@@ -186,7 +186,7 @@ func TestReadFramePartialReadsAreLooped(t *testing.T) {
 func TestExchangeWithCtxDeadline(t *testing.T) {
 	t.Parallel()
 	c1, c2 := net.Pipe()
-	defer c2.Close()
+	defer func() { _ = c2.Close() }()
 
 	go func() {
 		req, err := streamframe.ReadFrame(c2)
@@ -216,7 +216,7 @@ func TestExchangeWriteError(t *testing.T) {
 func TestExchangeReadErrorReturnsCtxErrWhenCancelled(t *testing.T) {
 	t.Parallel()
 	c1, c2 := net.Pipe()
-	defer c2.Close()
+	defer func() { _ = c2.Close() }()
 
 	ctx, cancel := context.WithCancel(t.Context())
 	// Server reads the request — guaranteeing WriteFrame returned and
@@ -251,8 +251,8 @@ func TestExchangeReadErrorWithoutCtxCancel(t *testing.T) {
 func TestNewConnStreamWithCtxDeadline(t *testing.T) {
 	t.Parallel()
 	c1, c2 := net.Pipe()
-	defer c1.Close()
-	defer c2.Close()
+	defer func() { _ = c1.Close() }()
+	defer func() { _ = c2.Close() }()
 
 	go func() { _, _ = streamframe.ReadFrame(c2) }()
 
@@ -275,7 +275,7 @@ func TestNewConnStreamWriteError(t *testing.T) {
 func TestNewConnStreamCtxCancelClosesConn(t *testing.T) {
 	t.Parallel()
 	c1, c2 := net.Pipe()
-	defer c2.Close()
+	defer func() { _ = c2.Close() }()
 
 	// Server reads but doesn't reply, just to keep the conn alive.
 	go func() { _, _ = streamframe.ReadFrame(c2) }()
@@ -296,7 +296,7 @@ func TestNewConnStreamCtxCancelClosesConn(t *testing.T) {
 func TestConnStreamNextWithCtxDeadline(t *testing.T) {
 	t.Parallel()
 	c1, c2 := net.Pipe()
-	defer c2.Close()
+	defer func() { _ = c2.Close() }()
 
 	go func() {
 		_, _ = streamframe.ReadFrame(c2)
@@ -305,7 +305,7 @@ func TestConnStreamNextWithCtxDeadline(t *testing.T) {
 
 	stream, err := streamframe.NewConnStream(t.Context(), c1, mustQ(t, 0x77), time.Hour)
 	require.NoError(t, err)
-	defer stream.Close()
+	defer func() { _ = stream.Close() }()
 
 	ctx, cancel := context.WithDeadline(t.Context(), time.Now().Add(time.Second))
 	defer cancel()
@@ -317,7 +317,7 @@ func TestConnStreamNextWithCtxDeadline(t *testing.T) {
 func TestConnStreamNextCtxCancelDuringRead(t *testing.T) {
 	t.Parallel()
 	c1, c2 := net.Pipe()
-	defer c2.Close()
+	defer func() { _ = c2.Close() }()
 
 	// Server reads request — proving NewConnStream finished WriteFrame —
 	// and only then we proceed to call Next.
@@ -329,7 +329,7 @@ func TestConnStreamNextCtxCancelDuringRead(t *testing.T) {
 
 	stream, err := streamframe.NewConnStream(t.Context(), c1, mustQ(t, 0x88), time.Hour)
 	require.NoError(t, err)
-	defer stream.Close()
+	defer func() { _ = stream.Close() }()
 
 	<-written
 	ctx, cancel := context.WithCancel(t.Context())
@@ -342,7 +342,7 @@ func TestConnStreamNextCtxCancelDuringRead(t *testing.T) {
 func TestConnStreamIDMismatch(t *testing.T) {
 	t.Parallel()
 	c1, c2 := net.Pipe()
-	defer c2.Close()
+	defer func() { _ = c2.Close() }()
 
 	go func() {
 		_, _ = streamframe.ReadFrame(c2)
@@ -351,7 +351,7 @@ func TestConnStreamIDMismatch(t *testing.T) {
 
 	stream, err := streamframe.NewConnStream(t.Context(), c1, mustQ(t, 0x1010), time.Hour)
 	require.NoError(t, err)
-	defer stream.Close()
+	defer func() { _ = stream.Close() }()
 
 	_, err = stream.Next(t.Context())
 	require.Error(t, err)

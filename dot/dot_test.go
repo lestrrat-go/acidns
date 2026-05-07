@@ -54,7 +54,7 @@ func startDoT(t *testing.T) (netip.AddrPort, *tls.Config) {
 	srvCfg := &tls.Config{Certificates: []tls.Certificate{cert}, MinVersion: tls.VersionTLS12}
 	ln, err := tls.Listen("tcp", "127.0.0.1:0", srvCfg)
 	require.NoError(t, err)
-	t.Cleanup(func() { ln.Close() })
+	t.Cleanup(func() { _ = ln.Close() })
 
 	go func() {
 		for {
@@ -63,7 +63,7 @@ func startDoT(t *testing.T) (netip.AddrPort, *tls.Config) {
 				return
 			}
 			go func(c net.Conn) {
-				defer c.Close()
+				defer func() { _ = c.Close() }()
 				var lenBuf [2]byte
 				if _, err := io.ReadFull(c, lenBuf[:]); err != nil {
 					return
@@ -86,8 +86,8 @@ func startDoT(t *testing.T) (netip.AddrPort, *tls.Config) {
 					Build()
 				wire, _ := wire.Marshal(resp)
 				binary.BigEndian.PutUint16(lenBuf[:], uint16(len(wire)))
-				c.Write(lenBuf[:])
-				c.Write(wire)
+				_, _ = c.Write(lenBuf[:])
+				_, _ = c.Write(wire)
 			}(conn)
 		}
 	}()
@@ -121,7 +121,7 @@ func TestDoTContextCancel(t *testing.T) {
 	// A non-TLS listener: TLS handshake will hang/error.
 	ln, err := net.Listen("tcp", "127.0.0.1:0")
 	require.NoError(t, err)
-	t.Cleanup(func() { ln.Close() })
+	t.Cleanup(func() { _ = ln.Close() })
 	a := ln.Addr().(*net.TCPAddr)
 	addr := netip.AddrPortFrom(netip.MustParseAddr("127.0.0.1"), uint16(a.Port))
 
@@ -247,7 +247,7 @@ func TestDoTStreamWriteError(t *testing.T) {
 	// FIN was observed. In that case Next must report the EOF — though the
 	// exact wrap (io.EOF, "use of closed network connection", "broken pipe")
 	// depends on timing, so we accept any error.
-	defer stream.Close()
+	defer func() { _ = stream.Close() }()
 	_, nerr := stream.Next(ctx)
 	require.Error(t, nerr)
 }
@@ -282,7 +282,7 @@ func startDoTHandshakeOnly(t *testing.T) (netip.AddrPort, *tls.Config) {
 	srvCfg := &tls.Config{Certificates: []tls.Certificate{cert}, MinVersion: tls.VersionTLS12}
 	ln, err := tls.Listen("tcp", "127.0.0.1:0", srvCfg)
 	require.NoError(t, err)
-	t.Cleanup(func() { ln.Close() })
+	t.Cleanup(func() { _ = ln.Close() })
 
 	go func() {
 		for {
@@ -294,7 +294,7 @@ func startDoTHandshakeOnly(t *testing.T) (netip.AddrPort, *tls.Config) {
 			if tc, ok := conn.(*tls.Conn); ok {
 				_ = tc.Handshake()
 			}
-			conn.Close()
+			_ = conn.Close()
 		}
 	}()
 
