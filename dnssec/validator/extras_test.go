@@ -271,6 +271,23 @@ func TestWalkerSourceLookupError(t *testing.T) {
 	require.Error(t, ans.Reason())
 }
 
+// TestWalkerSourceLookupErrorDefaultPolicy mirrors TestWalkerSourceLookupError
+// but with the default BogusReturnSERVFAIL policy so the bogus helper's
+// non-Answer return branch is exercised.
+func TestWalkerSourceLookupErrorDefaultPolicy(t *testing.T) {
+	t.Parallel()
+	src := &erroringSource{err: errors.New("dial timeout")}
+	a, err := validator.NewAnchor(wire.RootName(),
+		rdata.NewDS(1, rdata.AlgRSASHA256, rdata.DigestSHA256, make([]byte, 32)))
+	require.NoError(t, err)
+	w, err := validator.NewWalker(src, validator.WithAnchors(a))
+	require.NoError(t, err)
+	ans, err := w.Resolve(t.Context(), wire.MustParseName("example."), rrtype.A)
+	require.Error(t, err)
+	require.NotNil(t, ans)
+	require.Equal(t, validator.Bogus, ans.Result())
+}
+
 type erroringSource struct{ err error }
 
 func (s *erroringSource) Lookup(_ context.Context, _ wire.Name, _ rrtype.Type) (wire.Message, error) {

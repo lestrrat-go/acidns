@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/lestrrat-go/acidns/dnssec"
+	"github.com/lestrrat-go/acidns/dnssec/validator/validatorbb"
 	"github.com/lestrrat-go/acidns/wire"
 	"github.com/lestrrat-go/acidns/wire/rdata"
 	"github.com/lestrrat-go/acidns/wire/rrtype"
@@ -198,7 +199,7 @@ func (w *walker) Resolve(ctx context.Context, qname wire.Name, qtype rrtype.Type
 
 	// Positive answer: validate RRSIGs over each RRset of qtype at qname.
 	if rcode == wire.RCODENoError && len(answers) > 0 {
-		matching := recordsOfType(answers, qtype, qname)
+		matching := validatorbb.RecordsOfType(answers, qtype, qname)
 		if len(matching) == 0 {
 			// Could be a CNAME chain — caller's responsibility (resolver
 			// follows CNAMEs). For the walker we treat as no-data.
@@ -260,7 +261,7 @@ func (w *walker) walkChain(ctx context.Context, anchor Anchor, qname wire.Name) 
 		if nextLabels > qname.NumLabels() {
 			return chain, parentKeys, wire.Name{}, nil
 		}
-		candidate := truncateNameTo(qname, nextLabels)
+		candidate := validatorbb.TruncateNameTo(qname, nextLabels)
 
 		// NTA short-circuit: if NTA covers candidate or any descendant
 		// reaching qname, stop validating from here.
@@ -317,7 +318,7 @@ func (w *walker) fetchAndVerifyDNSKEY(ctx context.Context, zone wire.Name, dss [
 	if err != nil {
 		return nil, fmt.Errorf("DNSKEY lookup: %w", err)
 	}
-	dnskeyRRs := recordsOfType(msg.Answers(), rrtype.DNSKEY, zone)
+	dnskeyRRs := validatorbb.RecordsOfType(msg.Answers(), rrtype.DNSKEY, zone)
 	if len(dnskeyRRs) == 0 {
 		return nil, fmt.Errorf("validator: no DNSKEY rrset at %s", zone)
 	}
@@ -413,7 +414,7 @@ func (w *walker) classifyDSResponse(candidate, parentZone wire.Name, parentKeys 
 	}
 
 	// Look for a DS RRset in the answer section.
-	dsRRs := recordsOfType(msg.Answers(), rrtype.DS, candidate)
+	dsRRs := validatorbb.RecordsOfType(msg.Answers(), rrtype.DS, candidate)
 	if len(dsRRs) > 0 {
 		dsRDatas := make([]rdata.DS, 0, len(dsRRs))
 		for _, r := range dsRRs {
@@ -446,9 +447,9 @@ func (w *walker) classifyDSResponse(candidate, parentZone wire.Name, parentKeys 
 // classifyDSViaNSEC handles the NSEC denial path. Returns ok=false if no
 // NSEC records are present so the caller can try NSEC3.
 func (w *walker) classifyDSViaNSEC(candidate wire.Name, parentKeys []rdata.DNSKEY, msg wire.Message) (dsOutcome, bool, error) {
-	nsecRRs := recordsOfType(msg.Authorities(), rrtype.NSEC, candidate)
+	nsecRRs := validatorbb.RecordsOfType(msg.Authorities(), rrtype.NSEC, candidate)
 	if len(nsecRRs) == 0 {
-		nsecRRs = filterNSECByOwner(msg.Authorities(), candidate)
+		nsecRRs = validatorbb.FilterNSECByOwner(msg.Authorities(), candidate)
 	}
 	if len(nsecRRs) == 0 {
 		return dsOutcomeUnknown, false, nil
@@ -532,7 +533,7 @@ func (w *walker) validateNSEC3NXDomain(qname, parentZone wire.Name, parentKeys [
 // against parentKeys. authority is the full authority section the rrsets
 // were drawn from (used to find covering RRSIGs).
 func (w *walker) verifyNSEC3Set(nsec3RRs, authority []wire.Record, parentKeys []rdata.DNSKEY) error {
-	groups := groupRecordsByOwner(nsec3RRs)
+	groups := validatorbb.GroupRecordsByOwner(nsec3RRs)
 	allSigs := extractRRSIGs(authority)
 	for _, set := range groups {
 		owner := set[0].Name()
@@ -562,7 +563,7 @@ func (w *walker) validateNSECNXDomain(qname wire.Name, parentKeys []rdata.DNSKEY
 		return fmt.Errorf("no NSEC in authority")
 	}
 	// Group NSEC records and verify the rrset signatures.
-	groups := groupNSECByOwner(nsecRRs)
+	groups := validatorbb.GroupNSECByOwner(nsecRRs)
 	for _, set := range groups {
 		owner := set[0].Name()
 		sigs := rrsigsForTypeAndOwner(extractRRSIGs(msg.Authorities()), rrtype.NSEC, owner)
@@ -581,7 +582,7 @@ func (w *walker) validateNSECNXDomain(qname wire.Name, parentKeys []rdata.DNSKEY
 		if !ok {
 			continue
 		}
-		if nameCoveredBy(qname, r.Name(), nsec.NextDomainName()) {
+		if validatorbb.NameCoveredBy(qname, r.Name(), nsec.NextDomainName()) {
 			return nil
 		}
 	}
@@ -603,7 +604,7 @@ func (w *walker) validateNoData(qname wire.Name, qtype rrtype.Type, parentKeys [
 }
 
 func (w *walker) validateNoDataNSEC(qname wire.Name, qtype rrtype.Type, parentKeys []rdata.DNSKEY, msg wire.Message, chain []ChainStep) (Answer, bool) {
-	nsecRRs := filterNSECByOwner(msg.Authorities(), qname)
+	nsecRRs := validatorbb.FilterNSECByOwner(msg.Authorities(), qname)
 	if len(nsecRRs) == 0 {
 		return nil, false
 	}
@@ -639,7 +640,7 @@ func (w *walker) validateNoDataNSEC3(qname wire.Name, qtype rrtype.Type, parentK
 	if err := w.verifyNSEC3Set(nsec3RRs, msg.Authorities(), parentKeys); err != nil {
 		return nil, false
 	}
-	zone := signerOf(msg.Authorities())
+	zone := validatorbb.SignerOf(msg.Authorities())
 	if !zone.IsValid() {
 		return nil, false
 	}
@@ -660,7 +661,7 @@ func (w *walker) validateNegative(qname wire.Name, qtype rrtype.Type, parentKeys
 	if msg.Flags().RCODE() != wire.RCODENXDomain {
 		return w.validateNoData(qname, qtype, parentKeys, msg, chain)
 	}
-	zone := signerOf(msg.Authorities())
+	zone := validatorbb.SignerOf(msg.Authorities())
 	if err := w.validateNXDomain(qname, zone, parentKeys, msg); err != nil {
 		return w.bogus(qname, qtype, chain, fmt.Errorf("validator: NXDOMAIN proof: %w", err))
 	}
@@ -684,7 +685,7 @@ func (w *walker) verifyRRsetWithKeys(set []wire.Record, sigs []rdata.RRSIG, keys
 	now := w.now()
 	var lastErr error
 	for _, sig := range sigs {
-		if !rrsigValidNowWithSkew(sig, now, w.skew) {
+		if !validatorbb.RRSIGValidNowWithSkew(sig, now, w.skew) {
 			lastErr = fmt.Errorf("RRSIG outside validity window")
 			continue
 		}
@@ -705,16 +706,6 @@ func (w *walker) verifyRRsetWithKeys(set []wire.Record, sigs []rdata.RRSIG, keys
 	return rdata.RRSIG{}, rdata.DNSKEY{}, lastErr
 }
 
-func rrsigValidNowWithSkew(sig rdata.RRSIG, now time.Time, skew time.Duration) bool {
-	if now.Add(skew).Before(sig.SignatureInception()) {
-		return false
-	}
-	if now.Add(-skew).After(sig.SignatureExpiration()) {
-		return false
-	}
-	return true
-}
-
 // indeterminate builds an Answer with Result=Indeterminate.
 func (w *walker) indeterminate(qname wire.Name, qtype rrtype.Type, err error, note string) Answer {
 	if err == nil && note != "" {
@@ -731,16 +722,3 @@ func (w *walker) bogus(qname wire.Name, qtype rrtype.Type, chain []ChainStep, er
 	return a, err
 }
 
-// truncateNameTo returns name with exactly k labels (counting from the root).
-// If name has fewer than k labels, returns name unchanged.
-func truncateNameTo(name wire.Name, k int) wire.Name {
-	cur := name
-	for cur.NumLabels() > k {
-		parent, ok := cur.Parent()
-		if !ok {
-			break
-		}
-		cur = parent
-	}
-	return cur
-}

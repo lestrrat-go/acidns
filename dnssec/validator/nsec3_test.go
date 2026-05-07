@@ -4,6 +4,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/lestrrat-go/acidns/dnssec/validator/validatorbb"
 	"github.com/lestrrat-go/acidns/wire"
 	"github.com/stretchr/testify/require"
 )
@@ -29,7 +30,7 @@ func TestNSEC3HashRFC5155Appendix(t *testing.T) {
 			n := wire.MustParseName(tc.name)
 			got := nsec3Hash(n, salt, 12)
 			require.Equal(t, strings.ToLower(tc.expected),
-				strings.ToLower(base32hexEncode(got)))
+				strings.ToLower(validatorbb.Base32HexEncode(got)))
 		})
 	}
 }
@@ -38,27 +39,4 @@ func TestNSEC3IterationCap(t *testing.T) {
 	t.Parallel()
 	n := wire.MustParseName("example.")
 	require.Nil(t, nsec3Hash(n, nil, MaxNSEC3Iterations+1))
-}
-
-func TestBase32HexRoundTrip(t *testing.T) {
-	t.Parallel()
-	for _, s := range []string{"0P9MHAVEQVM6T7VBL5LOP2U3T2RP3TOM", "0123456789ABCDEFGHIJKLMNOPQRSTUV"} {
-		raw, err := base32hexDecode(s)
-		require.NoError(t, err)
-		require.Equal(t, s, base32hexEncode(raw))
-	}
-}
-
-func TestHashIntervalContains(t *testing.T) {
-	t.Parallel()
-	// Non-wraparound: [10, 20] contains 15 but not 25.
-	require.True(t, hashIntervalContains([]byte{10}, []byte{20}, []byte{15}))
-	require.False(t, hashIntervalContains([]byte{10}, []byte{20}, []byte{25}))
-	// Wraparound: [240, 10] contains 250 and 5 but not 100.
-	require.True(t, hashIntervalContains([]byte{240}, []byte{10}, []byte{250}))
-	require.True(t, hashIntervalContains([]byte{240}, []byte{10}, []byte{5}))
-	require.False(t, hashIntervalContains([]byte{240}, []byte{10}, []byte{100}))
-	// Endpoints are NOT included (strictly between).
-	require.False(t, hashIntervalContains([]byte{10}, []byte{20}, []byte{10}))
-	require.False(t, hashIntervalContains([]byte{10}, []byte{20}, []byte{20}))
 }

@@ -2,8 +2,8 @@ package validator
 
 import (
 	"fmt"
-	"strings"
 
+	"github.com/lestrrat-go/acidns/dnssec/validator/validatorbb"
 	"github.com/lestrrat-go/acidns/wire"
 	"github.com/lestrrat-go/acidns/wire/rdata"
 )
@@ -25,8 +25,8 @@ type anchor struct {
 	dss  []rdata.DS
 }
 
-func (a anchor) Name() wire.Name   { return a.name }
-func (a anchor) DSs() []rdata.DS   { return a.dss }
+func (a anchor) Name() wire.Name { return a.name }
+func (a anchor) DSs() []rdata.DS { return a.dss }
 
 // NewAnchor returns an Anchor with the supplied name and DS records. The DS
 // list is copied; an empty list is rejected because an anchor without DS
@@ -54,7 +54,7 @@ func NewAnchor(name wire.Name, dss ...rdata.DS) (Anchor, error) {
 // digest is encoded here. KSK-2024, when published, will need to be added.
 func IANARootAnchor() Anchor {
 	root := wire.RootName()
-	digest := mustHex("E06D44B80B8F1D39A95C0B0D7C65D08458E880409BBC683457104237C7F8EC8D")
+	digest := validatorbb.MustHex("E06D44B80B8F1D39A95C0B0D7C65D08458E880409BBC683457104237C7F8EC8D")
 	ds := rdata.NewDS(20326, rdata.AlgRSASHA256, rdata.DigestSHA256, digest)
 	a, err := NewAnchor(root, ds)
 	if err != nil {
@@ -69,7 +69,7 @@ func closestAnchor(anchors []Anchor, qname wire.Name) (Anchor, bool) {
 	var best Anchor
 	bestLabels := -1
 	for _, a := range anchors {
-		if !nameSuffixEqualOrSubdomain(qname, a.Name()) {
+		if !validatorbb.NameSuffixEqualOrSubdomain(qname, a.Name()) {
 			continue
 		}
 		nl := a.Name().NumLabels()
@@ -79,47 +79,4 @@ func closestAnchor(anchors []Anchor, qname wire.Name) (Anchor, bool) {
 		}
 	}
 	return best, best != nil
-}
-
-// nameSuffixEqualOrSubdomain reports whether sub equals parent or is a
-// strict subdomain of parent. Comparison is case-insensitive on the
-// presentation form (names are stored lowercase so this is also wire-equal).
-func nameSuffixEqualOrSubdomain(sub, parent wire.Name) bool {
-	if sub.Equal(parent) {
-		return true
-	}
-	subStr := strings.ToLower(sub.String())
-	parentStr := strings.ToLower(parent.String())
-	if parentStr == "." {
-		return true
-	}
-	if !strings.HasSuffix(subStr, "."+parentStr) {
-		return false
-	}
-	return true
-}
-
-func mustHex(s string) []byte {
-	out := make([]byte, len(s)/2)
-	for i := 0; i < len(s); i += 2 {
-		hi := hexDigit(s[i])
-		lo := hexDigit(s[i+1])
-		if hi < 0 || lo < 0 {
-			panic("validator: invalid hex literal: " + s)
-		}
-		out[i/2] = byte(hi<<4 | lo)
-	}
-	return out
-}
-
-func hexDigit(b byte) int {
-	switch {
-	case b >= '0' && b <= '9':
-		return int(b - '0')
-	case b >= 'a' && b <= 'f':
-		return int(b-'a') + 10
-	case b >= 'A' && b <= 'F':
-		return int(b-'A') + 10
-	}
-	return -1
 }

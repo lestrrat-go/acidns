@@ -5,100 +5,12 @@ import (
 	"testing"
 	"time"
 
+	"github.com/lestrrat-go/acidns/dnssec/validator/validatorbb"
 	"github.com/lestrrat-go/acidns/wire"
 	"github.com/lestrrat-go/acidns/wire/rdata"
 	"github.com/lestrrat-go/acidns/wire/rrtype"
 	"github.com/stretchr/testify/require"
 )
-
-func TestNameSuffixEqualOrSubdomainNonAncestor(t *testing.T) {
-	t.Parallel()
-	// Different parent.
-	require.False(t, nameSuffixEqualOrSubdomain(
-		wire.MustParseName("foo.example.com."),
-		wire.MustParseName("bar.com."),
-	))
-	// Same labels (equal).
-	require.True(t, nameSuffixEqualOrSubdomain(
-		wire.MustParseName("foo.example.com."),
-		wire.MustParseName("foo.example.com."),
-	))
-	// Subdomain.
-	require.True(t, nameSuffixEqualOrSubdomain(
-		wire.MustParseName("foo.example.com."),
-		wire.MustParseName("example.com."),
-	))
-	// Root parent always covers.
-	require.True(t, nameSuffixEqualOrSubdomain(
-		wire.MustParseName("foo.example.com."),
-		wire.RootName(),
-	))
-	// Sibling not covered.
-	require.False(t, nameSuffixEqualOrSubdomain(
-		wire.MustParseName("foo.example.com."),
-		wire.MustParseName("ple.com."),
-	))
-}
-
-func TestHexDigitInvalid(t *testing.T) {
-	t.Parallel()
-	// Valid digits.
-	require.Equal(t, 0, hexDigit('0'))
-	require.Equal(t, 9, hexDigit('9'))
-	require.Equal(t, 10, hexDigit('a'))
-	require.Equal(t, 15, hexDigit('F'))
-	// Invalid.
-	require.Equal(t, -1, hexDigit('g'))
-	require.Equal(t, -1, hexDigit('Z'))
-	require.Equal(t, -1, hexDigit(' '))
-}
-
-func TestMustHexPanicsOnInvalid(t *testing.T) {
-	t.Parallel()
-	require.Panics(t, func() { mustHex("zz") })
-}
-
-func TestBase32HexEncodeEmpty(t *testing.T) {
-	t.Parallel()
-	require.Empty(t, base32hexEncode(nil))
-	require.Empty(t, base32hexEncode([]byte{}))
-}
-
-func TestBase32HexDecodeInvalidChar(t *testing.T) {
-	t.Parallel()
-	_, err := base32hexDecode("!")
-	require.Error(t, err)
-	_, err = base32hexDecode("W") // beyond V
-	require.Error(t, err)
-}
-
-func TestBase32HexDecodeEmpty(t *testing.T) {
-	t.Parallel()
-	out, err := base32hexDecode("")
-	require.NoError(t, err)
-	require.Nil(t, out)
-}
-
-func TestBase32HexLowercase(t *testing.T) {
-	t.Parallel()
-	out, err := base32hexDecode("ab")
-	require.NoError(t, err)
-	require.NotEmpty(t, out)
-}
-
-func TestBytesLessAndEqual(t *testing.T) {
-	t.Parallel()
-	require.True(t, bytesLess([]byte{1, 2}, []byte{1, 3}))
-	require.False(t, bytesLess([]byte{1, 3}, []byte{1, 2}))
-	// Equal prefix, longer wins.
-	require.True(t, bytesLess([]byte{1}, []byte{1, 0}))
-	require.False(t, bytesLess([]byte{1, 0}, []byte{1}))
-	// Equal.
-	require.False(t, bytesLess([]byte{1, 2}, []byte{1, 2}))
-	require.True(t, bytesEqual([]byte{1, 2}, []byte{1, 2}))
-	require.False(t, bytesEqual([]byte{1}, []byte{1, 0}))
-	require.False(t, bytesEqual([]byte{1, 2}, []byte{1, 3}))
-}
 
 func TestNSEC3OwnerHashErrors(t *testing.T) {
 	t.Parallel()
@@ -112,49 +24,6 @@ func TestExtractNSEC3ParamsNoNSEC3(t *testing.T) {
 	t.Parallel()
 	_, ok := extractNSEC3Params(nil)
 	require.False(t, ok)
-}
-
-func TestNextCloserNameEqualLabels(t *testing.T) {
-	t.Parallel()
-	// encloser is qname's parent — next-closer == qname.
-	qname := wire.MustParseName("foo.example.")
-	encloser := wire.MustParseName("example.")
-	nc := nextCloserName(qname, encloser)
-	require.True(t, nc.Equal(qname))
-}
-
-func TestWildcardOf(t *testing.T) {
-	t.Parallel()
-	enc := wire.MustParseName("example.com.")
-	wc, err := wildcardOf(enc)
-	require.NoError(t, err)
-	require.True(t, wc.Equal(wire.MustParseName("*.example.com.")))
-}
-
-func TestNameCoveredByWraparound(t *testing.T) {
-	t.Parallel()
-	// Wraparound: owner > next in canonical order. qname > owner → covered.
-	owner := wire.MustParseName("z.example.")
-	next := wire.MustParseName("a.example.")
-	qname := wire.MustParseName("zz.example.")
-	require.True(t, nameCoveredBy(qname, owner, next))
-
-	// Wraparound, qname between owner and next — NOT covered.
-	qname2 := wire.MustParseName("m.example.")
-	require.False(t, nameCoveredBy(qname2, owner, next))
-
-	// Non-wraparound straightforward case.
-	require.True(t, nameCoveredBy(
-		wire.MustParseName("m.example."),
-		wire.MustParseName("a.example."),
-		wire.MustParseName("z.example."),
-	))
-}
-
-func TestSignerOfNoRRSIG(t *testing.T) {
-	t.Parallel()
-	// No records at all.
-	require.False(t, signerOf(nil).IsValid())
 }
 
 func TestExchangerSourceCounterOverflow(t *testing.T) {
@@ -187,7 +56,7 @@ func TestNSEC3MatchHashTooManyIterations(t *testing.T) {
 // makeNSEC3Record fabricates an NSEC3 record with a synthetic owner hash.
 func makeNSEC3Record(t *testing.T, hash, next []byte, types []rrtype.Type, flags uint8) wire.Record {
 	t.Helper()
-	label := base32hexEncode(hash)
+	label := validatorbb.Base32HexEncode(hash)
 	owner, err := wire.NameFromLabels(label, "example")
 	require.NoError(t, err)
 	return wire.NewRecord(owner, time.Hour, rdata.NewNSEC3(1, flags, 0, nil, next, types))
@@ -314,21 +183,6 @@ func TestNSEC3ProveDenialDSInsecureDelegation(t *testing.T) {
 	require.Equal(t, nsec3DenialInsecureDelegation, res.kind)
 }
 
-// TestNSEC3ProveDenialNoDataNonDS: non-DS NoData with matching NSEC3 lacking
-// the qtype bit.
-// TestHashIntervalContainsWrap exercises the wraparound branch with
-// non-trivial multi-byte values.
-func TestHashIntervalContainsWrap(t *testing.T) {
-	t.Parallel()
-	owner := []byte{0xff, 0xff}
-	next := []byte{0x00, 0x10}
-	// x just below next — covered (x < next).
-	require.True(t, hashIntervalContains(owner, next, []byte{0x00, 0x05}))
-	// x above owner is impossible since owner is max; check x in middle =
-	// not covered (x is not greater than owner and not less than next).
-	require.False(t, hashIntervalContains(owner, next, []byte{0x80, 0x00}))
-}
-
 // TestNSEC3ProveDenialDSOptOutCover: qtype==DS, no matching NSEC3 at qname,
 // but a covering NSEC3 has the opt-out flag → opt-out outcome.
 func TestNSEC3ProveDenialDSOptOutCover(t *testing.T) {
@@ -369,102 +223,6 @@ func TestNSEC3ProveDenialNoDataAAAA(t *testing.T) {
 	require.Equal(t, nsec3DenialNoData, res.kind)
 }
 
-func TestRRsigValidNowWithSkewBranches(t *testing.T) {
-	t.Parallel()
-	now := time.Now().UTC().Truncate(time.Second)
-	// Build a synthetic RRSIG via constructor.
-	// NewRRSIG signature is (typeCovered, alg, labels, origTTL, expiration, inception, ...)
-	sig := rdata.NewRRSIG(rrtype.A, rdata.AlgECDSAP256SHA256, 2, time.Hour,
-		now.Add(time.Hour), now.Add(-time.Hour),
-		1, wire.MustParseName("example."), nil)
-	require.True(t, rrsigValidNowWithSkew(sig, now, 0))
-	// Before inception even with skew.
-	require.False(t, rrsigValidNowWithSkew(sig, now.Add(-2*time.Hour), 0))
-	// After expiration even with skew.
-	require.False(t, rrsigValidNowWithSkew(sig, now.Add(2*time.Hour), 0))
-	// Inside skew bring in.
-	require.True(t, rrsigValidNowWithSkew(sig, now.Add(-90*time.Minute), time.Hour))
-	require.True(t, rrsigValidNowWithSkew(sig, now.Add(90*time.Minute), time.Hour))
-}
-
-func TestRecordsOfTypeFiltersTypeAndOwner(t *testing.T) {
-	t.Parallel()
-	owner := wire.MustParseName("foo.example.")
-	other := wire.MustParseName("bar.example.")
-	r1 := wire.NewRecord(owner, time.Hour, rdata.NewNS(wire.MustParseName("ns.foo.example.")))
-	r2 := wire.NewRecord(other, time.Hour, rdata.NewNS(wire.MustParseName("ns.bar.example.")))
-	r3 := wire.NewRecord(owner, time.Hour, rdata.NewNS(wire.MustParseName("ns2.foo.example.")))
-	got := recordsOfType([]wire.Record{r1, r2, r3}, rrtype.NS, owner)
-	require.Len(t, got, 2)
-
-	// Type mismatch path.
-	got = recordsOfType([]wire.Record{r1, r2, r3}, rrtype.MX, owner)
-	require.Empty(t, got)
-}
-
-func TestGroupRecordsByOwnerAppend(t *testing.T) {
-	t.Parallel()
-	a := wire.NewRecord(wire.MustParseName("a.example."), time.Hour, rdata.NewNS(wire.MustParseName("ns1.example.")))
-	a2 := wire.NewRecord(wire.MustParseName("a.example."), time.Hour, rdata.NewNS(wire.MustParseName("ns2.example.")))
-	b := wire.NewRecord(wire.MustParseName("b.example."), time.Hour, rdata.NewNS(wire.MustParseName("ns3.example.")))
-	groups := groupRecordsByOwner([]wire.Record{a, b, a2})
-	require.Len(t, groups, 2)
-	// First group is a.example. with two records.
-	require.Len(t, groups[0], 2)
-}
-
-func TestGroupNSECByOwnerAppend(t *testing.T) {
-	t.Parallel()
-	a := wire.NewRecord(wire.MustParseName("a.example."), time.Hour,
-		rdata.NewNSEC(wire.MustParseName("b.example."), nil))
-	a2 := wire.NewRecord(wire.MustParseName("a.example."), time.Hour,
-		rdata.NewNSEC(wire.MustParseName("c.example."), nil))
-	b := wire.NewRecord(wire.MustParseName("b.example."), time.Hour,
-		rdata.NewNSEC(wire.MustParseName("c.example."), nil))
-	groups := groupNSECByOwner([]wire.Record{a, b, a2})
-	require.Len(t, groups, 2)
-	require.Len(t, groups[0], 2)
-}
-
-func TestFilterNSECByOwner(t *testing.T) {
-	t.Parallel()
-	a := wire.NewRecord(wire.MustParseName("a.example."), time.Hour,
-		rdata.NewNSEC(wire.MustParseName("b.example."), nil))
-	other := wire.NewRecord(wire.MustParseName("z.example."), time.Hour,
-		rdata.NewNSEC(wire.MustParseName("zz.example."), nil))
-	notNSEC := wire.NewRecord(wire.MustParseName("a.example."), time.Hour,
-		rdata.NewNS(wire.MustParseName("ns.example.")))
-	got := filterNSECByOwner([]wire.Record{a, other, notNSEC}, wire.MustParseName("a.example."))
-	require.Len(t, got, 1)
-}
-
-func TestCanonicalNameCmpEqualLength(t *testing.T) {
-	t.Parallel()
-	a := wire.MustParseName("foo.example.")
-	require.Equal(t, 0, canonicalNameCmp(a, a))
-}
-
-func TestSignerOfReturnsRRSIGSigner(t *testing.T) {
-	t.Parallel()
-	now := time.Now().UTC()
-	sig := rdata.NewRRSIG(rrtype.A, rdata.AlgECDSAP256SHA256, 2, time.Hour,
-		now.Add(time.Hour), now,
-		1, wire.MustParseName("example."), nil)
-	rec := wire.NewRecord(wire.MustParseName("foo.example."), time.Hour, sig)
-	notSig := wire.NewRecord(wire.MustParseName("a.example."), time.Hour,
-		rdata.NewNS(wire.MustParseName("ns.example.")))
-	require.True(t, signerOf([]wire.Record{notSig, rec}).Equal(wire.MustParseName("example.")))
-}
-
-func TestBase32HexEncodeOddBytes(t *testing.T) {
-	t.Parallel()
-	// 1 byte = 8 bits → 2 base32hex chars (5+3 leftover).
-	require.Equal(t, "00", base32hexEncode([]byte{0}))
-	// 3 bytes = 24 bits → 5 base32hex chars (5*4=20 + 4 leftover).
-	enc := base32hexEncode([]byte{0xff, 0xff, 0xff})
-	require.NotEmpty(t, enc)
-}
-
 func TestExchangerSourceLookupBuildErrorPathUnreachable(t *testing.T) {
 	t.Parallel()
 	// The build-error path inside Lookup is effectively unreachable with
@@ -491,19 +249,118 @@ func (r *recordingExchangerInternal) Exchange(_ context.Context, _ wire.Message)
 	return r.resp, nil
 }
 
-func TestTruncateNameTo(t *testing.T) {
+// makeNSEC3RecordAt fabricates an NSEC3 record whose owner uses suffix as
+// the zone apex labels.
+func makeNSEC3RecordAt(t *testing.T, hash, next []byte, types []rrtype.Type, flags uint8, suffix ...string) wire.Record {
+	t.Helper()
+	label := validatorbb.Base32HexEncode(hash)
+	owner, err := wire.NameFromLabels(append([]string{label}, suffix...)...)
+	require.NoError(t, err)
+	return wire.NewRecord(owner, time.Hour, rdata.NewNSEC3(1, flags, 0, nil, next, types))
+}
+
+// TestFindNSEC3ClosestEncloserMatchAtZoneApex covers the zone-equal branch
+// where the NSEC3 matching the zone apex is what terminates the walk.
+func TestFindNSEC3ClosestEncloserMatchAtZoneApex(t *testing.T) {
 	t.Parallel()
-	n := wire.MustParseName("a.b.c.example.")
-	// Truncate to 2 labels (root + "example.")
-	got := truncateNameTo(n, 2)
-	require.True(t, got.Equal(wire.MustParseName("c.example.")))
-	// k larger than NumLabels — return unchanged.
-	got = truncateNameTo(n, 100)
-	require.True(t, got.Equal(n))
-	// k=1 → "example."
-	got = truncateNameTo(n, 1)
-	require.True(t, got.Equal(wire.MustParseName("example.")))
-	// k=0 → root.
-	got = truncateNameTo(n, 0)
-	require.True(t, got.Equal(wire.RootName()))
+	params := nsec3Params{alg: 1, iterations: 0, salt: nil}
+	zone := wire.MustParseName("example.")
+	zoneHash := nsec3Hash(zone, params.salt, params.iterations)
+	rec := makeNSEC3RecordAt(t, zoneHash, zoneHash, []rrtype.Type{rrtype.SOA}, 0, "example")
+	enc, ok := findNSEC3ClosestEncloser(
+		wire.MustParseName("missing.example."),
+		zone, params, []wire.Record{rec},
+	)
+	require.True(t, ok)
+	require.True(t, enc.Equal(zone))
+}
+
+// TestNSEC3ProveDenialNXDomainProof drives the NXDOMAIN closest-encloser
+// proof: matching NSEC3 at encloser, covering NSEC3 at next-closer, covering
+// NSEC3 at *.encloser.
+func TestNSEC3ProveDenialNXDomainProof(t *testing.T) {
+	t.Parallel()
+	params := nsec3Params{alg: 1, iterations: 0, salt: nil}
+	zone := wire.MustParseName("example.")
+	qname := wire.MustParseName("missing.example.")
+
+	// Encloser match: NSEC3 owner == H(example.)
+	encHash := nsec3Hash(zone, params.salt, params.iterations)
+	encRec := makeNSEC3RecordAt(t, encHash, encHash, []rrtype.Type{rrtype.SOA}, 0, "example")
+
+	// Next-closer cover: H(missing.example.) bracketed by lo,hi.
+	ncHash := nsec3Hash(qname, params.salt, params.iterations)
+	lo := append([]byte(nil), ncHash...)
+	hi := append([]byte(nil), ncHash...)
+	for i := len(lo) - 1; i >= 0; i-- {
+		if lo[i] > 0 {
+			lo[i]--
+			break
+		}
+		lo[i] = 0xff
+	}
+	for i := len(hi) - 1; i >= 0; i-- {
+		if hi[i] < 0xff {
+			hi[i]++
+			break
+		}
+		hi[i] = 0
+	}
+	ncRec := makeNSEC3RecordAt(t, lo, hi, nil, 0, "example")
+
+	// Wildcard cover: cover H(*.example.).
+	wc, err := validatorbb.WildcardOf(zone)
+	require.NoError(t, err)
+	wcHash := nsec3Hash(wc, params.salt, params.iterations)
+	wlo := append([]byte(nil), wcHash...)
+	whi := append([]byte(nil), wcHash...)
+	for i := len(wlo) - 1; i >= 0; i-- {
+		if wlo[i] > 0 {
+			wlo[i]--
+			break
+		}
+		wlo[i] = 0xff
+	}
+	for i := len(whi) - 1; i >= 0; i-- {
+		if whi[i] < 0xff {
+			whi[i]++
+			break
+		}
+		whi[i] = 0
+	}
+	wcRec := makeNSEC3RecordAt(t, wlo, whi, nil, 0, "example")
+
+	res := nsec3ProveDenial(qname, rrtype.A, zone, []wire.Record{encRec, ncRec, wcRec})
+	require.Equal(t, nsec3DenialNXDomain, res.kind)
+	require.True(t, res.closestEncloser.Equal(zone))
+}
+
+// TestNSEC3ProveDenialNoEncloser drives step 3 of nsec3ProveDenial when
+// findNSEC3ClosestEncloser fails (records present but none match an
+// ancestor of qname).
+func TestNSEC3ProveDenialNoEncloser(t *testing.T) {
+	t.Parallel()
+	// One NSEC3 with a deliberately unrelated owner-hash so no parent of
+	// qname matches.
+	rec := wire.NewRecord(wire.MustParseName("0.example."), time.Hour,
+		rdata.NewNSEC3(1, 0, 0, nil, make([]byte, 20), []rrtype.Type{rrtype.A}))
+	res := nsec3ProveDenial(
+		wire.MustParseName("missing.example."),
+		rrtype.AAAA,
+		wire.MustParseName("example."),
+		[]wire.Record{rec},
+	)
+	require.Equal(t, nsec3DenialNone, res.kind)
+}
+
+// TestExtractNSEC3ParamsFirstWins verifies the first-record-wins path of
+// extractNSEC3Params (single-NSEC3 fast path).
+func TestExtractNSEC3ParamsFirstWins(t *testing.T) {
+	t.Parallel()
+	r1 := wire.NewRecord(wire.MustParseName("aaa.example."), time.Hour,
+		rdata.NewNSEC3(1, 0, 5, []byte{1, 2, 3}, make([]byte, 20), nil))
+	got, ok := extractNSEC3Params([]wire.Record{r1})
+	require.True(t, ok)
+	require.Equal(t, uint16(5), got.iterations)
+	require.Equal(t, []byte{1, 2, 3}, got.salt)
 }

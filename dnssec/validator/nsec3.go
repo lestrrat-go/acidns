@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/lestrrat-go/acidns/dnssec/validator/validatorbb"
 	"github.com/lestrrat-go/acidns/wire"
 	"github.com/lestrrat-go/acidns/wire/rdata"
 	"github.com/lestrrat-go/acidns/wire/rrtype"
@@ -54,67 +55,6 @@ func nsec3Hash(name wire.Name, salt []byte, iterations uint16) []byte {
 	return h[:]
 }
 
-// base32hexAlphabet is the RFC 4648 base32hex alphabet (extended hex,
-// uppercase) used by NSEC3 owner-name labels (RFC 5155 §1.3 / §5.3).
-const base32hexAlphabet = "0123456789ABCDEFGHIJKLMNOPQRSTUV"
-
-// base32hexEncode renders raw bytes as the no-padding base32hex form used
-// by NSEC3 owner labels.
-func base32hexEncode(b []byte) string {
-	if len(b) == 0 {
-		return ""
-	}
-	out := make([]byte, 0, (len(b)*8+4)/5)
-	var buf uint64
-	bits := 0
-	for _, x := range b {
-		buf = (buf << 8) | uint64(x)
-		bits += 8
-		for bits >= 5 {
-			bits -= 5
-			idx := (buf >> bits) & 0x1f
-			out = append(out, base32hexAlphabet[idx])
-		}
-	}
-	if bits > 0 {
-		idx := (buf << (5 - bits)) & 0x1f
-		out = append(out, base32hexAlphabet[idx])
-	}
-	return string(out)
-}
-
-// base32hexDecode parses a base32hex-encoded label produced by NSEC3.
-// Returns ErrInvalidNSEC3Label for any non-alphabet character.
-func base32hexDecode(s string) ([]byte, error) {
-	if len(s) == 0 {
-		return nil, nil
-	}
-	out := make([]byte, 0, (len(s)*5+7)/8)
-	var buf uint64
-	bits := 0
-	for i := 0; i < len(s); i++ {
-		c := s[i]
-		var v int
-		switch {
-		case c >= '0' && c <= '9':
-			v = int(c - '0')
-		case c >= 'A' && c <= 'V':
-			v = int(c-'A') + 10
-		case c >= 'a' && c <= 'v':
-			v = int(c-'a') + 10
-		default:
-			return nil, fmt.Errorf("validator: bad base32hex character %q", c)
-		}
-		buf = (buf << 5) | uint64(v)
-		bits += 5
-		if bits >= 8 {
-			bits -= 8
-			out = append(out, byte((buf>>bits)&0xff))
-		}
-	}
-	return out, nil
-}
-
 // nsec3OwnerHash extracts the hash bytes from an NSEC3 owner. The leftmost
 // label is base32hex; the remainder is the zone apex. Returns an error if
 // the leftmost label fails to decode.
@@ -122,7 +62,7 @@ func nsec3OwnerHash(owner wire.Name) ([]byte, error) {
 	for l := range owner.Labels() {
 		// First label only.
 		s := strings.ToUpper(string(l))
-		return base32hexDecode(s)
+		return validatorbb.Base32HexDecode(s)
 	}
 	return nil, fmt.Errorf("validator: NSEC3 owner has no label")
 }
@@ -143,7 +83,7 @@ func nsec3Match(name wire.Name, params nsec3Params, records []wire.Record) (wire
 		if err != nil {
 			continue
 		}
-		if bytesEqual(got, want) {
+		if validatorbb.BytesEqual(got, want) {
 			n3, ok := wire.RDataAs[rdata.NSEC3](r)
 			if !ok {
 				continue
@@ -175,46 +115,11 @@ func nsec3Cover(name wire.Name, params nsec3Params, records []wire.Record) (wire
 			continue
 		}
 		next := n3.NextHashedOwner()
-		if hashIntervalContains(ownerHash, next, target) {
+		if validatorbb.HashIntervalContains(ownerHash, next, target) {
 			return r, n3, true
 		}
 	}
 	return nil, rdata.NSEC3{}, false
-}
-
-// hashIntervalContains reports whether x falls strictly between owner and
-// next under big-endian byte ordering, with apex wraparound (next < owner).
-func hashIntervalContains(owner, next, x []byte) bool {
-	if bytesLess(owner, next) {
-		return bytesLess(owner, x) && bytesLess(x, next)
-	}
-	// Wraparound.
-	return bytesLess(owner, x) || bytesLess(x, next)
-}
-
-func bytesLess(a, b []byte) bool {
-	n := len(a)
-	if len(b) < n {
-		n = len(b)
-	}
-	for i := 0; i < n; i++ {
-		if a[i] != b[i] {
-			return a[i] < b[i]
-		}
-	}
-	return len(a) < len(b)
-}
-
-func bytesEqual(a, b []byte) bool {
-	if len(a) != len(b) {
-		return false
-	}
-	for i := range a {
-		if a[i] != b[i] {
-			return false
-		}
-	}
-	return true
 }
 
 // nsec3Params bundles the (alg, iterations, salt) tuple shared by all NSEC3
@@ -250,7 +155,7 @@ func extractNSEC3Params(records []wire.Record) (nsec3Params, bool) {
 			first = false
 			continue
 		}
-		if cur.alg != params.alg || cur.iterations != params.iterations || !bytesEqual(cur.salt, params.salt) {
+		if cur.alg != params.alg || cur.iterations != params.iterations || !validatorbb.BytesEqual(cur.salt, params.salt) {
 			return nsec3Params{}, false
 		}
 	}
@@ -272,7 +177,7 @@ const (
 // nsec3DenialResult bundles the proof outcome and supporting record
 // references for diagnostics.
 type nsec3DenialResult struct {
-	kind          nsec3DenialKind
+	kind            nsec3DenialKind
 	closestEncloser wire.Name
 }
 
@@ -337,13 +242,13 @@ func nsec3ProveDenial(qname wire.Name, qtype rrtype.Type, zone wire.Name, record
 		return nsec3DenialResult{kind: nsec3DenialNone}
 	}
 	// Need NSEC3 covering "next closer name".
-	nextCloser := nextCloserName(qname, encloser)
+	nextCloser := validatorbb.NextCloserName(qname, encloser)
 	if _, _, found := nsec3Cover(nextCloser, params, records); !found {
 		return nsec3DenialResult{kind: nsec3DenialNone}
 	}
 	// Need NSEC3 covering *.<encloser> OR a matching wildcard NSEC3 with
 	// !qtype in bitmap (§8.7).
-	wildcard, err := wildcardOf(encloser)
+	wildcard, err := validatorbb.WildcardOf(encloser)
 	if err == nil {
 		if _, _, found := nsec3Cover(wildcard, params, records); found {
 			return nsec3DenialResult{kind: nsec3DenialNXDomain, closestEncloser: encloser}
@@ -380,28 +285,4 @@ func findNSEC3ClosestEncloser(qname, zone wire.Name, params nsec3Params, records
 		}
 		cur = parent
 	}
-}
-
-// nextCloserName returns the name one label longer than encloser toward
-// qname (RFC 5155 §1.3). For example, qname=a.b.c.example,
-// encloser=c.example → next-closer = b.c.example.
-func nextCloserName(qname, encloser wire.Name) wire.Name {
-	cur := qname
-	for cur.NumLabels() > encloser.NumLabels()+1 {
-		parent, ok := cur.Parent()
-		if !ok {
-			return cur
-		}
-		cur = parent
-	}
-	return cur
-}
-
-// wildcardOf prepends "*" to encloser.
-func wildcardOf(encloser wire.Name) (wire.Name, error) {
-	labels := []string{"*"}
-	for l := range encloser.Labels() {
-		labels = append(labels, string(l))
-	}
-	return wire.NameFromLabels(labels...)
 }

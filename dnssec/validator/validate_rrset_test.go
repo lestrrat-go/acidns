@@ -134,6 +134,111 @@ func TestValidateRRsetNoMatchingKey(t *testing.T) {
 	require.Error(t, err)
 }
 
+// TestValidateRRsetDefaultBogusPolicy exercises the default (non-Answer)
+// BogusPolicy branch in ValidateRRset.
+func TestValidateRRsetDefaultBogusPolicy(t *testing.T) {
+	t.Parallel()
+	priv, key := makeECDSAP256Key(t)
+	now := time.Now().UTC().Truncate(time.Second)
+	set := []wire.Record{
+		wire.NewRecord(wire.MustParseName("example.com"), time.Hour,
+			rdata.NewA(netip.MustParseAddr("192.0.2.1"))),
+	}
+	sig := signRRSIG(t, priv, set, key, now.Add(-2*time.Hour), now.Add(-time.Hour))
+	v := validator.New(validator.Options{Now: func() time.Time { return now }})
+	res, _, err := v.ValidateRRset(set, []rdata.RRSIG{sig}, []rdata.DNSKEY{key})
+	require.Equal(t, validator.Bogus, res)
+	require.Error(t, err)
+}
+
+// TestValidateRRsetSameAlgDifferentKeyTag covers the algorithm-matches but
+// KeyTag-mismatches continue branch in findMatchingKey.
+func TestValidateRRsetSameAlgDifferentKeyTag(t *testing.T) {
+	t.Parallel()
+	priv, key := makeECDSAP256Key(t)
+	now := time.Now().UTC().Truncate(time.Second)
+	set := []wire.Record{
+		wire.NewRecord(wire.MustParseName("example.com"), time.Hour,
+			rdata.NewA(netip.MustParseAddr("192.0.2.1"))),
+	}
+	sig := signRRSIG(t, priv, set, key, now.Add(-time.Hour), now.Add(time.Hour))
+
+	// Build a different DNSKEY with the same algorithm but different bytes
+	// (so its KeyTag differs from `key`'s tag).
+	other := rdata.NewDNSKEY(257, 3, rdata.AlgECDSAP256SHA256, make([]byte, 64))
+	v := validator.New(validator.Options{
+		Now:         func() time.Time { return now },
+		BogusPolicy: validator.BogusReturnAnswer,
+	})
+	res, _, err := v.ValidateRRset(set, []rdata.RRSIG{sig}, []rdata.DNSKEY{other, key})
+	require.Equal(t, validator.Secure, res, "the second key is the right one")
+	require.NoError(t, err)
+}
+
+// TestValidateRRsetMatchingKeyButVerifyFails exercises the path where a
+// DNSKEY's algorithm and KeyTag match the RRSIG but Verify fails because
+// the signature bytes are bogus. Drives the `else lastErr = err` branch.
+func TestValidateRRsetMatchingKeyButVerifyFails(t *testing.T) {
+	t.Parallel()
+	_, key := makeECDSAP256Key(t)
+	now := time.Now().UTC().Truncate(time.Second)
+	set := []wire.Record{
+		wire.NewRecord(wire.MustParseName("example.com"), time.Hour,
+			rdata.NewA(netip.MustParseAddr("192.0.2.1"))),
+	}
+	// Build an RRSIG whose KeyTag/Algorithm match `key` but signature is
+	// random bytes.
+	bogus := rdata.NewRRSIG(set[0].Type(), key.Algorithm(),
+		uint8(set[0].Name().NumLabels()), set[0].TTL(),
+		now.Add(time.Hour), now.Add(-time.Hour),
+		dnssec.KeyTag(key), set[0].Name(), make([]byte, 64))
+
+	v := validator.New(validator.Options{
+		Now:         func() time.Time { return now },
+		BogusPolicy: validator.BogusReturnAnswer,
+	})
+	res, _, err := v.ValidateRRset(set, []rdata.RRSIG{bogus}, []rdata.DNSKEY{key})
+	require.Equal(t, validator.Bogus, res)
+	require.Error(t, err)
+}
+
+// TestValidateRRsetNTACovers drives the NTA early-return branch.
+func TestValidateRRsetNTACovers(t *testing.T) {
+	t.Parallel()
+	owner := wire.MustParseName("nta.example.")
+	set := []wire.Record{
+		wire.NewRecord(owner, time.Hour, rdata.NewA(netip.MustParseAddr("192.0.2.1"))),
+	}
+	ntas := validator.NewNTAStore()
+	require.True(t, ntas.Add(owner))
+	v := validator.New(validator.Options{NTAs: ntas})
+	res, _, err := v.ValidateRRset(set, nil, nil)
+	require.Equal(t, validator.Indeterminate, res)
+	require.NoError(t, err)
+}
+
+// TestVerifyDelegationNTACovers drives the NTA early-return path of
+// VerifyDelegation.
+func TestVerifyDelegationNTACovers(t *testing.T) {
+	t.Parallel()
+	owner := wire.MustParseName("nta.example.")
+	ntas := validator.NewNTAStore()
+	require.True(t, ntas.Add(owner))
+	v := validator.New(validator.Options{NTAs: ntas})
+	res, err := v.VerifyDelegation(owner, nil, nil)
+	require.NoError(t, err)
+	require.Equal(t, validator.Indeterminate, res)
+}
+
+// TestVerifyDelegationInsecureNoDS drives the empty-DS Insecure branch.
+func TestVerifyDelegationInsecureNoDS(t *testing.T) {
+	t.Parallel()
+	v := validator.New(validator.Options{})
+	res, err := v.VerifyDelegation(wire.MustParseName("example."), nil, nil)
+	require.NoError(t, err)
+	require.Equal(t, validator.Insecure, res)
+}
+
 func TestVerifyDelegationSecure(t *testing.T) {
 	t.Parallel()
 	_, key := makeECDSAP256Key(t)
