@@ -31,7 +31,10 @@ const (
 	LOC        Type = 29 // RFC 1876
 	AAAA       Type = 28
 	SRV        Type = 33
+	KX         Type = 36 // RFC 2230
+	CERT       Type = 37 // RFC 4398
 	NAPTR      Type = 35
+	DNAME      Type = 39 // RFC 6672
 	APL        Type = 42 // RFC 3123
 	OPT        Type = 41
 	DS         Type = 43
@@ -48,6 +51,7 @@ const (
 	HIP        Type = 55 // RFC 5205
 	CDS        Type = 59
 	CDNSKEY    Type = 60
+	OPENPGPKEY Type = 61 // RFC 7929
 	CSYNC      Type = 62
 	ZONEMD     Type = 63 // RFC 8976
 	SVCB       Type = 64
@@ -61,28 +65,32 @@ const (
 	EUI64      Type = 109 // RFC 7043
 	URI        Type = 256 // RFC 7553
 	CAA        Type = 257
+	AMTRELAY   Type = 260 // RFC 8777
 	RESINFO    Type = 261 // RFC 9606
 	NXNAME     Type = 128 // draft-ietf-dnsop-compact-denial-of-existence
 
 	ANY  Type = 255
 	AXFR Type = 252
 	IXFR Type = 251
+	TKEY Type = 249 // RFC 2930
 )
 
 var typeNames = map[Type]string{
 	A: "A", NS: "NS", CNAME: "CNAME", SOA: "SOA", PTR: "PTR", HINFO: "HINFO",
 	MX: "MX", TXT: "TXT", RP: "RP", AFSDB: "AFSDB", X25: "X25", ISDN: "ISDN",
 	RT: "RT", NSAP: "NSAP", NSAPPTR: "NSAP-PTR", LOC: "LOC",
-	AAAA: "AAAA", SRV: "SRV", NAPTR: "NAPTR", OPT: "OPT",
+	AAAA: "AAAA", SRV: "SRV", KX: "KX", CERT: "CERT", NAPTR: "NAPTR",
+	DNAME: "DNAME", OPT: "OPT",
 	APL: "APL", DS: "DS", SSHFP: "SSHFP", IPSECKEY: "IPSECKEY",
 	RRSIG: "RRSIG", NSEC: "NSEC", DNSKEY: "DNSKEY", DHCID: "DHCID",
 	NSEC3: "NSEC3", NSEC3PARAM: "NSEC3PARAM", TLSA: "TLSA", SMIMEA: "SMIMEA",
-	HIP: "HIP", CDS: "CDS", CDNSKEY: "CDNSKEY", CSYNC: "CSYNC", ZONEMD: "ZONEMD",
+	HIP: "HIP", CDS: "CDS", CDNSKEY: "CDNSKEY", OPENPGPKEY: "OPENPGPKEY",
+	CSYNC: "CSYNC", ZONEMD: "ZONEMD",
 	SVCB: "SVCB", HTTPS: "HTTPS", SPF: "SPF",
 	NID: "NID", L32: "L32", L64: "L64", LP: "LP",
 	EUI48: "EUI48", EUI64: "EUI64",
-	URI: "URI", CAA: "CAA", RESINFO: "RESINFO", NXNAME: "NXNAME",
-	ANY: "ANY", AXFR: "AXFR", IXFR: "IXFR",
+	URI: "URI", CAA: "CAA", AMTRELAY: "AMTRELAY", RESINFO: "RESINFO", NXNAME: "NXNAME",
+	ANY: "ANY", AXFR: "AXFR", IXFR: "IXFR", TKEY: "TKEY",
 }
 
 var typeByName = func() map[string]Type {

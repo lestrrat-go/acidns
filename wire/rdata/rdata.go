@@ -159,6 +159,24 @@ func unpackTyped(t rrtype.Type, u *wirebb.Unpacker, rdlen int) (RData, error) {
 		return unpackSMIMEA(u, rdlen)
 	case rrtype.CSYNC:
 		return unpackCSYNC(u, rdlen)
+	case rrtype.DNAME:
+		return unpackDNAME(u)
+	case rrtype.HINFO:
+		return unpackHINFO(u)
+	case rrtype.KX:
+		return unpackKX(u)
+	case rrtype.CDS:
+		return unpackCDS(u, rdlen)
+	case rrtype.CDNSKEY:
+		return unpackCDNSKEY(u, rdlen)
+	case rrtype.OPENPGPKEY:
+		return unpackOPENPGPKEY(u, rdlen)
+	case rrtype.CERT:
+		return unpackCERT(u, rdlen)
+	case rrtype.AMTRELAY:
+		return unpackAMTRELAY(u, rdlen)
+	case rrtype.TKEY:
+		return unpackTKEY(u, rdlen)
 	default:
 		b, err := u.Bytes(rdlen)
 		if err != nil {
