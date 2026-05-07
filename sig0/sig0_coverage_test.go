@@ -373,7 +373,7 @@ func TestVerifyTruncatedRRHeader(t *testing.T) {
 	t.Parallel()
 	signed := ed25519Signed(t)
 	// Truncate so the SIG record's 10-byte fixed header doesn't fit.
-	short := append([]byte(nil), signed[:len(signed)-len(signed)+13]...)
+	short := append([]byte(nil), signed[:13]...)
 	// Restore arcount from original (keeps sanity in tests for short header path).
 	if len(short) >= 12 {
 		binary.BigEndian.PutUint16(short[10:12], 1)
@@ -391,7 +391,7 @@ func TestVerifyTruncatedRdata(t *testing.T) {
 	// Drop the trailing signature bytes — rdata length still claims original size.
 	chopped := append([]byte(nil), signed[:len(signed)-20]...)
 	_, err := sig0.Verify(chopped, rdata.AlgED25519, make([]byte, 32), wire.MustParseName("s"), time.Now())
-	require.ErrorContains(t, err, "truncated")
+	require.ErrorContains(t, err, "truncated rr body")
 }
 
 func TestVerifyTruncatedSIGHeader(t *testing.T) {

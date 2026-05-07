@@ -167,12 +167,16 @@ func ecdsaRawSig(t *testing.T, key *ecdsa.PrivateKey, size int, hashFn func() ha
 }
 
 func ecdsaRawPub(key *ecdsa.PrivateKey, size int) []byte {
-	pub := make([]byte, 2*size)
-	xb := key.PublicKey.X.Bytes()
-	yb := key.PublicKey.Y.Bytes()
-	copy(pub[size-len(xb):size], xb)
-	copy(pub[2*size-len(yb):], yb)
-	return pub
+	// (*ecdsa.PublicKey).Bytes returns SEC 1 uncompressed encoding:
+	// 0x04 || X || Y, each coordinate left-padded to coordinate size.
+	enc, err := key.PublicKey.Bytes()
+	if err != nil {
+		panic(err)
+	}
+	if len(enc) != 1+2*size {
+		panic("unexpected SEC1 length")
+	}
+	return enc[1:]
 }
 
 func TestVerifyECDSA(t *testing.T) {

@@ -364,21 +364,22 @@ func newKey(t *testing.T, alg rdata.DNSSECAlgorithm, ksk bool) keyMat {
 	case rdata.AlgECDSAP256SHA256:
 		priv, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
 		require.NoError(t, err)
-		pub := append(priv.PublicKey.X.FillBytes(make([]byte, 32)),
-			priv.PublicKey.Y.FillBytes(make([]byte, 32))...)
+		// SEC 1 uncompressed: 0x04 || X || Y, each padded to 32 bytes.
+		enc, err := priv.PublicKey.Bytes()
+		require.NoError(t, err)
 		return keyMat{
 			alg:    alg,
-			dnskey: rdata.NewDNSKEY(flags, 3, alg, pub),
+			dnskey: rdata.NewDNSKEY(flags, 3, alg, enc[1:]),
 			ecdsa:  priv,
 		}
 	case rdata.AlgECDSAP384SHA384:
 		priv, err := ecdsa.GenerateKey(elliptic.P384(), rand.Reader)
 		require.NoError(t, err)
-		pub := append(priv.PublicKey.X.FillBytes(make([]byte, 48)),
-			priv.PublicKey.Y.FillBytes(make([]byte, 48))...)
+		enc, err := priv.PublicKey.Bytes()
+		require.NoError(t, err)
 		return keyMat{
 			alg:    alg,
-			dnskey: rdata.NewDNSKEY(flags, 3, alg, pub),
+			dnskey: rdata.NewDNSKEY(flags, 3, alg, enc[1:]),
 			ecdsa:  priv,
 		}
 	case rdata.AlgED25519:

@@ -3,7 +3,6 @@ package recursive_test
 import (
 	"context"
 	"net/netip"
-	"sync/atomic"
 	"testing"
 	"time"
 
@@ -101,33 +100,11 @@ func TestCNAMELoopDetected(t *testing.T) {
 	require.ErrorIs(t, err, recursive.ErrCNAMELoop)
 }
 
-// lameDialer models a lame server that returns SERVFAIL the first N times,
-// then a success.
-type lameDialer struct {
-	delegate recursive.Dialer
-	failsLeft *atomic.Int32
-}
-
-func (d lameDialer) Exchange(ctx context.Context, server netip.AddrPort, q wire.Message) (wire.Message, error) {
-	if d.failsLeft.Add(-1) >= 0 {
-		// Return SERVFAIL.
-		question := q.Questions()[0]
-		resp, _ := wire.NewBuilder().
-			ID(q.ID()).
-			Response(true).
-			RCODE(wire.RCODEServFail).
-			Question(question).
-			Build()
-		return resp, nil
-	}
-	return d.delegate.Exchange(ctx, server, q)
-}
-
 func TestLameServerSkipped(t *testing.T) {
 	t.Parallel()
-	// Two distinct auth servers serving the same zone. The lameDialer makes
-	// the FIRST address answered respond with SERVFAIL; the resolver should
-	// fall through to the second server.
+	// Two distinct auth servers serving the same zone. The
+	// selectiveServfailDialer makes the bad address respond with
+	// SERVFAIL; the resolver should fall through to the other server.
 	good := startAuth(t, `$ORIGIN example.com.
 $TTL 30
 @   IN  SOA  ns. hm. ( 1 2 3 4 5 )
