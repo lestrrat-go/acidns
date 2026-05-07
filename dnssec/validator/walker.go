@@ -272,7 +272,7 @@ func (w *walker) walkChain(ctx context.Context, anchor Anchor, qname wire.Name) 
 		if err != nil {
 			return chain, nil, wire.Name{}, fmt.Errorf("DS lookup %s: %w", candidate, err)
 		}
-		switch outcome, dsRRs, errDS := w.classifyDSResponse(candidate, parentKeys, dsMsg); outcome {
+		switch outcome, dsRRs, errDS := w.classifyDSResponse(candidate, zone, parentKeys, dsMsg); outcome {
 		case dsOutcomeCut:
 			// Real zone cut. Verify the DS rrset is signed by parentKeys
 			// (already done in classifyDSResponse). Now pull DNSKEYs at
@@ -402,12 +402,11 @@ const (
 )
 
 // classifyDSResponse interprets a DS-query response. parentKeys are the
-// DNSKEYs of the zone above candidate.
-func (w *walker) classifyDSResponse(candidate wire.Name, parentKeys []rdata.DNSKEY, msg wire.Message) (dsOutcome, []rdata.DS, error) {
+// DNSKEYs of the parent zone (parentZone) authoritative for candidate's DS.
+func (w *walker) classifyDSResponse(candidate, parentZone wire.Name, parentKeys []rdata.DNSKEY, msg wire.Message) (dsOutcome, []rdata.DS, error) {
 	rcode := msg.Flags().RCODE()
 	if rcode == wire.RCODENXDomain {
-		// Validate the NXDOMAIN proof using NSEC in authority section.
-		if err := w.validateNSECNXDomain(candidate, parentKeys, msg); err != nil {
+		if err := w.validateNXDomain(candidate, parentZone, parentKeys, msg); err != nil {
 			return dsOutcomeUnknown, nil, fmt.Errorf("NXDOMAIN proof: %w", err)
 		}
 		return dsOutcomeNXDomain, nil, nil
@@ -434,25 +433,33 @@ func (w *walker) classifyDSResponse(candidate wire.Name, parentKeys []rdata.DNSK
 		return dsOutcomeCut, dsRDatas, nil
 	}
 
-	// No DS in answer: examine authority for NSEC proving NoData(DS).
+	// No DS in answer: try NSEC first, then NSEC3.
+	if outcome, ok, err := w.classifyDSViaNSEC(candidate, parentKeys, msg); ok {
+		return outcome, nil, err
+	}
+	if outcome, ok, err := w.classifyDSViaNSEC3(candidate, parentZone, parentKeys, msg); ok {
+		return outcome, nil, err
+	}
+	return dsOutcomeUnknown, nil, fmt.Errorf("validator: NoData(DS) at %s missing NSEC/NSEC3 proof", candidate)
+}
+
+// classifyDSViaNSEC handles the NSEC denial path. Returns ok=false if no
+// NSEC records are present so the caller can try NSEC3.
+func (w *walker) classifyDSViaNSEC(candidate wire.Name, parentKeys []rdata.DNSKEY, msg wire.Message) (dsOutcome, bool, error) {
 	nsecRRs := recordsOfType(msg.Authorities(), rrtype.NSEC, candidate)
 	if len(nsecRRs) == 0 {
-		// Also accept NSEC at any owner that proves NoData for candidate
-		// (closest-encloser-style); we'll be lenient on the ownership and
-		// rely on type-bitmap absence at candidate.
 		nsecRRs = filterNSECByOwner(msg.Authorities(), candidate)
 	}
 	if len(nsecRRs) == 0 {
-		return dsOutcomeUnknown, nil, fmt.Errorf("validator: NoData(DS) at %s missing NSEC proof", candidate)
+		return dsOutcomeUnknown, false, nil
 	}
 	sigs := rrsigsForTypeAndOwner(extractRRSIGs(msg.Authorities()), rrtype.NSEC, candidate)
 	if len(sigs) == 0 {
-		return dsOutcomeUnknown, nil, fmt.Errorf("validator: NSEC at %s lacks RRSIG", candidate)
+		return dsOutcomeUnknown, true, fmt.Errorf("validator: NSEC at %s lacks RRSIG", candidate)
 	}
 	if _, _, err := w.verifyRRsetWithKeys(nsecRRs, sigs, parentKeys); err != nil {
-		return dsOutcomeUnknown, nil, fmt.Errorf("NSEC rrsig: %w", err)
+		return dsOutcomeUnknown, true, fmt.Errorf("NSEC rrsig: %w", err)
 	}
-	// Inspect the NSEC bitmap: NS present + DS absent → insecure delegation.
 	for _, r := range nsecRRs {
 		nsec, ok := wire.RDataAs[rdata.NSEC](r, rrtype.NSEC)
 		if !ok {
@@ -463,12 +470,81 @@ func (w *walker) classifyDSResponse(candidate wire.Name, parentKeys []rdata.DNSK
 		hasSOA := bitmapHas(nsec.Types(), rrtype.SOA)
 		switch {
 		case hasNS && !hasDS && !hasSOA:
-			return dsOutcomeInsecure, nil, nil
+			return dsOutcomeInsecure, true, nil
 		case !hasDS:
-			return dsOutcomeNonCut, nil, nil
+			return dsOutcomeNonCut, true, nil
 		}
 	}
-	return dsOutcomeUnknown, nil, fmt.Errorf("validator: NSEC at %s did not prove DS absence", candidate)
+	return dsOutcomeUnknown, true, fmt.Errorf("validator: NSEC at %s did not prove DS absence", candidate)
+}
+
+// classifyDSViaNSEC3 handles the NSEC3 denial path. Returns ok=false if no
+// NSEC3 records are present.
+func (w *walker) classifyDSViaNSEC3(candidate, parentZone wire.Name, parentKeys []rdata.DNSKEY, msg wire.Message) (dsOutcome, bool, error) {
+	nsec3RRs := recordsOfType3(msg.Authorities())
+	if len(nsec3RRs) == 0 {
+		return dsOutcomeUnknown, false, nil
+	}
+	if err := w.verifyNSEC3Set(nsec3RRs, msg.Authorities(), parentKeys); err != nil {
+		return dsOutcomeUnknown, true, fmt.Errorf("NSEC3 rrsig: %w", err)
+	}
+	res := nsec3ProveDenial(candidate, rrtype.DS, parentZone, nsec3RRs)
+	switch res.kind {
+	case nsec3DenialInsecureDelegation, nsec3DenialOptOut:
+		return dsOutcomeInsecure, true, nil
+	case nsec3DenialNoData:
+		return dsOutcomeNonCut, true, nil
+	}
+	return dsOutcomeUnknown, true, fmt.Errorf("validator: NSEC3 at %s did not prove DS absence", candidate)
+}
+
+// validateNXDomain validates an NXDOMAIN response using NSEC OR NSEC3.
+func (w *walker) validateNXDomain(qname, parentZone wire.Name, parentKeys []rdata.DNSKEY, msg wire.Message) error {
+	if err := w.validateNSECNXDomain(qname, parentKeys, msg); err == nil {
+		return nil
+	}
+	// Fall through to NSEC3.
+	return w.validateNSEC3NXDomain(qname, parentZone, parentKeys, msg)
+}
+
+// validateNSEC3NXDomain validates an NXDOMAIN response using NSEC3
+// closest-encloser proof. parentZone is the zone whose keys signed the
+// authority section.
+func (w *walker) validateNSEC3NXDomain(qname, parentZone wire.Name, parentKeys []rdata.DNSKEY, msg wire.Message) error {
+	nsec3RRs := recordsOfType3(msg.Authorities())
+	if len(nsec3RRs) == 0 {
+		return fmt.Errorf("no NSEC3 in authority")
+	}
+	if err := w.verifyNSEC3Set(nsec3RRs, msg.Authorities(), parentKeys); err != nil {
+		return fmt.Errorf("NSEC3 rrsig: %w", err)
+	}
+	res := nsec3ProveDenial(qname, 0, parentZone, nsec3RRs)
+	switch res.kind {
+	case nsec3DenialNXDomain:
+		return nil
+	case nsec3DenialOptOut:
+		return nil
+	}
+	return fmt.Errorf("NSEC3 did not prove NXDOMAIN for %s", qname)
+}
+
+// verifyNSEC3Set verifies each NSEC3 rrset (grouped by owner) in records
+// against parentKeys. authority is the full authority section the rrsets
+// were drawn from (used to find covering RRSIGs).
+func (w *walker) verifyNSEC3Set(nsec3RRs, authority []wire.Record, parentKeys []rdata.DNSKEY) error {
+	groups := groupRecordsByOwner(nsec3RRs)
+	allSigs := extractRRSIGs(authority)
+	for _, set := range groups {
+		owner := set[0].Name()
+		sigs := rrsigsForTypeAndOwner(allSigs, rrtype.NSEC3, owner)
+		if len(sigs) == 0 {
+			return fmt.Errorf("NSEC3 at %s lacks RRSIG", owner)
+		}
+		if _, _, err := w.verifyRRsetWithKeys(set, sigs, parentKeys); err != nil {
+			return fmt.Errorf("NSEC3 rrsig at %s: %w", owner, err)
+		}
+	}
+	return nil
 }
 
 // validateNSECNXDomain performs a minimal NSEC NXDOMAIN check: the
@@ -513,22 +589,30 @@ func (w *walker) validateNSECNXDomain(qname wire.Name, parentKeys []rdata.DNSKEY
 }
 
 // validateNoData returns Secure with empty records when a NoData answer is
-// validly proven by NSEC; Bogus otherwise.
+// validly proven by NSEC or NSEC3; Bogus otherwise.
 func (w *walker) validateNoData(qname wire.Name, qtype rrtype.Type, parentKeys []rdata.DNSKEY, msg wire.Message, chain []ChainStep) (Answer, error) {
-	nsecRRs := recordsOfType(msg.Authorities(), rrtype.NSEC, qname)
-	if len(nsecRRs) == 0 {
-		// May also be matching-NSEC with same owner; widen filter.
-		nsecRRs = filterNSECByOwner(msg.Authorities(), qname)
+	// Try NSEC first.
+	if ans, ok := w.validateNoDataNSEC(qname, qtype, parentKeys, msg, chain); ok {
+		return ans, nil
 	}
+	// Fall through to NSEC3.
+	if ans, ok := w.validateNoDataNSEC3(qname, qtype, parentKeys, msg, chain); ok {
+		return ans, nil
+	}
+	return w.bogus(qname, qtype, chain, fmt.Errorf("validator: NoData missing NSEC/NSEC3 proof"))
+}
+
+func (w *walker) validateNoDataNSEC(qname wire.Name, qtype rrtype.Type, parentKeys []rdata.DNSKEY, msg wire.Message, chain []ChainStep) (Answer, bool) {
+	nsecRRs := filterNSECByOwner(msg.Authorities(), qname)
 	if len(nsecRRs) == 0 {
-		return w.bogus(qname, qtype, chain, fmt.Errorf("validator: NoData missing NSEC"))
+		return nil, false
 	}
 	sigs := rrsigsForTypeAndOwner(extractRRSIGs(msg.Authorities()), rrtype.NSEC, qname)
 	if len(sigs) == 0 {
-		return w.bogus(qname, qtype, chain, fmt.Errorf("validator: NSEC at %s lacks RRSIG", qname))
+		return nil, false
 	}
 	if _, _, err := w.verifyRRsetWithKeys(nsecRRs, sigs, parentKeys); err != nil {
-		return w.bogus(qname, qtype, chain, fmt.Errorf("validator: NSEC rrsig: %w", err))
+		return nil, false
 	}
 	for _, r := range nsecRRs {
 		nsec, ok := wire.RDataAs[rdata.NSEC](r, rrtype.NSEC)
@@ -541,19 +625,43 @@ func (w *walker) validateNoData(qname wire.Name, qtype rrtype.Type, parentKeys [
 				records: nil,
 				rcode:   wire.RCODENoError,
 				chain:   chain,
-			}, nil
+			}, true
 		}
 	}
-	return w.bogus(qname, qtype, chain, fmt.Errorf("validator: NSEC bitmap claims %s present but answer is empty", qtype))
+	return nil, false
 }
 
-// validateNegative classifies an NXDOMAIN response. NSEC closest-encloser
-// proof for wildcard NXDOMAIN is deferred to NSEC3 work in task #2.
+func (w *walker) validateNoDataNSEC3(qname wire.Name, qtype rrtype.Type, parentKeys []rdata.DNSKEY, msg wire.Message, chain []ChainStep) (Answer, bool) {
+	nsec3RRs := recordsOfType3(msg.Authorities())
+	if len(nsec3RRs) == 0 {
+		return nil, false
+	}
+	if err := w.verifyNSEC3Set(nsec3RRs, msg.Authorities(), parentKeys); err != nil {
+		return nil, false
+	}
+	zone := signerOf(msg.Authorities())
+	if !zone.IsValid() {
+		return nil, false
+	}
+	res := nsec3ProveDenial(qname, qtype, zone, nsec3RRs)
+	if res.kind == nsec3DenialNoData {
+		return &answer{
+			result:  Secure,
+			records: nil,
+			rcode:   wire.RCODENoError,
+			chain:   chain,
+		}, true
+	}
+	return nil, false
+}
+
+// validateNegative classifies an NXDOMAIN/NoData response.
 func (w *walker) validateNegative(qname wire.Name, qtype rrtype.Type, parentKeys []rdata.DNSKEY, msg wire.Message, chain []ChainStep) (Answer, error) {
 	if msg.Flags().RCODE() != wire.RCODENXDomain {
 		return w.validateNoData(qname, qtype, parentKeys, msg, chain)
 	}
-	if err := w.validateNSECNXDomain(qname, parentKeys, msg); err != nil {
+	zone := signerOf(msg.Authorities())
+	if err := w.validateNXDomain(qname, zone, parentKeys, msg); err != nil {
 		return w.bogus(qname, qtype, chain, fmt.Errorf("validator: NXDOMAIN proof: %w", err))
 	}
 	return &answer{

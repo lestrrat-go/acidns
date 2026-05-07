@@ -164,9 +164,9 @@ Status legend: **Implemented** = working code with tests; **Partial** = document
 | 3007 | Secure Domain Name System Dynamic Update | Implemented (`dnsupdate.Builder.SignedWire` produces TSIG-signed UPDATE wire bytes) |
 | 3445 | Limiting the Scope of (DNS)KEY | Followed (DNSKEY flag constants `DNSKEYFlagZone`/`Revoke`/`SEP` reflect the post-3445 narrowed scope) |
 | 4034 | Resource Records for the DNS Security Extensions | Implemented (DNSKEY, RRSIG, NSEC; canonical form §6) |
-| 4035 | Protocol Modifications for DNSSEC | Partial (verification primitives + framework `dnssec/validator` with NTA store, BogusPolicy, ValidateRRset/VerifyDelegation, chain Walker with iterative DS-probing, RFC 6840 §5.11 algorithm-rollover check, NSEC denial of existence; NSEC3 walker integration still TODO) |
+| 4035 | Protocol Modifications for DNSSEC | Implemented (verification primitives + framework `dnssec/validator` with NTA store, BogusPolicy, ValidateRRset/VerifyDelegation, chain Walker with iterative DS-probing, RFC 6840 §5.11 algorithm-rollover check, NSEC + NSEC3 denial of existence) |
 | 4509 | Use of SHA-256 in DNSSEC Delegation Signer | Implemented (DS digest type 2) |
-| 5155 | DNSSEC Hashed Authenticated Denial of Existence | Partial (NSEC3 + NSEC3PARAM encode/decode; validator does not yet consume) |
+| 5155 | DNSSEC Hashed Authenticated Denial of Existence | Implemented (NSEC3 + NSEC3PARAM encode/decode; validator consumes via `dnssec/validator` chain Walker — closest-encloser proof, NXDOMAIN, NoData, opt-out delegations) |
 | 5702 | RSA/SHA-2 in DNSSEC | Implemented (RSASHA256, RSASHA512) |
 | 6605 | Elliptic Curve DSA for DNSSEC | Implemented (ECDSAP256SHA256, ECDSAP384SHA384) |
 | 6698 | DNS-Based Authentication of Named Entities (DANE) — TLSA | Implemented (typed `rdata.TLSA` with usage / selector / matching enums) |
@@ -183,7 +183,7 @@ Status legend: **Implemented** = working code with tests; **Partial** = document
 | 8945 | Secret Key Transaction Authentication for DNS (TSIG) | Implemented (hmac-sha1/256/384/512; bridge into UPDATE via `dnsupdate.SignedWire`) |
 | 9250 | DNS over Dedicated QUIC Connections (DoQ) | Implemented |
 | 9460 | Service Binding (SVCB) and HTTPS Resource Records | Implemented (typed accessors for ALPN, port, IPv4/IPv6 hints, dohpath) |
-| Compact Denial draft (`draft-ietf-dnsop-compact-denial-of-existence`) | Compact Denial of Existence | Partial (NXNAME pseudo-type + `validator.IsCompactNXDOMAIN` classifier; full validator integration awaits NSEC/NSEC3 walker) |
+| Compact Denial draft (`draft-ietf-dnsop-compact-denial-of-existence`) | Compact Denial of Existence | Partial (NXNAME pseudo-type + `validator.IsCompactNXDOMAIN` classifier; chain Walker recognises NSEC/NSEC3 denial but Compact-Denial-specific bitmap interpretation pending) |
 | DNSCrypt v2 (non-IETF) | Trusted DNS Queries | Implemented (`dnscrypt/`: cert parse + verify, X25519 + XChaCha20-Poly1305 encrypt/decrypt, transport.Exchanger) |
 
 ### Out of scope

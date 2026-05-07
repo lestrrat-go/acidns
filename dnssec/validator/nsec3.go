@@ -1,0 +1,407 @@
+package validator
+
+import (
+	"crypto/sha1" //nolint:gosec // RFC 5155 §5 fixes the hash algorithm at SHA-1.
+	"errors"
+	"fmt"
+	"strings"
+
+	"github.com/lestrrat-go/acidns/wire"
+	"github.com/lestrrat-go/acidns/wire/rdata"
+	"github.com/lestrrat-go/acidns/wire/rrtype"
+)
+
+// NSEC3HashSHA1 is the hash algorithm code for SHA-1 (RFC 5155 §11.2). It
+// is the only NSEC3 hash algorithm registered with IANA; modern zones
+// continue to use it because no successor has been standardised.
+const NSEC3HashSHA1 = 1
+
+// NSEC3FlagOptOut marks an NSEC3 record as opt-out (RFC 5155 §6). When set,
+// unsigned delegations may exist between the record's owner-hash and its
+// next-hashed-owner; a "covering" NSEC3 with this flag is therefore a
+// proof of "no signed delegation" rather than "no name".
+const NSEC3FlagOptOut uint8 = 0x01
+
+// MaxNSEC3Iterations is the validator's hard cap on NSEC3 iterations,
+// matching the conservative bound recommended by RFC 9276 §3.1. Records
+// with a higher count are treated as Insecure (the resolver continues
+// without DNSSEC validation for that response). Operationally most zones
+// use 0; values above 100 have no defensive value and are pure CPU drag.
+const MaxNSEC3Iterations uint16 = 100
+
+// ErrNSEC3IterationsExceeded is returned when a record exceeds
+// MaxNSEC3Iterations.
+var ErrNSEC3IterationsExceeded = errors.New("validator: NSEC3 iterations exceed limit")
+
+// nsec3Hash computes IH(salt, name, iterations) per RFC 5155 §5.1 — H(x ||
+// salt) iterated `iterations` extra times after the initial round.
+//
+// The input name is rendered in canonical (lowercase) wire form. acidns
+// stores names lowercase, so we use the existing AppendWire output.
+func nsec3Hash(name wire.Name, salt []byte, iterations uint16) []byte {
+	if iterations > MaxNSEC3Iterations {
+		return nil
+	}
+	buf := name.AppendWire(nil)
+	buf = append(buf, salt...)
+	h := sha1.Sum(buf) //nolint:gosec
+	for i := uint16(0); i < iterations; i++ {
+		next := make([]byte, 0, len(h)+len(salt))
+		next = append(next, h[:]...)
+		next = append(next, salt...)
+		h = sha1.Sum(next) //nolint:gosec
+	}
+	return h[:]
+}
+
+// base32hexAlphabet is the RFC 4648 base32hex alphabet (extended hex,
+// uppercase) used by NSEC3 owner-name labels (RFC 5155 §1.3 / §5.3).
+const base32hexAlphabet = "0123456789ABCDEFGHIJKLMNOPQRSTUV"
+
+// base32hexEncode renders raw bytes as the no-padding base32hex form used
+// by NSEC3 owner labels.
+func base32hexEncode(b []byte) string {
+	if len(b) == 0 {
+		return ""
+	}
+	out := make([]byte, 0, (len(b)*8+4)/5)
+	var buf uint64
+	bits := 0
+	for _, x := range b {
+		buf = (buf << 8) | uint64(x)
+		bits += 8
+		for bits >= 5 {
+			bits -= 5
+			idx := (buf >> bits) & 0x1f
+			out = append(out, base32hexAlphabet[idx])
+		}
+	}
+	if bits > 0 {
+		idx := (buf << (5 - bits)) & 0x1f
+		out = append(out, base32hexAlphabet[idx])
+	}
+	return string(out)
+}
+
+// base32hexDecode parses a base32hex-encoded label produced by NSEC3.
+// Returns ErrInvalidNSEC3Label for any non-alphabet character.
+func base32hexDecode(s string) ([]byte, error) {
+	if len(s) == 0 {
+		return nil, nil
+	}
+	out := make([]byte, 0, (len(s)*5+7)/8)
+	var buf uint64
+	bits := 0
+	for i := 0; i < len(s); i++ {
+		c := s[i]
+		var v int
+		switch {
+		case c >= '0' && c <= '9':
+			v = int(c - '0')
+		case c >= 'A' && c <= 'V':
+			v = int(c-'A') + 10
+		case c >= 'a' && c <= 'v':
+			v = int(c-'a') + 10
+		default:
+			return nil, fmt.Errorf("validator: bad base32hex character %q", c)
+		}
+		buf = (buf << 5) | uint64(v)
+		bits += 5
+		if bits >= 8 {
+			bits -= 8
+			out = append(out, byte((buf>>bits)&0xff))
+		}
+	}
+	return out, nil
+}
+
+// nsec3OwnerHash extracts the hash bytes from an NSEC3 owner. The leftmost
+// label is base32hex; the remainder is the zone apex. Returns an error if
+// the leftmost label fails to decode.
+func nsec3OwnerHash(owner wire.Name) ([]byte, error) {
+	for l := range owner.Labels() {
+		// First label only.
+		s := strings.ToUpper(string(l))
+		return base32hexDecode(s)
+	}
+	return nil, fmt.Errorf("validator: NSEC3 owner has no label")
+}
+
+// nsec3Match returns the NSEC3 record (and its containing wire.Record)
+// whose owner-hash matches H(name) under params. matched indicates whether
+// such a record was found.
+func nsec3Match(name wire.Name, params nsec3Params, records []wire.Record) (wire.Record, rdata.NSEC3, bool) {
+	want := nsec3Hash(name, params.salt, params.iterations)
+	if want == nil {
+		return nil, nil, false
+	}
+	for _, r := range records {
+		if r.Type() != rrtype.NSEC3 {
+			continue
+		}
+		got, err := nsec3OwnerHash(r.Name())
+		if err != nil {
+			continue
+		}
+		if bytesEqual(got, want) {
+			n3, ok := wire.RDataAs[rdata.NSEC3](r, rrtype.NSEC3)
+			if !ok {
+				continue
+			}
+			return r, n3, true
+		}
+	}
+	return nil, nil, false
+}
+
+// nsec3Cover returns the NSEC3 record whose (owner-hash, next-hash)
+// interval covers H(name). RFC 5155 §6.2 — interval is (owner-hash,
+// next-hash], with wraparound at the apex.
+func nsec3Cover(name wire.Name, params nsec3Params, records []wire.Record) (wire.Record, rdata.NSEC3, bool) {
+	target := nsec3Hash(name, params.salt, params.iterations)
+	if target == nil {
+		return nil, nil, false
+	}
+	for _, r := range records {
+		if r.Type() != rrtype.NSEC3 {
+			continue
+		}
+		ownerHash, err := nsec3OwnerHash(r.Name())
+		if err != nil {
+			continue
+		}
+		n3, ok := wire.RDataAs[rdata.NSEC3](r, rrtype.NSEC3)
+		if !ok {
+			continue
+		}
+		next := n3.NextHashedOwner()
+		if hashIntervalContains(ownerHash, next, target) {
+			return r, n3, true
+		}
+	}
+	return nil, nil, false
+}
+
+// hashIntervalContains reports whether x falls strictly between owner and
+// next under big-endian byte ordering, with apex wraparound (next < owner).
+func hashIntervalContains(owner, next, x []byte) bool {
+	if bytesLess(owner, next) {
+		return bytesLess(owner, x) && bytesLess(x, next)
+	}
+	// Wraparound.
+	return bytesLess(owner, x) || bytesLess(x, next)
+}
+
+func bytesLess(a, b []byte) bool {
+	n := len(a)
+	if len(b) < n {
+		n = len(b)
+	}
+	for i := 0; i < n; i++ {
+		if a[i] != b[i] {
+			return a[i] < b[i]
+		}
+	}
+	return len(a) < len(b)
+}
+
+func bytesEqual(a, b []byte) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	for i := range a {
+		if a[i] != b[i] {
+			return false
+		}
+	}
+	return true
+}
+
+// nsec3Params bundles the (alg, iterations, salt) tuple shared by all NSEC3
+// records in a zone (RFC 5155 §4.1.1; mismatched parameters are a protocol
+// violation that validators MUST reject).
+type nsec3Params struct {
+	alg        uint8
+	iterations uint16
+	salt       []byte
+}
+
+// extractNSEC3Params returns the (alg, iterations, salt) from any NSEC3 in
+// records. Returns ok=false if no NSEC3 records are present, or if the
+// records disagree (which is a protocol violation per RFC 5155 §4.1.1).
+func extractNSEC3Params(records []wire.Record) (nsec3Params, bool) {
+	var params nsec3Params
+	first := true
+	for _, r := range records {
+		if r.Type() != rrtype.NSEC3 {
+			continue
+		}
+		n3, ok := wire.RDataAs[rdata.NSEC3](r, rrtype.NSEC3)
+		if !ok {
+			continue
+		}
+		cur := nsec3Params{
+			alg:        n3.HashAlgorithm(),
+			iterations: n3.Iterations(),
+			salt:       append([]byte(nil), n3.Salt()...),
+		}
+		if first {
+			params = cur
+			first = false
+			continue
+		}
+		if cur.alg != params.alg || cur.iterations != params.iterations || !bytesEqual(cur.salt, params.salt) {
+			return nsec3Params{}, false
+		}
+	}
+	return params, !first
+}
+
+// nsec3DenialKind classifies the outcome of an NSEC3 denial-of-existence
+// check.
+type nsec3DenialKind int
+
+const (
+	nsec3DenialNone nsec3DenialKind = iota
+	nsec3DenialNoData
+	nsec3DenialNXDomain
+	nsec3DenialInsecureDelegation
+	nsec3DenialOptOut
+)
+
+// nsec3DenialResult bundles the proof outcome and supporting record
+// references for diagnostics.
+type nsec3DenialResult struct {
+	kind          nsec3DenialKind
+	closestEncloser wire.Name
+}
+
+// nsec3ProveDenial inspects an NSEC3 set in the authority section to
+// classify a NoData / NXDOMAIN / insecure-delegation outcome for qname /
+// qtype. Records must be the post-RRSIG-verification authority NSEC3
+// records.
+//
+// RFC 5155 §8 split:
+//
+//   - §8.4 NoData: matching NSEC3 at qname with !qtype in bitmap.
+//   - §8.5 NoData with wildcard: matching NSEC3 at *.<closest_encloser>.
+//   - §8.6 NXDOMAIN: closest-encloser proof — match at encloser, cover at
+//     next-closer, cover at *.encloser.
+//   - §6   Opt-out: covering NSEC3 with opt-out flag set; outcomes that
+//     would otherwise be Bogus become Insecure.
+//   - DS-NoData (RFC 5155 §7.2.4): matching NSEC3 at delegation point
+//     whose bitmap has NS but not DS — insecure delegation (or covering
+//     opt-out NSEC3).
+func nsec3ProveDenial(qname wire.Name, qtype rrtype.Type, zone wire.Name, records []wire.Record) nsec3DenialResult {
+	params, ok := extractNSEC3Params(records)
+	if !ok {
+		return nsec3DenialResult{kind: nsec3DenialNone}
+	}
+	if params.iterations > MaxNSEC3Iterations {
+		// Refuse to spend cycles on hostile zones.
+		return nsec3DenialResult{kind: nsec3DenialNone}
+	}
+
+	// 1. DS-NoData / insecure-delegation handling (qtype == DS).
+	if qtype == rrtype.DS {
+		if r, n3, found := nsec3Match(qname, params, records); found {
+			_ = r
+			hasNS := bitmapHas(n3.Types(), rrtype.NS)
+			hasDS := bitmapHas(n3.Types(), rrtype.DS)
+			hasSOA := bitmapHas(n3.Types(), rrtype.SOA)
+			switch {
+			case hasNS && !hasDS && !hasSOA:
+				return nsec3DenialResult{kind: nsec3DenialInsecureDelegation}
+			case !hasDS:
+				return nsec3DenialResult{kind: nsec3DenialNoData}
+			}
+		}
+		// Opt-out covering: insecure delegation possible.
+		if _, n3, found := nsec3Cover(qname, params, records); found {
+			if n3.Flags()&NSEC3FlagOptOut != 0 {
+				return nsec3DenialResult{kind: nsec3DenialOptOut}
+			}
+		}
+	}
+
+	// 2. NoData at qname (matching NSEC3 says qtype absent).
+	if _, n3, found := nsec3Match(qname, params, records); found {
+		if !bitmapHas(n3.Types(), qtype) {
+			return nsec3DenialResult{kind: nsec3DenialNoData}
+		}
+	}
+
+	// 3. NXDOMAIN closest-encloser proof.
+	encloser, ok := findNSEC3ClosestEncloser(qname, zone, params, records)
+	if !ok {
+		return nsec3DenialResult{kind: nsec3DenialNone}
+	}
+	// Need NSEC3 covering "next closer name".
+	nextCloser := nextCloserName(qname, encloser)
+	if _, _, found := nsec3Cover(nextCloser, params, records); !found {
+		return nsec3DenialResult{kind: nsec3DenialNone}
+	}
+	// Need NSEC3 covering *.<encloser> OR a matching wildcard NSEC3 with
+	// !qtype in bitmap (§8.7).
+	wildcard, err := wildcardOf(encloser)
+	if err == nil {
+		if _, _, found := nsec3Cover(wildcard, params, records); found {
+			return nsec3DenialResult{kind: nsec3DenialNXDomain, closestEncloser: encloser}
+		}
+		if _, n3, found := nsec3Match(wildcard, params, records); found {
+			if !bitmapHas(n3.Types(), qtype) {
+				return nsec3DenialResult{kind: nsec3DenialNoData, closestEncloser: encloser}
+			}
+		}
+	}
+	return nsec3DenialResult{kind: nsec3DenialNone}
+}
+
+// findNSEC3ClosestEncloser walks ancestors of qname (starting at qname's
+// parent and stopping at zone's apex) and returns the deepest ancestor
+// whose hashed name is matched by an NSEC3 in records.
+func findNSEC3ClosestEncloser(qname, zone wire.Name, params nsec3Params, records []wire.Record) (wire.Name, bool) {
+	cur := qname
+	for {
+		parent, ok := cur.Parent()
+		if !ok {
+			return wire.Name{}, false
+		}
+		if _, _, found := nsec3Match(parent, params, records); found {
+			return parent, true
+		}
+		if parent.Equal(zone) {
+			// Zone apex always has an NSEC3; if not matched it's a
+			// configuration error.
+			if _, _, found := nsec3Match(zone, params, records); found {
+				return zone, true
+			}
+			return wire.Name{}, false
+		}
+		cur = parent
+	}
+}
+
+// nextCloserName returns the name one label longer than encloser toward
+// qname (RFC 5155 §1.3). For example, qname=a.b.c.example,
+// encloser=c.example → next-closer = b.c.example.
+func nextCloserName(qname, encloser wire.Name) wire.Name {
+	cur := qname
+	for cur.NumLabels() > encloser.NumLabels()+1 {
+		parent, ok := cur.Parent()
+		if !ok {
+			return cur
+		}
+		cur = parent
+	}
+	return cur
+}
+
+// wildcardOf prepends "*" to encloser.
+func wildcardOf(encloser wire.Name) (wire.Name, error) {
+	labels := []string{"*"}
+	for l := range encloser.Labels() {
+		labels = append(labels, string(l))
+	}
+	return wire.NameFromLabels(labels...)
+}

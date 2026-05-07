@@ -74,6 +74,48 @@ func allNSEC(records []wire.Record) []wire.Record {
 	return out
 }
 
+// signerOf returns the SignerName carried by the first RRSIG in records,
+// or an invalid Name if no RRSIG is present. Useful for inferring the
+// authoritative zone of a response without parsing SOA records.
+func signerOf(records []wire.Record) wire.Name {
+	for _, r := range records {
+		s, ok := wire.RDataAs[rdata.RRSIG](r, rrtype.RRSIG)
+		if ok {
+			return s.SignerName()
+		}
+	}
+	return wire.Name{}
+}
+
+// recordsOfType3 returns every NSEC3 record in records.
+func recordsOfType3(records []wire.Record) []wire.Record {
+	out := make([]wire.Record, 0, len(records))
+	for _, r := range records {
+		if r.Type() == rrtype.NSEC3 {
+			out = append(out, r)
+		}
+	}
+	return out
+}
+
+// groupRecordsByOwner partitions records by owner name. Order of returned
+// groups matches first appearance.
+func groupRecordsByOwner(records []wire.Record) [][]wire.Record {
+	idx := make(map[string]int)
+	var out [][]wire.Record
+	for _, r := range records {
+		k := r.Name().String()
+		i, ok := idx[k]
+		if !ok {
+			idx[k] = len(out)
+			out = append(out, []wire.Record{r})
+			continue
+		}
+		out[i] = append(out[i], r)
+	}
+	return out
+}
+
 // groupNSECByOwner partitions NSEC records by owner. Order of returned
 // groups matches first appearance.
 func groupNSECByOwner(records []wire.Record) [][]wire.Record {
