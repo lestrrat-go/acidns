@@ -45,8 +45,8 @@ func TestParseRSAPublic(t *testing.T) {
 		enc := encodeRSAPublic(t, &key.PublicKey)
 		got, err := dnssecbb.ParseRSAPublic(enc)
 		require.NoError(t, err)
-		require.Equal(t, key.PublicKey.E, got.E)
-		require.Equal(t, 0, key.PublicKey.N.Cmp(got.N))
+		require.Equal(t, key.E, got.E)
+		require.Equal(t, 0, key.N.Cmp(got.N))
 	})
 
 	t.Run("long form (leading zero) round trip", func(t *testing.T) {

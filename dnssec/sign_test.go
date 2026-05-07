@@ -33,7 +33,9 @@ func TestDSDigestAllAlgorithms(t *testing.T) {
 	t.Parallel()
 	priv, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
 	require.NoError(t, err)
-	pub := append(priv.PublicKey.X.FillBytes(make([]byte, 32)), priv.PublicKey.Y.FillBytes(make([]byte, 32))...)
+	encPK, err2 := priv.PublicKey.Bytes()
+	require.NoError(t, err2)
+	pub := encPK[1:]
 	key := rdata.NewDNSKEY(257, 3, rdata.AlgECDSAP256SHA256, pub)
 	owner := wire.MustParseName("example.com")
 
@@ -51,7 +53,9 @@ func TestVerifyDSAlgorithmMismatch(t *testing.T) {
 	t.Parallel()
 	priv, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
 	require.NoError(t, err)
-	pub := append(priv.PublicKey.X.FillBytes(make([]byte, 32)), priv.PublicKey.Y.FillBytes(make([]byte, 32))...)
+	encPK, err2 := priv.PublicKey.Bytes()
+	require.NoError(t, err2)
+	pub := encPK[1:]
 	key := rdata.NewDNSKEY(257, 3, rdata.AlgECDSAP256SHA256, pub)
 	owner := wire.MustParseName("example.com")
 	digest, err := dnssec.DSDigest(owner, key, rdata.DigestSHA256)
@@ -65,7 +69,9 @@ func TestVerifyDSUnsupportedDigest(t *testing.T) {
 	t.Parallel()
 	priv, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
 	require.NoError(t, err)
-	pub := append(priv.PublicKey.X.FillBytes(make([]byte, 32)), priv.PublicKey.Y.FillBytes(make([]byte, 32))...)
+	encPK, err2 := priv.PublicKey.Bytes()
+	require.NoError(t, err2)
+	pub := encPK[1:]
 	key := rdata.NewDNSKEY(257, 3, rdata.AlgECDSAP256SHA256, pub)
 	owner := wire.MustParseName("example.com")
 	ds := rdata.NewDS(dnssec.KeyTag(key), key.Algorithm(), rdata.DSDigestType(99), make([]byte, 32))
@@ -76,7 +82,9 @@ func TestVerifyKeyTagMismatch(t *testing.T) {
 	t.Parallel()
 	priv, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
 	require.NoError(t, err)
-	pub := append(priv.PublicKey.X.FillBytes(make([]byte, 32)), priv.PublicKey.Y.FillBytes(make([]byte, 32))...)
+	encPK, err2 := priv.PublicKey.Bytes()
+	require.NoError(t, err2)
+	pub := encPK[1:]
 	key := rdata.NewDNSKEY(257, 3, rdata.AlgECDSAP256SHA256, pub)
 	rrsig := rdata.NewRRSIG(rrtype.A, rdata.AlgECDSAP256SHA256, 3,
 		time.Hour, time.Now().Add(time.Hour), time.Now().Add(-time.Hour),

@@ -20,7 +20,9 @@ func makeECDSAP256Key(t *testing.T) (*ecdsa.PrivateKey, rdata.DNSKEY) {
 	t.Helper()
 	priv, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
 	require.NoError(t, err)
-	pub := append(priv.PublicKey.X.FillBytes(make([]byte, 32)), priv.PublicKey.Y.FillBytes(make([]byte, 32))...)
+	encPK, err2 := priv.PublicKey.Bytes()
+	require.NoError(t, err2)
+	pub := encPK[1:]
 	key := rdata.NewDNSKEY(257, 3, rdata.AlgECDSAP256SHA256, pub)
 	return priv, key
 }

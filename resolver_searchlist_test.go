@@ -1,7 +1,6 @@
 package acidns_test
 
 import (
-	"context"
 	"net"
 	"net/netip"
 	"sync/atomic"
@@ -160,6 +159,6 @@ func TestSearchListUnused(t *testing.T) {
 	r, err := acidns.NewResolver(acidns.WithExchanger(ex))
 	require.NoError(t, err)
 
-	_, err = acidns.LookupHost(context.WithValue(t.Context(), struct{}{}, 1), r, "host.")
+	_, err = acidns.LookupHost(t.Context(), r, "host.")
 	require.NoError(t, err)
 }

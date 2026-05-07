@@ -220,14 +220,14 @@ func (p *parser) parseRData(t rrtype.Type, fields []fieldTok) (rdata.RData, erro
 	switch t {
 	case rrtype.A:
 		if len(fields) != 1 {
-			return nil, fmt.Errorf("A: expected 1 field, got %d", len(fields))
+			return nil, fmt.Errorf("rdata A: expected 1 field, got %d", len(fields))
 		}
 		ip, err := netip.ParseAddr(fields[0].text)
 		if err != nil {
-			return nil, fmt.Errorf("A: %w", err)
+			return nil, fmt.Errorf("rdata A: %w", err)
 		}
 		if !ip.Is4() {
-			return nil, fmt.Errorf("A: not an IPv4 address: %s", fields[0].text)
+			return nil, fmt.Errorf("rdata A: not an IPv4 address: %s", fields[0].text)
 		}
 		return rdata.NewA(ip), nil
 	case rrtype.AAAA:

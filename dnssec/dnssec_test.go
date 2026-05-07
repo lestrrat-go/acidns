@@ -56,7 +56,9 @@ func TestVerifyECDSAP256(t *testing.T) {
 	priv, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
 	require.NoError(t, err)
 
-	pub := append(priv.PublicKey.X.FillBytes(make([]byte, 32)), priv.PublicKey.Y.FillBytes(make([]byte, 32))...)
+	encPK, err2 := priv.PublicKey.Bytes()
+	require.NoError(t, err2)
+	pub := encPK[1:]
 	key := rdata.NewDNSKEY(257, 3, rdata.AlgECDSAP256SHA256, pub)
 
 	signer := wire.MustParseName("example.com")
@@ -85,7 +87,9 @@ func TestVerifyECDSAP384(t *testing.T) {
 	t.Parallel()
 	priv, err := ecdsa.GenerateKey(elliptic.P384(), rand.Reader)
 	require.NoError(t, err)
-	pub := append(priv.PublicKey.X.FillBytes(make([]byte, 48)), priv.PublicKey.Y.FillBytes(make([]byte, 48))...)
+	encPK, err2 := priv.PublicKey.Bytes()
+	require.NoError(t, err2)
+	pub := encPK[1:]
 	key := rdata.NewDNSKEY(257, 3, rdata.AlgECDSAP384SHA384, pub)
 
 	signer := wire.MustParseName("example.com")

@@ -67,15 +67,14 @@ func NewAMTRELAYNone(prec uint8, discovery bool) AMTRELAY {
 // NewAMTRELAYAddr returns an AMTRELAY rdata whose relay is an IPv4 or
 // IPv6 address.
 func NewAMTRELAYAddr(prec uint8, discovery bool, addr netip.Addr) (AMTRELAY, error) {
-	var zero AMTRELAY
-	rt := AMTRELAYTypeIPv4
+	var rt AMTRELAYType
 	switch {
 	case addr.Is4():
 		rt = AMTRELAYTypeIPv4
 	case addr.Is6():
 		rt = AMTRELAYTypeIPv6
 	default:
-		return zero, fmt.Errorf("%w: AMTRELAY address must be IPv4 or IPv6", ErrInvalidRData)
+		return AMTRELAY{}, fmt.Errorf("%w: AMTRELAY address must be IPv4 or IPv6", ErrInvalidRData)
 	}
 	return AMTRELAY{prec: prec, discovery: discovery, rt: rt, relayAddr: addr}, nil
 }

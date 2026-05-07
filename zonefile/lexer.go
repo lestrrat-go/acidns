@@ -65,10 +65,10 @@ func (l *lexer) next() (token, bool, error) {
 		if err != nil {
 			return token{}, false, err
 		}
-		switch {
-		case b == '\r':
+		switch b {
+		case '\r':
 			// drop
-		case b == '\n':
+		case '\n':
 			l.line++
 			if l.parenDepth == 0 && l.inLine {
 				l.inLine = false
@@ -76,11 +76,11 @@ func (l *lexer) next() (token, bool, error) {
 				return token{kind: tokEOL, line: l.line - 1}, false, nil
 			}
 			// otherwise: in parens, or empty line — keep going
-		case b == ' ' || b == '\t':
+		case ' ', '\t':
 			if !l.inLine {
 				l.sawLeadingWS = true
 			}
-		case b == ';':
+		case ';':
 			// comment to end of physical line
 			for {
 				c, err := l.r.ReadByte()
@@ -100,14 +100,14 @@ func (l *lexer) next() (token, bool, error) {
 					break
 				}
 			}
-		case b == '(':
+		case '(':
 			l.parenDepth++
-		case b == ')':
+		case ')':
 			if l.parenDepth == 0 {
 				return token{}, false, fmt.Errorf("line %d: unexpected ')'", l.line)
 			}
 			l.parenDepth--
-		case b == '"':
+		case '"':
 			s, err := l.readQuoted()
 			if err != nil {
 				return token{}, false, err

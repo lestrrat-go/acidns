@@ -26,7 +26,6 @@ type rateLimitConfig struct {
 	qps    float64
 	burst  int
 	drop   bool
-	keyer  func(netip.Addr) string
 	prefix int // CIDR mask applied before keying (e.g. 24 → group v4 by /24)
 }
 
