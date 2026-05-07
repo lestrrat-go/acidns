@@ -1,7 +1,8 @@
-// Command acidns-server runs the acidns DNS server as either authoritative
+// Command acidns-server runs the acidns DNS server as authoritative
 // (loading zones from master files), recursive (walking from the roots),
-// or both modes layered (zones for delegated names; recursion for
-// everything else).
+// hybrid (zones for delegated names; recursion for everything else), or
+// forward (caching forwarder that relays to a single upstream over UDP
+// or DoT).
 package main
 
 import (
@@ -16,6 +17,7 @@ import (
 
 	"github.com/lestrrat-go/acidns"
 	"github.com/lestrrat-go/acidns/authoritative"
+	"github.com/lestrrat-go/acidns/forward"
 	"github.com/lestrrat-go/acidns/recursive"
 	"github.com/lestrrat-go/acidns/wire"
 	"github.com/lestrrat-go/acidns/zonefile"
@@ -33,6 +35,11 @@ type opts struct {
 	listen    string
 	zoneFiles []string
 	roots     []string
+
+	upstream     string
+	upstreamTLS  string
+	tlsName      string
+	cacheSize    int
 }
 
 func run(argv []string) error {
@@ -40,13 +47,21 @@ func run(argv []string) error {
 	var zonesFlag, rootsFlag string
 	fs := flag.NewFlagSet("acidns-server", flag.ContinueOnError)
 	fs.StringVar(&o.mode, "mode", "authoritative",
-		"authoritative | recursive | hybrid")
+		"authoritative | recursive | hybrid | forward")
 	fs.StringVar(&o.listen, "listen", "127.0.0.1:5353",
 		"address:port to bind UDP and TCP listeners on")
 	fs.StringVar(&zonesFlag, "zones", "",
 		"comma-separated list of master files to load (authoritative/hybrid mode)")
 	fs.StringVar(&rootsFlag, "roots", "",
 		"comma-separated list of root server addr:port (recursive/hybrid mode)")
+	fs.StringVar(&o.upstream, "upstream", "",
+		"forward mode: upstream addr:port over UDP-with-TCP-fallback (e.g. 8.8.8.8:53)")
+	fs.StringVar(&o.upstreamTLS, "upstream-tls", "",
+		"forward mode: upstream addr:port over DoT (e.g. 8.8.8.8:853)")
+	fs.StringVar(&o.tlsName, "tls-name", "",
+		"forward mode: SNI / cert-verify name for -upstream-tls (e.g. dns.google)")
+	fs.IntVar(&o.cacheSize, "cache-size", 4096,
+		"forward mode: number of cached answers retained (0 disables caching)")
 	fs.Usage = func() {
 		fmt.Fprintf(os.Stderr, "usage: acidns-server [options]\n\noptions:\n")
 		fs.PrintDefaults()
@@ -114,9 +129,36 @@ func buildHandler(o opts) (acidns.Handler, error) {
 			return nil, err
 		}
 		return hybrid{auth: auth, rec: rec}, nil
+	case "forward":
+		return buildForward(o)
 	default:
 		return nil, fmt.Errorf("unknown mode %q", o.mode)
 	}
+}
+
+func buildForward(o opts) (acidns.Handler, error) {
+	if o.upstream == "" && o.upstreamTLS == "" {
+		return nil, fmt.Errorf("forward mode requires -upstream or -upstream-tls")
+	}
+	if o.upstream != "" && o.upstreamTLS != "" {
+		return nil, fmt.Errorf("forward mode: pass at most one of -upstream / -upstream-tls")
+	}
+	opts := []forward.Option{forward.WithCacheSize(o.cacheSize)}
+	switch {
+	case o.upstreamTLS != "":
+		ap, err := netip.ParseAddrPort(o.upstreamTLS)
+		if err != nil {
+			return nil, fmt.Errorf("parse upstream-tls %q: %w", o.upstreamTLS, err)
+		}
+		opts = append(opts, forward.WithDoTUpstream(ap, o.tlsName))
+	default:
+		ap, err := netip.ParseAddrPort(o.upstream)
+		if err != nil {
+			return nil, fmt.Errorf("parse upstream %q: %w", o.upstream, err)
+		}
+		opts = append(opts, forward.WithUDPUpstream(ap))
+	}
+	return forward.New(opts...)
 }
 
 func buildAuthoritative(files []string) (acidns.Handler, error) {

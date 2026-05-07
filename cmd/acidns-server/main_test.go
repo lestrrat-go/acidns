@@ -138,3 +138,48 @@ func TestHybridFallthroughOnRefused(t *testing.T) {
 	// reached the recursive arm and produced a response.
 	require.NotNil(t, w.captured)
 }
+
+func TestBuildForwardRequiresUpstream(t *testing.T) {
+	t.Parallel()
+	_, err := buildForward(opts{mode: "forward"})
+	require.Error(t, err)
+}
+
+func TestBuildForwardRejectsBothUpstreams(t *testing.T) {
+	t.Parallel()
+	_, err := buildForward(opts{
+		mode:        "forward",
+		upstream:    "8.8.8.8:53",
+		upstreamTLS: "8.8.8.8:853",
+	})
+	require.Error(t, err)
+}
+
+func TestBuildForwardUDP(t *testing.T) {
+	t.Parallel()
+	h, err := buildForward(opts{
+		mode:      "forward",
+		upstream:  "8.8.8.8:53",
+		cacheSize: 256,
+	})
+	require.NoError(t, err)
+	require.NotNil(t, h)
+}
+
+func TestBuildForwardDoT(t *testing.T) {
+	t.Parallel()
+	h, err := buildForward(opts{
+		mode:        "forward",
+		upstreamTLS: "8.8.8.8:853",
+		tlsName:     "dns.google",
+		cacheSize:   256,
+	})
+	require.NoError(t, err)
+	require.NotNil(t, h)
+}
+
+func TestBuildForwardBadAddr(t *testing.T) {
+	t.Parallel()
+	_, err := buildForward(opts{mode: "forward", upstream: "not-an-addr"})
+	require.Error(t, err)
+}
