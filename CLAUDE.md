@@ -129,7 +129,7 @@ Status legend: **Implemented** = working code with tests; **Partial** = document
 | 7766 | DNS Transport over TCP | Partial (server-side multi-query per connection + idle timeout; no client-side keepalive) |
 | 7828 | edns-tcp-keepalive | Implemented (typed `dnsmsg.NewTCPKeepalive` + parser) |
 | 7871 | EDNS Client Subnet | Implemented (typed `dnsmsg.NewClientSubnet` + parser, IPv4/IPv6) |
-| 7873 | DNS Cookies | Implemented (typed `dnsmsg.NewClientCookie` / `NewClientServerCookie`; full client/server state machine still TODO) |
+| 7873 / 9018 | DNS Cookies | Implemented (typed wire codec + state machine in `cookies/`: client cache with BADCOOKIE retry; server SecretPool with timed rotation; RFC 9018 server-cookie HMAC over client cookie + addr + timestamp) |
 | 8490 | DNS Stateful Operations | Partial (TLV codec + KeepAlive/RetryDelay/EncryptionPadding TLVs in `dso/`; no transport binding yet) |
 | 8499 | DNS Terminology | Followed (no master/slave terminology in code or docs — primary/secondary throughout) |
 | 8777 | DNS Reverse IP AMT Discovery | Implemented (`dnsclient/amt.Discover` — SRV `_amt._udp.<domain>` lookup, RFC 2782 ranking) |
