@@ -8,14 +8,13 @@ import (
 	"testing"
 	"time"
 
-	"github.com/lestrrat-go/acidns/dnsclient/transport"
-	"github.com/lestrrat-go/acidns/dnsclient/transport/tcp"
-	"github.com/lestrrat-go/acidns/dnsserver"
+	"github.com/lestrrat-go/acidns"
 	"github.com/lestrrat-go/acidns/authoritative"
-	"github.com/lestrrat-go/acidns/zonefile"
+	"github.com/lestrrat-go/acidns/dnsserver"
 	"github.com/lestrrat-go/acidns/ixfr"
 	"github.com/lestrrat-go/acidns/wire"
 	"github.com/lestrrat-go/acidns/wire/rdata"
+	"github.com/lestrrat-go/acidns/zonefile"
 	"github.com/stretchr/testify/require"
 )
 
@@ -51,9 +50,9 @@ func TestTransferAXFRFallback(t *testing.T) {
 	xferCtx, xcancel := context.WithTimeout(t.Context(), 5*time.Second)
 	defer xcancel()
 
-	ex, err := tcp.New(srv.Addr())
+	ex, err := acidns.NewTCPExchanger(srv.Addr())
 	require.NoError(t, err)
-	sx, ok := ex.(transport.StreamExchanger)
+	sx, ok := ex.(acidns.StreamExchanger)
 	require.True(t, ok, "tcp exchanger must implement StreamExchanger")
 
 	xfer, err := ixfr.Start(xferCtx, sx, wire.MustParseName("example.com"), clientSOA)

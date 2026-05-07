@@ -14,7 +14,7 @@ import (
 func Example_dnsupdate_build() {
 	// update.Builder constructs an RFC 2136 UPDATE message. Add a
 	// prerequisite, an addition, and a delete; Build returns a wire.Message
-	// you can ship over any transport.Exchanger.
+	// you can ship over any acidns.Exchanger.
 	zone := wire.MustParseName("example.com")
 	rec := wire.NewRecord(
 		wire.MustParseName("blog.example.com"),

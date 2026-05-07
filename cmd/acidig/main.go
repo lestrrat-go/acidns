@@ -12,12 +12,10 @@ import (
 	"strings"
 	"time"
 
+	"github.com/lestrrat-go/acidns"
 	"github.com/lestrrat-go/acidns/dnsclient"
-	"github.com/lestrrat-go/acidns/dnsclient/transport"
 	"github.com/lestrrat-go/acidns/doh"
 	"github.com/lestrrat-go/acidns/dot"
-	"github.com/lestrrat-go/acidns/dnsclient/transport/tcp"
-	"github.com/lestrrat-go/acidns/dnsclient/transport/udp"
 	"github.com/lestrrat-go/acidns/wire"
 	"github.com/lestrrat-go/acidns/wire/rdata"
 	"github.com/lestrrat-go/acidns/wire/rrtype"
@@ -148,7 +146,7 @@ func buildResolver(o opts) (dnsclient.Resolver, error) {
 		if err != nil {
 			return nil, err
 		}
-		ex, err := tcp.New(addr)
+		ex, err := acidns.NewTCPExchanger(addr)
 		if err != nil {
 			return nil, err
 		}
@@ -156,12 +154,12 @@ func buildResolver(o opts) (dnsclient.Resolver, error) {
 	case o.useSys:
 		return dnsclient.New(dnsclient.WithSystemResolvers())
 	default:
-		var ex transport.Exchanger
+		var ex acidns.Exchanger
 		addr, err := serverAddr(o, 53)
 		if err != nil {
 			return nil, err
 		}
-		ex, err = udp.New(addr)
+		ex, err = acidns.NewUDPExchanger(addr)
 		if err != nil {
 			return nil, err
 		}

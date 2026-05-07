@@ -8,14 +8,13 @@ import (
 	"strings"
 	"time"
 
-	"github.com/lestrrat-go/acidns/axfr"
-	"github.com/lestrrat-go/acidns/dnsclient/transport"
-	"github.com/lestrrat-go/acidns/dnsclient/transport/tcp"
-	"github.com/lestrrat-go/acidns/dnsserver"
+	"github.com/lestrrat-go/acidns"
 	"github.com/lestrrat-go/acidns/authoritative"
-	"github.com/lestrrat-go/acidns/zonefile"
+	"github.com/lestrrat-go/acidns/axfr"
+	"github.com/lestrrat-go/acidns/dnsserver"
 	"github.com/lestrrat-go/acidns/wire"
 	"github.com/lestrrat-go/acidns/wire/rrtype"
+	"github.com/lestrrat-go/acidns/zonefile"
 )
 
 func Example_axfr_transfer() {
@@ -43,12 +42,12 @@ www IN  A    192.0.2.42
 	go func() { _ = srv.Serve(ctx) }()
 
 	// Client side: open a TCP stream-exchanger and pull records.
-	tx, err := tcp.New(srv.Addr())
+	tx, err := acidns.NewTCPExchanger(srv.Addr())
 	if err != nil {
 		fmt.Println("dial:", err)
 		return
 	}
-	sx := tx.(transport.StreamExchanger)
+	sx := tx.(acidns.StreamExchanger)
 
 	xferCtx, xcancel := context.WithTimeout(ctx, 5*time.Second)
 	defer xcancel()

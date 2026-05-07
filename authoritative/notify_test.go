@@ -8,12 +8,12 @@ import (
 	"testing"
 	"time"
 
-	"github.com/lestrrat-go/acidns/dnsclient/transport/udp"
-	"github.com/lestrrat-go/acidns/dnsserver"
+	"github.com/lestrrat-go/acidns"
 	"github.com/lestrrat-go/acidns/authoritative"
-	"github.com/lestrrat-go/acidns/zonefile"
+	"github.com/lestrrat-go/acidns/dnsserver"
 	"github.com/lestrrat-go/acidns/notify"
 	"github.com/lestrrat-go/acidns/wire"
+	"github.com/lestrrat-go/acidns/zonefile"
 	"github.com/stretchr/testify/require"
 )
 
@@ -45,7 +45,7 @@ func TestServeNotifyAcksAndCallsHandler(t *testing.T) {
 	t.Cleanup(cancel)
 	go func() { _ = srv.Serve(ctx) }()
 
-	ex, err := udp.New(srv.Addr())
+	ex, err := acidns.NewUDPExchanger(srv.Addr())
 	require.NoError(t, err)
 	resp, err := notify.Send(t.Context(), ex, wire.MustParseName("example.com"))
 	require.NoError(t, err)
@@ -65,7 +65,7 @@ func TestServeNotifyRefusesUnknownZone(t *testing.T) {
 	t.Cleanup(cancel)
 	go func() { _ = srv.Serve(ctx) }()
 
-	ex, err := udp.New(srv.Addr())
+	ex, err := acidns.NewUDPExchanger(srv.Addr())
 	require.NoError(t, err)
 	resp, err := notify.Send(t.Context(), ex, wire.MustParseName("example.org"))
 	require.NoError(t, err)

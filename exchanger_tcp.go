@@ -5,7 +5,7 @@
 // out of scope for the toolkit's primitive transports — higher layers may
 // wrap this Exchanger to add reuse, persistent connections (RFC 7766), or
 // pipelining.
-package tcp
+package acidns
 
 import (
 	"context"
@@ -14,46 +14,45 @@ import (
 	"net/netip"
 	"time"
 
-	"github.com/lestrrat-go/acidns/dnsclient/transport"
 	"github.com/lestrrat-go/acidns/internal/streamframe"
 	"github.com/lestrrat-go/acidns/wire"
 )
 
-// Option configures a TCP Exchanger.
-type Option interface{ applyTCP(*config) }
+// TCPExchangerOption configures a TCP Exchanger.
+type TCPExchangerOption interface{ applyTCPExchanger(*tcpExchangerConfig) }
 
-type optionFunc func(*config)
+type tcpOptionFunc func(*tcpExchangerConfig)
 
-func (f optionFunc) applyTCP(c *config) { f(c) }
+func (f tcpOptionFunc) applyTCPExchanger(c *tcpExchangerConfig) { f(c) }
 
-type config struct {
+type tcpExchangerConfig struct {
 	timeout time.Duration
 }
 
-// WithTimeout sets a per-exchange timeout used when the caller's context
+// WithTCPTimeout sets a per-exchange timeout used when the caller's context
 // has no deadline. Defaults to 5 seconds.
-func WithTimeout(d time.Duration) Option {
-	return optionFunc(func(c *config) { c.timeout = d })
+func WithTCPTimeout(d time.Duration) TCPExchangerOption {
+	return tcpOptionFunc(func(c *tcpExchangerConfig) { c.timeout = d })
 }
 
-type exchanger struct {
+type tcpExchanger struct {
 	addr    netip.AddrPort
 	timeout time.Duration
 }
 
 // New returns an Exchanger that talks TCP to addr.
-func New(addr netip.AddrPort, opts ...Option) (transport.Exchanger, error) {
+func NewTCPExchanger(addr netip.AddrPort, opts ...TCPExchangerOption) (Exchanger, error) {
 	if !addr.IsValid() {
 		return nil, fmt.Errorf("tcp: invalid server address")
 	}
-	c := config{timeout: 5 * time.Second}
+	c := tcpExchangerConfig{timeout: 5 * time.Second}
 	for _, o := range opts {
-		o.applyTCP(&c)
+		o.applyTCPExchanger(&c)
 	}
-	return &exchanger{addr: addr, timeout: c.timeout}, nil
+	return &tcpExchanger{addr: addr, timeout: c.timeout}, nil
 }
 
-func (e *exchanger) Exchange(ctx context.Context, q wire.Message) (wire.Message, error) {
+func (e *tcpExchanger) Exchange(ctx context.Context, q wire.Message) (wire.Message, error) {
 	var d net.Dialer
 	conn, err := d.DialContext(ctx, "tcp", e.addr.String())
 	if err != nil {
@@ -65,7 +64,7 @@ func (e *exchanger) Exchange(ctx context.Context, q wire.Message) (wire.Message,
 // Stream sends q over a fresh TCP connection and returns a MessageStream
 // from which the caller pulls responses. The stream MUST be closed by the
 // caller to release the connection.
-func (e *exchanger) Stream(ctx context.Context, q wire.Message) (transport.MessageStream, error) {
+func (e *tcpExchanger) Stream(ctx context.Context, q wire.Message) (MessageStream, error) {
 	var d net.Dialer
 	conn, err := d.DialContext(ctx, "tcp", e.addr.String())
 	if err != nil {

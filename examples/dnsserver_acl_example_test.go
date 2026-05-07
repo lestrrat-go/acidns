@@ -7,13 +7,13 @@ import (
 	"strings"
 	"time"
 
-	"github.com/lestrrat-go/acidns/dnsclient/transport/udp"
+	"github.com/lestrrat-go/acidns"
+	"github.com/lestrrat-go/acidns/authoritative"
 	"github.com/lestrrat-go/acidns/dnsserver"
 	"github.com/lestrrat-go/acidns/dnsserver/acl"
-	"github.com/lestrrat-go/acidns/authoritative"
-	"github.com/lestrrat-go/acidns/zonefile"
 	"github.com/lestrrat-go/acidns/wire"
 	"github.com/lestrrat-go/acidns/wire/rrtype"
+	"github.com/lestrrat-go/acidns/zonefile"
 )
 
 func Example_dnsserver_acl() {
@@ -45,7 +45,7 @@ www IN  A    192.0.2.42
 		ID(1).
 		Question(wire.NewQuestion(wire.MustParseName("www.example.com"), rrtype.A)).
 		Build()
-	ex, _ := udp.New(srv.Addr())
+	ex, _ := acidns.NewUDPExchanger(srv.Addr())
 	qctx, qcancel := context.WithTimeout(ctx, 2*time.Second)
 	defer qcancel()
 	resp, err := ex.Exchange(qctx, q)

@@ -7,8 +7,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/lestrrat-go/acidns"
 	"github.com/lestrrat-go/acidns/dnsclient"
-	"github.com/lestrrat-go/acidns/dnsclient/transport/udp"
 	"github.com/lestrrat-go/acidns/wire"
 	"github.com/lestrrat-go/acidns/wire/rdata"
 	"github.com/lestrrat-go/acidns/wire/rrtype"
@@ -68,7 +68,7 @@ func startServer(t *testing.T, v4 []netip.Addr, v6 []netip.Addr) netip.AddrPort 
 
 func newResolver(t *testing.T, addr netip.AddrPort) dnsclient.Resolver {
 	t.Helper()
-	ex, err := udp.New(addr)
+	ex, err := acidns.NewUDPExchanger(addr)
 	require.NoError(t, err)
 	r, err := dnsclient.New(dnsclient.WithExchanger(ex))
 	require.NoError(t, err)

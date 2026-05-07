@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/lestrrat-go/acidns/dnsclient/transport/tcp"
+	"github.com/lestrrat-go/acidns"
 	"github.com/lestrrat-go/acidns/dnsserver"
 	"github.com/lestrrat-go/acidns/wire"
 	"github.com/lestrrat-go/acidns/wire/rdata"
@@ -40,7 +40,7 @@ func TestTCPServerEcho(t *testing.T) {
 	})
 	srv := startTCP(t, h)
 
-	ex, err := tcp.New(srv.Addr())
+	ex, err := acidns.NewTCPExchanger(srv.Addr())
 	require.NoError(t, err)
 	resp, err := ex.Exchange(t.Context(), mkQuery(t, "example.com", rrtype.A))
 	require.NoError(t, err)
@@ -88,7 +88,7 @@ func TestTCPServerNoTruncation(t *testing.T) {
 	})
 	srv := startTCP(t, h)
 
-	ex, err := tcp.New(srv.Addr())
+	ex, err := acidns.NewTCPExchanger(srv.Addr())
 	require.NoError(t, err)
 
 	q, _ := wire.NewBuilder().

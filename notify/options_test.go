@@ -6,8 +6,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/lestrrat-go/acidns/dnsclient/transport"
-	"github.com/lestrrat-go/acidns/dnsclient/transport/udp"
+	"github.com/lestrrat-go/acidns"
 	"github.com/lestrrat-go/acidns/dnsserver"
 	"github.com/lestrrat-go/acidns/notify"
 	"github.com/lestrrat-go/acidns/wire"
@@ -22,7 +21,7 @@ func TestSendWithSOAAndTimeout(t *testing.T) {
 	addr := startSecondary(t, func(q wire.Question, _ dnsserver.ResponseWriter) {
 		got.Store(&q)
 	})
-	ex, err := udp.New(addr)
+	ex, err := acidns.NewUDPExchanger(addr)
 	require.NoError(t, err)
 
 	soa := rdata.NewSOA(
@@ -46,9 +45,9 @@ func TestBroadcast(t *testing.T) {
 		startSecondary(t, nil),
 		startSecondary(t, nil),
 	}
-	exs := make([]transport.Exchanger, len(addrs))
+	exs := make([]acidns.Exchanger, len(addrs))
 	for i, a := range addrs {
-		ex, err := udp.New(a)
+		ex, err := acidns.NewUDPExchanger(a)
 		require.NoError(t, err)
 		exs[i] = ex
 	}

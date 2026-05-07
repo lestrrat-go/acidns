@@ -9,7 +9,7 @@
 //   - KindAXFRFallback — the entire zone, identical wire format to AXFR.
 //   - KindIncremental — [SOA_new, (SOA_old, removed..., SOA_new, added...)+, SOA_new]
 //
-// Start performs the IXFR query over a transport.StreamExchanger and
+// Start performs the IXFR query over a acidns.StreamExchanger and
 // returns a Transfer iterator. The caller pulls Events with Next until
 // io.EOF and MUST Close the iterator to release the underlying stream.
 //
@@ -28,7 +28,7 @@ import (
 	"io"
 	"time"
 
-	"github.com/lestrrat-go/acidns/dnsclient/transport"
+	"github.com/lestrrat-go/acidns"
 	"github.com/lestrrat-go/acidns/wire"
 	"github.com/lestrrat-go/acidns/wire/rdata"
 	"github.com/lestrrat-go/acidns/wire/rrtype"
@@ -123,7 +123,7 @@ func WithTimeout(d time.Duration) Option {
 // clientSOA names the requester's current view of the zone — only the
 // Serial field is interpreted by the server, but the full SOA RR is what
 // the wire requires.
-func Start(ctx context.Context, ex transport.StreamExchanger, zone wire.Name, clientSOA rdata.SOA, opts ...Option) (Transfer, error) {
+func Start(ctx context.Context, ex acidns.StreamExchanger, zone wire.Name, clientSOA rdata.SOA, opts ...Option) (Transfer, error) {
 	c := config{timeout: 30 * time.Second}
 	for _, o := range opts {
 		o.applyIXFR(&c)
@@ -156,7 +156,7 @@ func Start(ctx context.Context, ex transport.StreamExchanger, zone wire.Name, cl
 
 // transfer is the concrete Transfer implementation.
 type transfer struct {
-	stream transport.MessageStream
+	stream acidns.MessageStream
 	reader *recReader
 
 	kind   Kind
@@ -319,7 +319,7 @@ func (t *transfer) nextIncremental(ctx context.Context) (Event, error) {
 // stream message, with a small pushback queue so callers can defer
 // interpretation of a record they peeked.
 type recReader struct {
-	stream   transport.MessageStream
+	stream   acidns.MessageStream
 	curMsg   wire.Message
 	curIdx   int
 	pushback []wire.Record

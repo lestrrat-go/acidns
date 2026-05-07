@@ -7,7 +7,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/lestrrat-go/acidns/dnsclient/transport/udp"
+	"github.com/lestrrat-go/acidns"
 	"github.com/lestrrat-go/acidns/dnsserver"
 	"github.com/lestrrat-go/acidns/recursive"
 	"github.com/lestrrat-go/acidns/wire"
@@ -37,7 +37,7 @@ www IN  A    192.0.2.42
 	t.Cleanup(cancel)
 	go func() { _ = srv.Serve(ctx) }()
 
-	ex, err := udp.New(srv.Addr())
+	ex, err := acidns.NewUDPExchanger(srv.Addr())
 	require.NoError(t, err)
 	q, err := wire.NewBuilder().
 		ID(0xbeef).
@@ -66,7 +66,7 @@ func TestServeDNSFormErrOnEmptyQuestion(t *testing.T) {
 
 	q, err := wire.NewBuilder().ID(1).Build() // no question
 	require.NoError(t, err)
-	ex, err := udp.New(srv.Addr())
+	ex, err := acidns.NewUDPExchanger(srv.Addr())
 	require.NoError(t, err)
 	qctx, qcancel := context.WithTimeout(ctx, 2*time.Second)
 	defer qcancel()
@@ -93,7 +93,7 @@ func TestServeDNSServFailOnUnreachable(t *testing.T) {
 		Question(wire.NewQuestion(wire.MustParseName("nope.invalid"), rrtype.A)).
 		Build()
 	require.NoError(t, err)
-	ex, err := udp.New(srv.Addr())
+	ex, err := acidns.NewUDPExchanger(srv.Addr())
 	require.NoError(t, err)
 	qctx, qcancel := context.WithTimeout(ctx, 2*time.Second)
 	defer qcancel()

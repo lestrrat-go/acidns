@@ -9,7 +9,7 @@
 //   - Cert: the in-band certificate the resolver advertises via a TXT
 //     record at "2.dnscrypt-cert.<provider>", together with helpers to
 //     parse and verify it against a known provider Ed25519 public key.
-//   - Exchanger: a transport.Exchanger that encrypts queries and
+//   - Exchanger: a acidns.Exchanger that encrypts queries and
 //     decrypts responses using the certificate's short-term key.
 //
 // Only ES version 2 (X25519 + XChaCha20-Poly1305) is implemented; the
@@ -31,7 +31,7 @@ import (
 	"golang.org/x/crypto/chacha20poly1305"
 	"golang.org/x/crypto/curve25519"
 
-	"github.com/lestrrat-go/acidns/dnsclient/transport"
+	"github.com/lestrrat-go/acidns"
 	"github.com/lestrrat-go/acidns/wire"
 )
 
@@ -278,9 +278,9 @@ type exchanger struct {
 	timeout time.Duration
 }
 
-// New returns a transport.Exchanger that sends DNSCrypt-encrypted
+// New returns a acidns.Exchanger that sends DNSCrypt-encrypted
 // queries to addr using the verified cert.
-func New(addr netip.AddrPort, cert *Cert, opts ...Option) (transport.Exchanger, error) {
+func New(addr netip.AddrPort, cert *Cert, opts ...Option) (acidns.Exchanger, error) {
 	if cert.ESVersion != ESVersion2 {
 		return nil, fmt.Errorf("%w: ES%d", ErrUnsupportedESVersion, cert.ESVersion)
 	}

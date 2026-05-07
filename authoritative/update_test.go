@@ -7,14 +7,14 @@ import (
 	"testing"
 	"time"
 
-	"github.com/lestrrat-go/acidns/dnsclient/transport/udp"
-	"github.com/lestrrat-go/acidns/dnsserver"
+	"github.com/lestrrat-go/acidns"
 	"github.com/lestrrat-go/acidns/authoritative"
-	"github.com/lestrrat-go/acidns/zonefile"
+	"github.com/lestrrat-go/acidns/dnsserver"
 	"github.com/lestrrat-go/acidns/update"
 	"github.com/lestrrat-go/acidns/wire"
 	"github.com/lestrrat-go/acidns/wire/rdata"
 	"github.com/lestrrat-go/acidns/wire/rrtype"
+	"github.com/lestrrat-go/acidns/zonefile"
 	"github.com/stretchr/testify/require"
 )
 
@@ -48,7 +48,7 @@ func TestUpdateAddRRset(t *testing.T) {
 	new := wire.NewRecord(wire.MustParseName("blog.example.com"), 60*time.Second,
 		rdata.NewA(netip.MustParseAddr("198.51.100.5")))
 
-	ex, err := udp.New(addr)
+	ex, err := acidns.NewUDPExchanger(addr)
 	require.NoError(t, err)
 	msg, err := update.NewBuilder(wire.MustParseName("example.com")).
 		AddRRset(new).
@@ -74,7 +74,7 @@ func TestUpdateDeleteRRset(t *testing.T) {
 	t.Parallel()
 	_, addr := startUpdatable(t)
 
-	ex, err := udp.New(addr)
+	ex, err := acidns.NewUDPExchanger(addr)
 	require.NoError(t, err)
 	msg, err := update.NewBuilder(wire.MustParseName("example.com")).
 		DeleteRRset(wire.MustParseName("www.example.com"), rrtype.A).
@@ -98,7 +98,7 @@ func TestUpdatePrereqRRsetExistsFails(t *testing.T) {
 	t.Parallel()
 	_, addr := startUpdatable(t)
 
-	ex, err := udp.New(addr)
+	ex, err := acidns.NewUDPExchanger(addr)
 	require.NoError(t, err)
 	msg, err := update.NewBuilder(wire.MustParseName("example.com")).
 		PrereqRRsetExists(wire.MustParseName("nope.example.com"), rrtype.A).
@@ -115,7 +115,7 @@ func TestUpdatePrereqRRsetAbsentSucceeds(t *testing.T) {
 	t.Parallel()
 	_, addr := startUpdatable(t)
 
-	ex, err := udp.New(addr)
+	ex, err := acidns.NewUDPExchanger(addr)
 	require.NoError(t, err)
 	msg, err := update.NewBuilder(wire.MustParseName("example.com")).
 		PrereqRRsetAbsent(wire.MustParseName("blog.example.com"), rrtype.A).
@@ -131,7 +131,7 @@ func TestUpdatePrereqRRsetAbsentSucceeds(t *testing.T) {
 func TestUpdateOutOfZoneRefused(t *testing.T) {
 	t.Parallel()
 	_, addr := startUpdatable(t)
-	ex, err := udp.New(addr)
+	ex, err := acidns.NewUDPExchanger(addr)
 	require.NoError(t, err)
 	msg, err := update.NewBuilder(wire.MustParseName("example.org")).
 		AddRRset(wire.NewRecord(wire.MustParseName("a.example.org"), 60*time.Second,

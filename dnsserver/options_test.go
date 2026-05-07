@@ -6,8 +6,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/lestrrat-go/acidns/dnsclient/transport/tcp"
-	"github.com/lestrrat-go/acidns/dnsclient/transport/udp"
+	"github.com/lestrrat-go/acidns"
 	"github.com/lestrrat-go/acidns/dnsserver"
 	"github.com/lestrrat-go/acidns/wire"
 	"github.com/lestrrat-go/acidns/wire/rrtype"
@@ -32,7 +31,7 @@ func TestUDPListenWithOptions(t *testing.T) {
 	t.Cleanup(cancel)
 	go func() { _ = srv.Serve(ctx) }()
 
-	ex, err := udp.New(srv.Addr())
+	ex, err := acidns.NewUDPExchanger(srv.Addr())
 	require.NoError(t, err)
 	q, _ := wire.NewBuilder().
 		ID(1).
@@ -55,7 +54,7 @@ func TestTCPListenWithOptions(t *testing.T) {
 	t.Cleanup(cancel)
 	go func() { _ = srv.Serve(ctx) }()
 
-	ex, err := tcp.New(srv.Addr())
+	ex, err := acidns.NewTCPExchanger(srv.Addr())
 	require.NoError(t, err)
 	q, _ := wire.NewBuilder().
 		ID(2).

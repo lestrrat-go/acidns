@@ -1,10 +1,11 @@
-// Package transport defines the contract a DNS transport must satisfy to
-// serve as the substrate for higher-level resolvers. Concrete transports
-// (UDP, TCP, DoT, DoH, DoQ) live in sub-packages and implement Exchanger;
-// the connection-oriented ones (TCP, DoT, DoQ) additionally implement
-// StreamExchanger so zone-transfer-style protocols can read the response
-// stream that follows a single query.
-package transport
+package acidns
+
+// This file defines the contract a DNS transport must satisfy to serve as
+// the substrate for higher-level resolvers. UDP and TCP exchangers live in
+// this package; DoT, DoH, DoQ are in sibling packages
+// [github.com/lestrrat-go/acidns/dot], [github.com/lestrrat-go/acidns/doh],
+// [github.com/lestrrat-go/acidns/doq]. Connection-oriented transports
+// additionally implement [StreamExchanger] for zone-transfer-style protocols.
 
 import (
 	"context"

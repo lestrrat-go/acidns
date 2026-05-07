@@ -1,4 +1,4 @@
-package tcp_test
+package acidns_test
 
 import (
 	"context"
@@ -9,7 +9,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/lestrrat-go/acidns/dnsclient/transport/tcp"
+	"github.com/lestrrat-go/acidns"
 	"github.com/lestrrat-go/acidns/wire"
 	"github.com/lestrrat-go/acidns/wire/rdata"
 	"github.com/lestrrat-go/acidns/wire/rrtype"
@@ -72,7 +72,7 @@ func TestTCPExchange(t *testing.T) {
 	t.Parallel()
 	addr := startTCPEcho(t)
 
-	ex, err := tcp.New(addr)
+	ex, err := acidns.NewTCPExchanger(addr)
 	require.NoError(t, err)
 
 	q, err := wire.NewBuilder().
@@ -96,7 +96,7 @@ func TestTCPContextDeadline(t *testing.T) {
 	t.Cleanup(func() { ln.Close() })
 	a := ln.Addr().(*net.TCPAddr)
 
-	ex, err := tcp.New(netip.AddrPortFrom(netip.MustParseAddr("127.0.0.1"), uint16(a.Port)))
+	ex, err := acidns.NewTCPExchanger(netip.AddrPortFrom(netip.MustParseAddr("127.0.0.1"), uint16(a.Port)))
 	require.NoError(t, err)
 
 	q, _ := wire.NewBuilder().

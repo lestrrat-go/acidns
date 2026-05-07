@@ -7,8 +7,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/lestrrat-go/acidns"
 	"github.com/lestrrat-go/acidns/dnsclient"
-	"github.com/lestrrat-go/acidns/dnsclient/transport"
 	"github.com/lestrrat-go/acidns/specialuse"
 	"github.com/lestrrat-go/acidns/wire"
 	"github.com/lestrrat-go/acidns/wire/rrtype"
@@ -94,4 +94,4 @@ func TestAnswerMethods(t *testing.T) {
 	require.False(t, ans.Truncated())
 }
 
-var _ transport.Exchanger = (*stubExchanger)(nil)
+var _ acidns.Exchanger = (*stubExchanger)(nil)

@@ -8,12 +8,12 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/lestrrat-go/acidns/dnsclient/transport/udp"
-	"github.com/lestrrat-go/acidns/dnsserver"
+	"github.com/lestrrat-go/acidns"
 	"github.com/lestrrat-go/acidns/authoritative"
-	"github.com/lestrrat-go/acidns/zonefile"
+	"github.com/lestrrat-go/acidns/dnsserver"
 	"github.com/lestrrat-go/acidns/notify"
 	"github.com/lestrrat-go/acidns/wire"
+	"github.com/lestrrat-go/acidns/zonefile"
 )
 
 func Example_notify_send() {
@@ -48,7 +48,7 @@ ns1 IN  A    192.0.2.10
 	go func() { _ = srv.Serve(ctx) }()
 
 	// Send a NOTIFY using the dnsclient/notify helper.
-	ex, err := udp.New(srv.Addr())
+	ex, err := acidns.NewUDPExchanger(srv.Addr())
 	if err != nil {
 		fmt.Println("dial:", err)
 		return

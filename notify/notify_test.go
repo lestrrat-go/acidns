@@ -8,12 +8,12 @@ import (
 	"testing"
 	"time"
 
-	"github.com/lestrrat-go/acidns/dnsclient/transport/udp"
-	"github.com/lestrrat-go/acidns/dnsserver"
+	"github.com/lestrrat-go/acidns"
 	"github.com/lestrrat-go/acidns/authoritative"
-	"github.com/lestrrat-go/acidns/zonefile"
+	"github.com/lestrrat-go/acidns/dnsserver"
 	"github.com/lestrrat-go/acidns/notify"
 	"github.com/lestrrat-go/acidns/wire"
+	"github.com/lestrrat-go/acidns/zonefile"
 	"github.com/stretchr/testify/require"
 )
 
@@ -49,7 +49,7 @@ func TestSendNotifyAcks(t *testing.T) {
 		fired.Add(1)
 	})
 
-	ex, err := udp.New(addr)
+	ex, err := acidns.NewUDPExchanger(addr)
 	require.NoError(t, err)
 	resp, err := notify.Send(t.Context(), ex, wire.MustParseName("example.com"))
 	require.NoError(t, err)
@@ -65,7 +65,7 @@ func TestSendNotifyAcks(t *testing.T) {
 func TestNotifyForUnservedZoneNotAuth(t *testing.T) {
 	t.Parallel()
 	addr := startSecondary(t, nil)
-	ex, err := udp.New(addr)
+	ex, err := acidns.NewUDPExchanger(addr)
 	require.NoError(t, err)
 	resp, err := notify.Send(t.Context(), ex, wire.MustParseName("example.org"))
 	require.NoError(t, err)

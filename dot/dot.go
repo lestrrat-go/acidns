@@ -13,7 +13,7 @@ import (
 	"net/netip"
 	"time"
 
-	"github.com/lestrrat-go/acidns/dnsclient/transport"
+	"github.com/lestrrat-go/acidns"
 	"github.com/lestrrat-go/acidns/internal/streamframe"
 	"github.com/lestrrat-go/acidns/wire"
 )
@@ -60,7 +60,7 @@ type exchanger struct {
 // New returns an Exchanger that talks DoT to addr. addr is typically
 // "host:853" — DoT does not auto-default the port, but addresses without a
 // port resolve to 853 in the higher-level Resolver wiring.
-func New(addr netip.AddrPort, opts ...Option) (transport.Exchanger, error) {
+func New(addr netip.AddrPort, opts ...Option) (acidns.Exchanger, error) {
 	if !addr.IsValid() {
 		return nil, fmt.Errorf("dot: invalid server address")
 	}
@@ -96,7 +96,7 @@ func (e *exchanger) Exchange(ctx context.Context, q wire.Message) (wire.Message,
 // Stream sends q over a fresh TLS connection and returns a MessageStream
 // from which the caller pulls responses. Implements XoT (RFC 9103) when
 // q is an AXFR/IXFR query.
-func (e *exchanger) Stream(ctx context.Context, q wire.Message) (transport.MessageStream, error) {
+func (e *exchanger) Stream(ctx context.Context, q wire.Message) (acidns.MessageStream, error) {
 	d := tls.Dialer{Config: e.tlsConfig, NetDialer: &net.Dialer{}}
 	conn, err := d.DialContext(ctx, "tcp", e.addr.String())
 	if err != nil {

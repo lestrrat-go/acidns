@@ -4,7 +4,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/lestrrat-go/acidns/dnsclient/transport"
+	"github.com/lestrrat-go/acidns"
 	"github.com/lestrrat-go/acidns/dot"
 	"github.com/lestrrat-go/acidns/wire"
 	"github.com/lestrrat-go/acidns/wire/rrtype"
@@ -26,7 +26,7 @@ func TestDoTStream(t *testing.T) {
 		Question(wire.NewQuestion(wire.MustParseName("example.com"), rrtype.A)).
 		Build()
 
-	se, ok := ex.(transport.StreamExchanger)
+	se, ok := ex.(acidns.StreamExchanger)
 	require.True(t, ok)
 	stream, err := se.Stream(t.Context(), q)
 	require.NoError(t, err)

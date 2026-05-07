@@ -8,14 +8,13 @@ import (
 	"testing"
 	"time"
 
-	"github.com/lestrrat-go/acidns/axfr"
-	"github.com/lestrrat-go/acidns/dnsclient/transport"
-	"github.com/lestrrat-go/acidns/dnsclient/transport/tcp"
-	"github.com/lestrrat-go/acidns/dnsserver"
+	"github.com/lestrrat-go/acidns"
 	"github.com/lestrrat-go/acidns/authoritative"
-	"github.com/lestrrat-go/acidns/zonefile"
+	"github.com/lestrrat-go/acidns/axfr"
+	"github.com/lestrrat-go/acidns/dnsserver"
 	"github.com/lestrrat-go/acidns/wire"
 	"github.com/lestrrat-go/acidns/wire/rrtype"
+	"github.com/lestrrat-go/acidns/zonefile"
 	"github.com/stretchr/testify/require"
 )
 
@@ -31,11 +30,11 @@ mail IN A    192.0.2.3
 mail IN MX   10 mail.example.com.
 `
 
-func newStreamEx(t *testing.T, addr netip.AddrPort) transport.StreamExchanger {
+func newStreamEx(t *testing.T, addr netip.AddrPort) acidns.StreamExchanger {
 	t.Helper()
-	ex, err := tcp.New(addr)
+	ex, err := acidns.NewTCPExchanger(addr)
 	require.NoError(t, err)
-	sx, ok := ex.(transport.StreamExchanger)
+	sx, ok := ex.(acidns.StreamExchanger)
 	require.True(t, ok, "tcp must implement StreamExchanger")
 	return sx
 }

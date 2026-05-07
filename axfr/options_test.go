@@ -8,12 +8,12 @@ import (
 	"testing"
 	"time"
 
+	"github.com/lestrrat-go/acidns/authoritative"
 	"github.com/lestrrat-go/acidns/axfr"
 	"github.com/lestrrat-go/acidns/dnsserver"
-	"github.com/lestrrat-go/acidns/authoritative"
-	"github.com/lestrrat-go/acidns/zonefile"
 	"github.com/lestrrat-go/acidns/wire"
 	"github.com/lestrrat-go/acidns/wire/rrtype"
+	"github.com/lestrrat-go/acidns/zonefile"
 	"github.com/stretchr/testify/require"
 )
 

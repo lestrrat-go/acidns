@@ -8,13 +8,13 @@ import (
 	"strings"
 	"time"
 
+	"github.com/lestrrat-go/acidns/authoritative"
 	"github.com/lestrrat-go/acidns/dnsclient"
 	"github.com/lestrrat-go/acidns/dnsserver"
-	"github.com/lestrrat-go/acidns/authoritative"
-	"github.com/lestrrat-go/acidns/zonefile"
 	"github.com/lestrrat-go/acidns/wire"
 	"github.com/lestrrat-go/acidns/wire/rdata"
 	"github.com/lestrrat-go/acidns/wire/rrtype"
+	"github.com/lestrrat-go/acidns/zonefile"
 )
 
 // startLocalNS is a tiny shared helper: spin up an authoritative server bound

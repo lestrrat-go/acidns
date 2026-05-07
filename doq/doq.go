@@ -19,7 +19,7 @@ import (
 
 	"github.com/quic-go/quic-go"
 
-	"github.com/lestrrat-go/acidns/dnsclient/transport"
+	"github.com/lestrrat-go/acidns"
 	"github.com/lestrrat-go/acidns/internal/streamframe"
 	"github.com/lestrrat-go/acidns/wire"
 )
@@ -63,7 +63,7 @@ type exchanger struct {
 }
 
 // New returns an Exchanger that talks DoQ to addr.
-func New(addr netip.AddrPort, opts ...Option) (transport.Exchanger, error) {
+func New(addr netip.AddrPort, opts ...Option) (acidns.Exchanger, error) {
 	if !addr.IsValid() {
 		return nil, fmt.Errorf("doq: invalid server address")
 	}
@@ -163,7 +163,7 @@ func (e *exchanger) Exchange(ctx context.Context, q wire.Message) (wire.Message,
 // which the caller pulls responses. Implements XFR-over-QUIC (RFC 9103
 // §4.4): one query, then a stream of responses on the same QUIC stream
 // until the server FINs the read side.
-func (e *exchanger) Stream(ctx context.Context, q wire.Message) (transport.MessageStream, error) {
+func (e *exchanger) Stream(ctx context.Context, q wire.Message) (acidns.MessageStream, error) {
 	dialCtx := ctx
 	if _, ok := ctx.Deadline(); !ok && e.timeout > 0 {
 		var cancel context.CancelFunc

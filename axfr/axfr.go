@@ -18,7 +18,7 @@ import (
 	"io"
 	"time"
 
-	"github.com/lestrrat-go/acidns/dnsclient/transport"
+	"github.com/lestrrat-go/acidns"
 	"github.com/lestrrat-go/acidns/wire"
 	"github.com/lestrrat-go/acidns/wire/rdata"
 	"github.com/lestrrat-go/acidns/wire/rrtype"
@@ -61,7 +61,7 @@ func WithTimeout(d time.Duration) Option {
 
 // Start sends an AXFR query for zone over ex and returns a Transfer
 // iterator positioned just past the leading SOA.
-func Start(ctx context.Context, ex transport.StreamExchanger, zone wire.Name, opts ...Option) (Transfer, error) {
+func Start(ctx context.Context, ex acidns.StreamExchanger, zone wire.Name, opts ...Option) (Transfer, error) {
 	c := config{timeout: 30 * time.Second}
 	for _, o := range opts {
 		o.applyAXFR(&c)
@@ -92,7 +92,7 @@ func Start(ctx context.Context, ex transport.StreamExchanger, zone wire.Name, op
 }
 
 type transfer struct {
-	stream transport.MessageStream
+	stream acidns.MessageStream
 	reader *recReader
 
 	newSOA          rdata.SOA
@@ -140,7 +140,7 @@ func (t *transfer) Next(ctx context.Context) (RecordEvent, error) {
 // recReader pulls records from successive stream messages with a small
 // pushback queue.
 type recReader struct {
-	stream   transport.MessageStream
+	stream   acidns.MessageStream
 	curMsg   wire.Message
 	curIdx   int
 	pushback []wire.Record

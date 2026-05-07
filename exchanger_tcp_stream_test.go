@@ -1,4 +1,4 @@
-package tcp_test
+package acidns_test
 
 import (
 	"context"
@@ -6,8 +6,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/lestrrat-go/acidns/dnsclient/transport"
-	"github.com/lestrrat-go/acidns/dnsclient/transport/tcp"
+	"github.com/lestrrat-go/acidns"
 	"github.com/lestrrat-go/acidns/wire"
 	"github.com/lestrrat-go/acidns/wire/rrtype"
 	"github.com/stretchr/testify/require"
@@ -16,7 +15,7 @@ import (
 func TestTCPStream(t *testing.T) {
 	t.Parallel()
 	addr := startTCPEcho(t)
-	ex, err := tcp.New(addr, tcp.WithTimeout(2*time.Second))
+	ex, err := acidns.NewTCPExchanger(addr, acidns.WithTCPTimeout(2*time.Second))
 	require.NoError(t, err)
 
 	q, err := wire.NewBuilder().
@@ -25,7 +24,7 @@ func TestTCPStream(t *testing.T) {
 		Build()
 	require.NoError(t, err)
 
-	se, ok := ex.(transport.StreamExchanger)
+	se, ok := ex.(acidns.StreamExchanger)
 	require.True(t, ok)
 	stream, err := se.Stream(t.Context(), q)
 	require.NoError(t, err)
@@ -37,20 +36,20 @@ func TestTCPStream(t *testing.T) {
 
 func TestTCPNewInvalidAddr(t *testing.T) {
 	t.Parallel()
-	_, err := tcp.New(netip.AddrPort{})
+	_, err := acidns.NewTCPExchanger(netip.AddrPort{})
 	require.Error(t, err)
 }
 
 func TestTCPDialFailure(t *testing.T) {
 	t.Parallel()
-	ex, err := tcp.New(netip.MustParseAddrPort("127.0.0.1:1"))
+	ex, err := acidns.NewTCPExchanger(netip.MustParseAddrPort("127.0.0.1:1"))
 	require.NoError(t, err)
 	q, _ := wire.NewBuilder().ID(1).
 		Question(wire.NewQuestion(wire.MustParseName("example.com"), rrtype.A)).
 		Build()
 	ctx, cancel := context.WithTimeout(t.Context(), 200*time.Millisecond)
 	defer cancel()
-	se, ok := ex.(transport.StreamExchanger)
+	se, ok := ex.(acidns.StreamExchanger)
 	require.True(t, ok)
 	_, err = se.Stream(ctx, q)
 	require.Error(t, err)

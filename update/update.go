@@ -4,7 +4,7 @@
 // with the opcode set to UPDATE (5).
 //
 // Builder.Build returns a wire.Message ready for shipping over a
-// transport.Exchanger or signing via tsig.SignMessage.
+// acidns.Exchanger or signing via tsig.SignMessage.
 //
 // This package focuses on the most commonly used prerequisite forms and
 // update operations. Class-specific value-match prerequisites and CNAME

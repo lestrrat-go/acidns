@@ -1,4 +1,4 @@
-package udp_test
+package acidns_test
 
 import (
 	"context"
@@ -7,7 +7,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/lestrrat-go/acidns/dnsclient/transport/udp"
+	"github.com/lestrrat-go/acidns"
 	"github.com/lestrrat-go/acidns/wire"
 	"github.com/lestrrat-go/acidns/wire/rdata"
 	"github.com/lestrrat-go/acidns/wire/rrtype"
@@ -62,7 +62,7 @@ func TestExchange(t *testing.T) {
 	t.Parallel()
 	addr := startEcho(t)
 
-	ex, err := udp.New(addr)
+	ex, err := acidns.NewUDPExchanger(addr)
 	require.NoError(t, err)
 
 	q, err := wire.NewBuilder().
@@ -93,7 +93,7 @@ func TestExchangeContextCancelled(t *testing.T) {
 	a := pc.LocalAddr().(*net.UDPAddr)
 	addr := netip.AddrPortFrom(netip.MustParseAddr("127.0.0.1"), uint16(a.Port))
 
-	ex, err := udp.New(addr)
+	ex, err := acidns.NewUDPExchanger(addr)
 	require.NoError(t, err)
 
 	q, _ := wire.NewBuilder().
@@ -146,7 +146,7 @@ func TestExchangeMismatchedID(t *testing.T) {
 		pc.WriteTo(gw, src)
 	}()
 
-	ex, err := udp.New(addr, udp.WithTimeout(2*time.Second))
+	ex, err := acidns.NewUDPExchanger(addr, acidns.WithUDPTimeout(2*time.Second))
 	require.NoError(t, err)
 	q, _ := wire.NewBuilder().
 		ID(0x1234).

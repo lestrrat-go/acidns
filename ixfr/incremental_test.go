@@ -7,7 +7,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/lestrrat-go/acidns/dnsclient/transport"
+	"github.com/lestrrat-go/acidns"
 	"github.com/lestrrat-go/acidns/ixfr"
 	"github.com/lestrrat-go/acidns/wire"
 	"github.com/lestrrat-go/acidns/wire/rdata"
@@ -36,7 +36,7 @@ type fakeStreamExchanger struct{ stream *fakeStream }
 func (f *fakeStreamExchanger) Exchange(_ context.Context, _ wire.Message) (wire.Message, error) {
 	return nil, io.EOF
 }
-func (f *fakeStreamExchanger) Stream(_ context.Context, _ wire.Message) (transport.MessageStream, error) {
+func (f *fakeStreamExchanger) Stream(_ context.Context, _ wire.Message) (acidns.MessageStream, error) {
 	return f.stream, nil
 }
 

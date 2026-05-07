@@ -14,7 +14,7 @@ import (
 	"net/http"
 	"net/url"
 
-	"github.com/lestrrat-go/acidns/dnsclient/transport"
+	"github.com/lestrrat-go/acidns"
 	"github.com/lestrrat-go/acidns/wire"
 )
 
@@ -65,7 +65,7 @@ type exchanger struct {
 
 // New returns an Exchanger that talks DoH to the given endpoint URL
 // (e.g. "https://cloudflare-dns.com/dns-query").
-func New(endpoint string, opts ...Option) (transport.Exchanger, error) {
+func New(endpoint string, opts ...Option) (acidns.Exchanger, error) {
 	u, err := url.Parse(endpoint)
 	if err != nil {
 		return nil, fmt.Errorf("doh: invalid endpoint: %w", err)

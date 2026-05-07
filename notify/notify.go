@@ -6,7 +6,7 @@
 //
 // The caller chooses the transport — typically UDP, but TCP / DoT / DoQ
 // are equally valid since NOTIFY is a single-message exchange that fits
-// the transport.Exchanger contract.
+// the acidns.Exchanger contract.
 package notify
 
 import (
@@ -16,7 +16,7 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/lestrrat-go/acidns/dnsclient/transport"
+	"github.com/lestrrat-go/acidns"
 	"github.com/lestrrat-go/acidns/wire"
 	"github.com/lestrrat-go/acidns/wire/rdata"
 	"github.com/lestrrat-go/acidns/wire/rrtype"
@@ -48,7 +48,7 @@ func WithSOA(soa rdata.SOA) Option {
 }
 
 // Send transmits a NOTIFY for zone over ex and waits for the ACK.
-func Send(ctx context.Context, ex transport.Exchanger, zone wire.Name, opts ...Option) (wire.Message, error) {
+func Send(ctx context.Context, ex acidns.Exchanger, zone wire.Name, opts ...Option) (wire.Message, error) {
 	c := config{timeout: 5 * time.Second}
 	for _, o := range opts {
 		o.applyNotify(&c)
@@ -80,25 +80,25 @@ func Send(ctx context.Context, ex transport.Exchanger, zone wire.Name, opts ...O
 
 // Result captures one secondary's response from Broadcast.
 type Result interface {
-	Exchanger() transport.Exchanger
+	Exchanger() acidns.Exchanger
 	Response() wire.Message
 	Err() error
 }
 
 type result struct {
-	ex   transport.Exchanger
+	ex   acidns.Exchanger
 	resp wire.Message
 	err  error
 }
 
-func (r result) Exchanger() transport.Exchanger { return r.ex }
-func (r result) Response() wire.Message         { return r.resp }
-func (r result) Err() error                     { return r.err }
+func (r result) Exchanger() acidns.Exchanger { return r.ex }
+func (r result) Response() wire.Message      { return r.resp }
+func (r result) Err() error                  { return r.err }
 
 // Broadcast sends NOTIFY in parallel to many secondaries and returns one
 // Result per exchanger, in the order supplied. Errors on individual
 // secondaries do not abort the broadcast.
-func Broadcast(ctx context.Context, exs []transport.Exchanger, zone wire.Name, opts ...Option) []Result {
+func Broadcast(ctx context.Context, exs []acidns.Exchanger, zone wire.Name, opts ...Option) []Result {
 	out := make([]Result, len(exs))
 	type slot struct {
 		idx  int
@@ -107,7 +107,7 @@ func Broadcast(ctx context.Context, exs []transport.Exchanger, zone wire.Name, o
 	}
 	ch := make(chan slot, len(exs))
 	for i, ex := range exs {
-		go func(i int, ex transport.Exchanger) {
+		go func(i int, ex acidns.Exchanger) {
 			resp, err := Send(ctx, ex, zone, opts...)
 			ch <- slot{idx: i, resp: resp, err: err}
 		}(i, ex)

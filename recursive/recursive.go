@@ -17,8 +17,7 @@ import (
 	"net/netip"
 	"time"
 
-	"github.com/lestrrat-go/acidns/dnsclient/transport/tcp"
-	"github.com/lestrrat-go/acidns/dnsclient/transport/udp"
+	"github.com/lestrrat-go/acidns"
 	"github.com/lestrrat-go/acidns/dnsserver"
 	"github.com/lestrrat-go/acidns/wire"
 	"github.com/lestrrat-go/acidns/wire/rdata"
@@ -120,7 +119,7 @@ func DefaultDialer() Dialer { return defaultDialer{} }
 type defaultDialer struct{}
 
 func (defaultDialer) Exchange(ctx context.Context, server netip.AddrPort, q wire.Message) (wire.Message, error) {
-	uex, err := udp.New(server)
+	uex, err := acidns.NewUDPExchanger(server)
 	if err != nil {
 		return nil, err
 	}
@@ -129,7 +128,7 @@ func (defaultDialer) Exchange(ctx context.Context, server netip.AddrPort, q wire
 		return nil, err
 	}
 	if resp.Flags().Truncated() {
-		tex, terr := tcp.New(server)
+		tex, terr := acidns.NewTCPExchanger(server)
 		if terr != nil {
 			return resp, nil
 		}

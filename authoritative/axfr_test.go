@@ -6,12 +6,12 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/lestrrat-go/acidns/dnsclient/transport/tcp"
-	"github.com/lestrrat-go/acidns/dnsserver"
+	"github.com/lestrrat-go/acidns"
 	"github.com/lestrrat-go/acidns/authoritative"
-	"github.com/lestrrat-go/acidns/zonefile"
+	"github.com/lestrrat-go/acidns/dnsserver"
 	"github.com/lestrrat-go/acidns/wire"
 	"github.com/lestrrat-go/acidns/wire/rrtype"
+	"github.com/lestrrat-go/acidns/zonefile"
 	"github.com/stretchr/testify/require"
 )
 
@@ -54,7 +54,7 @@ func TestAXFROverTCP(t *testing.T) {
 	t.Cleanup(cancel)
 	go func() { _ = srv.Serve(ctx) }()
 
-	ex, err := tcp.New(srv.Addr())
+	ex, err := acidns.NewTCPExchanger(srv.Addr())
 	require.NoError(t, err)
 
 	q, _ := wire.NewBuilder().

@@ -4,7 +4,7 @@
 // the request is received, the context fires, or an unrecoverable I/O error
 // occurs. It does NOT retry on truncation; callers wanting TCP fall-back are
 // expected to compose two transports at the resolver layer.
-package udp
+package acidns
 
 import (
 	"context"
@@ -14,53 +14,52 @@ import (
 	"net/netip"
 	"time"
 
-	"github.com/lestrrat-go/acidns/dnsclient/transport"
 	"github.com/lestrrat-go/acidns/wire"
 )
 
-// Option configures a UDP Exchanger.
-type Option interface{ applyUDP(*config) }
+// UDPExchangerOption configures a UDP Exchanger.
+type UDPExchangerOption interface{ applyUDPExchanger(*udpExchangerConfig) }
 
-type optionFunc func(*config)
+type udpOptionFunc func(*udpExchangerConfig)
 
-func (f optionFunc) applyUDP(c *config) { f(c) }
+func (f udpOptionFunc) applyUDPExchanger(c *udpExchangerConfig) { f(c) }
 
-type config struct {
+type udpExchangerConfig struct {
 	timeout    time.Duration
 	bufferSize int
 }
 
-// WithTimeout sets a per-exchange timeout that takes effect when the caller
+// WithUDPTimeout sets a per-exchange timeout that takes effect when the caller
 // supplies a context without its own deadline. Defaults to 5 seconds.
-func WithTimeout(d time.Duration) Option {
-	return optionFunc(func(c *config) { c.timeout = d })
+func WithUDPTimeout(d time.Duration) UDPExchangerOption {
+	return udpOptionFunc(func(c *udpExchangerConfig) { c.timeout = d })
 }
 
-// WithReadBufferSize sets the size of the UDP read buffer in bytes. Defaults
+// WithUDPReadBufferSize sets the size of the UDP read buffer in bytes. Defaults
 // to 4096, which fits a typical EDNS-extended response.
-func WithReadBufferSize(n int) Option {
-	return optionFunc(func(c *config) { c.bufferSize = n })
+func WithUDPReadBufferSize(n int) UDPExchangerOption {
+	return udpOptionFunc(func(c *udpExchangerConfig) { c.bufferSize = n })
 }
 
-type exchanger struct {
+type udpExchanger struct {
 	addr    netip.AddrPort
 	timeout time.Duration
 	bufsize int
 }
 
 // New returns an Exchanger that talks UDP to addr.
-func New(addr netip.AddrPort, opts ...Option) (transport.Exchanger, error) {
+func NewUDPExchanger(addr netip.AddrPort, opts ...UDPExchangerOption) (Exchanger, error) {
 	if !addr.IsValid() {
 		return nil, fmt.Errorf("udp: invalid server address")
 	}
-	c := config{timeout: 5 * time.Second, bufferSize: 4096}
+	c := udpExchangerConfig{timeout: 5 * time.Second, bufferSize: 4096}
 	for _, o := range opts {
-		o.applyUDP(&c)
+		o.applyUDPExchanger(&c)
 	}
-	return &exchanger{addr: addr, timeout: c.timeout, bufsize: c.bufferSize}, nil
+	return &udpExchanger{addr: addr, timeout: c.timeout, bufsize: c.bufferSize}, nil
 }
 
-func (e *exchanger) Exchange(ctx context.Context, q wire.Message) (wire.Message, error) {
+func (e *udpExchanger) Exchange(ctx context.Context, q wire.Message) (wire.Message, error) {
 	msg, err := wire.Marshal(q)
 	if err != nil {
 		return nil, fmt.Errorf("udp: marshal query: %w", err)

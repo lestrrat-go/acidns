@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/lestrrat-go/acidns/dnsclient/transport/udp"
+	"github.com/lestrrat-go/acidns"
 	"github.com/lestrrat-go/acidns/dnsserver"
 	"github.com/lestrrat-go/acidns/wire"
 	"github.com/lestrrat-go/acidns/wire/rdata"
@@ -52,7 +52,7 @@ func TestUDPServerEcho(t *testing.T) {
 	})
 	srv, _ := startUDP(t, h)
 
-	ex, err := udp.New(srv.Addr())
+	ex, err := acidns.NewUDPExchanger(srv.Addr())
 	require.NoError(t, err)
 	resp, err := ex.Exchange(t.Context(), mkQuery(t, "example.com", rrtype.A))
 	require.NoError(t, err)
@@ -103,7 +103,7 @@ func TestUDPServerTruncation(t *testing.T) {
 	})
 	srv, _ := startUDP(t, h)
 
-	ex, err := udp.New(srv.Addr())
+	ex, err := acidns.NewUDPExchanger(srv.Addr())
 	require.NoError(t, err)
 
 	// Send a query WITHOUT EDNS so the server caps at 512 bytes.
@@ -146,7 +146,7 @@ func TestUDPServerEDNSPayloadSize(t *testing.T) {
 	})
 	srv, _ := startUDP(t, h)
 
-	ex, err := udp.New(srv.Addr())
+	ex, err := acidns.NewUDPExchanger(srv.Addr())
 	require.NoError(t, err)
 
 	// Query with EDNS advertising 4096 bytes — server should not truncate.

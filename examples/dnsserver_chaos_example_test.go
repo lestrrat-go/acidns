@@ -6,9 +6,9 @@ import (
 	"net/netip"
 	"time"
 
-	"github.com/lestrrat-go/acidns/dnsclient/transport/udp"
-	"github.com/lestrrat-go/acidns/dnsserver"
+	"github.com/lestrrat-go/acidns"
 	"github.com/lestrrat-go/acidns/chaos"
+	"github.com/lestrrat-go/acidns/dnsserver"
 	"github.com/lestrrat-go/acidns/wire"
 	"github.com/lestrrat-go/acidns/wire/rdata"
 	"github.com/lestrrat-go/acidns/wire/rrtype"
@@ -36,7 +36,7 @@ func Example_dnsserver_chaos() {
 		ID(1).
 		Question(wire.NewQuestionClass(wire.MustParseName("id.server."), rrtype.TXT, rrtype.ClassCH)).
 		Build()
-	ex, _ := udp.New(srv.Addr())
+	ex, _ := acidns.NewUDPExchanger(srv.Addr())
 	qctx, qcancel := context.WithTimeout(ctx, 2*time.Second)
 	defer qcancel()
 	resp, err := ex.Exchange(qctx, q)

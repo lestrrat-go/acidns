@@ -8,8 +8,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/lestrrat-go/acidns"
 	"github.com/lestrrat-go/acidns/dnsclient"
-	"github.com/lestrrat-go/acidns/dnsclient/transport/udp"
 	"github.com/lestrrat-go/acidns/wire"
 	"github.com/lestrrat-go/acidns/wire/rdata"
 	"github.com/lestrrat-go/acidns/wire/rrtype"
@@ -75,7 +75,7 @@ func TestSearchListSuffixed(t *testing.T) {
 	t.Parallel()
 
 	addr, queries := startSearchServer(t, "host.example.com.")
-	ex, _ := udp.New(addr)
+	ex, _ := acidns.NewUDPExchanger(addr)
 	r, err := dnsclient.New(
 		dnsclient.WithExchanger(ex),
 		dnsclient.WithSearchList(wire.MustParseName("example.com")),
@@ -98,7 +98,7 @@ func TestSearchListAbsoluteSkipsSearch(t *testing.T) {
 	t.Parallel()
 
 	addr, queries := startSearchServer(t, "host.")
-	ex, _ := udp.New(addr)
+	ex, _ := acidns.NewUDPExchanger(addr)
 	r, err := dnsclient.New(
 		dnsclient.WithExchanger(ex),
 		dnsclient.WithSearchList(wire.MustParseName("example.com")),
@@ -121,7 +121,7 @@ func TestSearchListNdotsAbsoluteFirst(t *testing.T) {
 	t.Parallel()
 
 	addr, queries := startSearchServer(t, "a.b.c.")
-	ex, _ := udp.New(addr)
+	ex, _ := acidns.NewUDPExchanger(addr)
 	r, err := dnsclient.New(
 		dnsclient.WithExchanger(ex),
 		dnsclient.WithSearchList(wire.MustParseName("example.com")),
@@ -157,7 +157,7 @@ func TestSearchListUnused(t *testing.T) {
 	t.Parallel()
 	// No search list configured → behave exactly as before.
 	addr, _ := startSearchServer(t, "host.")
-	ex, _ := udp.New(addr)
+	ex, _ := acidns.NewUDPExchanger(addr)
 	r, err := dnsclient.New(dnsclient.WithExchanger(ex))
 	require.NoError(t, err)
 

@@ -1,7 +1,7 @@
 // Package dnsclient is the user-facing entry point for performing DNS
 // queries against a configured resolver.
 //
-// Two layers are exposed: the low-level transport.Exchanger (one query, one
+// Two layers are exposed: the low-level acidns.Exchanger (one query, one
 // response, no retry, no fall-back) and the high-level Resolver, which adds
 // query construction, ID randomisation, parallel A/AAAA dispatch, and typed
 // convenience helpers.
@@ -16,9 +16,7 @@ import (
 	"net/netip"
 	"time"
 
-	"github.com/lestrrat-go/acidns/dnsclient/transport"
-	"github.com/lestrrat-go/acidns/dnsclient/transport/tcp"
-	"github.com/lestrrat-go/acidns/dnsclient/transport/udp"
+	"github.com/lestrrat-go/acidns"
 	"github.com/lestrrat-go/acidns/resolvconf"
 	"github.com/lestrrat-go/acidns/specialuse"
 	"github.com/lestrrat-go/acidns/wire"
@@ -85,7 +83,7 @@ type optionFunc func(*config)
 func (f optionFunc) applyResolver(c *config) { f(c) }
 
 type config struct {
-	exchanger         transport.Exchanger
+	exchanger         acidns.Exchanger
 	servers           []netip.AddrPort
 	ednsUDP           uint16
 	ednsDO            bool
@@ -101,7 +99,7 @@ type config struct {
 
 // WithExchanger pins the Resolver to a specific transport. Mutually
 // exclusive with WithServers.
-func WithExchanger(ex transport.Exchanger) Option {
+func WithExchanger(ex acidns.Exchanger) Option {
 	return optionFunc(func(c *config) { c.exchanger = ex })
 }
 
@@ -186,7 +184,7 @@ func WithNdots(n int) Option {
 }
 
 type resolver struct {
-	exchanger         transport.Exchanger
+	exchanger         acidns.Exchanger
 	ednsUDP           uint16
 	ednsDO            bool
 	disableEDNS       bool
@@ -378,18 +376,18 @@ func randomID() (uint16, error) {
 	return binary.BigEndian.Uint16(b[:]), nil
 }
 
-func buildFallover(servers []netip.AddrPort, attempts int, perAttempt time.Duration) (transport.Exchanger, error) {
-	exs := make([]transport.Exchanger, 0, len(servers))
+func buildFallover(servers []netip.AddrPort, attempts int, perAttempt time.Duration) (acidns.Exchanger, error) {
+	exs := make([]acidns.Exchanger, 0, len(servers))
 	for _, s := range servers {
-		uex, err := udp.New(s)
+		uex, err := acidns.NewUDPExchanger(s)
 		if err != nil {
 			return nil, err
 		}
-		tex, err := tcp.New(s)
+		tex, err := acidns.NewTCPExchanger(s)
 		if err != nil {
 			return nil, err
 		}
-		var ex transport.Exchanger = &tcFallback{primary: uex, fallback: tex}
+		var ex acidns.Exchanger = &tcFallback{primary: uex, fallback: tex}
 		if attempts > 1 || perAttempt > 0 {
 			ex = &retryExchanger{inner: ex, attempts: max(attempts, 1), perAttempt: perAttempt}
 		}
@@ -404,7 +402,7 @@ func buildFallover(servers []netip.AddrPort, attempts int, perAttempt time.Durat
 // retryExchanger retries a wrapped Exchanger up to attempts times, with an
 // optional per-attempt timeout that caps each individual try.
 type retryExchanger struct {
-	inner      transport.Exchanger
+	inner      acidns.Exchanger
 	attempts   int
 	perAttempt time.Duration
 }
@@ -432,7 +430,7 @@ func (r *retryExchanger) Exchange(ctx context.Context, q wire.Message) (wire.Mes
 	return nil, lastErr
 }
 
-type failover struct{ exs []transport.Exchanger }
+type failover struct{ exs []acidns.Exchanger }
 
 func (f *failover) Exchange(ctx context.Context, q wire.Message) (wire.Message, error) {
 	var lastErr error
@@ -452,7 +450,7 @@ func (f *failover) Exchange(ctx context.Context, q wire.Message) (wire.Message, 
 // tcFallback wraps a primary (typically UDP) exchanger with a fallback
 // (typically TCP) for retrying truncated responses per RFC 1035 §4.2.1.
 type tcFallback struct {
-	primary, fallback transport.Exchanger
+	primary, fallback acidns.Exchanger
 }
 
 func (e *tcFallback) Exchange(ctx context.Context, q wire.Message) (wire.Message, error) {
