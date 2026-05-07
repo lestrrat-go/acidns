@@ -5,14 +5,14 @@ import (
 	"net/netip"
 	"time"
 
-	"github.com/lestrrat-go/acidns/dnsclient/dnsupdate"
+	"github.com/lestrrat-go/acidns/update"
 	"github.com/lestrrat-go/acidns/wire"
 	"github.com/lestrrat-go/acidns/wire/rdata"
 	"github.com/lestrrat-go/acidns/wire/rrtype"
 )
 
 func Example_dnsupdate_build() {
-	// dnsupdate.Builder constructs an RFC 2136 UPDATE message. Add a
+	// update.Builder constructs an RFC 2136 UPDATE message. Add a
 	// prerequisite, an addition, and a delete; Build returns a wire.Message
 	// you can ship over any transport.Exchanger.
 	zone := wire.MustParseName("example.com")
@@ -22,7 +22,7 @@ func Example_dnsupdate_build() {
 		rdata.NewA(netip.MustParseAddr("198.51.100.5")),
 	)
 
-	msg, err := dnsupdate.NewBuilder(zone).
+	msg, err := update.NewBuilder(zone).
 		PrereqNameNotInUse(wire.MustParseName("blog.example.com")).
 		AddRRset(rec).
 		Build()

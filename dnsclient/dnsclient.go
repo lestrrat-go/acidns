@@ -16,11 +16,11 @@ import (
 	"net/netip"
 	"time"
 
-	"github.com/lestrrat-go/acidns/dnsclient/resolvconf"
-	"github.com/lestrrat-go/acidns/dnsclient/specialuse"
 	"github.com/lestrrat-go/acidns/dnsclient/transport"
 	"github.com/lestrrat-go/acidns/dnsclient/transport/tcp"
 	"github.com/lestrrat-go/acidns/dnsclient/transport/udp"
+	"github.com/lestrrat-go/acidns/resolvconf"
+	"github.com/lestrrat-go/acidns/specialuse"
 	"github.com/lestrrat-go/acidns/wire"
 	"github.com/lestrrat-go/acidns/wire/rdata"
 	"github.com/lestrrat-go/acidns/wire/rrtype"

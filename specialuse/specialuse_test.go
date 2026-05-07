@@ -3,7 +3,7 @@ package specialuse_test
 import (
 	"testing"
 
-	"github.com/lestrrat-go/acidns/dnsclient/specialuse"
+	"github.com/lestrrat-go/acidns/specialuse"
 	"github.com/lestrrat-go/acidns/wire"
 	"github.com/stretchr/testify/require"
 )

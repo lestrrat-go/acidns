@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/lestrrat-go/acidns/dnsclient/resolvconf"
+	"github.com/lestrrat-go/acidns/resolvconf"
 )
 
 func Example_resolvconf_parse() {

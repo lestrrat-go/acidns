@@ -9,7 +9,7 @@
 // This package focuses on the most commonly used prerequisite forms and
 // update operations. Class-specific value-match prerequisites and CNAME
 // safety checks are out of scope for this version.
-package dnsupdate
+package update
 
 import (
 	"crypto/rand"

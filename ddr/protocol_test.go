@@ -3,7 +3,7 @@ package ddr_test
 import (
 	"testing"
 
-	"github.com/lestrrat-go/acidns/dnsclient/ddr"
+	"github.com/lestrrat-go/acidns/ddr"
 	"github.com/stretchr/testify/require"
 )
 

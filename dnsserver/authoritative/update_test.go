@@ -7,11 +7,11 @@ import (
 	"testing"
 	"time"
 
-	"github.com/lestrrat-go/acidns/dnsclient/dnsupdate"
 	"github.com/lestrrat-go/acidns/dnsclient/transport/udp"
 	"github.com/lestrrat-go/acidns/dnsserver"
 	"github.com/lestrrat-go/acidns/dnsserver/authoritative"
 	"github.com/lestrrat-go/acidns/dnszone"
+	"github.com/lestrrat-go/acidns/update"
 	"github.com/lestrrat-go/acidns/wire"
 	"github.com/lestrrat-go/acidns/wire/rdata"
 	"github.com/lestrrat-go/acidns/wire/rrtype"
@@ -50,7 +50,7 @@ func TestUpdateAddRRset(t *testing.T) {
 
 	ex, err := udp.New(addr)
 	require.NoError(t, err)
-	msg, err := dnsupdate.NewBuilder(wire.MustParseName("example.com")).
+	msg, err := update.NewBuilder(wire.MustParseName("example.com")).
 		AddRRset(new).
 		Build()
 	require.NoError(t, err)
@@ -76,7 +76,7 @@ func TestUpdateDeleteRRset(t *testing.T) {
 
 	ex, err := udp.New(addr)
 	require.NoError(t, err)
-	msg, err := dnsupdate.NewBuilder(wire.MustParseName("example.com")).
+	msg, err := update.NewBuilder(wire.MustParseName("example.com")).
 		DeleteRRset(wire.MustParseName("www.example.com"), rrtype.A).
 		Build()
 	require.NoError(t, err)
@@ -100,7 +100,7 @@ func TestUpdatePrereqRRsetExistsFails(t *testing.T) {
 
 	ex, err := udp.New(addr)
 	require.NoError(t, err)
-	msg, err := dnsupdate.NewBuilder(wire.MustParseName("example.com")).
+	msg, err := update.NewBuilder(wire.MustParseName("example.com")).
 		PrereqRRsetExists(wire.MustParseName("nope.example.com"), rrtype.A).
 		AddRRset(wire.NewRecord(wire.MustParseName("blog.example.com"), 60*time.Second,
 			rdata.NewA(netip.MustParseAddr("198.51.100.7")))).
@@ -117,7 +117,7 @@ func TestUpdatePrereqRRsetAbsentSucceeds(t *testing.T) {
 
 	ex, err := udp.New(addr)
 	require.NoError(t, err)
-	msg, err := dnsupdate.NewBuilder(wire.MustParseName("example.com")).
+	msg, err := update.NewBuilder(wire.MustParseName("example.com")).
 		PrereqRRsetAbsent(wire.MustParseName("blog.example.com"), rrtype.A).
 		AddRRset(wire.NewRecord(wire.MustParseName("blog.example.com"), 60*time.Second,
 			rdata.NewA(netip.MustParseAddr("198.51.100.8")))).
@@ -133,7 +133,7 @@ func TestUpdateOutOfZoneRefused(t *testing.T) {
 	_, addr := startUpdatable(t)
 	ex, err := udp.New(addr)
 	require.NoError(t, err)
-	msg, err := dnsupdate.NewBuilder(wire.MustParseName("example.org")).
+	msg, err := update.NewBuilder(wire.MustParseName("example.org")).
 		AddRRset(wire.NewRecord(wire.MustParseName("a.example.org"), 60*time.Second,
 			rdata.NewA(netip.MustParseAddr("198.51.100.9")))).
 		Build()

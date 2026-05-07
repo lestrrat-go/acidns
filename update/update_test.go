@@ -1,4 +1,4 @@
-package dnsupdate_test
+package update_test
 
 import (
 	"crypto/rand"
@@ -6,8 +6,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/lestrrat-go/acidns/dnsclient/dnsupdate"
 	"github.com/lestrrat-go/acidns/tsig"
+	"github.com/lestrrat-go/acidns/update"
 	"github.com/lestrrat-go/acidns/wire"
 	"github.com/lestrrat-go/acidns/wire/rdata"
 	"github.com/stretchr/testify/require"
@@ -29,7 +29,7 @@ func TestSignedUpdate(t *testing.T) {
 		rdata.NewA(netip.MustParseAddr("198.51.100.5")))
 
 	now := time.Now().Truncate(time.Second)
-	msg, err := dnsupdate.NewBuilder(wire.MustParseName("example.com")).
+	msg, err := update.NewBuilder(wire.MustParseName("example.com")).
 		AddRRset(rec).
 		Build()
 	require.NoError(t, err)

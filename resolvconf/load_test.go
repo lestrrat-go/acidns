@@ -5,7 +5,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/lestrrat-go/acidns/dnsclient/resolvconf"
+	"github.com/lestrrat-go/acidns/resolvconf"
 	"github.com/stretchr/testify/require"
 )
 

@@ -7,8 +7,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/lestrrat-go/acidns/dnsclient/ixfr"
 	"github.com/lestrrat-go/acidns/dnsclient/transport"
+	"github.com/lestrrat-go/acidns/ixfr"
 	"github.com/lestrrat-go/acidns/wire"
 	"github.com/lestrrat-go/acidns/wire/rdata"
 	"github.com/lestrrat-go/acidns/wire/rrtype"

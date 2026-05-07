@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/lestrrat-go/acidns/dnsclient/resolvconf"
+	"github.com/lestrrat-go/acidns/resolvconf"
 	"github.com/stretchr/testify/require"
 )
 

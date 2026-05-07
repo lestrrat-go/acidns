@@ -8,7 +8,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/lestrrat-go/acidns/dnsclient/axfr"
+	"github.com/lestrrat-go/acidns/axfr"
 	"github.com/lestrrat-go/acidns/dnsclient/transport"
 	"github.com/lestrrat-go/acidns/dnsclient/transport/tcp"
 	"github.com/lestrrat-go/acidns/dnsserver"
