@@ -149,7 +149,7 @@ func Browse(ctx context.Context, service string, timeout time.Duration) ([]Servi
 		return nil, err
 	}
 
-	conn, err := openMulticast()
+	conn, err := openConn()
 	if err != nil {
 		return nil, err
 	}
@@ -201,6 +201,11 @@ func Browse(ctx context.Context, service string, timeout time.Duration) ([]Servi
 	}
 	return out, nil
 }
+
+// openConn opens the network connection used by Browse. It is a package
+// variable so tests can swap it for an in-process loopback PacketConn —
+// CI cannot reliably bind the real multicast group.
+var openConn = func() (net.PacketConn, error) { return openMulticast() }
 
 func openMulticast() (*net.UDPConn, error) {
 	addr := &net.UDPAddr{IP: net.ParseIP(GroupV4), Port: Port}
