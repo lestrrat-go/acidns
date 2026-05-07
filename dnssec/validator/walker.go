@@ -563,7 +563,7 @@ func (w *walker) validateNSECNXDomain(qname wire.Name, parentKeys []rdata.DNSKEY
 		return fmt.Errorf("no NSEC in authority")
 	}
 	// Group NSEC records and verify the rrset signatures.
-	groups := validatorbb.GroupNSECByOwner(nsecRRs)
+	groups := validatorbb.GroupRecordsByOwner(nsecRRs)
 	for _, set := range groups {
 		owner := set[0].Name()
 		sigs := rrsigsForTypeAndOwner(extractRRSIGs(msg.Authorities()), rrtype.NSEC, owner)

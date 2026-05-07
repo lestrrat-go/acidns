@@ -16,19 +16,3 @@ func BytesLess(a, b []byte) bool {
 	}
 	return len(a) < len(b)
 }
-
-// BytesEqual reports whether a and b have the same length and identical
-// content. It exists alongside [BytesLess] so callers do not need to mix
-// in [bytes.Equal] from the standard library for what is otherwise a
-// trivially inlinable comparison.
-func BytesEqual(a, b []byte) bool {
-	if len(a) != len(b) {
-		return false
-	}
-	for i := range a {
-		if a[i] != b[i] {
-			return false
-		}
-	}
-	return true
-}

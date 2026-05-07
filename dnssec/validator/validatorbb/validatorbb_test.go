@@ -103,7 +103,7 @@ func TestBase32HexEncodeOddBytes(t *testing.T) {
 	require.NotEmpty(t, enc)
 }
 
-func TestBytesLessAndEqual(t *testing.T) {
+func TestBytesLess(t *testing.T) {
 	t.Parallel()
 	require.True(t, validatorbb.BytesLess([]byte{1, 2}, []byte{1, 3}))
 	require.False(t, validatorbb.BytesLess([]byte{1, 3}, []byte{1, 2}))
@@ -112,9 +112,6 @@ func TestBytesLessAndEqual(t *testing.T) {
 	require.False(t, validatorbb.BytesLess([]byte{1, 0}, []byte{1}))
 	// Equal.
 	require.False(t, validatorbb.BytesLess([]byte{1, 2}, []byte{1, 2}))
-	require.True(t, validatorbb.BytesEqual([]byte{1, 2}, []byte{1, 2}))
-	require.False(t, validatorbb.BytesEqual([]byte{1}, []byte{1, 0}))
-	require.False(t, validatorbb.BytesEqual([]byte{1, 2}, []byte{1, 3}))
 }
 
 func TestNextCloserNameEqualLabels(t *testing.T) {
@@ -221,19 +218,6 @@ func TestGroupRecordsByOwnerAppend(t *testing.T) {
 	groups := validatorbb.GroupRecordsByOwner([]wire.Record{a, b, a2})
 	require.Len(t, groups, 2)
 	// First group is a.example. with two records.
-	require.Len(t, groups[0], 2)
-}
-
-func TestGroupNSECByOwnerAppend(t *testing.T) {
-	t.Parallel()
-	a := wire.NewRecord(wire.MustParseName("a.example."), time.Hour,
-		rdata.NewNSEC(wire.MustParseName("b.example."), nil))
-	a2 := wire.NewRecord(wire.MustParseName("a.example."), time.Hour,
-		rdata.NewNSEC(wire.MustParseName("c.example."), nil))
-	b := wire.NewRecord(wire.MustParseName("b.example."), time.Hour,
-		rdata.NewNSEC(wire.MustParseName("c.example."), nil))
-	groups := validatorbb.GroupNSECByOwner([]wire.Record{a, b, a2})
-	require.Len(t, groups, 2)
 	require.Len(t, groups[0], 2)
 }
 

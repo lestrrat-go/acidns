@@ -409,6 +409,10 @@ func TestStreamContextCancelDuringNext(t *testing.T) {
 	nextCtx, nextCancel := context.WithTimeout(t.Context(), 50*time.Millisecond)
 	defer nextCancel()
 	_, err = stream.Next(nextCtx)
+	// Cannot tighten to context.DeadlineExceeded: doqStream.Next races
+	// the conn-level read deadline (set from ctx.Deadline) against
+	// ctx.Done; if the i/o timeout fires before ctx.Err() flips, the
+	// raw "i/o timeout" surfaces instead of context.DeadlineExceeded.
 	require.Error(t, err)
 }
 
@@ -435,10 +439,23 @@ func TestStreamDialFailureWithDeadline(t *testing.T) {
 	require.Error(t, err)
 }
 
-// startRefusingDoQ accepts the QUIC handshake but immediately closes the
-// connection with an application error. Subsequent OpenStreamSync /
-// stream.Write calls from the client must fail.
-func startRefusingDoQ(t *testing.T) (netip.AddrPort, *tls.Config) {
+// closeTiming controls when startRefusingDoQ tears the QUIC connection down.
+type closeTiming int
+
+const (
+	// closeAfterAccept tears the connection down immediately after the
+	// handshake completes — drives the client's OpenStreamSync error
+	// branch (no live stream to open).
+	closeAfterAccept closeTiming = iota
+	// closeAfterStreamOpen waits for the client to open a stream, then
+	// tears the connection down — drives the post-open Write/Read error
+	// branch deterministically without racing on wall-clock time.
+	closeAfterStreamOpen
+)
+
+// startRefusingDoQ accepts the QUIC handshake but then closes the
+// connection per timing. Subsequent client operations must fail.
+func startRefusingDoQ(t *testing.T, timing closeTiming) (netip.AddrPort, *tls.Config) {
 	t.Helper()
 
 	priv, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
@@ -489,13 +506,14 @@ func startRefusingDoQ(t *testing.T) (netip.AddrPort, *tls.Config) {
 			if err != nil {
 				return
 			}
-			// Wait for the client to open a stream, then tear the
-			// connection down. This synchronizes the close on a real
-			// client action instead of a wall-clock sleep — the
-			// resulting error path (OpenStreamSync / Write) is the
-			// behavior under test.
 			go func(c *quic.Conn) {
-				_, _ = c.AcceptStream(t.Context())
+				switch timing {
+				case closeAfterStreamOpen:
+					_, _ = c.AcceptStream(t.Context())
+				case closeAfterAccept:
+					// Close immediately, before the client can
+					// open a stream.
+				}
 				_ = c.CloseWithError(42, "go away")
 			}(conn)
 		}
@@ -505,12 +523,12 @@ func startRefusingDoQ(t *testing.T) (netip.AddrPort, *tls.Config) {
 	return netip.AddrPortFrom(netip.MustParseAddr("127.0.0.1"), uint16(a.Port)), clientTLS
 }
 
-// TestExchangeStreamRefused covers Exchange's OpenStreamSync / Write error
-// branches by talking to a server that closes the QUIC connection right
-// after the handshake.
-func TestExchangeStreamRefused(t *testing.T) {
+// TestExchangeStreamRefusedAtOpen covers Exchange's OpenStreamSync error
+// branch: the server closes the QUIC connection immediately after the
+// handshake, before the client can open a stream.
+func TestExchangeStreamRefusedAtOpen(t *testing.T) {
 	t.Parallel()
-	addr, cfg := startRefusingDoQ(t)
+	addr, cfg := startRefusingDoQ(t, closeAfterAccept)
 	ex, err := doq.New(addr, doq.WithTLSConfig(cfg))
 	require.NoError(t, err)
 
@@ -518,8 +536,6 @@ func TestExchangeStreamRefused(t *testing.T) {
 	ctx, cancel := context.WithTimeout(t.Context(), 5*time.Second)
 	defer cancel()
 
-	// Multiple attempts so that at least one races into the
-	// stream-open / write phase rather than failing during dial only.
 	var lastErr error
 	for i := 0; i < 5; i++ {
 		_, lastErr = ex.Exchange(ctx, q)
@@ -530,12 +546,34 @@ func TestExchangeStreamRefused(t *testing.T) {
 	require.Error(t, lastErr)
 }
 
-// TestStreamRefused covers Stream's OpenStreamSync / WriteFrame error
-// branches by talking to a server that tears the connection down right
-// after the handshake.
-func TestStreamRefused(t *testing.T) {
+// TestExchangeStreamRefusedAfterOpen covers Exchange's post-stream-open
+// Write/Read error branch: the server lets the client open a stream,
+// then tears the connection down.
+func TestExchangeStreamRefusedAfterOpen(t *testing.T) {
 	t.Parallel()
-	addr, cfg := startRefusingDoQ(t)
+	addr, cfg := startRefusingDoQ(t, closeAfterStreamOpen)
+	ex, err := doq.New(addr, doq.WithTLSConfig(cfg))
+	require.NoError(t, err)
+
+	q := buildQuery(t, 11)
+	ctx, cancel := context.WithTimeout(t.Context(), 5*time.Second)
+	defer cancel()
+
+	var lastErr error
+	for i := 0; i < 5; i++ {
+		_, lastErr = ex.Exchange(ctx, q)
+		if lastErr != nil {
+			break
+		}
+	}
+	require.Error(t, lastErr)
+}
+
+// TestStreamRefusedAtOpen covers Stream's OpenStreamSync error branch:
+// the server closes the QUIC connection immediately after the handshake.
+func TestStreamRefusedAtOpen(t *testing.T) {
+	t.Parallel()
+	addr, cfg := startRefusingDoQ(t, closeAfterAccept)
 	ex, err := doq.New(addr, doq.WithTLSConfig(cfg))
 	require.NoError(t, err)
 	se, ok := ex.(acidns.StreamExchanger)
@@ -552,8 +590,38 @@ func TestStreamRefused(t *testing.T) {
 			lastErr = err
 			break
 		}
-		// If Stream returned without error the conn was probably still
-		// transient; pull a frame to confirm and continue retrying.
+		if _, err := s.Next(ctx); err != nil {
+			s.Close()
+			lastErr = err
+			break
+		}
+		s.Close()
+	}
+	require.Error(t, lastErr)
+}
+
+// TestStreamRefusedAfterOpen covers Stream's post-open Read error branch:
+// the server lets the client open a stream, then tears the connection
+// down so Next returns an error.
+func TestStreamRefusedAfterOpen(t *testing.T) {
+	t.Parallel()
+	addr, cfg := startRefusingDoQ(t, closeAfterStreamOpen)
+	ex, err := doq.New(addr, doq.WithTLSConfig(cfg))
+	require.NoError(t, err)
+	se, ok := ex.(acidns.StreamExchanger)
+	require.True(t, ok)
+
+	q := buildQuery(t, 12)
+	ctx, cancel := context.WithTimeout(t.Context(), 5*time.Second)
+	defer cancel()
+
+	var lastErr error
+	for i := 0; i < 5; i++ {
+		s, err := se.Stream(ctx, q)
+		if err != nil {
+			lastErr = err
+			break
+		}
 		if _, err := s.Next(ctx); err != nil {
 			s.Close()
 			lastErr = err

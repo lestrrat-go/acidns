@@ -1,6 +1,7 @@
 package validator
 
 import (
+	"bytes"
 	"crypto/sha1" //nolint:gosec // RFC 5155 §5 fixes the hash algorithm at SHA-1.
 	"errors"
 	"fmt"
@@ -83,7 +84,7 @@ func nsec3Match(name wire.Name, params nsec3Params, records []wire.Record) (wire
 		if err != nil {
 			continue
 		}
-		if validatorbb.BytesEqual(got, want) {
+		if bytes.Equal(got, want) {
 			n3, ok := wire.RDataAs[rdata.NSEC3](r)
 			if !ok {
 				continue
@@ -155,7 +156,7 @@ func extractNSEC3Params(records []wire.Record) (nsec3Params, bool) {
 			first = false
 			continue
 		}
-		if cur.alg != params.alg || cur.iterations != params.iterations || !validatorbb.BytesEqual(cur.salt, params.salt) {
+		if cur.alg != params.alg || cur.iterations != params.iterations || !bytes.Equal(cur.salt, params.salt) {
 			return nsec3Params{}, false
 		}
 	}

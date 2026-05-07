@@ -53,26 +53,6 @@ func GroupRecordsByOwner(records []wire.Record) [][]wire.Record {
 	return out
 }
 
-// GroupNSECByOwner partitions NSEC records by owner. Non-NSEC records
-// would still be grouped by their owner name; the function does not
-// filter type so callers should pre-filter if they want strict NSEC-only
-// groups. Order of returned groups matches first appearance.
-func GroupNSECByOwner(records []wire.Record) [][]wire.Record {
-	idx := make(map[string]int)
-	var out [][]wire.Record
-	for _, r := range records {
-		k := r.Name().String()
-		i, ok := idx[k]
-		if !ok {
-			idx[k] = len(out)
-			out = append(out, []wire.Record{r})
-			continue
-		}
-		out[i] = append(out[i], r)
-	}
-	return out
-}
-
 // FilterNSECByOwner returns NSEC records whose owner equals target. Other
 // record types and other owners are dropped.
 func FilterNSECByOwner(records []wire.Record, target wire.Name) []wire.Record {
