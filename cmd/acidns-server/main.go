@@ -69,6 +69,9 @@ func run(argv []string) error {
 	if err := fs.Parse(argv); err != nil {
 		return err
 	}
+	if err := validateFlagsForMode(fs, o.mode); err != nil {
+		return err
+	}
 	if zonesFlag != "" {
 		o.zoneFiles = splitCSV(zonesFlag)
 	}
@@ -224,6 +227,65 @@ type peekingWriter struct {
 
 func (p *peekingWriter) WriteMsg(m wire.Message) error {
 	p.captured = m
+	return nil
+}
+
+// modeFlags lists, per server mode, the flag names that are meaningful
+// in that mode beyond the universal -mode and -listen. Any flag the user
+// explicitly set that does not appear in the active mode's set is
+// rejected at parse time so misconfigurations fail loudly at startup
+// instead of silently degrading at query time (e.g. -tls-name set with
+// -upstream rather than -upstream-tls).
+var modeFlags = map[string]map[string]struct{}{
+	"authoritative": {"zones": {}},
+	"recursive":     {"roots": {}},
+	"hybrid":        {"zones": {}, "roots": {}},
+	"forward":       {"upstream": {}, "upstream-tls": {}, "tls-name": {}, "cache-size": {}},
+}
+
+// universalFlags are valid in every mode.
+var universalFlags = map[string]struct{}{
+	"mode":   {},
+	"listen": {},
+}
+
+func validateFlagsForMode(fs *flag.FlagSet, mode string) error {
+	allowed, ok := modeFlags[mode]
+	if !ok {
+		// Unknown mode is reported by buildHandler with a clearer message;
+		// don't double up the error here.
+		return nil
+	}
+	var stray []string
+	fs.Visit(func(f *flag.Flag) {
+		if _, ok := universalFlags[f.Name]; ok {
+			return
+		}
+		if _, ok := allowed[f.Name]; ok {
+			return
+		}
+		stray = append(stray, "-"+f.Name)
+	})
+	if len(stray) > 0 {
+		return fmt.Errorf("flags %s are not valid in -mode=%s",
+			strings.Join(stray, ", "), mode)
+	}
+	if mode == "forward" {
+		// -tls-name only makes sense paired with -upstream-tls; it would
+		// otherwise be silently dropped on the plaintext path.
+		var tlsNameSet, upstreamTLSSet bool
+		fs.Visit(func(f *flag.Flag) {
+			switch f.Name {
+			case "tls-name":
+				tlsNameSet = true
+			case "upstream-tls":
+				upstreamTLSSet = true
+			}
+		})
+		if tlsNameSet && !upstreamTLSSet {
+			return fmt.Errorf("-tls-name requires -upstream-tls")
+		}
+	}
 	return nil
 }
 

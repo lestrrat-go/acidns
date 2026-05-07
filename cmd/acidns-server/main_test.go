@@ -183,3 +183,75 @@ func TestBuildForwardBadAddr(t *testing.T) {
 	_, err := buildForward(opts{mode: "forward", upstream: "not-an-addr"})
 	require.Error(t, err)
 }
+
+func TestRunRejectsTLSNameWithoutTLSUpstream(t *testing.T) {
+	t.Parallel()
+	err := run([]string{
+		"-mode=forward",
+		"-listen=127.0.0.1:0",
+		"-upstream=8.8.8.8:853",
+		"-tls-name=dns.google",
+	})
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "-tls-name requires -upstream-tls")
+}
+
+func TestRunRejectsForwardFlagsInAuthoritativeMode(t *testing.T) {
+	t.Parallel()
+	err := run([]string{
+		"-mode=authoritative",
+		"-zones=/dev/null",
+		"-upstream=8.8.8.8:53",
+	})
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "-upstream")
+	require.Contains(t, err.Error(), "-mode=authoritative")
+}
+
+func TestRunRejectsZonesInForwardMode(t *testing.T) {
+	t.Parallel()
+	err := run([]string{
+		"-mode=forward",
+		"-upstream=8.8.8.8:53",
+		"-zones=/dev/null",
+	})
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "-zones")
+	require.Contains(t, err.Error(), "-mode=forward")
+}
+
+func TestRunRejectsRootsInAuthoritativeMode(t *testing.T) {
+	t.Parallel()
+	err := run([]string{
+		"-mode=authoritative",
+		"-zones=/dev/null",
+		"-roots=198.41.0.4:53",
+	})
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "-roots")
+}
+
+func TestRunRejectsCacheSizeOutsideForward(t *testing.T) {
+	t.Parallel()
+	err := run([]string{
+		"-mode=recursive",
+		"-roots=198.41.0.4:53",
+		"-cache-size=100",
+	})
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "-cache-size")
+}
+
+func TestRunAcceptsHybridZonesAndRoots(t *testing.T) {
+	t.Parallel()
+	// Validation should pass even though the build itself will fail (we
+	// pass nonsense paths) — the test stops at validateFlagsForMode by
+	// observing that the error is the zone-load error, not a flag error.
+	err := run([]string{
+		"-mode=hybrid",
+		"-zones=/no/such/zone",
+		"-roots=198.41.0.4:53",
+	})
+	require.Error(t, err)
+	require.NotContains(t, err.Error(), "not valid in -mode=hybrid")
+}
