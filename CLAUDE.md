@@ -120,7 +120,7 @@ Status legend: **Implemented** = working code with tests; **Partial** = document
 | 5205 | HIP record | Implemented (typed `rdata.HIP`) |
 | 6742 | ILNP DNS resource records | Implemented (typed `rdata.NID`/`L32`/`L64`/`LP`) |
 | 6761 | Special-Use Domain Names | Implemented (`dnsclient/specialuse`: localhost / invalid / test / onion / alt; `local` deferred to mDNS) |
-| 6762 | Multicast DNS (mDNS) | Implemented (browse + parse via `mdns/`; service publication is out of scope) |
+| 6762 | Multicast DNS (mDNS) | Implemented (browse + parse + service publication via `mdns/`: probe → announce → goodbye lifecycle, cache-flush bit on owned records, conflict detection during probe per §8.1) |
 | 6763 | DNS-Based Service Discovery (DNS-SD) | Implemented (`mdns.Browse` returns Service entries with SRV/TXT/A/AAAA merged) |
 | 6891 | Extension Mechanisms for DNS (EDNS(0)) | Implemented (OPT pseudo-RR, UDP size, DO bit, extended RCODE) |
 | 7043 | EUI48 / EUI64 | Implemented (typed `rdata.EUI48`, `rdata.EUI64`) |
@@ -208,7 +208,6 @@ Status legend: **Implemented** = working code with tests; **Partial** = document
 
 | RFC | Title | Reason |
 |-----|-------|--------|
-| 6762 publishing | Service announcement (mDNS) | Browse-only for now; announcer requires interface enumeration + cache-flush handling not yet built |
 | 7816 / 9156 | QNAME Minimisation | Recursive resolver is straight-walk for now |
 | 8198 | Aggressive NSEC Caching | Builds on full NSEC validation, not yet present |
 
