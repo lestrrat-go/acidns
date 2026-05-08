@@ -47,7 +47,7 @@ func nsec3Hash(name wire.Name, salt []byte, iterations uint16) []byte {
 	buf := name.AppendWire(nil)
 	buf = append(buf, salt...)
 	h := sha1.Sum(buf) //nolint:gosec
-	for i := uint16(0); i < iterations; i++ {
+	for range iterations {
 		next := make([]byte, 0, len(h)+len(salt))
 		next = append(next, h[:]...)
 		next = append(next, salt...)

@@ -109,12 +109,12 @@ func TestExchangeIDMismatch(t *testing.T) {
 			Question(wire.NewQuestion(wire.MustParseName("example.com"), rrtype.A)).
 			Build()
 		if err != nil {
-			http.Error(w, err.Error(), 500)
+			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
 		}
 		out, err := wire.Marshal(resp)
 		if err != nil {
-			http.Error(w, err.Error(), 500)
+			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
 		}
 		w.Header().Set("Content-Type", "application/dns-message")

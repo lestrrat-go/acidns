@@ -141,10 +141,10 @@ func TestVerifyNonTSIGRRType(t *testing.T) {
 	msg := make([]byte, 12+1+10)
 	binary.BigEndian.PutUint16(msg[10:12], 1) // ARCOUNT=1
 	off := 13
-	binary.BigEndian.PutUint16(msg[off:off+2], 1)     // TYPE=A
-	binary.BigEndian.PutUint16(msg[off+2:off+4], 1)   // CLASS=IN
-	binary.BigEndian.PutUint32(msg[off+4:off+8], 0)   // TTL
-	binary.BigEndian.PutUint16(msg[off+8:off+10], 0)  // rdlen=0
+	binary.BigEndian.PutUint16(msg[off:off+2], 1)    // TYPE=A
+	binary.BigEndian.PutUint16(msg[off+2:off+4], 1)  // CLASS=IN
+	binary.BigEndian.PutUint32(msg[off+4:off+8], 0)  // TTL
+	binary.BigEndian.PutUint16(msg[off+8:off+10], 0) // rdlen=0
 	key := tsig.Key{
 		Name:      wire.MustParseName("k.example."),
 		Algorithm: tsig.HMACSHA256,
@@ -300,9 +300,9 @@ func TestVerifyTruncatedRRBody(t *testing.T) {
 	msg := make([]byte, 12+1+10)
 	binary.BigEndian.PutUint16(msg[10:12], 2) // ARCOUNT=2
 	off := 13
-	binary.BigEndian.PutUint16(msg[off:off+2], 1)     // TYPE=A
-	binary.BigEndian.PutUint16(msg[off+2:off+4], 1)   // CLASS=IN
-	binary.BigEndian.PutUint32(msg[off+4:off+8], 0)   // TTL
+	binary.BigEndian.PutUint16(msg[off:off+2], 1)      // TYPE=A
+	binary.BigEndian.PutUint16(msg[off+2:off+4], 1)    // CLASS=IN
+	binary.BigEndian.PutUint32(msg[off+4:off+8], 0)    // TTL
 	binary.BigEndian.PutUint16(msg[off+8:off+10], 200) // rdlen=200 (lie)
 
 	key := tsig.Key{

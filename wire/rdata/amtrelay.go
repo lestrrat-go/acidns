@@ -32,13 +32,13 @@ type AMTRELAY struct {
 	relayName wirebb.Name
 }
 
-func (AMTRELAY) Type() rrtype.Type        { return rrtype.AMTRELAY }
-func (AMTRELAY) typedRData()              {}
-func (a AMTRELAY) Precedence() uint8      { return a.prec }
-func (a AMTRELAY) Discovery() bool        { return a.discovery }
+func (AMTRELAY) Type() rrtype.Type         { return rrtype.AMTRELAY }
+func (AMTRELAY) typedRData()               {}
+func (a AMTRELAY) Precedence() uint8       { return a.prec }
+func (a AMTRELAY) Discovery() bool         { return a.discovery }
 func (a AMTRELAY) RelayType() AMTRELAYType { return a.rt }
-func (a AMTRELAY) RelayAddr() netip.Addr  { return a.relayAddr }
-func (a AMTRELAY) RelayName() wirebb.Name { return a.relayName }
+func (a AMTRELAY) RelayAddr() netip.Addr   { return a.relayAddr }
+func (a AMTRELAY) RelayName() wirebb.Name  { return a.relayName }
 func (a AMTRELAY) Pack(p *wirebb.Packer) {
 	p.Uint8(a.prec)
 	b := uint8(a.rt) & 0x7f

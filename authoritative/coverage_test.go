@@ -199,7 +199,7 @@ func TestAXFRMultiMessageFlush(t *testing.T) {
 	sb.WriteString("ns1 IN A 192.0.2.10\n")
 	// 32 records of ~700 bytes TXT each → ~22 KB total.
 	bigPayload := strings.Repeat("x", 240)
-	for i := 0; i < 32; i++ {
+	for i := range 32 {
 		sb.WriteString("rec")
 		sb.WriteString(itoa(i))
 		sb.WriteString(" IN TXT \"")

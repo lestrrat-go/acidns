@@ -177,7 +177,7 @@ func TestTCPWriteMsgTooLarge(t *testing.T) {
 			long[i] = 'Z'
 		}
 		txt, _ := rdata.NewTXT(string(long))
-		for i := 0; i < 300; i++ {
+		for range 300 {
 			b = b.Answer(wire.NewRecord(q.Questions()[0].Name(), time.Minute, txt))
 		}
 		resp, err := b.Build()

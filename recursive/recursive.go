@@ -381,7 +381,7 @@ func (r *recursive) resolveDepth(ctx context.Context, name wire.Name, t rrtype.T
 	}
 
 	servers := append([]netip.AddrPort(nil), r.roots...)
-	for it := 0; it < r.maxIterations; it++ {
+	for range r.maxIterations {
 		if len(servers) == 0 {
 			return Entry{}, fmt.Errorf("recursive: no servers to query for %s", name)
 		}

@@ -17,9 +17,9 @@ import (
 // fakeTransport records every Send and lets tests feed canned responses
 // to Recv.
 type fakeTransport struct {
-	mu      sync.Mutex
-	sent    []wire.Message
-	inbox   chan wire.Message
+	mu    sync.Mutex
+	sent  []wire.Message
+	inbox chan wire.Message
 }
 
 func newFakeTransport() *fakeTransport {

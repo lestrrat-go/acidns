@@ -29,7 +29,7 @@ func (h chainHandler) ServeDNS(_ context.Context, w acidns.ResponseWriter, q wir
 		Authoritative(true).
 		Question(question)
 	cur := question.Name()
-	for hops := 0; hops < 16; hops++ {
+	for range 16 {
 		if next, ok := h.chain[cur.String()]; ok {
 			b.Answer(wire.NewRecord(cur, time.Hour, rdata.NewCNAME(next)))
 			cur = next

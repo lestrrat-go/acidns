@@ -257,8 +257,8 @@ func leadingLabel(n wire.Name) string {
 func parseTXT(strs []string) map[string]string {
 	out := map[string]string{}
 	for _, s := range strs {
-		if i := strings.IndexByte(s, '='); i >= 0 {
-			out[s[:i]] = s[i+1:]
+		if before, after, ok := strings.Cut(s, "="); ok {
+			out[before] = after
 		} else if s != "" {
 			out[s] = ""
 		}

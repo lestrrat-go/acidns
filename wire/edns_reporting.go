@@ -3,6 +3,7 @@ package wire
 import (
 	"fmt"
 	"strconv"
+	"strings"
 
 	"github.com/lestrrat-go/acidns/wire/rrtype"
 	"github.com/lestrrat-go/acidns/wire/wirebb"
@@ -72,9 +73,10 @@ func joinLabels(parts []string) string {
 	if len(parts) == 0 {
 		return "."
 	}
-	out := parts[0]
+	var out strings.Builder
+	out.WriteString(parts[0])
 	for _, p := range parts[1:] {
-		out += "." + p
+		out.WriteString("." + p)
 	}
-	return out
+	return out.String()
 }

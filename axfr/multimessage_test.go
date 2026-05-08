@@ -29,7 +29,7 @@ func TestTransferLargeZone(t *testing.T) {
 	sb.WriteString("@ IN SOA ns.big.example. hostmaster.big.example. ( 1 7200 3600 1209600 60 )\n")
 	sb.WriteString("@ IN NS ns.big.example.\nns IN A 192.0.2.1\n")
 	const recordCount = 4000
-	for i := 0; i < recordCount; i++ {
+	for i := range recordCount {
 		fmt.Fprintf(&sb, "h%05d IN A 192.0.2.%d\n", i, (i%250)+2)
 	}
 

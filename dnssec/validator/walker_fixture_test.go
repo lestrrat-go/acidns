@@ -9,7 +9,9 @@ import (
 	"crypto/sha256"
 	"crypto/sha512"
 	"fmt"
+	"slices"
 	"sort"
+	"strings"
 	"testing"
 	"time"
 
@@ -123,14 +125,14 @@ func nameSubdomainOrEqual(sub, parent wire.Name) bool {
 // canonical name strings. Records grouped per (name, type). Each such
 // rrset is signed with the zone ZSK.
 type signedZone struct {
-	apex     wire.Name
-	ksk      keyMat
-	zsk      keyMat
-	dnskeys  []rdata.DNSKEY
+	apex       wire.Name
+	ksk        keyMat
+	zsk        keyMat
+	dnskeys    []rdata.DNSKEY
 	dsForChild map[string][]rdata.DS // child apex name → DS records (parent perspective)
-	rrsets   map[recKey][]wire.Record
-	now      time.Time
-	dur      time.Duration // signature validity
+	rrsets     map[recKey][]wire.Record
+	now        time.Time
+	dur        time.Duration // signature validity
 }
 
 type recKey struct {
@@ -143,14 +145,14 @@ func newSignedZone(t *testing.T, apex wire.Name, alg rdata.DNSSECAlgorithm, now 
 	ksk := newKey(t, alg, true)
 	zsk := newKey(t, alg, false)
 	z := &signedZone{
-		apex:    apex,
-		ksk:     ksk,
-		zsk:     zsk,
-		dnskeys: []rdata.DNSKEY{ksk.dnskey, zsk.dnskey},
+		apex:       apex,
+		ksk:        ksk,
+		zsk:        zsk,
+		dnskeys:    []rdata.DNSKEY{ksk.dnskey, zsk.dnskey},
 		dsForChild: map[string][]rdata.DS{},
-		rrsets:  map[recKey][]wire.Record{},
-		now:     now,
-		dur:     time.Hour,
+		rrsets:     map[recKey][]wire.Record{},
+		now:        now,
+		dur:        time.Hour,
 	}
 	return z
 }
@@ -271,7 +273,7 @@ func (z *signedZone) typesAt(name wire.Name) []rrtype.Type {
 	for t := range seen {
 		out = append(out, t)
 	}
-	sort.Slice(out, func(i, j int) bool { return out[i] < out[j] })
+	slices.Sort(out)
 	return out
 }
 
@@ -339,11 +341,11 @@ func canonicalForm(n wire.Name) string {
 	for i, j := 0, len(labels)-1; i < j; i, j = i+1, j-1 {
 		labels[i], labels[j] = labels[j], labels[i]
 	}
-	out := ""
+	var out strings.Builder
 	for _, l := range labels {
-		out += l + "\x01" // label separator that sorts before any content byte
+		out.WriteString(l + "\x01") // label separator that sorts before any content byte
 	}
-	return out
+	return out.String()
 }
 
 // keyMat bundles a generated keypair with its DNSKEY rdata.

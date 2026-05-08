@@ -2,7 +2,7 @@ package rdata
 
 import (
 	"fmt"
-	"sort"
+	"slices"
 	"time"
 
 	"github.com/lestrrat-go/acidns/wire/rrtype"
@@ -314,7 +314,7 @@ func encodeTypeBitmap(p *wirebb.Packer, types []rrtype.Type) {
 		return
 	}
 	sorted := append([]rrtype.Type(nil), types...)
-	sort.Slice(sorted, func(i, j int) bool { return sorted[i] < sorted[j] })
+	slices.Sort(sorted)
 
 	// Bucket by window (high byte of type).
 	type bucket struct {
@@ -371,7 +371,7 @@ func decodeTypeBitmap(u *wirebb.Unpacker, n int) ([]rrtype.Type, error) {
 		}
 		for i := 0; i < int(ln); i++ {
 			b := bm[i]
-			for bit := 0; bit < 8; bit++ {
+			for bit := range 8 {
 				if b&(1<<(7-bit)) != 0 {
 					t := uint16(win)<<8 | uint16(i*8+bit)
 					out = append(out, rrtype.Type(t))

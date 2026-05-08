@@ -12,9 +12,9 @@ type KX struct {
 	exchange wirebb.Name
 }
 
-func (KX) Type() rrtype.Type       { return rrtype.KX }
-func (KX) typedRData()             {}
-func (k KX) Preference() uint16    { return k.pref }
+func (KX) Type() rrtype.Type        { return rrtype.KX }
+func (KX) typedRData()              {}
+func (k KX) Preference() uint16     { return k.pref }
 func (k KX) Exchanger() wirebb.Name { return k.exchange }
 func (k KX) Pack(p *wirebb.Packer) {
 	p.Uint16(k.pref)

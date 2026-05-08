@@ -95,7 +95,7 @@ func buildOversized(t *testing.T) wire.Message {
 		ID(1).
 		Question(wire.NewQuestion(wire.MustParseName("example.com"), rrtype.A))
 	// each record contributes ~270 bytes; 300 → ~80KB > 64KB.
-	for i := 0; i < 300; i++ {
+	for range 300 {
 		b = b.Additional(rec)
 	}
 	m, err := b.Build()

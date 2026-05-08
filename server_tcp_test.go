@@ -79,7 +79,7 @@ func TestTCPServerNoTruncation(t *testing.T) {
 			long[i] = 'X'
 		}
 		txt, _ := rdata.NewTXT(string(long))
-		for i := 0; i < 50; i++ {
+		for range 50 {
 			b = b.Answer(wire.NewRecord(q.Questions()[0].Name(), time.Minute, txt))
 		}
 		resp, _ := b.Build()

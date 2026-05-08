@@ -77,7 +77,7 @@ type chainStep struct {
 	res  Result
 }
 
-func (s chainStep) Zone() wire.Name        { return s.zone }
+func (s chainStep) Zone() wire.Name         { return s.zone }
 func (s chainStep) DNSKEYs() []rdata.DNSKEY { return s.keys }
 func (s chainStep) DSs() []rdata.DS         { return s.dss }
 func (s chainStep) Result() Result          { return s.res }
@@ -90,11 +90,11 @@ type answer struct {
 	reason  error
 }
 
-func (a *answer) Result() Result          { return a.result }
-func (a *answer) Records() []wire.Record  { return a.records }
-func (a *answer) RCODE() wire.RCODE       { return a.rcode }
-func (a *answer) Chain() []ChainStep      { return a.chain }
-func (a *answer) Reason() error           { return a.reason }
+func (a *answer) Result() Result         { return a.result }
+func (a *answer) Records() []wire.Record { return a.records }
+func (a *answer) RCODE() wire.RCODE      { return a.rcode }
+func (a *answer) Chain() []ChainStep     { return a.chain }
+func (a *answer) Reason() error          { return a.reason }
 
 // WalkerOption configures a Walker. Options live in walker_options.go.
 type WalkerOption interface {
@@ -395,11 +395,11 @@ func (w *walker) fetchAndVerifyDNSKEY(ctx context.Context, zone wire.Name, dss [
 type dsOutcome int
 
 const (
-	dsOutcomeUnknown dsOutcome = iota
-	dsOutcomeCut              // DS RRset present and signature-verified
-	dsOutcomeInsecure         // signed proof of NoData(DS) where NSEC bitmap has NS
-	dsOutcomeNonCut           // signed proof of NoData(DS) where NS bit absent
-	dsOutcomeNXDomain         // signed proof that candidate doesn't exist
+	dsOutcomeUnknown  dsOutcome = iota
+	dsOutcomeCut                // DS RRset present and signature-verified
+	dsOutcomeInsecure           // signed proof of NoData(DS) where NSEC bitmap has NS
+	dsOutcomeNonCut             // signed proof of NoData(DS) where NS bit absent
+	dsOutcomeNXDomain           // signed proof that candidate doesn't exist
 )
 
 // classifyDSResponse interprets a DS-query response. parentKeys are the
@@ -721,4 +721,3 @@ func (w *walker) bogus(qname wire.Name, qtype rrtype.Type, chain []ChainStep, er
 	}
 	return a, err
 }
-

@@ -116,10 +116,10 @@ type captureWriter struct {
 	got wire.Message
 }
 
-func (c *captureWriter) WriteMsg(m wire.Message) error  { c.got = m; return nil }
-func (c *captureWriter) RemoteAddr() netip.AddrPort     { return netip.AddrPort{} }
-func (c *captureWriter) LocalAddr() netip.AddrPort      { return netip.AddrPort{} }
-func (c *captureWriter) Network() string                { return "udp" }
+func (c *captureWriter) WriteMsg(m wire.Message) error { c.got = m; return nil }
+func (c *captureWriter) RemoteAddr() netip.AddrPort    { return netip.AddrPort{} }
+func (c *captureWriter) LocalAddr() netip.AddrPort     { return netip.AddrPort{} }
+func (c *captureWriter) Network() string               { return "udp" }
 
 func TestPositiveCacheHit(t *testing.T) {
 	t.Parallel()
@@ -132,7 +132,7 @@ func TestPositiveCacheHit(t *testing.T) {
 	require.NoError(t, err)
 
 	q := clientQuery(t, "example.com", rrtype.A)
-	for i := 0; i < 5; i++ {
+	for range 5 {
 		w := &captureWriter{}
 		h.ServeDNS(t.Context(), w, q)
 		require.NotNil(t, w.got)
@@ -200,7 +200,7 @@ func TestNXDomainCachedFromSOAMinimum(t *testing.T) {
 	require.NoError(t, err)
 
 	q := clientQuery(t, "nope.example", rrtype.A)
-	for i := 0; i < 3; i++ {
+	for range 3 {
 		w := &captureWriter{}
 		h.ServeDNS(t.Context(), w, q)
 		require.Equal(t, wire.RCODENXDomain, w.got.Flags().RCODE())
@@ -219,7 +219,7 @@ func TestNoDataCached(t *testing.T) {
 	require.NoError(t, err)
 
 	q := clientQuery(t, "ipv6less.example", rrtype.AAAA)
-	for i := 0; i < 3; i++ {
+	for range 3 {
 		w := &captureWriter{}
 		h.ServeDNS(t.Context(), w, q)
 		require.Equal(t, wire.RCODENoError, w.got.Flags().RCODE())
@@ -272,7 +272,7 @@ func TestServFailNotCached(t *testing.T) {
 	require.NoError(t, err)
 
 	q := clientQuery(t, "fail.example", rrtype.A)
-	for i := 0; i < 3; i++ {
+	for range 3 {
 		w := &captureWriter{}
 		h.ServeDNS(t.Context(), w, q)
 	}
@@ -328,7 +328,7 @@ func TestCacheCapacityZeroDisables(t *testing.T) {
 	require.NoError(t, err)
 
 	q := clientQuery(t, "example.com", rrtype.A)
-	for i := 0; i < 3; i++ {
+	for range 3 {
 		w := &captureWriter{}
 		h.ServeDNS(t.Context(), w, q)
 	}
@@ -516,7 +516,7 @@ func TestNXDomainNoSOAFallsBackToMaxNeg(t *testing.T) {
 	require.NoError(t, err)
 
 	q := clientQuery(t, "nope.example", rrtype.A)
-	for i := 0; i < 3; i++ {
+	for range 3 {
 		w := &captureWriter{}
 		h.ServeDNS(t.Context(), w, q)
 		require.Equal(t, wire.RCODENXDomain, w.got.Flags().RCODE())
@@ -545,7 +545,7 @@ func TestNoDataNoSOANotCached(t *testing.T) {
 	require.NoError(t, err)
 
 	q := clientQuery(t, "empty.example", rrtype.A)
-	for i := 0; i < 3; i++ {
+	for range 3 {
 		w := &captureWriter{}
 		h.ServeDNS(t.Context(), w, q)
 		require.Equal(t, wire.RCODENoError, w.got.Flags().RCODE())
@@ -568,7 +568,7 @@ func TestPositiveZeroTTLNotCached(t *testing.T) {
 	require.NoError(t, err)
 
 	q := clientQuery(t, "zero.example", rrtype.A)
-	for i := 0; i < 3; i++ {
+	for range 3 {
 		w := &captureWriter{}
 		h.ServeDNS(t.Context(), w, q)
 		require.Equal(t, wire.RCODENoError, w.got.Flags().RCODE())
@@ -595,7 +595,7 @@ func TestMinTTLFloor(t *testing.T) {
 	require.NoError(t, err)
 
 	q := clientQuery(t, "example.com", rrtype.A)
-	for i := 0; i < 3; i++ {
+	for range 3 {
 		w := &captureWriter{}
 		h.ServeDNS(t.Context(), w, q)
 	}

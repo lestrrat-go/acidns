@@ -53,7 +53,7 @@ func BuildDelegationCNAMEs(prefix netip.Prefix, subzoneOwner wire.Name, ttl time
 	}
 
 	out := make([]wire.Record, 0, count)
-	for i := 0; i < count; i++ {
+	for i := range count {
 		oct := strconv.Itoa(startOctet + i)
 		ownerStr := oct + "." + parentRev.String()
 		owner, err := wire.ParseName(ownerStr)

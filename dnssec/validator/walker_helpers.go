@@ -1,6 +1,8 @@
 package validator
 
 import (
+	"slices"
+
 	"github.com/lestrrat-go/acidns/wire"
 	"github.com/lestrrat-go/acidns/wire/rdata"
 	"github.com/lestrrat-go/acidns/wire/rrtype"
@@ -37,12 +39,7 @@ func rrsigsForTypeAndOwner(sigs []rdata.RRSIG, t rrtype.Type, owner wire.Name) [
 
 // bitmapHas reports whether t appears in an NSEC/NSEC3 type bitmap slice.
 func bitmapHas(types []rrtype.Type, t rrtype.Type) bool {
-	for _, x := range types {
-		if x == t {
-			return true
-		}
-	}
-	return false
+	return slices.Contains(types, t)
 }
 
 // allNSEC returns every NSEC record in records, regardless of owner.

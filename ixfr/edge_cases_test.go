@@ -242,12 +242,12 @@ func TestNextIncrementalUnexpectedAfterClosing(t *testing.T) {
 	added := aRR("b.example.com", "192.0.2.2")
 	resp, err := wire.NewBuilder().
 		ID(1).Response(true).
-		Answer(soaRR(101)).        // newSOA
-		Answer(soaRR(100)).        // sub-diff start
+		Answer(soaRR(101)). // newSOA
+		Answer(soaRR(100)). // sub-diff start
 		Answer(removed).
-		Answer(soaRR(101)).        // mid-diff
+		Answer(soaRR(101)). // mid-diff
 		Answer(added).
-		Answer(soaRR(101)).        // closing
+		Answer(soaRR(101)).                                // closing
 		Answer(aRR("trailing.example.com", "192.0.2.99")). // trailing!
 		Build()
 	require.NoError(t, err)
@@ -314,8 +314,8 @@ func TestNextIncrementalReadRemovedError(t *testing.T) {
 	zone := wire.MustParseName("example.com")
 	first, err := wire.NewBuilder().
 		ID(1).Response(true).
-		Answer(soaRR(101)).        // newSOA
-		Answer(soaRR(100)).        // sub-diff start (gets pushed back)
+		Answer(soaRR(101)). // newSOA
+		Answer(soaRR(100)). // sub-diff start (gets pushed back)
 		Build()
 	require.NoError(t, err)
 	sentinel := errors.New("torn mid-removed")

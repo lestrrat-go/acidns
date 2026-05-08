@@ -60,7 +60,7 @@ func TestRateLimitBurstThenRefuse(t *testing.T) {
 		acidns.WithRateLimitBurst(3),
 	)
 
-	for i := 0; i < 3; i++ {
+	for i := range 3 {
 		w := &rlFakeWriter{src: netip.MustParseAddrPort("198.51.100.5:1000")}
 		h.ServeDNS(context.Background(), w, rateLimitMkQuery(t))
 		require.Equal(t, wire.RCODENoError, w.captured.Flags().RCODE(),

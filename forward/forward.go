@@ -186,10 +186,7 @@ func buildFromCache(in wire.Message, e entry, now time.Time) wire.Message {
 
 // adjustTTL returns r with its TTL reduced by elapsed, floored at 0.
 func adjustTTL(r wire.Record, elapsed time.Duration) wire.Record {
-	remaining := r.TTL() - elapsed
-	if remaining < 0 {
-		remaining = 0
-	}
+	remaining := max(r.TTL()-elapsed, 0)
 	return wire.NewRecordClass(r.Name(), r.Class(), remaining, r.RData())
 }
 
@@ -271,10 +268,7 @@ func negativeTTLFromSOA(authority []wire.Record, maxNeg time.Duration) (time.Dur
 		if !ok {
 			continue
 		}
-		ttl := soa.Minimum()
-		if r.TTL() < ttl {
-			ttl = r.TTL()
-		}
+		ttl := min(r.TTL(), soa.Minimum())
 		if ttl > maxNeg {
 			ttl = maxNeg
 		}

@@ -146,7 +146,7 @@ func TestKeepAliveReusesConnection(t *testing.T) {
 	ex, err := acidns.NewTCPKeepAliveExchanger(addr)
 	require.NoError(t, err)
 
-	for i := 0; i < 3; i++ {
+	for range 3 {
 		_, err := ex.Exchange(t.Context(), newQuery(t, "example.com"))
 		require.NoError(t, err)
 	}
@@ -165,7 +165,7 @@ func TestKeepAliveServerSignalsClose(t *testing.T) {
 	ex, err := acidns.NewTCPKeepAliveExchanger(addr)
 	require.NoError(t, err)
 
-	for i := 0; i < 3; i++ {
+	for range 3 {
 		_, err := ex.Exchange(t.Context(), newQuery(t, "example.com"))
 		require.NoError(t, err)
 	}

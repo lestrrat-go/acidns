@@ -1,6 +1,8 @@
 package validator
 
 import (
+	"slices"
+
 	"github.com/lestrrat-go/acidns/wire/rdata"
 	"github.com/lestrrat-go/acidns/wire/rrtype"
 )
@@ -14,10 +16,5 @@ import (
 // This helper does not itself perform validation; it classifies a NSEC
 // payload that ValidateRRset has already deemed Secure.
 func IsCompactNXDOMAIN(nsec rdata.NSEC) bool {
-	for _, t := range nsec.Types() {
-		if t == rrtype.NXNAME {
-			return true
-		}
-	}
-	return false
+	return slices.Contains(nsec.Types(), rrtype.NXNAME)
 }

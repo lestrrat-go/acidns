@@ -36,10 +36,10 @@ type opts struct {
 	zoneFiles []string
 	roots     []string
 
-	upstream     string
-	upstreamTLS  string
-	tlsName      string
-	cacheSize    int
+	upstream    string
+	upstreamTLS string
+	tlsName     string
+	cacheSize   int
 }
 
 func run(argv []string) error {
@@ -110,7 +110,7 @@ func run(argv []string) error {
 
 	<-ctx.Done()
 	cancel()
-	for i := 0; i < 2; i++ {
+	for range 2 {
 		<-errCh
 	}
 	return nil
@@ -222,6 +222,7 @@ func (h hybrid) ServeDNS(ctx context.Context, w acidns.ResponseWriter, q wire.Me
 
 type peekingWriter struct {
 	acidns.ResponseWriter
+
 	captured wire.Message
 }
 

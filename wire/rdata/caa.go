@@ -33,7 +33,7 @@ func NewCAA(flags uint8, tag string, value []byte) (CAA, error) {
 	if len(tag) == 0 || len(tag) > 15 {
 		return zero, fmt.Errorf("%w: CAA tag must be 1-15 bytes", ErrInvalidRData)
 	}
-	for i := 0; i < len(tag); i++ {
+	for i := range len(tag) {
 		c := tag[i]
 		ok := (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9')
 		if !ok {

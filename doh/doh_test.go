@@ -30,21 +30,21 @@ func makeServer(t *testing.T, expectedMethod string) *httptest.Server {
 		case http.MethodPost:
 			b, err := io.ReadAll(r.Body)
 			if err != nil {
-				http.Error(w, err.Error(), 500)
+				http.Error(w, err.Error(), http.StatusInternalServerError)
 				return
 			}
 			msg = b
 		case http.MethodGet:
 			dec, err := base64.RawURLEncoding.DecodeString(r.URL.Query().Get("dns"))
 			if err != nil {
-				http.Error(w, err.Error(), 400)
+				http.Error(w, err.Error(), http.StatusBadRequest)
 				return
 			}
 			msg = dec
 		}
 		req, err := wire.Unmarshal(msg)
 		if err != nil {
-			http.Error(w, err.Error(), 400)
+			http.Error(w, err.Error(), http.StatusBadRequest)
 			return
 		}
 		resp, _ := wire.NewBuilder().

@@ -71,7 +71,7 @@ func TestBuildDelegationCNAMEsTargetTooLong(t *testing.T) {
 	// derive the target name pushes parsing past the limit, so the
 	// target ParseName error path must trigger.
 	labels := make([]string, 0, 127)
-	for i := 0; i < 127; i++ {
+	for range 127 {
 		labels = append(labels, "a")
 	}
 	long, err := wire.NameFromLabels(labels...)

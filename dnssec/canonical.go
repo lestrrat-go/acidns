@@ -71,7 +71,7 @@ func canonicalOwner(owner wire.Name, rrsig rdata.RRSIG) []byte {
 
 func stripLeadingLabels(n wire.Name, count int) wire.Name {
 	cur := n
-	for i := 0; i < count; i++ {
+	for range count {
 		parent, ok := cur.Parent()
 		if !ok {
 			return cur

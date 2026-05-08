@@ -2,6 +2,7 @@ package validator_test
 
 import (
 	"context"
+	"slices"
 	"time"
 
 	"github.com/lestrrat-go/acidns/dnssec/validator"
@@ -18,7 +19,6 @@ type nsec3Mode struct {
 	salt       []byte
 	optOut     bool
 }
-
 
 // nsec3Source serves the same data as fixtureSource but renders denial
 // answers using NSEC3 closest-encloser proofs.
@@ -279,11 +279,5 @@ func bumpHashDown(h []byte) []byte {
 }
 
 func contains(t []rrtype.Type, want rrtype.Type) bool {
-	for _, x := range t {
-		if x == want {
-			return true
-		}
-	}
-	return false
+	return slices.Contains(t, want)
 }
-

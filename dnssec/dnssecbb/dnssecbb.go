@@ -35,11 +35,11 @@ var ErrUnsupportedAlgorithm = errors.New("dnssecbb: unsupported algorithm")
 // Algorithm IDs from the IANA DNS Security Algorithm Numbers registry
 // (see RFC 8624 §3.1 for current implementation requirements).
 const (
-	AlgRSASHA256      uint8 = 8
-	AlgRSASHA512      uint8 = 10
+	AlgRSASHA256       uint8 = 8
+	AlgRSASHA512       uint8 = 10
 	AlgECDSAP256SHA256 uint8 = 13
 	AlgECDSAP384SHA384 uint8 = 14
-	AlgED25519        uint8 = 15
+	AlgED25519         uint8 = 15
 )
 
 // Digest type IDs from the IANA DS RR Digest Algorithm registry.

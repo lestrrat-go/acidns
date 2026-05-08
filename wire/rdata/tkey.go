@@ -13,12 +13,12 @@ import (
 type TKEYMode uint16
 
 const (
-	TKEYModeReserved      TKEYMode = 0
-	TKEYModeServerAssign  TKEYMode = 1
-	TKEYModeDH            TKEYMode = 2
-	TKEYModeGSSAPI        TKEYMode = 3 // RFC 3645
+	TKEYModeReserved       TKEYMode = 0
+	TKEYModeServerAssign   TKEYMode = 1
+	TKEYModeDH             TKEYMode = 2
+	TKEYModeGSSAPI         TKEYMode = 3 // RFC 3645
 	TKEYModeResolverAssign TKEYMode = 4
-	TKEYModeKeyDeletion   TKEYMode = 5
+	TKEYModeKeyDeletion    TKEYMode = 5
 )
 
 // TKEY is the transaction-key rdata (RFC 2930). The wire format places
@@ -35,15 +35,15 @@ type TKEY struct {
 	otherData []byte
 }
 
-func (TKEY) Type() rrtype.Type             { return rrtype.TKEY }
-func (TKEY) typedRData()                   {}
-func (t TKEY) Algorithm() wirebb.Name      { return t.algorithm }
-func (t TKEY) Inception() time.Time        { return time.Unix(int64(t.inception), 0).UTC() }
-func (t TKEY) Expiration() time.Time       { return time.Unix(int64(t.expire), 0).UTC() }
-func (t TKEY) Mode() TKEYMode              { return t.mode }
-func (t TKEY) Error() uint16               { return t.errCode }
-func (t TKEY) KeyData() []byte             { return t.keyData }
-func (t TKEY) OtherData() []byte           { return t.otherData }
+func (TKEY) Type() rrtype.Type        { return rrtype.TKEY }
+func (TKEY) typedRData()              {}
+func (t TKEY) Algorithm() wirebb.Name { return t.algorithm }
+func (t TKEY) Inception() time.Time   { return time.Unix(int64(t.inception), 0).UTC() }
+func (t TKEY) Expiration() time.Time  { return time.Unix(int64(t.expire), 0).UTC() }
+func (t TKEY) Mode() TKEYMode         { return t.mode }
+func (t TKEY) Error() uint16          { return t.errCode }
+func (t TKEY) KeyData() []byte        { return t.keyData }
+func (t TKEY) OtherData() []byte      { return t.otherData }
 func (t TKEY) Pack(p *wirebb.Packer) {
 	p.NameUncompressed(t.algorithm)
 	p.Uint32(t.inception)

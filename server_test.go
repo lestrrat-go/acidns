@@ -94,7 +94,7 @@ func TestUDPServerTruncation(t *testing.T) {
 			long[i] = 'A'
 		}
 		txt, _ := rdata.NewTXT(string(long))
-		for i := 0; i < 50; i++ {
+		for range 50 {
 			b = b.Answer(wire.NewRecord(q.Questions()[0].Name(), time.Minute, txt))
 		}
 		resp, _ := b.Build()
@@ -128,7 +128,7 @@ func TestUDPServerEDNSPayloadSize(t *testing.T) {
 			Question(q.Questions()[0])
 		// 10 short TXT records — fits in 4096 but not 512
 		short, _ := rdata.NewTXT("hello")
-		for i := 0; i < 10; i++ {
+		for range 10 {
 			b = b.Answer(wire.NewRecord(q.Questions()[0].Name(), time.Minute, short))
 		}
 		// pad with more TXT to push past 512 bytes
@@ -137,7 +137,7 @@ func TestUDPServerEDNSPayloadSize(t *testing.T) {
 			long[i] = 'B'
 		}
 		txt, _ := rdata.NewTXT(string(long))
-		for i := 0; i < 5; i++ {
+		for range 5 {
 			b = b.Answer(wire.NewRecord(q.Questions()[0].Name(), time.Minute, txt))
 		}
 		resp, _ := b.Build()

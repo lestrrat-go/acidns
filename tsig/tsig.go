@@ -329,7 +329,7 @@ func findLastRROffset(msg []byte) (int, error) {
 	off := 12
 
 	// Skip questions.
-	for i := 0; i < qdcount; i++ {
+	for range qdcount {
 		_, next, err := wire.DecodeName(msg, off)
 		if err != nil {
 			return 0, err
@@ -341,7 +341,7 @@ func findLastRROffset(msg []byte) (int, error) {
 	}
 
 	last := off
-	for i := 0; i < totalRR; i++ {
+	for range totalRR {
 		last = off
 		_, next, err := wire.DecodeName(msg, off)
 		if err != nil {

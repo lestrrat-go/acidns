@@ -538,7 +538,7 @@ func TestUnmarshalAdditionalNameOnly(t *testing.T) {
 		0, 0,
 		0, 0,
 		0, 1, // arcount=1
-		0,    // root name only
+		0, // root name only
 	}
 	_, err := wire.Unmarshal(buf)
 	require.ErrorIs(t, err, wire.ErrInvalidMessage)
@@ -595,7 +595,7 @@ func TestUnmarshalOPTTruncatedRDLen(t *testing.T) {
 		0, 0,
 		0, 0,
 		0, 1, // arcount=1
-		0,    // root name
+		0,     // root name
 		0, 41, // type=OPT
 		0x04, 0xd0, // udp size 1232
 		0, 0, 0, 0, // ttl
@@ -619,7 +619,7 @@ func TestUnmarshalOPTMalformedOption(t *testing.T) {
 		0, 0,
 		0, 0,
 		0, 1, // arcount=1
-		0,    // root name
+		0,     // root name
 		0, 41, // type=OPT
 		0x04, 0xd0, // udp size 1232
 		0, 0, 0, 0, // ttl

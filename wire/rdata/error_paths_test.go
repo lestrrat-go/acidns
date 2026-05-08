@@ -12,8 +12,8 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func zeroTime() time.Time { return time.Unix(0, 0) }
-func zeroAddr() netip.Addr { return netip.Addr{} }
+func zeroTime() time.Time           { return time.Unix(0, 0) }
+func zeroAddr() netip.Addr          { return netip.Addr{} }
 func parseAddr(s string) netip.Addr { return netip.MustParseAddr(s) }
 
 // unpackErr feeds buf to rdata.Unpack with the supplied rdlen and asserts
@@ -553,8 +553,8 @@ func TestUnpackPartialReads(t *testing.T) {
 		{"RRSIG/12", rrtype.RRSIG, 12}, // sigExp OK, sigInc fails
 		{"RRSIG/16", rrtype.RRSIG, 16}, // sigInc OK, keyTag fails
 		// SOA: 2 names then 5 uint32. Use rdlens after the names succeed.
-		{"SOA/2", rrtype.SOA, 2},  // both names = root,root (2 bytes), then serial fails
-		{"SOA/6", rrtype.SOA, 6},  // serial OK, refresh fails
+		{"SOA/2", rrtype.SOA, 2},   // both names = root,root (2 bytes), then serial fails
+		{"SOA/6", rrtype.SOA, 6},   // serial OK, refresh fails
 		{"SOA/10", rrtype.SOA, 10}, // refresh OK, retry fails
 		{"SOA/14", rrtype.SOA, 14},
 		{"SOA/18", rrtype.SOA, 18},
@@ -576,10 +576,10 @@ func TestUnpackPartialReads(t *testing.T) {
 		{"DNSKEY/2", rrtype.DNSKEY, 2}, // proto fails
 		{"DNSKEY/3", rrtype.DNSKEY, 3}, // alg fails
 		// DS / CDS: keyTag(2) + alg(1) + dt(1) + digest.
-		{"DS/2", rrtype.DS, 2},   // alg fails
-		{"DS/3", rrtype.DS, 3},   // dt fails
-		{"CDS/2", rrtype.CDS, 2}, // alg fails
-		{"CDS/3", rrtype.CDS, 3}, // dt fails
+		{"DS/2", rrtype.DS, 2},           // alg fails
+		{"DS/3", rrtype.DS, 3},           // dt fails
+		{"CDS/2", rrtype.CDS, 2},         // alg fails
+		{"CDS/3", rrtype.CDS, 3},         // dt fails
 		{"CDNSKEY/2", rrtype.CDNSKEY, 2}, // proto fails
 		{"CDNSKEY/3", rrtype.CDNSKEY, 3}, // alg fails
 		// CERT: certType(2) + keyTag(2) + alg(1). rdlen guard requires >=5.

@@ -333,7 +333,7 @@ func (z *zoneIndex) lookup(qname wire.Name, qtype rrtype.Type) lookupResult {
 
 func (z *zoneIndex) lookupAuthoritative(qname wire.Name, qtype rrtype.Type) (answer, authority []wire.Record, rcode wire.RCODE) {
 	current := qname
-	for chain := 0; chain < maxCNAMEChain; chain++ {
+	for chain := range maxCNAMEChain {
 		recs, hasRecs := z.byName[nameKey(current)]
 		if hasRecs {
 			ans, follow, done := z.matchRRSet(recs, qtype)

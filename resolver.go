@@ -333,7 +333,7 @@ func matchAnswers(answers []wire.Record, qname wire.Name, qtype rrtype.Type) []w
 	const maxHops = 8
 	target := qname
 	if qtype != rrtype.CNAME {
-		for hop := 0; hop < maxHops; hop++ {
+		for range maxHops {
 			var next wire.Name
 			found := false
 			for _, rec := range answers {

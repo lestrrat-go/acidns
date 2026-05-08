@@ -77,12 +77,12 @@ func TestWalkerValidateNegativeNXDOMAINBogus(t *testing.T) {
 // covering NSEC signed by the zone's keys. This drives validateNegative
 // through the secure NXDOMAIN branch.
 type nxdomainForger struct {
-	inner   validator.Source
-	zone    *signedZone
-	target  wire.Name
-	qtype   rrtype.Type
-	owner   wire.Name
-	next    wire.Name
+	inner  validator.Source
+	zone   *signedZone
+	target wire.Name
+	qtype  rrtype.Type
+	owner  wire.Name
+	next   wire.Name
 }
 
 func (s *nxdomainForger) Lookup(ctx context.Context, qname wire.Name, qtype rrtype.Type) (wire.Message, error) {

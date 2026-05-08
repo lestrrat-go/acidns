@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"net/netip"
+	"slices"
 	"sync"
 	"time"
 
@@ -76,12 +77,12 @@ type announcerOptionFunc func(*announcerConfig)
 func (f announcerOptionFunc) applyAnnouncer(c *announcerConfig) { f(c) }
 
 type announcerConfig struct {
-	transport      Transport
-	probeWait      time.Duration // RFC 6762 §8.1: 250ms between probes
-	probeCount     int           // RFC 6762 §8.1: 3 probes
-	announceWait   time.Duration // RFC 6762 §8.3: 1s between announcements
-	announceCount  int           // RFC 6762 §8.3: 2 announcements
-	now            func() time.Time
+	transport     Transport
+	probeWait     time.Duration // RFC 6762 §8.1: 250ms between probes
+	probeCount    int           // RFC 6762 §8.1: 3 probes
+	announceWait  time.Duration // RFC 6762 §8.3: 1s between announcements
+	announceCount int           // RFC 6762 §8.3: 2 announcements
+	now           func() time.Time
 }
 
 // WithAnnouncerTransport sets the transport. Required.
@@ -151,7 +152,7 @@ func (a *announcer) Announce(ctx context.Context, p Publication) error {
 	if err != nil {
 		return fmt.Errorf("mdns: build probe: %w", err)
 	}
-	for i := 0; i < a.cfg.probeCount; i++ {
+	for range a.cfg.probeCount {
 		if err := a.cfg.transport.Send(probe); err != nil {
 			return fmt.Errorf("mdns: send probe: %w", err)
 		}
@@ -172,7 +173,7 @@ func (a *announcer) Announce(ctx context.Context, p Publication) error {
 	if err != nil {
 		return fmt.Errorf("mdns: build announcement: %w", err)
 	}
-	for i := 0; i < a.cfg.announceCount; i++ {
+	for i := range a.cfg.announceCount {
 		if err := a.cfg.transport.Send(ann); err != nil {
 			return fmt.Errorf("mdns: send announcement: %w", err)
 		}
@@ -274,12 +275,7 @@ func conflictsWith(records []wire.Record, p Publication) bool {
 }
 
 func addrsContain(haystack []netip.Addr, needle netip.Addr) bool {
-	for _, a := range haystack {
-		if a == needle {
-			return true
-		}
-	}
-	return false
+	return slices.Contains(haystack, needle)
 }
 
 // buildProbe builds the QU=1 probe message (RFC 6762 §8.1). It places our

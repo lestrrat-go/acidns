@@ -34,11 +34,11 @@ type fakeRecord struct {
 	rd    rdata.RData
 }
 
-func (r fakeRecord) Name() wire.Name        { return r.name }
-func (r fakeRecord) Type() rrtype.Type      { return r.typ }
-func (r fakeRecord) Class() rrtype.Class    { return r.class }
-func (r fakeRecord) TTL() time.Duration     { return r.ttl }
-func (r fakeRecord) RData() rdata.RData     { return r.rd }
+func (r fakeRecord) Name() wire.Name     { return r.name }
+func (r fakeRecord) Type() rrtype.Type   { return r.typ }
+func (r fakeRecord) Class() rrtype.Class { return r.class }
+func (r fakeRecord) TTL() time.Duration  { return r.ttl }
+func (r fakeRecord) RData() rdata.RData  { return r.rd }
 
 func TestDiscover_ResolverError(t *testing.T) {
 	t.Parallel()

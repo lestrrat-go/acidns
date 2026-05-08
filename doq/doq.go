@@ -14,6 +14,7 @@ import (
 	"fmt"
 	"io"
 	"net/netip"
+	"slices"
 	"sync"
 	"time"
 
@@ -91,12 +92,7 @@ func New(addr netip.AddrPort, opts ...Option) (acidns.Exchanger, error) {
 }
 
 func containsALPN(list []string, want string) bool {
-	for _, p := range list {
-		if p == want {
-			return true
-		}
-	}
-	return false
+	return slices.Contains(list, want)
 }
 
 func (e *exchanger) Exchange(ctx context.Context, q wire.Message) (wire.Message, error) {

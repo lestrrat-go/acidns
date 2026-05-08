@@ -348,7 +348,7 @@ func TestStreamMultipleResponses(t *testing.T) {
 	t.Parallel()
 	var sent atomic.Int32
 	addr, cfg := startCustomDoQ(t, func(t *testing.T, req wire.Message, stream *quic.Stream) {
-		for i := 0; i < 3; i++ {
+		for range 3 {
 			resp := buildAnswer(t, req.ID(), req.Questions()[0])
 			out, err := wire.Marshal(resp)
 			require.NoError(t, err)
@@ -369,7 +369,7 @@ func TestStreamMultipleResponses(t *testing.T) {
 	require.NoError(t, err)
 	defer func() { _ = stream.Close() }()
 
-	for i := 0; i < 3; i++ {
+	for range 3 {
 		resp, err := stream.Next(ctx)
 		require.NoError(t, err)
 		require.Equal(t, q.ID(), resp.ID())
@@ -542,7 +542,7 @@ func TestExchangeStreamRefusedAtOpen(t *testing.T) {
 	defer cancel()
 
 	var lastErr error
-	for i := 0; i < 5; i++ {
+	for range 5 {
 		_, lastErr = ex.Exchange(ctx, q)
 		if lastErr != nil {
 			break
@@ -568,7 +568,7 @@ func TestExchangeStreamRefusedAfterOpen(t *testing.T) {
 	defer cancel()
 
 	var lastErr error
-	for i := 0; i < 5; i++ {
+	for range 5 {
 		_, lastErr = ex.Exchange(ctx, q)
 		if lastErr != nil {
 			break
@@ -595,7 +595,7 @@ func TestStreamRefusedAtOpen(t *testing.T) {
 	defer cancel()
 
 	var lastErr error
-	for i := 0; i < 5; i++ {
+	for range 5 {
 		s, err := se.Stream(ctx, q)
 		if err != nil {
 			lastErr = err
@@ -628,7 +628,7 @@ func TestStreamRefusedAfterOpen(t *testing.T) {
 	defer cancel()
 
 	var lastErr error
-	for i := 0; i < 5; i++ {
+	for range 5 {
 		s, err := se.Stream(ctx, q)
 		if err != nil {
 			lastErr = err
@@ -856,12 +856,12 @@ func TestExchangeBrokenAfterDial(t *testing.T) {
 	require.True(t, ok)
 
 	q := buildQuery(t, 21)
-	for i := 0; i < 25; i++ {
+	for range 25 {
 		ctx, cancel := context.WithTimeout(t.Context(), 2*time.Second)
 		_, _ = ex.Exchange(ctx, q)
 		cancel()
 	}
-	for i := 0; i < 25; i++ {
+	for range 25 {
 		ctx, cancel := context.WithTimeout(t.Context(), 2*time.Second)
 		s, err := se.Stream(ctx, q)
 		if err == nil {

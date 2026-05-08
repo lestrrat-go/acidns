@@ -31,9 +31,9 @@ type memoryStats struct {
 }
 
 type statEntry struct {
-	rtt       time.Duration // smoothed
-	streak    int
-	lastUsed  time.Time
+	rtt      time.Duration // smoothed
+	streak   int
+	lastUsed time.Time
 }
 
 // NewMemoryStats returns an empty in-memory ServerStats.

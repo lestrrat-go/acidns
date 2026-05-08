@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"net/netip"
 	"os"
+	"strings"
 	"time"
 
 	"github.com/lestrrat-go/acidns"
@@ -129,11 +130,12 @@ type svcbLike interface {
 }
 
 func formatSVCB[T svcbLike](s T) string {
-	out := fmt.Sprintf("%d %s", s.Priority(), s.Target())
+	var out strings.Builder
+	out.WriteString(fmt.Sprintf("%d %s", s.Priority(), s.Target()))
 	for _, p := range s.Params() {
-		out += fmt.Sprintf(" key%d=%x", p.Key(), p.Value())
+		out.WriteString(fmt.Sprintf(" key%d=%x", p.Key(), p.Value()))
 	}
-	return out
+	return out.String()
 }
 
 func truncate(b []byte, n int) []byte {

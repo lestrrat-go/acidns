@@ -5,11 +5,8 @@ package validatorbb
 // It is used by the NSEC3 hash-interval check and matches RFC 5155's
 // canonical hash ordering.
 func BytesLess(a, b []byte) bool {
-	n := len(a)
-	if len(b) < n {
-		n = len(b)
-	}
-	for i := 0; i < n; i++ {
+	n := min(len(b), len(a))
+	for i := range n {
 		if a[i] != b[i] {
 			return a[i] < b[i]
 		}

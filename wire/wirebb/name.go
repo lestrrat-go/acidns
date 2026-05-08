@@ -238,7 +238,7 @@ func FromLabels(labels ...string) (Name, error) {
 			return Name{}, fmt.Errorf("%w: label exceeds %d bytes", ErrInvalidName, maxLabelLen)
 		}
 		wire = append(wire, byte(len(l)))
-		for i := 0; i < len(l); i++ {
+		for i := range len(l) {
 			wire = append(wire, foldByte(l[i]))
 		}
 	}

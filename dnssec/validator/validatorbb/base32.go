@@ -43,7 +43,7 @@ func Base32HexDecode(s string) ([]byte, error) {
 	out := make([]byte, 0, (len(s)*5+7)/8)
 	var buf uint64
 	bits := 0
-	for i := 0; i < len(s); i++ {
+	for i := range len(s) {
 		c := s[i]
 		var v int
 		switch {

@@ -33,11 +33,8 @@ func NameSuffixEqualOrSubdomain(sub, parent wire.Name) bool {
 func CanonicalNameCmp(a, b wire.Name) int {
 	aLabels := collectLabels(a)
 	bLabels := collectLabels(b)
-	n := len(aLabels)
-	if len(bLabels) < n {
-		n = len(bLabels)
-	}
-	for i := 0; i < n; i++ {
+	n := min(len(bLabels), len(aLabels))
+	for i := range n {
 		if c := bytes.Compare(aLabels[i], bLabels[i]); c != 0 {
 			return c
 		}

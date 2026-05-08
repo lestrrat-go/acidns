@@ -78,8 +78,8 @@ func relativise(n, origin wire.Name) string {
 	}
 	full := n.String()
 	o := origin.String()
-	if strings.HasSuffix(full, "."+o) {
-		return strings.TrimSuffix(full, "."+o)
+	if before, ok := strings.CutSuffix(full, "."+o); ok {
+		return before
 	}
 	return full
 }
@@ -129,7 +129,7 @@ func quoteCharString(s string) string {
 	var b strings.Builder
 	b.Grow(len(s) + 2)
 	b.WriteByte('"')
-	for i := 0; i < len(s); i++ {
+	for i := range len(s) {
 		c := s[i]
 		switch c {
 		case '"', '\\':

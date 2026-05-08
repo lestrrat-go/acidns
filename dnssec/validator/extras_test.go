@@ -221,8 +221,8 @@ func TestWalkerClockSkewAcceptsBoundarySigs(t *testing.T) {
 	w, err := validator.NewWalker(src,
 		validator.WithAnchors(anchor),
 		validator.WithNow(func() time.Time { return now.Add(time.Hour + time.Minute) }),
-		validator.WithClockSkew(0),                  // ignored zero (still within default)
-		validator.WithClockSkew(-time.Second),       // negative ignored
+		validator.WithClockSkew(0),            // ignored zero (still within default)
+		validator.WithClockSkew(-time.Second), // negative ignored
 		validator.WithClockSkew(2*time.Hour),
 	)
 	require.NoError(t, err)
@@ -376,9 +376,9 @@ func (s *authorityStripper) Lookup(ctx context.Context, qname wire.Name, qtype r
 // answerOnlyExchanger drops the RRSIG-bearing answers for qname/qtype to
 // produce an "unsigned answer in a signed zone" response.
 type sigStripper struct {
-	inner   validator.Source
-	target  wire.Name
-	qtype   rrtype.Type
+	inner  validator.Source
+	target wire.Name
+	qtype  rrtype.Type
 }
 
 func (s *sigStripper) Lookup(ctx context.Context, qname wire.Name, qtype rrtype.Type) (wire.Message, error) {
@@ -520,7 +520,7 @@ func TestExchangerSourceCounterWraps(t *testing.T) {
 	// install an idFn that exercises both branches in nextID via the
 	// fixed-id path indirectly. Instead, ensure the no-id path works for
 	// the first 2 calls (covers basic increment).
-	for i := 0; i < 2; i++ {
+	for range 2 {
 		_, err := src.Lookup(t.Context(), qname, rrtype.A)
 		require.NoError(t, err)
 	}
