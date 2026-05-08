@@ -1,0 +1,320 @@
+package doh
+
+// DoH server. Two layers:
+//
+//   - [NewHandler] returns an http.Handler that decodes RFC 8484
+//     wire-format requests, dispatches to the supplied
+//     [acidns.Handler], and writes the wire-format response back
+//     under Content-Type: application/dns-message. Compose this with
+//     any net/http server you already operate.
+//
+//   - [NewServer] / [Server.Run] is a convenience wrapper that
+//     constructs an http.Server with the bundled handler, sane
+//     TLS-1.3 / ALPN h2 + http/1.1 defaults, and a Run(ctx)
+//     lifecycle that mirrors the rest of the acidns server family.
+//
+// # RFC 8484 conformance
+//
+// Both POST and GET are accepted (§4.1). For POST, the request body
+// is the wire-format query — Content-Type MUST be
+// application/dns-message; otherwise 415. For GET, the wire-format
+// query is base64url-encoded with no padding in a "dns" query
+// parameter; the handler accepts only the canonical no-padding
+// form. The response always carries Content-Type:
+// application/dns-message.
+
+import (
+	"context"
+	"crypto/tls"
+	"encoding/base64"
+	"errors"
+	"fmt"
+	"io"
+	"net"
+	"net/http"
+	"net/netip"
+	"slices"
+	"sync/atomic"
+	"time"
+
+	"github.com/lestrrat-go/acidns"
+	"github.com/lestrrat-go/acidns/wire"
+)
+
+// ErrServerClosed is recorded on the [Controller] after a clean
+// shutdown via context cancellation.
+var ErrServerClosed = errors.New("doh: server closed")
+
+// MaxRequestBytes caps the request body the handler is willing to
+// read. RFC 8484 carries one DNS message, whose wire form is
+// bounded by the 16-bit length field plus a small slack for HTTP
+// framing variations. A hostile client could otherwise stream
+// gigabytes past wire.Unmarshal's rejection.
+const MaxRequestBytes = 64 * 1024
+
+// NewHandler returns an http.Handler that serves DoH requests by
+// dispatching to h.
+func NewHandler(h acidns.Handler, opts ...HandlerOption) http.Handler {
+	if h == nil {
+		// Degrade to a 500 handler so a misuse is loud rather than
+		// silent. Returning nil would NPE inside ServeMux.
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			http.Error(w, "doh: handler is nil", http.StatusInternalServerError)
+		})
+	}
+	c := handlerConfig{maxRequestBytes: MaxRequestBytes}
+	for _, o := range opts {
+		o.applyDoHHandler(&c)
+	}
+	if c.maxRequestBytes <= 0 {
+		c.maxRequestBytes = MaxRequestBytes
+	}
+	return &dohHandler{h: h, cfg: c}
+}
+
+type dohHandler struct {
+	h   acidns.Handler
+	cfg handlerConfig
+}
+
+func (h *dohHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	body, err := h.readRequest(r)
+	if err != nil {
+		writeHTTPError(w, err)
+		return
+	}
+
+	q, err := wire.Unmarshal(body)
+	if err != nil {
+		http.Error(w, "doh: malformed DNS message", http.StatusBadRequest)
+		return
+	}
+
+	rw := &dohResponseWriter{
+		http:   w,
+		remote: remoteAddr(r),
+		local:  localAddr(r),
+	}
+	h.h.ServeDNS(r.Context(), rw, q)
+	if !rw.wrote {
+		// Handler returned without writing — emit a SERVFAIL so the
+		// client sees a deterministic outcome rather than a hung HTTP
+		// connection. RFC 8484 has no notion of "no answer."
+		fb, _ := wire.NewBuilder().ID(q.ID()).Response(true).RCODE(wire.RCODEServFail).Build()
+		_ = rw.WriteMsg(fb)
+	}
+}
+
+func (h *dohHandler) readRequest(r *http.Request) ([]byte, error) {
+	switch r.Method {
+	case http.MethodPost:
+		if ct := r.Header.Get("Content-Type"); ct != contentType {
+			return nil, &httpProblem{status: http.StatusUnsupportedMediaType, msg: "doh: Content-Type must be " + contentType}
+		}
+		return io.ReadAll(io.LimitReader(r.Body, int64(h.cfg.maxRequestBytes)+1))
+	case http.MethodGet:
+		// RFC 8484 §4.1: base64url-encoded "dns" query parameter, no
+		// padding. The Go base64 package's RawURLEncoding rejects
+		// padding by default — use it as the canonical decoder.
+		dnsParam := r.URL.Query().Get("dns")
+		if dnsParam == "" {
+			return nil, &httpProblem{status: http.StatusBadRequest, msg: "doh: missing dns query parameter"}
+		}
+		if len(dnsParam) > base64.RawURLEncoding.EncodedLen(h.cfg.maxRequestBytes) {
+			return nil, &httpProblem{status: http.StatusRequestEntityTooLarge, msg: "doh: dns parameter exceeds size cap"}
+		}
+		return base64.RawURLEncoding.DecodeString(dnsParam)
+	default:
+		return nil, &httpProblem{status: http.StatusMethodNotAllowed, msg: "doh: method not allowed"}
+	}
+}
+
+type httpProblem struct {
+	status int
+	msg    string
+}
+
+func (p *httpProblem) Error() string { return p.msg }
+
+func writeHTTPError(w http.ResponseWriter, err error) {
+	var p *httpProblem
+	if errors.As(err, &p) {
+		http.Error(w, p.msg, p.status)
+		return
+	}
+	http.Error(w, err.Error(), http.StatusBadRequest)
+}
+
+// dohResponseWriter implements [acidns.ResponseWriter] over an
+// http.ResponseWriter. The wire-format DNS response is written as the
+// HTTP body with the canonical Content-Type. The HTTP body is
+// flushed on the first WriteMsg call; subsequent WriteMsg calls
+// return an error because HTTP carries one response per request.
+type dohResponseWriter struct {
+	http   http.ResponseWriter
+	remote netip.AddrPort
+	local  netip.AddrPort
+	wrote  bool
+}
+
+func (w *dohResponseWriter) RemoteAddr() netip.AddrPort { return w.remote }
+func (w *dohResponseWriter) LocalAddr() netip.AddrPort  { return w.local }
+func (w *dohResponseWriter) Network() string            { return "doh" }
+
+func (w *dohResponseWriter) WriteMsg(m wire.Message) error {
+	if w.wrote {
+		return fmt.Errorf("doh: WriteMsg called twice on a single HTTP response")
+	}
+	w.wrote = true
+	buf, err := wire.Marshal(m)
+	if err != nil {
+		http.Error(w.http, "doh: marshal error", http.StatusInternalServerError)
+		return err
+	}
+	w.http.Header().Set("Content-Type", contentType)
+	w.http.WriteHeader(http.StatusOK)
+	_, err = w.http.Write(buf)
+	return err
+}
+
+// remoteAddr returns the client's address as a netip.AddrPort,
+// preferring the parsed *net.TCPAddr form so the address survives
+// any IPv6 zone-id formatting variation.
+func remoteAddr(r *http.Request) netip.AddrPort {
+	if ap, err := netip.ParseAddrPort(r.RemoteAddr); err == nil {
+		return ap
+	}
+	return netip.AddrPort{}
+}
+
+func localAddr(r *http.Request) netip.AddrPort {
+	if la, ok := r.Context().Value(http.LocalAddrContextKey).(*net.TCPAddr); ok {
+		return la.AddrPort()
+	}
+	return netip.AddrPort{}
+}
+
+// Server is the convenience wrapper around an http.Server that runs
+// the DoH handler with sane defaults. Operators with their own HTTP
+// machinery should compose [NewHandler] into their existing
+// http.ServeMux instead.
+type Server struct {
+	addr    netip.AddrPort
+	handler acidns.Handler
+	cfg     serverConfig
+}
+
+// NewServer returns a Server. tls.Config is required (DoH without
+// HTTPS isn't DoH); set its Certificates and ServerName as needed.
+// The path the handler responds on is configurable via
+// [WithServerPath]; default is "/dns-query" per RFC 8484 §3.
+func NewServer(addr netip.AddrPort, h acidns.Handler, opts ...ServerOption) (*Server, error) {
+	if h == nil {
+		return nil, fmt.Errorf("doh: handler is nil")
+	}
+	cfg := serverConfig{
+		path:              "/dns-query",
+		maxRequestBytes:   MaxRequestBytes,
+		readHeaderTimeout: 10 * time.Second,
+		readTimeout:       30 * time.Second,
+		writeTimeout:      30 * time.Second,
+		idleTimeout:       60 * time.Second,
+	}
+	for _, o := range opts {
+		o.applyDoHServer(&cfg)
+	}
+	if cfg.tlsConfig == nil {
+		return nil, fmt.Errorf("doh: WithServerTLSConfig is required")
+	}
+	tc := cfg.tlsConfig.Clone()
+	if tc.MinVersion == 0 {
+		tc.MinVersion = tls.VersionTLS13
+	}
+	// Advertise both HTTP/2 and HTTP/1.1 — RFC 8484 mandates HTTP/2
+	// support but real-world clients still negotiate 1.1 frequently.
+	for _, p := range []string{"h2", "http/1.1"} {
+		if !slices.Contains(tc.NextProtos, p) {
+			tc.NextProtos = append(tc.NextProtos, p)
+		}
+	}
+	cfg.tlsConfig = tc
+	return &Server{addr: addr, handler: h, cfg: cfg}, nil
+}
+
+// Run binds a fresh TCP socket, wraps it with TLS, and serves
+// HTTP/2 + HTTP/1.1 DoH requests until ctx is cancelled.
+func (s *Server) Run(ctx context.Context) (*Controller, error) {
+	ln, err := net.Listen("tcp", s.addr.String()) //nolint:noctx // socket lifetime is bound to Run's ctx
+	if err != nil {
+		return nil, fmt.Errorf("doh: listen %s: %w", s.addr, err)
+	}
+	la, ok := ln.Addr().(*net.TCPAddr)
+	if !ok {
+		_ = ln.Close()
+		return nil, fmt.Errorf("doh: listen %s: unexpected addr type %T", s.addr, ln.Addr())
+	}
+	bound := netip.AddrPortFrom(la.AddrPort().Addr(), uint16(la.Port))
+
+	mux := http.NewServeMux()
+	mux.Handle(s.cfg.path, NewHandler(s.handler, WithHandlerMaxRequestBytes(s.cfg.maxRequestBytes)))
+
+	hs := &http.Server{
+		Handler:           mux,
+		TLSConfig:         s.cfg.tlsConfig,
+		ReadHeaderTimeout: s.cfg.readHeaderTimeout,
+		ReadTimeout:       s.cfg.readTimeout,
+		WriteTimeout:      s.cfg.writeTimeout,
+		IdleTimeout:       s.cfg.idleTimeout,
+		BaseContext:       func(net.Listener) context.Context { return ctx },
+	}
+
+	ctrl := &Controller{addr: bound, done: make(chan struct{})}
+	go func() {
+		<-ctx.Done()
+		shutdownCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		defer cancel()
+		_ = hs.Shutdown(shutdownCtx)
+	}()
+	go func() {
+		defer close(ctrl.done)
+		err := hs.ServeTLS(ln, "", "")
+		if err != nil && !errors.Is(err, http.ErrServerClosed) {
+			ctrl.setErr(fmt.Errorf("doh: serve: %w", err))
+		}
+	}()
+	return ctrl, nil
+}
+
+// Controller is the runtime handle returned by [Server.Run].
+type Controller struct {
+	addr netip.AddrPort
+	done chan struct{}
+	err  atomic.Pointer[error]
+}
+
+// Addr returns the address the server is bound to.
+func (c *Controller) Addr() netip.AddrPort { return c.addr }
+
+// Done returns a channel closed when the server has shut down.
+func (c *Controller) Done() <-chan struct{} { return c.done }
+
+// Err returns the terminal error, or nil after a clean shutdown.
+func (c *Controller) Err() error {
+	if p := c.err.Load(); p != nil {
+		return *p
+	}
+	return nil
+}
+
+// Wait blocks until the server has shut down and returns the
+// terminal error.
+func (c *Controller) Wait() error {
+	<-c.done
+	return c.Err()
+}
+
+func (c *Controller) setErr(err error) {
+	if err != nil {
+		c.err.Store(&err)
+	}
+}
