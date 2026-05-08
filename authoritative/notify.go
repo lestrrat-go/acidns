@@ -11,13 +11,6 @@ import (
 // queued (the response is sent regardless of whether the handler errs).
 type NotifyHandler func(zone wire.Question, src acidns.ResponseWriter)
 
-// WithNotifyHandler installs a callback that fires when an inbound
-// NOTIFY arrives. Use this on a secondary to schedule an IXFR/AXFR
-// fetch from the primary that sent the NOTIFY.
-func WithNotifyHandler(h NotifyHandler) Option {
-	return optionFunc(func(c *config) { c.notifyHandler = h })
-}
-
 // serveNotify acknowledges a NOTIFY for a zone the server hosts. NOTIFY
 // queries from peers about zones we don't hold receive REFUSED.
 func (a *authoritative) serveNotify(w acidns.ResponseWriter, q wire.Message) {

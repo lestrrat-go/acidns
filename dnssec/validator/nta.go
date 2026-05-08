@@ -1,19 +1,3 @@
-// Package validator wires the dnssec verification primitives into a
-// chain-of-trust validator with first-class Negative Trust Anchor (NTA)
-// support, per the project's DNSSEC stance: NTAs are an operational
-// requirement, not a bolt-on (cf. the May-2025 .de TLD outage).
-//
-// The validator does NOT yet implement a recursive chain walker — that
-// requires a Resolver hook to fetch DNSKEY/DS records on demand and is a
-// separate concern. What this package supplies:
-//
-//   - Result: Secure / Insecure / Bogus / Indeterminate (RFC 4035 §4.3).
-//   - NTAStore: runtime-mutable NTA registry, safe for concurrent use.
-//   - Validator: validates a pre-resolved authentication chain (a parent
-//     DS, the matching zone DNSKEY set, and the RRSIG over the answer).
-//
-// A future Resolver-aware walker can compose Validator with chain
-// retrieval; the API shape (and especially NTA bypass) does not change.
 package validator
 
 import (

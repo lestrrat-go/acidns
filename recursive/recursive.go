@@ -65,76 +65,9 @@ const (
 	StatusIndeterminate ValidationStatus = 3
 )
 
-// Option configures a Recursive at construction.
-type Option interface{ applyRecursive(*config) }
-
-type optionFunc func(*config)
-
-func (f optionFunc) applyRecursive(c *config) { f(c) }
-
-type config struct {
-	roots         []netip.AddrPort
-	cache         Cache
-	stats         ServerStats
-	maxIterations int
-	maxDepth      int
-	maxCNAMEs     int
-	dialer        Dialer
-	validator     Validator
-	queryTimeout  time.Duration
-}
-
-// WithRoots overrides the default root server list.
-func WithRoots(addrs ...netip.AddrPort) Option {
-	return optionFunc(func(c *config) { c.roots = append(c.roots[:0], addrs...) })
-}
-
-// WithCache sets a custom Cache implementation.
-func WithCache(c Cache) Option {
-	return optionFunc(func(cfg *config) { cfg.cache = c })
-}
-
-// WithServerStats sets a custom ServerStats implementation. The default is
-// an in-memory store.
-func WithServerStats(s ServerStats) Option {
-	return optionFunc(func(c *config) { c.stats = s })
-}
-
-// WithMaxIterations caps how many delegation steps a single query may
-// traverse. Defaults to 30.
-func WithMaxIterations(n int) Option {
-	return optionFunc(func(c *config) { c.maxIterations = n })
-}
-
-// WithMaxCNAMEDepth caps how many CNAME hops a single query may follow.
-// Defaults to 8 — RFC 1035 doesn't specify a limit but every production
-// resolver caps to defend against loops.
-func WithMaxCNAMEDepth(n int) Option {
-	return optionFunc(func(c *config) { c.maxCNAMEs = n })
-}
-
-// WithQueryTimeout sets a per-query timeout that bounds each individual
-// upstream exchange (independent of any caller-supplied context). Defaults
-// to 4 seconds.
-func WithQueryTimeout(d time.Duration) Option {
-	return optionFunc(func(c *config) { c.queryTimeout = d })
-}
-
-// WithValidator enables DNSSEC validation. The validator is invoked on
-// every Resolve call; bogus answers become SERVFAIL responses bearing the
-// configured EDE. The Resolver caches validated answers like any other.
-func WithValidator(v Validator) Option {
-	return optionFunc(func(c *config) { c.validator = v })
-}
-
 // Dialer abstracts how the resolver delivers a query to a chosen server.
 type Dialer interface {
 	Exchange(ctx context.Context, server netip.AddrPort, q wire.Message) (wire.Message, error)
-}
-
-// WithDialer sets a custom Dialer.
-func WithDialer(d Dialer) Option {
-	return optionFunc(func(c *config) { c.dialer = d })
 }
 
 type recursive struct {

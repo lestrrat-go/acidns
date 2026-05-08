@@ -98,23 +98,6 @@ func (e diffEvent) ToSerial() uint32       { return e.to }
 func (e diffEvent) Removed() []wire.Record { return e.removed }
 func (e diffEvent) Added() []wire.Record   { return e.added }
 
-// Option configures a Start call.
-type Option interface{ applyIXFR(*config) }
-
-type optionFunc func(*config)
-
-func (f optionFunc) applyIXFR(c *config) { f(c) }
-
-type config struct {
-	timeout time.Duration
-}
-
-// WithTimeout sets the per-stream-message read timeout used when ctx has
-// no deadline. Defaults to 30 seconds.
-func WithTimeout(d time.Duration) Option {
-	return optionFunc(func(c *config) { c.timeout = d })
-}
-
 // Start sends an IXFR query for zone over ex and returns a Transfer
 // iterator positioned just past the first response message. The caller's
 // ctx applies to the initial request and the first response read; per-call

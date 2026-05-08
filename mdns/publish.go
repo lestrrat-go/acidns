@@ -67,50 +67,6 @@ type Announcer interface {
 	Withdraw(ctx context.Context) error
 }
 
-// AnnouncerOption configures NewAnnouncer.
-type AnnouncerOption interface {
-	applyAnnouncer(*announcerConfig)
-}
-
-type announcerOptionFunc func(*announcerConfig)
-
-func (f announcerOptionFunc) applyAnnouncer(c *announcerConfig) { f(c) }
-
-type announcerConfig struct {
-	transport     Transport
-	probeWait     time.Duration // RFC 6762 §8.1: 250ms between probes
-	probeCount    int           // RFC 6762 §8.1: 3 probes
-	announceWait  time.Duration // RFC 6762 §8.3: 1s between announcements
-	announceCount int           // RFC 6762 §8.3: 2 announcements
-	now           func() time.Time
-}
-
-// WithAnnouncerTransport sets the transport. Required.
-func WithAnnouncerTransport(t Transport) AnnouncerOption {
-	return announcerOptionFunc(func(c *announcerConfig) { c.transport = t })
-}
-
-// WithProbeTiming overrides the probe wait + count.
-func WithProbeTiming(wait time.Duration, count int) AnnouncerOption {
-	return announcerOptionFunc(func(c *announcerConfig) {
-		c.probeWait = wait
-		c.probeCount = count
-	})
-}
-
-// WithAnnounceTiming overrides the announce wait + count.
-func WithAnnounceTiming(wait time.Duration, count int) AnnouncerOption {
-	return announcerOptionFunc(func(c *announcerConfig) {
-		c.announceWait = wait
-		c.announceCount = count
-	})
-}
-
-// WithAnnouncerClock injects a clock for tests.
-func WithAnnouncerClock(now func() time.Time) AnnouncerOption {
-	return announcerOptionFunc(func(c *announcerConfig) { c.now = now })
-}
-
 // NewAnnouncer constructs an Announcer.
 func NewAnnouncer(opts ...AnnouncerOption) (Announcer, error) {
 	c := announcerConfig{

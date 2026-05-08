@@ -136,27 +136,6 @@ func ParseBrowseResponse(m wire.Message) []Service {
 	return out
 }
 
-// BrowseOption configures Browse.
-type BrowseOption interface {
-	applyBrowse(*browseConfig)
-}
-
-type browseOptionFunc func(*browseConfig)
-
-func (f browseOptionFunc) applyBrowse(c *browseConfig) { f(c) }
-
-type browseConfig struct {
-	openConn func() (net.PacketConn, error)
-}
-
-// WithBrowseConn injects the function used to open the listening
-// socket. The default opens the IPv4 mDNS multicast group on udp4. Tests
-// pass an in-process [net.PacketConn] factory to avoid binding the real
-// multicast group.
-func WithBrowseConn(open func() (net.PacketConn, error)) BrowseOption {
-	return browseOptionFunc(func(c *browseConfig) { c.openConn = open })
-}
-
 // Browse sends a multicast PTR query for the named service type and
 // collects responses until ctx is cancelled or its deadline expires.
 // Callers SHOULD wrap ctx with context.WithTimeout to bound the wait —

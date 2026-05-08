@@ -42,23 +42,6 @@ type recordEvent struct{ rec wire.Record }
 func (recordEvent) isAXFREvent()          {}
 func (e recordEvent) Record() wire.Record { return e.rec }
 
-// Option configures a Start call.
-type Option interface{ applyAXFR(*config) }
-
-type optionFunc func(*config)
-
-func (f optionFunc) applyAXFR(c *config) { f(c) }
-
-type config struct {
-	timeout time.Duration
-}
-
-// WithTimeout sets the per-stream-message read timeout used when ctx has
-// no deadline. Defaults to 30 seconds.
-func WithTimeout(d time.Duration) Option {
-	return optionFunc(func(c *config) { c.timeout = d })
-}
-
 // Start sends an AXFR query for zone over ex and returns a Transfer
 // iterator positioned just past the leading SOA.
 func Start(ctx context.Context, ex acidns.StreamExchanger, zone wire.Name, opts ...Option) (Transfer, error) {

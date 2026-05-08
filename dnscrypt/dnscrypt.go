@@ -256,22 +256,6 @@ func unpad(b []byte) ([]byte, error) {
 	return nil, fmt.Errorf("dnscrypt: padding sentinel not found")
 }
 
-// Option configures an Exchanger.
-type Option interface{ applyDNSCrypt(*config) }
-
-type optionFunc func(*config)
-
-func (f optionFunc) applyDNSCrypt(c *config) { f(c) }
-
-type config struct {
-	timeout time.Duration
-}
-
-// WithTimeout sets the per-exchange timeout when ctx has no deadline.
-func WithTimeout(d time.Duration) Option {
-	return optionFunc(func(c *config) { c.timeout = d })
-}
-
 type exchanger struct {
 	addr    netip.AddrPort
 	cert    *Cert
