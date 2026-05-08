@@ -23,6 +23,7 @@ func TestParseLexerEdgeCases(t *testing.T) {
 	t.Parallel()
 
 	t.Run("comment at EOF without newline", func(t *testing.T) {
+		t.Parallel()
 		// Comment immediately before EOF after at least one record on the
 		// same logical line — exercises lexer.flushOnEOF via the comment
 		// branch (the EOF check inside the comment-skip loop).
@@ -33,6 +34,7 @@ func TestParseLexerEdgeCases(t *testing.T) {
 	})
 
 	t.Run("backslash escape in bare word", func(t *testing.T) {
+		t.Parallel()
 		// A backslash-escaped dot inside a label exercises the readWord
 		// escape branch.
 		src := "$ORIGIN example.com.\n$TTL 60\nweird\\.label IN A 192.0.2.5\n"
@@ -41,6 +43,7 @@ func TestParseLexerEdgeCases(t *testing.T) {
 	})
 
 	t.Run("dangling backslash at EOF in word", func(t *testing.T) {
+		t.Parallel()
 		src := "$ORIGIN example.com.\n$TTL 60\n@ IN A foo\\"
 		_, err := zonefile.Parse(strings.NewReader(src))
 		require.Error(t, err)
@@ -48,6 +51,7 @@ func TestParseLexerEdgeCases(t *testing.T) {
 	})
 
 	t.Run("newline inside quoted string", func(t *testing.T) {
+		t.Parallel()
 		src := "$ORIGIN example.com.\n$TTL 60\n@ IN TXT \"line1\nline2\"\n"
 		z, err := zonefile.Parse(strings.NewReader(src))
 		require.NoError(t, err)
@@ -62,6 +66,7 @@ func TestParseLexerEdgeCases(t *testing.T) {
 	})
 
 	t.Run("unterminated quoted string", func(t *testing.T) {
+		t.Parallel()
 		src := "$ORIGIN example.com.\n$TTL 60\n@ IN TXT \"never closed\n"
 		_, err := zonefile.Parse(strings.NewReader(src))
 		require.Error(t, err)
@@ -69,12 +74,14 @@ func TestParseLexerEdgeCases(t *testing.T) {
 	})
 
 	t.Run("dangling backslash in quoted string", func(t *testing.T) {
+		t.Parallel()
 		src := "$ORIGIN example.com.\n$TTL 60\n@ IN TXT \"x\\"
 		_, err := zonefile.Parse(strings.NewReader(src))
 		require.ErrorIs(t, err, zonefile.ErrParse)
 	})
 
 	t.Run("unbalanced close paren", func(t *testing.T) {
+		t.Parallel()
 		src := "$ORIGIN example.com.\n$TTL 60\n@ IN A 192.0.2.1 )\n"
 		_, err := zonefile.Parse(strings.NewReader(src))
 		require.Error(t, err)
@@ -82,6 +89,7 @@ func TestParseLexerEdgeCases(t *testing.T) {
 	})
 
 	t.Run("blank lines and comment-only lines", func(t *testing.T) {
+		t.Parallel()
 		src := "\n\n; just a comment\n\n$ORIGIN example.com.\n$TTL 60\n; another\n@ IN A 192.0.2.1\n"
 		z, err := zonefile.Parse(strings.NewReader(src))
 		require.NoError(t, err)
@@ -89,6 +97,7 @@ func TestParseLexerEdgeCases(t *testing.T) {
 	})
 
 	t.Run("CRLF line endings", func(t *testing.T) {
+		t.Parallel()
 		src := "$ORIGIN example.com.\r\n$TTL 60\r\n@ IN A 192.0.2.1\r\n"
 		z, err := zonefile.Parse(strings.NewReader(src))
 		require.NoError(t, err)
@@ -131,6 +140,7 @@ func TestParseDirectiveErrors(t *testing.T) {
 	}
 	for name, c := range cases {
 		t.Run(name, func(t *testing.T) {
+			t.Parallel()
 			_, err := zonefile.Parse(strings.NewReader(c.src))
 			require.Error(t, err)
 			require.Contains(t, err.Error(), c.contains)
@@ -156,6 +166,7 @@ func TestParseClassBranches(t *testing.T) {
 	t.Parallel()
 
 	t.Run("class then ttl ordering", func(t *testing.T) {
+		t.Parallel()
 		// CLASS first, then TTL: parser should accept either order
 		// before the TYPE.
 		src := "$ORIGIN example.com.\n$TTL 60\n@ IN 120 A 192.0.2.1\n"
@@ -165,6 +176,7 @@ func TestParseClassBranches(t *testing.T) {
 	})
 
 	t.Run("ttl then class ordering", func(t *testing.T) {
+		t.Parallel()
 		src := "$ORIGIN example.com.\n$TTL 60\n@ 120 IN A 192.0.2.1\n"
 		z, err := zonefile.Parse(strings.NewReader(src))
 		require.NoError(t, err)
@@ -172,6 +184,7 @@ func TestParseClassBranches(t *testing.T) {
 	})
 
 	t.Run("CHAOS class", func(t *testing.T) {
+		t.Parallel()
 		src := "$ORIGIN example.com.\n$TTL 60\n@ CH TXT \"chaos\"\n"
 		z, err := zonefile.Parse(strings.NewReader(src))
 		require.NoError(t, err)
@@ -179,6 +192,7 @@ func TestParseClassBranches(t *testing.T) {
 	})
 
 	t.Run("HS class", func(t *testing.T) {
+		t.Parallel()
 		src := "$ORIGIN example.com.\n$TTL 60\n@ HS TXT \"hesiod\"\n"
 		z, err := zonefile.Parse(strings.NewReader(src))
 		require.NoError(t, err)
@@ -186,6 +200,7 @@ func TestParseClassBranches(t *testing.T) {
 	})
 
 	t.Run("ANY class", func(t *testing.T) {
+		t.Parallel()
 		src := "$ORIGIN example.com.\n$TTL 60\n@ ANY TXT \"x\"\n"
 		z, err := zonefile.Parse(strings.NewReader(src))
 		require.NoError(t, err)
@@ -193,6 +208,7 @@ func TestParseClassBranches(t *testing.T) {
 	})
 
 	t.Run("NONE class", func(t *testing.T) {
+		t.Parallel()
 		src := "$ORIGIN example.com.\n$TTL 60\n@ NONE TXT \"x\"\n"
 		z, err := zonefile.Parse(strings.NewReader(src))
 		require.NoError(t, err)
@@ -229,6 +245,7 @@ func TestParseRDataErrors(t *testing.T) {
 	}
 	for name, src := range cases {
 		t.Run(name, func(t *testing.T) {
+			t.Parallel()
 			_, err := zonefile.Parse(strings.NewReader(src))
 			require.Error(t, err, "expected error for %q", name)
 			require.True(t, errors.Is(err, zonefile.ErrParse))

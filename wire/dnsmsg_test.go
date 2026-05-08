@@ -149,11 +149,13 @@ func TestUnmarshalCorrupt(t *testing.T) {
 	t.Parallel()
 
 	t.Run("short header", func(t *testing.T) {
+		t.Parallel()
 		_, err := wire.Unmarshal([]byte{0, 0, 0, 0, 0, 0})
 		require.Error(t, err)
 	})
 
 	t.Run("truncated question", func(t *testing.T) {
+		t.Parallel()
 		buf := []byte{0, 1, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 7, 'e', 'x'}
 		_, err := wire.Unmarshal(buf)
 		require.Error(t, err)

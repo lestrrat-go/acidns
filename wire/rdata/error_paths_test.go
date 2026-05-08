@@ -635,6 +635,7 @@ func TestUnpackPartialReads(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
 			buf := make([]byte, tc.rdlen)
 			u := wirebb.NewUnpacker(buf)
 			_, _ = rdata.Unpack(tc.typ, u, tc.rdlen)

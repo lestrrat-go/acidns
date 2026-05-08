@@ -13,6 +13,7 @@ func TestParse(t *testing.T) {
 	t.Parallel()
 
 	t.Run("simple", func(t *testing.T) {
+		t.Parallel()
 		n, err := wirebb.Parse("example.com")
 		require.NoError(t, err)
 		require.Equal(t, "example.com.", n.String())
@@ -22,12 +23,14 @@ func TestParse(t *testing.T) {
 	})
 
 	t.Run("trailing dot", func(t *testing.T) {
+		t.Parallel()
 		n, err := wirebb.Parse("example.com.")
 		require.NoError(t, err)
 		require.Equal(t, "example.com.", n.String())
 	})
 
 	t.Run("root", func(t *testing.T) {
+		t.Parallel()
 		n, err := wirebb.Parse(".")
 		require.NoError(t, err)
 		require.Equal(t, ".", n.String())
@@ -36,6 +39,7 @@ func TestParse(t *testing.T) {
 	})
 
 	t.Run("case folded", func(t *testing.T) {
+		t.Parallel()
 		a, err := wirebb.Parse("EXAMPLE.COM")
 		require.NoError(t, err)
 		b, err := wirebb.Parse("example.com")
@@ -45,12 +49,14 @@ func TestParse(t *testing.T) {
 	})
 
 	t.Run("subdomain", func(t *testing.T) {
+		t.Parallel()
 		n, err := wirebb.Parse("a.b.c.example.com")
 		require.NoError(t, err)
 		require.Equal(t, 5, n.NumLabels())
 	})
 
 	t.Run("escaped dot", func(t *testing.T) {
+		t.Parallel()
 		n, err := wirebb.Parse(`weird\.label.example.com`)
 		require.NoError(t, err)
 		require.Equal(t, 3, n.NumLabels())
@@ -61,6 +67,7 @@ func TestParse(t *testing.T) {
 	})
 
 	t.Run("escaped decimal", func(t *testing.T) {
+		t.Parallel()
 		n, err := wirebb.Parse(`\032space.example.com`)
 		require.NoError(t, err)
 		labels := slices.Collect(n.Labels())
@@ -68,21 +75,25 @@ func TestParse(t *testing.T) {
 	})
 
 	t.Run("empty", func(t *testing.T) {
+		t.Parallel()
 		_, err := wirebb.Parse("")
 		require.Error(t, err)
 	})
 
 	t.Run("empty label", func(t *testing.T) {
+		t.Parallel()
 		_, err := wirebb.Parse("foo..bar")
 		require.Error(t, err)
 	})
 
 	t.Run("label too long", func(t *testing.T) {
+		t.Parallel()
 		_, err := wirebb.Parse(strings.Repeat("a", 64) + ".example.com")
 		require.Error(t, err)
 	})
 
 	t.Run("name too long", func(t *testing.T) {
+		t.Parallel()
 		var b strings.Builder
 		for range 64 {
 			b.WriteString("aaaa.")
@@ -107,6 +118,7 @@ func TestEqual(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.a+"_vs_"+tc.b, func(t *testing.T) {
+			t.Parallel()
 			a, err := wirebb.Parse(tc.a)
 			require.NoError(t, err)
 			b, err := wirebb.Parse(tc.b)
@@ -116,6 +128,7 @@ func TestEqual(t *testing.T) {
 	}
 
 	t.Run("zero values equal", func(t *testing.T) {
+		t.Parallel()
 		var a, b wirebb.Name
 		require.True(t, a.Equal(b))
 		require.False(t, a.IsValid())
@@ -167,6 +180,7 @@ func TestAppendWire(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
 			n := wirebb.MustParse(tc.name)
 			got := n.AppendWire(nil)
 			require.Equal(t, tc.want, got)
@@ -178,6 +192,7 @@ func TestDecodeWire(t *testing.T) {
 	t.Parallel()
 
 	t.Run("simple", func(t *testing.T) {
+		t.Parallel()
 		buf := []byte{7, 'e', 'x', 'a', 'm', 'p', 'l', 'e', 3, 'c', 'o', 'm', 0, 0xff}
 		n, off, err := wirebb.DecodeWire(buf, 0)
 		require.NoError(t, err)
@@ -186,6 +201,7 @@ func TestDecodeWire(t *testing.T) {
 	})
 
 	t.Run("root", func(t *testing.T) {
+		t.Parallel()
 		buf := []byte{0}
 		n, off, err := wirebb.DecodeWire(buf, 0)
 		require.NoError(t, err)
@@ -194,6 +210,7 @@ func TestDecodeWire(t *testing.T) {
 	})
 
 	t.Run("compression pointer", func(t *testing.T) {
+		t.Parallel()
 		// Layout:
 		// [0..12]: "example.com" wire
 		// [13..]: "www" + ptr to offset 0
@@ -208,24 +225,28 @@ func TestDecodeWire(t *testing.T) {
 	})
 
 	t.Run("pointer loop", func(t *testing.T) {
+		t.Parallel()
 		buf := []byte{0xc0, 0x02, 0xc0, 0x00}
 		_, _, err := wirebb.DecodeWire(buf, 0)
 		require.Error(t, err)
 	})
 
 	t.Run("forward pointer", func(t *testing.T) {
+		t.Parallel()
 		buf := []byte{0xc0, 0x02, 3, 'a', 'b', 'c', 0}
 		_, _, err := wirebb.DecodeWire(buf, 0)
 		require.Error(t, err)
 	})
 
 	t.Run("truncated", func(t *testing.T) {
+		t.Parallel()
 		buf := []byte{7, 'e', 'x'}
 		_, _, err := wirebb.DecodeWire(buf, 0)
 		require.Error(t, err)
 	})
 
 	t.Run("bad label length", func(t *testing.T) {
+		t.Parallel()
 		// 0x80 is reserved (top bits 10)
 		buf := []byte{0x80, 0, 0}
 		_, _, err := wirebb.DecodeWire(buf, 0)
@@ -239,6 +260,7 @@ func TestRoundTrip(t *testing.T) {
 	names := []string{".", "com", "example.com", "a.b.c.d.example.com"}
 	for _, s := range names {
 		t.Run(s, func(t *testing.T) {
+			t.Parallel()
 			n := wirebb.MustParse(s)
 			buf := n.AppendWire(nil)
 			n2, _, err := wirebb.DecodeWire(buf, 0)

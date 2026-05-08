@@ -81,6 +81,7 @@ func TestSignedDataAcrossRDataTypes(t *testing.T) {
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
+			t.Parallel()
 			rrsig := makeRRSIG(c.typ, uint8(c.set[0].Name().NumLabels()))
 			out, err := dnssec.SignedData(c.set, rrsig)
 			require.NoError(t, err)

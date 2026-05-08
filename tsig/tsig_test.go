@@ -39,6 +39,7 @@ func TestSignVerifyRoundTrip(t *testing.T) {
 		tsig.HMACSHA1, tsig.HMACSHA256, tsig.HMACSHA384, tsig.HMACSHA512,
 	} {
 		t.Run(string(alg), func(t *testing.T) {
+			t.Parallel()
 			key := tsig.Key{
 				Name:      wire.MustParseName("test.key"),
 				Algorithm: alg,

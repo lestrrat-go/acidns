@@ -19,44 +19,52 @@ func TestNameWrappers(t *testing.T) {
 	t.Parallel()
 
 	t.Run("ParseName", func(t *testing.T) {
+		t.Parallel()
 		n, err := wire.ParseName("example.com")
 		require.NoError(t, err)
 		require.Equal(t, "example.com.", n.String())
 	})
 
 	t.Run("ParseNameInvalid", func(t *testing.T) {
+		t.Parallel()
 		_, err := wire.ParseName(strings.Repeat("a", 64) + ".example.")
 		require.ErrorIs(t, err, wirebb.ErrInvalidName)
 	})
 
 	t.Run("MustParseName", func(t *testing.T) {
+		t.Parallel()
 		n := wire.MustParseName("example.com")
 		require.Equal(t, "example.com.", n.String())
 	})
 
 	t.Run("RootName", func(t *testing.T) {
+		t.Parallel()
 		root := wire.RootName()
 		require.True(t, root.IsRoot())
 	})
 
 	t.Run("NameFromLabels", func(t *testing.T) {
+		t.Parallel()
 		n, err := wire.NameFromLabels("foo", "bar", "example", "com")
 		require.NoError(t, err)
 		require.Equal(t, "foo.bar.example.com.", n.String())
 	})
 
 	t.Run("NameFromLabelsEmpty", func(t *testing.T) {
+		t.Parallel()
 		n, err := wire.NameFromLabels()
 		require.NoError(t, err)
 		require.True(t, n.IsRoot())
 	})
 
 	t.Run("NameFromLabelsInvalid", func(t *testing.T) {
+		t.Parallel()
 		_, err := wire.NameFromLabels("")
 		require.ErrorIs(t, err, wirebb.ErrInvalidName)
 	})
 
 	t.Run("DecodeName", func(t *testing.T) {
+		t.Parallel()
 		// Build wire bytes for "example.com" using the packer to
 		// produce a normal uncompressed name.
 		raw := []byte{
@@ -71,6 +79,7 @@ func TestNameWrappers(t *testing.T) {
 	})
 
 	t.Run("DecodeNameInvalid", func(t *testing.T) {
+		t.Parallel()
 		// Truncated name.
 		_, _, err := wire.DecodeName([]byte{5, 'a', 'b'}, 0)
 		require.ErrorIs(t, err, wirebb.ErrInvalidName)
@@ -164,21 +173,25 @@ func TestEDNSOptionAccessorsMismatch(t *testing.T) {
 	require.NoError(t, err)
 
 	t.Run("NSIDIdentifier", func(t *testing.T) {
+		t.Parallel()
 		_, ok := wire.NSIDIdentifier(other)
 		require.False(t, ok)
 	})
 
 	t.Run("EDNSExpireSecondsWrongCode", func(t *testing.T) {
+		t.Parallel()
 		_, ok := wire.EDNSExpireSeconds(other)
 		require.False(t, ok)
 	})
 
 	t.Run("TCPKeepaliveTimeoutWrongCode", func(t *testing.T) {
+		t.Parallel()
 		_, ok := wire.TCPKeepaliveTimeout(other)
 		require.False(t, ok)
 	})
 
 	t.Run("TCPKeepaliveTimeoutWrongLength", func(t *testing.T) {
+		t.Parallel()
 		// Empty-payload keepalive (query-side) returns false.
 		empty := wire.NewTCPKeepalive(0)
 		_, ok := wire.TCPKeepaliveTimeout(empty)
@@ -186,11 +199,13 @@ func TestEDNSOptionAccessorsMismatch(t *testing.T) {
 	})
 
 	t.Run("ClientSubnetWrongCode", func(t *testing.T) {
+		t.Parallel()
 		_, _, ok := wire.ClientSubnet(other)
 		require.False(t, ok)
 	})
 
 	t.Run("ClientSubnetTooShort", func(t *testing.T) {
+		t.Parallel()
 		short, err := wire.NewEDNSOption(8, []byte{0, 1}) // ECS code, but <4 bytes
 		require.NoError(t, err)
 		_, _, ok := wire.ClientSubnet(short)
@@ -198,6 +213,7 @@ func TestEDNSOptionAccessorsMismatch(t *testing.T) {
 	})
 
 	t.Run("ClientSubnetUnknownFamily", func(t *testing.T) {
+		t.Parallel()
 		// Family=99 (unknown).
 		bad, err := wire.NewEDNSOption(8, []byte{0x00, 0x63, 0x00, 0x00})
 		require.NoError(t, err)
@@ -206,11 +222,13 @@ func TestEDNSOptionAccessorsMismatch(t *testing.T) {
 	})
 
 	t.Run("CookiesWrongCode", func(t *testing.T) {
+		t.Parallel()
 		_, _, ok := wire.Cookies(other)
 		require.False(t, ok)
 	})
 
 	t.Run("CookiesBadLength", func(t *testing.T) {
+		t.Parallel()
 		// 9 bytes - between 8 and 16, malformed.
 		bad, err := wire.NewEDNSOption(10, make([]byte, 9))
 		require.NoError(t, err)
@@ -219,6 +237,7 @@ func TestEDNSOptionAccessorsMismatch(t *testing.T) {
 	})
 
 	t.Run("CookiesOversize", func(t *testing.T) {
+		t.Parallel()
 		bad, err := wire.NewEDNSOption(10, make([]byte, 41))
 		require.NoError(t, err)
 		_, _, ok := wire.Cookies(bad)
@@ -226,11 +245,13 @@ func TestEDNSOptionAccessorsMismatch(t *testing.T) {
 	})
 
 	t.Run("ExtendedErrorWrongCode", func(t *testing.T) {
+		t.Parallel()
 		_, _, ok := wire.ExtendedError(other)
 		require.False(t, ok)
 	})
 
 	t.Run("ExtendedErrorTooShort", func(t *testing.T) {
+		t.Parallel()
 		bad, err := wire.NewEDNSOption(15, []byte{0x00})
 		require.NoError(t, err)
 		_, _, ok := wire.ExtendedError(bad)
@@ -238,11 +259,13 @@ func TestEDNSOptionAccessorsMismatch(t *testing.T) {
 	})
 
 	t.Run("ZoneVersionWrongCode", func(t *testing.T) {
+		t.Parallel()
 		_, _, ok := wire.ZoneVersionSOASerial(other)
 		require.False(t, ok)
 	})
 
 	t.Run("ZoneVersionWrongType", func(t *testing.T) {
+		t.Parallel()
 		// Code 19 (zone version), 6 bytes, type byte != 0.
 		bad, err := wire.NewEDNSOption(19, []byte{0x02, 0x09, 0x00, 0x00, 0x00, 0x00})
 		require.NoError(t, err)
@@ -256,11 +279,13 @@ func TestNewClientSubnetErrors(t *testing.T) {
 	t.Parallel()
 
 	t.Run("InvalidPrefix", func(t *testing.T) {
+		t.Parallel()
 		_, err := wire.NewClientSubnet(netip.Prefix{}, 0)
 		require.ErrorIs(t, err, wire.ErrInvalidMessage)
 	})
 
 	t.Run("SourceTooLong", func(t *testing.T) {
+		t.Parallel()
 		// /33 on a v4 address — exceeds 32-bit width.
 		bad := netip.PrefixFrom(netip.MustParseAddr("192.0.2.0"), 33)
 		_, err := wire.NewClientSubnet(bad, 0)
@@ -495,11 +520,13 @@ func TestNewRRsetFromRDatasErrors(t *testing.T) {
 	t.Parallel()
 
 	t.Run("Empty", func(t *testing.T) {
+		t.Parallel()
 		_, err := wire.NewRRsetFromRDatas(wirebb.MustParse("x."), rrtype.ClassIN, time.Minute)
 		require.ErrorIs(t, err, wire.ErrInvalidMessage)
 	})
 
 	t.Run("Mismatch", func(t *testing.T) {
+		t.Parallel()
 		_, err := wire.NewRRsetFromRDatas(
 			wirebb.MustParse("x."),
 			rrtype.ClassIN,

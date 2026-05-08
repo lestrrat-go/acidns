@@ -65,9 +65,10 @@ func TestE2EAuthoritativeOverUDPAndTCP(t *testing.T) {
 	require.NoError(t, err)
 
 	ctx, cancel := context.WithTimeout(t.Context(), 2*time.Second)
-	defer cancel()
+	t.Cleanup(cancel)
 
 	t.Run("LookupHost www", func(t *testing.T) {
+		t.Parallel()
 		addrs, err := acidns.LookupHost(ctx, r, "www.example.com")
 		require.NoError(t, err)
 		got := make([]string, len(addrs))
@@ -81,6 +82,7 @@ func TestE2EAuthoritativeOverUDPAndTCP(t *testing.T) {
 	})
 
 	t.Run("Resolve MX mail", func(t *testing.T) {
+		t.Parallel()
 		ans, err := r.Resolve(ctx, wire.MustParseName("mail.example.com"), rrtype.MX)
 		require.NoError(t, err)
 		require.Equal(t, wire.RCODENoError, ans.RCODE())
@@ -91,6 +93,7 @@ func TestE2EAuthoritativeOverUDPAndTCP(t *testing.T) {
 	})
 
 	t.Run("NXDOMAIN", func(t *testing.T) {
+		t.Parallel()
 		_, err := r.Resolve(ctx, wire.MustParseName("nope.example.com"), rrtype.A)
 		require.ErrorIs(t, err, acidns.ErrNXDOMAIN)
 		var rerr *acidns.RCodeError
@@ -99,6 +102,7 @@ func TestE2EAuthoritativeOverUDPAndTCP(t *testing.T) {
 	})
 
 	t.Run("NODATA", func(t *testing.T) {
+		t.Parallel()
 		ans, err := r.Resolve(ctx, wire.MustParseName("ns1.example.com"), rrtype.AAAA)
 		require.NoError(t, err)
 		require.Equal(t, wire.RCODENoError, ans.RCODE())
@@ -107,6 +111,7 @@ func TestE2EAuthoritativeOverUDPAndTCP(t *testing.T) {
 	})
 
 	t.Run("CNAME chase", func(t *testing.T) {
+		t.Parallel()
 		ans, err := r.Resolve(ctx, wire.MustParseName("alias.example.com"), rrtype.A)
 		require.NoError(t, err)
 		require.Equal(t, wire.RCODENoError, ans.RCODE())
@@ -117,6 +122,7 @@ func TestE2EAuthoritativeOverUDPAndTCP(t *testing.T) {
 	})
 
 	t.Run("REFUSED out-of-zone", func(t *testing.T) {
+		t.Parallel()
 		_, err := r.Resolve(ctx, wire.MustParseName("example.org"), rrtype.A)
 		require.ErrorIs(t, err, acidns.ErrRefused)
 	})

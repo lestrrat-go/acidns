@@ -23,12 +23,14 @@ func TestParseCertErrors(t *testing.T) {
 	t.Parallel()
 
 	t.Run("too short", func(t *testing.T) {
+		t.Parallel()
 		_, err := dnscrypt.ParseCert(make([]byte, 50))
 		require.Error(t, err)
 		require.Contains(t, err.Error(), "too short")
 	})
 
 	t.Run("wrong magic", func(t *testing.T) {
+		t.Parallel()
 		buf := make([]byte, 124)
 		copy(buf[0:4], []byte("XXXX"))
 		_, err := dnscrypt.ParseCert(buf)
@@ -80,6 +82,7 @@ func TestDecryptErrors(t *testing.T) {
 	cert := makeCert(t).cert
 
 	t.Run("unsupported ES version", func(t *testing.T) {
+		t.Parallel()
 		bad := *cert
 		bad.ESVersion = dnscrypt.ESVersion1
 		_, err := dnscrypt.Decrypt(&bad, [32]byte{}, [12]byte{}, make([]byte, 64))
@@ -87,11 +90,13 @@ func TestDecryptErrors(t *testing.T) {
 	})
 
 	t.Run("packet too short", func(t *testing.T) {
+		t.Parallel()
 		_, err := dnscrypt.Decrypt(cert, [32]byte{}, [12]byte{}, make([]byte, 4))
 		require.ErrorIs(t, err, dnscrypt.ErrPlainTextTooShort)
 	})
 
 	t.Run("bad resolver magic", func(t *testing.T) {
+		t.Parallel()
 		buf := make([]byte, 64)
 		copy(buf[0:8], []byte("ZZZZZZZZ"))
 		_, err := dnscrypt.Decrypt(cert, [32]byte{}, [12]byte{}, buf)
@@ -99,6 +104,7 @@ func TestDecryptErrors(t *testing.T) {
 	})
 
 	t.Run("client nonce mismatch", func(t *testing.T) {
+		t.Parallel()
 		buf := make([]byte, 64)
 		copy(buf[0:8], []byte("r6fnvWj8"))
 		// bytes [8:20] are zero — caller passes a different nonce.
@@ -110,6 +116,7 @@ func TestDecryptErrors(t *testing.T) {
 	})
 
 	t.Run("aead open failure", func(t *testing.T) {
+		t.Parallel()
 		// Build a packet with valid magic and matching client nonce but
 		// garbage ciphertext so chacha20poly1305.Open fails.
 		var clientNonce [12]byte
@@ -170,6 +177,7 @@ func TestUnpadErrorsViaDecrypt(t *testing.T) {
 	}
 
 	t.Run("bad padding byte", func(t *testing.T) {
+		t.Parallel()
 		// Plaintext ends in something that's neither 0x00 nor 0x80.
 		pkt := buildPacket([]byte{0x01, 0x02, 0x42})
 		_, err := dnscrypt.Decrypt(cert, clientSK, clientNonce, pkt)
@@ -178,6 +186,7 @@ func TestUnpadErrorsViaDecrypt(t *testing.T) {
 	})
 
 	t.Run("missing sentinel - all zero", func(t *testing.T) {
+		t.Parallel()
 		// Plaintext is all 0x00 → unpad walks through every byte and
 		// returns "padding sentinel not found".
 		pkt := buildPacket(make([]byte, 8))

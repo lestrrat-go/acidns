@@ -28,6 +28,7 @@ func TestType(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
 			require.Equal(t, tc.name, tc.t.String())
 			parsed, ok := rrtype.Parse(tc.name)
 			require.True(t, ok)

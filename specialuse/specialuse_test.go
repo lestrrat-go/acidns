@@ -25,6 +25,7 @@ func TestFor(t *testing.T) {
 	}
 	for name, want := range cases {
 		t.Run(name, func(t *testing.T) {
+			t.Parallel()
 			n := wire.MustParseName(name)
 			require.Equal(t, want, specialuse.For(n))
 		})

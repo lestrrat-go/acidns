@@ -56,6 +56,7 @@ func TestUnpackTruncations(t *testing.T) {
 		{"TXT", rrtype.TXT, 0},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
 			buf := make([]byte, tc.l)
 			u := wirebb.NewUnpacker(buf)
 			// Pretend rdlen is much larger to trigger the bounds check.

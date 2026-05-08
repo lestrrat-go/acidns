@@ -77,22 +77,26 @@ func TestStringEscapes(t *testing.T) {
 	t.Parallel()
 
 	t.Run("escaped dot in label", func(t *testing.T) {
+		t.Parallel()
 		n := wirebb.MustParse(`weird\.label.example.com`)
 		require.Equal(t, `weird\.label.example.com.`, n.String())
 	})
 
 	t.Run("escaped backslash in label", func(t *testing.T) {
+		t.Parallel()
 		n := wirebb.MustParse(`a\\b.example.com`)
 		require.Equal(t, `a\\b.example.com.`, n.String())
 	})
 
 	t.Run("non printable becomes decimal escape", func(t *testing.T) {
+		t.Parallel()
 		n, err := wirebb.FromLabels(string([]byte{0x01, 'x'}), "com")
 		require.NoError(t, err)
 		require.Equal(t, `\001x.com.`, n.String())
 	})
 
 	t.Run("high byte becomes decimal escape", func(t *testing.T) {
+		t.Parallel()
 		n, err := wirebb.FromLabels(string([]byte{0xff}), "com")
 		require.NoError(t, err)
 		require.Equal(t, `\255.com.`, n.String())
@@ -116,31 +120,37 @@ func TestParseEscapeErrors(t *testing.T) {
 	t.Parallel()
 
 	t.Run("trailing backslash", func(t *testing.T) {
+		t.Parallel()
 		_, err := wirebb.Parse(`example.com\`)
 		require.ErrorIs(t, err, wirebb.ErrInvalidName)
 	})
 
 	t.Run("truncated decimal escape", func(t *testing.T) {
+		t.Parallel()
 		_, err := wirebb.Parse(`\12`)
 		require.ErrorIs(t, err, wirebb.ErrInvalidName)
 	})
 
 	t.Run("non-digit second char in decimal escape", func(t *testing.T) {
+		t.Parallel()
 		_, err := wirebb.Parse(`\1a2.com`)
 		require.ErrorIs(t, err, wirebb.ErrInvalidName)
 	})
 
 	t.Run("non-digit third char in decimal escape", func(t *testing.T) {
+		t.Parallel()
 		_, err := wirebb.Parse(`\12a.com`)
 		require.ErrorIs(t, err, wirebb.ErrInvalidName)
 	})
 
 	t.Run("decimal escape over 255", func(t *testing.T) {
+		t.Parallel()
 		_, err := wirebb.Parse(`\256.com`)
 		require.ErrorIs(t, err, wirebb.ErrInvalidName)
 	})
 
 	t.Run("escaped non-digit ok", func(t *testing.T) {
+		t.Parallel()
 		n, err := wirebb.Parse(`a\@b.com`)
 		require.NoError(t, err)
 		// '@' is 0x40, printable, so renders verbatim
@@ -164,21 +174,25 @@ func TestDecodeWireErrors(t *testing.T) {
 	t.Parallel()
 
 	t.Run("offset out of range negative", func(t *testing.T) {
+		t.Parallel()
 		_, _, err := wirebb.DecodeWire([]byte{0}, -1)
 		require.ErrorIs(t, err, wirebb.ErrInvalidName)
 	})
 
 	t.Run("offset out of range past end", func(t *testing.T) {
+		t.Parallel()
 		_, _, err := wirebb.DecodeWire([]byte{0}, 5)
 		require.ErrorIs(t, err, wirebb.ErrInvalidName)
 	})
 
 	t.Run("empty msg", func(t *testing.T) {
+		t.Parallel()
 		_, _, err := wirebb.DecodeWire(nil, 0)
 		require.ErrorIs(t, err, wirebb.ErrInvalidName)
 	})
 
 	t.Run("truncated label content", func(t *testing.T) {
+		t.Parallel()
 		// label length 7 but only 2 bytes follow.
 		buf := []byte{7, 'a', 'b'}
 		_, _, err := wirebb.DecodeWire(buf, 0)
@@ -186,6 +200,7 @@ func TestDecodeWireErrors(t *testing.T) {
 	})
 
 	t.Run("truncated pointer second byte", func(t *testing.T) {
+		t.Parallel()
 		// 0xc0 starts pointer but no second byte.
 		buf := []byte{0xc0}
 		_, _, err := wirebb.DecodeWire(buf, 0)
@@ -193,6 +208,7 @@ func TestDecodeWireErrors(t *testing.T) {
 	})
 
 	t.Run("self pointer", func(t *testing.T) {
+		t.Parallel()
 		// pointer at offset 0 pointing to offset 0.
 		buf := []byte{0xc0, 0x00}
 		_, _, err := wirebb.DecodeWire(buf, 0)
@@ -200,6 +216,7 @@ func TestDecodeWireErrors(t *testing.T) {
 	})
 
 	t.Run("name exceeds max length via labels", func(t *testing.T) {
+		t.Parallel()
 		// Build a buffer with concatenated labels that exceed 255 bytes total.
 		var buf []byte
 		// 4 labels of 63 bytes each = 4 * (1+63) = 256 bytes before terminator.
@@ -213,6 +230,7 @@ func TestDecodeWireErrors(t *testing.T) {
 	})
 
 	t.Run("case folding in decoded labels", func(t *testing.T) {
+		t.Parallel()
 		buf := []byte{3, 'A', 'B', 'C', 0}
 		n, _, err := wirebb.DecodeWire(buf, 0)
 		require.NoError(t, err)
@@ -220,6 +238,7 @@ func TestDecodeWireErrors(t *testing.T) {
 	})
 
 	t.Run("reserved label type 0x40", func(t *testing.T) {
+		t.Parallel()
 		buf := []byte{0x40, 0, 0}
 		_, _, err := wirebb.DecodeWire(buf, 0)
 		require.ErrorIs(t, err, wirebb.ErrInvalidName)
@@ -322,36 +341,42 @@ func TestUnpackerTruncated(t *testing.T) {
 	t.Parallel()
 
 	t.Run("uint16 truncated", func(t *testing.T) {
+		t.Parallel()
 		u := wirebb.NewUnpacker([]byte{1})
 		_, err := u.Uint16()
 		require.ErrorIs(t, err, wirebb.ErrTruncated)
 	})
 
 	t.Run("uint32 truncated", func(t *testing.T) {
+		t.Parallel()
 		u := wirebb.NewUnpacker([]byte{1, 2, 3})
 		_, err := u.Uint32()
 		require.ErrorIs(t, err, wirebb.ErrTruncated)
 	})
 
 	t.Run("bytes truncated", func(t *testing.T) {
+		t.Parallel()
 		u := wirebb.NewUnpacker([]byte{1, 2})
 		_, err := u.Bytes(5)
 		require.ErrorIs(t, err, wirebb.ErrTruncated)
 	})
 
 	t.Run("bytes negative", func(t *testing.T) {
+		t.Parallel()
 		u := wirebb.NewUnpacker([]byte{1, 2})
 		_, err := u.Bytes(-1)
 		require.ErrorIs(t, err, wirebb.ErrTruncated)
 	})
 
 	t.Run("char string length read fails", func(t *testing.T) {
+		t.Parallel()
 		u := wirebb.NewUnpacker(nil)
 		_, err := u.CharString()
 		require.ErrorIs(t, err, wirebb.ErrTruncated)
 	})
 
 	t.Run("char string body truncated", func(t *testing.T) {
+		t.Parallel()
 		// length=5 but only 2 bytes follow.
 		u := wirebb.NewUnpacker([]byte{5, 'a', 'b'})
 		_, err := u.CharString()
@@ -359,6 +384,7 @@ func TestUnpackerTruncated(t *testing.T) {
 	})
 
 	t.Run("name decode error propagates", func(t *testing.T) {
+		t.Parallel()
 		// reserved label type triggers DecodeWire error.
 		u := wirebb.NewUnpacker([]byte{0x80, 0, 0})
 		_, err := u.Name()

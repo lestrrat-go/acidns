@@ -117,6 +117,7 @@ func TestParseErrors(t *testing.T) {
 	}
 	for name, in := range cases {
 		t.Run(name, func(t *testing.T) {
+			t.Parallel()
 			_, err := zonefile.Parse(strings.NewReader(in))
 			require.Error(t, err)
 		})

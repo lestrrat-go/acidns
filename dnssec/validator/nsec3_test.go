@@ -27,6 +27,7 @@ func TestNSEC3HashRFC5155Appendix(t *testing.T) {
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
 			n := wire.MustParseName(tc.name)
 			got := nsec3Hash(n, salt, 12)
 			require.Equal(t, strings.ToLower(tc.expected),
