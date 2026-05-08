@@ -407,20 +407,24 @@ func (r *recursive) resolveDepthInner(ctx context.Context, name wire.Name, t rrt
 			r.cache.Put(name, t, entry)
 			return entry, nil
 		}
-		// Some servers don't set AA but still answer; if there are matching
-		// records in the answer section, treat it as terminal.
+
+		// Non-authoritative response (AA=0). Prefer following any
+		// delegation in the authority section over accepting the
+		// answer; a path-injected forgery typically lacks a coherent
+		// delegation chain, while legitimate authoritatives set AA=1.
+		// If there's no referral path, fall back to accepting matching
+		// answer records (forwarder behaviour).
+		next := r.serversFromReferral(ctx, resp, depth)
+		if len(next) > 0 {
+			servers = next
+			continue
+		}
 		if hasAnswerFor(resp, name, t) {
 			entry := r.entryFromResponse(name, resp)
 			r.cache.Put(name, t, entry)
 			return entry, nil
 		}
-
-		// Otherwise treat it as a referral.
-		next := r.serversFromReferral(ctx, resp, depth)
-		if len(next) == 0 {
-			return Entry{}, fmt.Errorf("recursive: empty referral for %s", name)
-		}
-		servers = next
+		return Entry{}, fmt.Errorf("recursive: empty referral for %s", name)
 	}
 	return Entry{}, ErrIterationLimit
 }

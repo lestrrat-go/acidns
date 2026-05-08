@@ -371,15 +371,37 @@ func (w *walker) fetchAndVerifyDNSKEY(ctx context.Context, zone wire.Name, dss [
 	}
 
 	// RFC 6840 §5.11: every algorithm in the parent's DS list must have a
-	// signing pair. Walk RRSIGs and mark covered algorithms.
+	// signing pair that actually verifies the DNSKEY rrset. The earlier
+	// keytag-only match was insufficient — a forged RRSIG with the right
+	// keytag but invalid signature would falsely satisfy completeness.
+	now := w.now()
 	signingAlgs := map[rdata.DNSSECAlgorithm]struct{}{}
+	tries := 0
 	for _, sig := range sigs {
-		// Match RRSIG to a DNSKEY in the rrset; the key need not be a KSK.
+		if _, need := parentAlgs[sig.Algorithm()]; !need {
+			continue
+		}
+		if _, done := signingAlgs[sig.Algorithm()]; done {
+			continue
+		}
+		if !validatorbb.RRSIGValidNowWithSkew(sig, now, w.skew) {
+			continue
+		}
 		for _, key := range keys {
-			if dnssec.KeyTag(key) == sig.KeyTag() && key.Algorithm() == sig.Algorithm() {
+			if dnssec.KeyTag(key) != sig.KeyTag() || key.Algorithm() != sig.Algorithm() {
+				continue
+			}
+			tries++
+			if tries > w.maxRRSIGsTry {
+				break
+			}
+			if err := dnssec.Verify(dnskeyRRs, sig, key); err == nil {
 				signingAlgs[sig.Algorithm()] = struct{}{}
 				break
 			}
+		}
+		if tries > w.maxRRSIGsTry {
+			break
 		}
 	}
 	for alg := range parentAlgs {
@@ -577,16 +599,21 @@ func (w *walker) validateNSECNXDomain(qname wire.Name, parentKeys []rdata.DNSKEY
 	if len(nsecRRs) == 0 {
 		return fmt.Errorf("no NSEC in authority")
 	}
-	// Group NSEC records and verify the rrset signatures.
+	// Group NSEC records and require every group to be signature-verified.
+	// Skipping a group with no RRSIG would let a forged NSEC inserted
+	// alongside a legitimate one fabricate the wildcard side of the proof
+	// (the cover/wildcard scans below iterate every NSEC). Mirror the
+	// fail-closed shape used by verifyNSEC3Set.
 	groups := validatorbb.GroupRecordsByOwner(nsecRRs)
+	allSigs := extractRRSIGs(msg.Authorities())
 	for _, set := range groups {
 		owner := set[0].Name()
-		sigs := rrsigsForTypeAndOwner(extractRRSIGs(msg.Authorities()), rrtype.NSEC, owner)
+		sigs := rrsigsForTypeAndOwner(allSigs, rrtype.NSEC, owner)
 		if len(sigs) == 0 {
-			continue
+			return fmt.Errorf("NSEC at %s lacks RRSIG", owner)
 		}
 		if err := w.verifyRRsetWithKeys(set, sigs, parentKeys); err != nil {
-			return fmt.Errorf("NSEC rrsig: %w", err)
+			return fmt.Errorf("NSEC rrsig at %s: %w", owner, err)
 		}
 	}
 	// 1. Find a covering NSEC for qname and capture its bounds for the
@@ -657,23 +684,61 @@ func (w *walker) validateNoData(qname wire.Name, qtype rrtype.Type, parentKeys [
 }
 
 func (w *walker) validateNoDataNSEC(qname wire.Name, qtype rrtype.Type, parentKeys []rdata.DNSKEY, msg wire.Message, chain []ChainStep) (Answer, bool) {
-	nsecRRs := validatorbb.FilterNSECByOwner(msg.Authorities(), qname)
-	if len(nsecRRs) == 0 {
+	allNSECs := allNSEC(msg.Authorities())
+	if len(allNSECs) == 0 {
 		return nil, false
 	}
-	sigs := rrsigsForTypeAndOwner(extractRRSIGs(msg.Authorities()), rrtype.NSEC, qname)
-	if len(sigs) == 0 {
-		return nil, false
+	// Verify every NSEC group; fail closed if any group lacks signatures
+	// or fails verification, otherwise the ENT scan below could rely on
+	// an unsigned record.
+	groups := validatorbb.GroupRecordsByOwner(allNSECs)
+	allSigs := extractRRSIGs(msg.Authorities())
+	for _, set := range groups {
+		owner := set[0].Name()
+		sigs := rrsigsForTypeAndOwner(allSigs, rrtype.NSEC, owner)
+		if len(sigs) == 0 {
+			return nil, false
+		}
+		if err := w.verifyRRsetWithKeys(set, sigs, parentKeys); err != nil {
+			return nil, false
+		}
 	}
-	if err := w.verifyRRsetWithKeys(nsecRRs, sigs, parentKeys); err != nil {
-		return nil, false
-	}
-	for _, r := range nsecRRs {
+
+	// Case 1 (RFC 4035 §3.1.3.1): NSEC at owner==qname proves qtype absence
+	// via its type bitmap.
+	for _, r := range allNSECs {
+		if !r.Name().Equal(qname) {
+			continue
+		}
 		nsec, ok := wire.RDataAs[rdata.NSEC](r)
 		if !ok {
 			continue
 		}
 		if !bitmapHas(nsec.Types(), qtype) {
+			return &answer{
+				result:  Secure,
+				records: nil,
+				rcode:   wire.RCODENoError,
+				chain:   chain,
+			}, true
+		}
+	}
+
+	// Case 2 (RFC 4035 §3.1.3.4 / RFC 7129 §5.5): qname is an Empty
+	// Non-Terminal. Proven by an NSEC whose NextDomainName is a strict
+	// descendant of qname — qname must exist as an interior name to be
+	// skipped over by the chain — and an ENT has no records of any type,
+	// so NoData for qtype follows automatically.
+	for _, r := range allNSECs {
+		nsec, ok := wire.RDataAs[rdata.NSEC](r)
+		if !ok {
+			continue
+		}
+		next := nsec.NextDomainName()
+		if next.Equal(qname) {
+			continue
+		}
+		if validatorbb.NameSuffixEqualOrSubdomain(next, qname) {
 			return &answer{
 				result:  Secure,
 				records: nil,
@@ -714,7 +779,18 @@ func (w *walker) validateNegative(qname wire.Name, qtype rrtype.Type, parentKeys
 	if msg.Flags().RCODE() != wire.RCODENXDomain {
 		return w.validateNoData(qname, qtype, parentKeys, msg, chain)
 	}
-	zone := validatorbb.SignerOf(msg.Authorities())
+	// The zone for NSEC3 closest-encloser hashing must come from the
+	// validated chain — not from the response's RRSIG signer name. A
+	// hostile authoritative could otherwise smuggle a signer name from a
+	// peer zone whose keys parentKeys do not authenticate.
+	zone := deepestSecureZone(chain)
+	if !zone.IsValid() {
+		return w.bogus(qname, qtype, chain, fmt.Errorf("validator: no secure zone in chain"))
+	}
+	respSigner := validatorbb.SignerOf(msg.Authorities())
+	if respSigner.IsValid() && !validatorbb.NameSuffixEqualOrSubdomain(zone, respSigner) && !respSigner.Equal(zone) {
+		return w.bogus(qname, qtype, chain, fmt.Errorf("validator: NXDOMAIN signer %s not in chain (deepest secure zone %s)", respSigner, zone))
+	}
 	if err := w.validateNXDomain(qname, zone, parentKeys, msg); err != nil {
 		return w.bogus(qname, qtype, chain, fmt.Errorf("validator: NXDOMAIN proof: %w", err))
 	}
@@ -724,6 +800,17 @@ func (w *walker) validateNegative(qname wire.Name, qtype rrtype.Type, parentKeys
 		rcode:   wire.RCODENXDomain,
 		chain:   chain,
 	}, nil
+}
+
+// deepestSecureZone returns the zone of the deepest Secure step in chain.
+// Returns the zero Name if no Secure step is present.
+func deepestSecureZone(chain []ChainStep) wire.Name {
+	for i := len(chain) - 1; i >= 0; i-- {
+		if chain[i].Result() == Secure {
+			return chain[i].Zone()
+		}
+	}
+	return wire.Name{}
 }
 
 // signingAlgorithms returns the set of DNSSEC algorithms that the parent
@@ -763,11 +850,13 @@ func (w *walker) verifyRRsetAllAlgs(set []wire.Record, sigs []rdata.RRSIG, keys 
 	if len(set) == 0 {
 		return fmt.Errorf("validator: empty rrset")
 	}
-	if len(sigs) > w.maxRRSIGsTry {
-		sigs = sigs[:w.maxRRSIGsTry]
-	}
 	now := w.now()
 	covered := map[rdata.DNSSECAlgorithm]struct{}{}
+	// Walk every sig (do NOT pre-truncate to maxRRSIGsTry — that would
+	// silently drop the only valid signature of a strong algorithm if
+	// many weak-algorithm sigs sort before it). Cap the actual
+	// dnssec.Verify calls instead.
+	tries := 0
 	for _, sig := range sigs {
 		if _, need := requiredAlgs[sig.Algorithm()]; !need {
 			continue
@@ -782,10 +871,17 @@ func (w *walker) verifyRRsetAllAlgs(set []wire.Record, sigs []rdata.RRSIG, keys 
 			if dnssec.KeyTag(key) != sig.KeyTag() || key.Algorithm() != sig.Algorithm() {
 				continue
 			}
+			tries++
+			if tries > w.maxRRSIGsTry {
+				break
+			}
 			if err := dnssec.Verify(set, sig, key); err == nil {
 				covered[sig.Algorithm()] = struct{}{}
 				break
 			}
+		}
+		if tries > w.maxRRSIGsTry {
+			break
 		}
 	}
 	for alg := range requiredAlgs {
