@@ -246,12 +246,21 @@ func (r *recursive) resolveDepthFollow(ctx context.Context, name wire.Name, t rr
 		if err != nil {
 			return Entry{}, err
 		}
-		// First leg becomes the spine of the response; subsequent legs
-		// merge their answer records.
+		// Filter each leg's answers to records the leg explicitly asked
+		// about — same owner. RFC 5452 §5 + RFC 8499 §6: an
+		// authoritative MAY return additional records along the chain,
+		// but we don't trust them. A malicious authoritative for
+		// `evil.example` returning `evil.example CNAME victim.bank.com`
+		// PLUS a forged `victim.bank.com A 1.2.3.4` in the same answer
+		// section would otherwise see the forged A flow into the
+		// aggregated result. The next leg of the chase re-resolves the
+		// CNAME target from roots, getting the legitimate records.
+		legAnswers := recordsAt(entry.Answer, cur)
 		if len(aggregated.Answer) == 0 && len(aggregated.Authority) == 0 {
 			aggregated = entry
+			aggregated.Answer = legAnswers
 		} else {
-			aggregated.Answer = append(aggregated.Answer, entry.Answer...)
+			aggregated.Answer = append(aggregated.Answer, legAnswers...)
 			if entry.RCODE != wire.RCODENoError {
 				aggregated.RCODE = entry.RCODE
 			}
@@ -279,6 +288,21 @@ func (r *recursive) resolveDepthFollow(ctx context.Context, name wire.Name, t rr
 		}
 		cur = target
 	}
+}
+
+// recordsAt returns the subset of records whose owner equals name. Used
+// during CNAME chasing to discard "extra" records an authoritative
+// server may have bundled alongside the requested data — the resolver
+// re-resolves the chase target from roots, so trusting the bundled
+// records would let one zone forge data for another.
+func recordsAt(records []wire.Record, name wire.Name) []wire.Record {
+	out := make([]wire.Record, 0, len(records))
+	for _, r := range records {
+		if r.Name().Equal(name) {
+			out = append(out, r)
+		}
+	}
+	return out
 }
 
 func (r *recursive) resolveDepth(ctx context.Context, name wire.Name, t rrtype.Type, depth int) (Entry, error) {

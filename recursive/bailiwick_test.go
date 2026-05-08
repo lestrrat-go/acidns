@@ -56,6 +56,23 @@ func TestGlueForRejectsOutOfBailiwickAdditional(t *testing.T) {
 		"glue for out-of-bailiwick name must be rejected")
 }
 
+func TestRecordsAtFiltersByOwner(t *testing.T) {
+	t.Parallel()
+	cur := wire.MustParseName("evil.example")
+	other := wire.MustParseName("victim.bank.com")
+
+	records := []wire.Record{
+		// Legitimate record at the queried name.
+		wire.NewRecord(cur, 60, rdata.NewCNAME(other)),
+		// Forged record bundled by a malicious authoritative.
+		wire.NewRecord(other, 60,
+			rdata.NewA(netip.MustParseAddr("198.51.100.1"))),
+	}
+	got := recordsAt(records, cur)
+	require.Len(t, got, 1, "only records owned by cur must survive")
+	require.True(t, got[0].Name().Equal(cur))
+}
+
 func TestReferralZone(t *testing.T) {
 	t.Parallel()
 	rec := wire.NewRecord(wire.MustParseName("example.com"), 0,
