@@ -23,7 +23,7 @@ func (a *authoritative) serveNotify(w acidns.ResponseWriter, q wire.Message) {
 	}
 
 	if len(q.Questions()) == 0 {
-		_ = w.WriteMsg(mustBuild(echoEDNS(b, q).RCODE(wire.RCODEFormErr), q))
+		_ = w.WriteMsg(mustBuild(setRCODE(b, q, wire.RCODEFormErr), q))
 		return
 	}
 	zoneQ := q.Questions()[0]
@@ -33,7 +33,7 @@ func (a *authoritative) serveNotify(w acidns.ResponseWriter, q wire.Message) {
 	handler := a.notifyHandler
 	a.mu.RUnlock()
 	if !owns {
-		_ = w.WriteMsg(mustBuild(echoEDNS(b, q).RCODE(wire.RCODENotAuth), q))
+		_ = w.WriteMsg(mustBuild(setRCODE(b, q, wire.RCODENotAuth), q))
 		return
 	}
 

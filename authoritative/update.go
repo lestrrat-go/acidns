@@ -29,19 +29,19 @@ func (a *authoritative) serveUpdate(w acidns.ResponseWriter, q wire.Message) {
 	// reveal anything that the malformed-by-construction caller doesn't
 	// already know.
 	if len(q.Questions()) != 1 {
-		_ = w.WriteMsg(mustBuild(echoEDNS(b, q).RCODE(wire.RCODEFormErr), q))
+		_ = w.WriteMsg(mustBuild(setRCODE(b, q, wire.RCODEFormErr), q))
 		return
 	}
 	zoneQ := q.Questions()[0]
 	if zoneQ.Type() != rrtype.SOA {
-		_ = w.WriteMsg(mustBuild(echoEDNS(b, q).RCODE(wire.RCODEFormErr), q))
+		_ = w.WriteMsg(mustBuild(setRCODE(b, q, wire.RCODEFormErr), q))
 		return
 	}
 
 	// Authorisation gate. With no policy installed, every UPDATE is
 	// refused — we won't accept unauthenticated mutation by default.
 	if a.updatePolicy == nil || !a.updatePolicy(w, q) {
-		_ = w.WriteMsg(mustBuild(echoEDNS(b, q).RCODE(wire.RCODERefused), q))
+		_ = w.WriteMsg(mustBuild(setRCODE(b, q, wire.RCODERefused), q))
 		return
 	}
 
@@ -49,14 +49,14 @@ func (a *authoritative) serveUpdate(w acidns.ResponseWriter, q wire.Message) {
 	defer a.mu.Unlock()
 	zone, ok := a.zones[nameKey(zoneQ.Name())]
 	if !ok {
-		_ = w.WriteMsg(mustBuild(echoEDNS(b, q).RCODE(wire.RCODENotAuth), q))
+		_ = w.WriteMsg(mustBuild(setRCODE(b, q, wire.RCODENotAuth), q))
 		return
 	}
 
 	// Prerequisites — RFC 2136 §3.2.
 	for _, p := range q.Answers() {
 		if rcode := zone.checkPrereq(p); rcode != wire.RCODENoError {
-			_ = w.WriteMsg(mustBuild(echoEDNS(b, q).RCODE(rcode), q))
+			_ = w.WriteMsg(mustBuild(setRCODE(b, q, rcode), q))
 			return
 		}
 	}

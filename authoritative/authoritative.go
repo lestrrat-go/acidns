@@ -167,18 +167,18 @@ func (a *authoritative) serveAXFR(w acidns.ResponseWriter, q wire.Message) {
 
 	// AXFR over UDP is not allowed.
 	if w.Network() != "tcp" {
-		_ = w.WriteMsg(mustBuild(echoEDNS(header(), q).RCODE(wire.RCODERefused), q))
+		_ = w.WriteMsg(mustBuild(setRCODE(header(), q, wire.RCODERefused), q))
 		return
 	}
 
 	zone := a.findZone(question.Name())
 	if zone == nil {
-		_ = w.WriteMsg(mustBuild(echoEDNS(header(), q).RCODE(wire.RCODERefused), q))
+		_ = w.WriteMsg(mustBuild(setRCODE(header(), q, wire.RCODERefused), q))
 		return
 	}
 	if !zone.origin.Equal(question.Name()) {
 		// AXFR target must equal a zone's apex.
-		_ = w.WriteMsg(mustBuild(echoEDNS(header(), q).RCODE(wire.RCODENotAuth), q))
+		_ = w.WriteMsg(mustBuild(setRCODE(header(), q, wire.RCODENotAuth), q))
 		return
 	}
 
@@ -234,15 +234,14 @@ func (a *authoritative) answer(q wire.Message) wire.Message {
 		RecursionDesired(q.Flags().RecursionDesired())
 
 	if len(q.Questions()) == 0 {
-		return mustBuild(echoEDNS(b, q).RCODE(wire.RCODEFormErr), q)
+		return mustBuild(setRCODE(b, q, wire.RCODEFormErr), q)
 	}
 	question := q.Questions()[0]
 	b = b.Question(question)
-	b = echoEDNS(b, q)
 
 	zone := a.findZone(question.Name())
 	if zone == nil {
-		return mustBuild(b.RCODE(wire.RCODERefused), q)
+		return mustBuild(setRCODE(b, q, wire.RCODERefused), q)
 	}
 
 	res := zone.lookup(question.Name(), question.Type())
@@ -256,26 +255,35 @@ func (a *authoritative) answer(q wire.Message) wire.Message {
 	for _, r := range res.additional {
 		b = b.Additional(r)
 	}
-	if res.rcode != wire.RCODENoError {
-		b = b.RCODE(res.rcode)
-	}
-	return mustBuild(b, q)
+	return mustBuild(setRCODE(b, q, res.rcode), q)
 }
 
-// echoEDNS attaches an OPT pseudo-RR to the response builder if the
-// request carried one (RFC 6891 §6.1.1: a response to a query with OPT
-// MUST contain an OPT in the response). The echoed OPT advertises this
-// server's UDP buffer size and mirrors the requestor's DO bit.
-func echoEDNS(b *wire.Builder, q wire.Message) *wire.Builder {
+// setRCODE writes the response RCODE to b, attaching an OPT echo when
+// the request carried EDNS (RFC 6891 §6.1.1) and splitting the 12-bit
+// RCODE into the header's low 4 bits and the OPT's 8-bit extended RCODE
+// (RFC 6891 §6.1.3). For RCODE values that fit in 4 bits the OPT's
+// extended-RCODE field is zero, matching the no-EDNS encoding.
+func setRCODE(b *wire.Builder, q wire.Message, code wire.RCODE) *wire.Builder {
+	b = b.RCODE(wire.RCODE(uint8(code) & 0x0f))
 	qe, ok := q.EDNS()
 	if !ok || qe == nil {
 		return b
 	}
-	resp := wire.NewEDNSBuilder().
+	eb := wire.NewEDNSBuilder().
 		UDPSize(1232). // DNS Flag Day 2020 default
-		DO(qe.DO()).
-		Build()
-	return b.EDNS(resp)
+		DO(qe.DO())
+	if hi := uint8(code) >> 4; hi != 0 {
+		eb = eb.ExtendedRCODE(hi)
+	}
+	return b.EDNS(eb.Build())
+}
+
+// echoEDNS attaches an OPT pseudo-RR to the response builder if the
+// request carried one. Used by code paths that don't carry an explicit
+// RCODE (e.g. successful AXFR envelopes); for paths that set a RCODE
+// use [setRCODE] instead so the extended bits are not silently dropped.
+func echoEDNS(b *wire.Builder, q wire.Message) *wire.Builder {
+	return setRCODE(b, q, wire.RCODENoError)
 }
 
 // mustBuild builds m. On builder error it returns a SERVFAIL that still
