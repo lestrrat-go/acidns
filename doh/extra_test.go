@@ -31,6 +31,29 @@ func TestNewURLParseError(t *testing.T) {
 	require.Contains(t, err.Error(), "invalid endpoint")
 }
 
+// TestNewRefusesPlaintextHTTP confirms that an http:// endpoint is
+// rejected unless WithInsecure is set explicitly. RFC 8484 mandates a
+// TLS-protected channel; silently allowing http would defeat the
+// privacy goal of the package.
+func TestNewRefusesPlaintextHTTP(t *testing.T) {
+	t.Parallel()
+	_, err := doh.New("http://example.com/dns-query")
+	require.Error(t, err, "plaintext http:// must be refused")
+	require.Contains(t, err.Error(), "plaintext http")
+
+	// Explicit opt-in lets it through.
+	ex, err := doh.New("http://example.com/dns-query", doh.WithInsecure())
+	require.NoError(t, err)
+	require.NotNil(t, ex)
+}
+
+func TestNewRefusesUnknownScheme(t *testing.T) {
+	t.Parallel()
+	_, err := doh.New("ftp://example.com/dns-query")
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "scheme must be https")
+}
+
 // TestNewNilHTTPClient covers the WithHTTPClient(nil) branch — the constructor
 // must fall back to http.DefaultClient.
 func TestNewNilHTTPClient(t *testing.T) {
@@ -49,7 +72,7 @@ func TestExchangeBadContentType(t *testing.T) {
 	}))
 	t.Cleanup(srv.Close)
 
-	ex, err := doh.New(srv.URL)
+	ex, err := doh.New(srv.URL, doh.WithInsecure())
 	require.NoError(t, err)
 
 	_, err = ex.Exchange(t.Context(), newQuery(t, 0x1234))
@@ -69,7 +92,7 @@ func TestExchangeEmptyContentType(t *testing.T) {
 	}))
 	t.Cleanup(srv.Close)
 
-	ex, err := doh.New(srv.URL)
+	ex, err := doh.New(srv.URL, doh.WithInsecure())
 	require.NoError(t, err)
 
 	_, err = ex.Exchange(t.Context(), newQuery(t, 0x2345))
@@ -88,7 +111,7 @@ func TestExchangeUnmarshalError(t *testing.T) {
 	}))
 	t.Cleanup(srv.Close)
 
-	ex, err := doh.New(srv.URL)
+	ex, err := doh.New(srv.URL, doh.WithInsecure())
 	require.NoError(t, err)
 
 	_, err = ex.Exchange(t.Context(), newQuery(t, 0x3456))
@@ -121,7 +144,7 @@ func TestExchangeIDMismatch(t *testing.T) {
 	}))
 	t.Cleanup(srv.Close)
 
-	ex, err := doh.New(srv.URL)
+	ex, err := doh.New(srv.URL, doh.WithInsecure())
 	require.NoError(t, err)
 
 	_, err = ex.Exchange(t.Context(), newQuery(t, 0x4567))
@@ -137,7 +160,7 @@ func TestExchangeRequestError(t *testing.T) {
 	url := srv.URL
 	srv.Close() // close immediately so subsequent dial fails.
 
-	ex, err := doh.New(url)
+	ex, err := doh.New(url, doh.WithInsecure())
 	require.NoError(t, err)
 
 	_, err = ex.Exchange(t.Context(), newQuery(t, 0x5678))

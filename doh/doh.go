@@ -72,12 +72,19 @@ func New(endpoint string, opts ...Option) (acidns.Exchanger, error) {
 	if err != nil {
 		return nil, fmt.Errorf("doh: invalid endpoint: %w", err)
 	}
-	if u.Scheme != "https" && u.Scheme != "http" {
-		return nil, fmt.Errorf("doh: endpoint scheme must be http(s)")
-	}
 	c := config{client: http.DefaultClient, method: MethodPOST, userAgent: "acidns-doh/0.1", padding: true}
 	for _, o := range opts {
 		o.applyDoH(&c)
+	}
+	switch u.Scheme {
+	case "https":
+		// the only real DoH transport
+	case "http":
+		if !c.insecure {
+			return nil, fmt.Errorf("doh: refusing plaintext http:// endpoint; use https:// or WithInsecure() (test loopback only)")
+		}
+	default:
+		return nil, fmt.Errorf("doh: endpoint scheme must be https (or http with WithInsecure)")
 	}
 	if c.client == nil {
 		c.client = http.DefaultClient

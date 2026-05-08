@@ -14,6 +14,7 @@ type config struct {
 	method    Method
 	userAgent string
 	padding   bool
+	insecure  bool
 }
 
 // WithHTTPClient overrides the default *http.Client.
@@ -37,4 +38,13 @@ func WithUserAgent(ua string) Option {
 // disable padding.
 func WithPadding(v bool) Option {
 	return optionFunc(func(c *config) { c.padding = v })
+}
+
+// WithInsecure permits a plaintext "http://" endpoint. By default
+// [New] refuses non-HTTPS schemes — DoH (RFC 8484) is meaningful only
+// over a TLS-protected channel, and silently downgrading to HTTP would
+// defeat the privacy goal. Use this only for tests against a local
+// loopback server (e.g. httptest.NewServer).
+func WithInsecure() Option {
+	return optionFunc(func(c *config) { c.insecure = true })
 }

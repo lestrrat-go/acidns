@@ -22,7 +22,7 @@ func TestExchange_HTTPStatusError(t *testing.T) {
 	}))
 	t.Cleanup(srv.Close)
 
-	ex, err := doh.New(srv.URL)
+	ex, err := doh.New(srv.URL, doh.WithInsecure())
 	require.NoError(t, err)
 
 	q := wiretest.Query(wire.MustParseName("example.com"), rrtype.A)

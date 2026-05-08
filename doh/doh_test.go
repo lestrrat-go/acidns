@@ -65,7 +65,7 @@ func TestDoHPost(t *testing.T) {
 	srv := makeServer(t, http.MethodPost)
 	t.Cleanup(srv.Close)
 
-	ex, err := doh.New(srv.URL + "/dns-query")
+	ex, err := doh.New(srv.URL+"/dns-query", doh.WithInsecure())
 	require.NoError(t, err)
 
 	q, _ := wire.NewBuilder().
@@ -84,7 +84,7 @@ func TestDoHGet(t *testing.T) {
 	srv := makeServer(t, http.MethodGet)
 	t.Cleanup(srv.Close)
 
-	ex, err := doh.New(srv.URL+"/dns-query", doh.WithMethod(doh.MethodGET))
+	ex, err := doh.New(srv.URL+"/dns-query", doh.WithMethod(doh.MethodGET), doh.WithInsecure())
 	require.NoError(t, err)
 
 	q, _ := wire.NewBuilder().
@@ -104,7 +104,7 @@ func TestDoHHTTPError(t *testing.T) {
 	}))
 	t.Cleanup(srv.Close)
 
-	ex, err := doh.New(srv.URL)
+	ex, err := doh.New(srv.URL, doh.WithInsecure())
 	require.NoError(t, err)
 
 	q, _ := wire.NewBuilder().
@@ -125,7 +125,7 @@ func TestDoHContextCancel(t *testing.T) {
 	}))
 	t.Cleanup(srv.Close)
 
-	ex, err := doh.New(srv.URL)
+	ex, err := doh.New(srv.URL, doh.WithInsecure())
 	require.NoError(t, err)
 
 	q, _ := wire.NewBuilder().
