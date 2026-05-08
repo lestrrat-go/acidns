@@ -4,8 +4,8 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/lestrrat-go/acidns/wire"
 	"github.com/lestrrat-go/acidns/wire/rdata"
-	"github.com/lestrrat-go/acidns/wire/rrtype"
 	"github.com/lestrrat-go/acidns/zonefile"
 )
 
@@ -28,8 +28,8 @@ www IN  A    192.0.2.42
 
 	// Walk the parsed records and find the SOA serial.
 	for _, rec := range z.Records() {
-		if rec.Type() == rrtype.SOA {
-			fmt.Println("soa serial:", rec.RData().(rdata.SOA).Serial())
+		if soa, ok := wire.RDataAs[rdata.SOA](rec); ok {
+			fmt.Println("soa serial:", soa.Serial())
 			break
 		}
 	}

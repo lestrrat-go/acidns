@@ -29,16 +29,28 @@ go test ./examples/...
 - [dnsclient_resolve_as](dnsclient_resolve_as_example_test.go) — generic typed lookup with `ResolveAs[T]`.
 - [dnsupdate_build](dnsupdate_build_example_test.go) — build an RFC 2136 UPDATE.
 - [axfr_transfer](axfr_transfer_example_test.go) — pull a zone with AXFR.
+- [ixfr_transfer](ixfr_transfer_example_test.go) — drive an RFC 1995 incremental transfer.
 - [notify_send](notify_send_example_test.go) — send RFC 1996 NOTIFY.
 - [resolvconf_parse](resolvconf_parse_example_test.go) — parse `/etc/resolv.conf`.
 - [specialuse_disposition](specialuse_disposition_example_test.go) — RFC 6761 special-use name handling.
 - [ddr_discover](ddr_discover_example_test.go) — Designated Resolver discovery (RFC 9462).
+- [amt_discover](amt_discover_example_test.go) — RFC 8777 AMT relay discovery.
+- [recursive_resolve](recursive_resolve_example_test.go) — iterative resolver against a scripted dialer.
+
+## Transports
+
+- [dot_exchange](dot_exchange_example_test.go) — DNS over TLS (RFC 7858).
+- [doh_exchange](doh_exchange_example_test.go) — DNS over HTTPS (RFC 8484).
+- [doq_exchange](doq_exchange_example_test.go) — DNS over QUIC (RFC 9250).
+- [dnscrypt_decode_cert](dnscrypt_decode_cert_example_test.go) — parse and verify a DNSCrypt v2 certificate.
 
 ## Server
 
 - [dnsserver_authoritative](dnsserver_authoritative_example_test.go) — run an authoritative server.
 - [dnsserver_chaos](dnsserver_chaos_example_test.go) — id.server / version.bind handler.
+- [chaos_handler](chaos_handler_example_test.go) — invoke the CHAOS handler directly.
 - [dnsserver_acl](dnsserver_acl_example_test.go) — wrap a Handler with source-IP ACLs.
+- [forward_cache](forward_cache_example_test.go) — caching forwarder over a stub upstream.
 
 ## Security
 
@@ -46,6 +58,11 @@ go test ./examples/...
 - [sig0_sign_verify](sig0_sign_verify_example_test.go) — SIG(0) sign + verify (RFC 2931).
 - [dnssec_verify](dnssec_verify_example_test.go) — verify an RRSIG against a DNSKEY.
 - [validator_nta](validator_nta_example_test.go) — Negative Trust Anchor store.
+- [cookies_roundtrip](cookies_roundtrip_example_test.go) — RFC 7873 / 9018 DNS Cookies.
+
+## Zones
+
+- [classless_delegation](classless_delegation_example_test.go) — RFC 2317 reverse-DNS CNAMEs.
 
 ## Other
 
