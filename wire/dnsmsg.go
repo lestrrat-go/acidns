@@ -89,7 +89,10 @@ func Marshal(m Message) ([]byte, error) {
 // Unmarshal decodes a wire-format DNS message.
 func Unmarshal(buf []byte) (Message, error) {
 	if len(buf) < 12 {
-		return nil, fmt.Errorf("%w: header too short (%d bytes)", ErrInvalidMessage, len(buf))
+		return nil, &MessageParseError{
+			Section: SectionHeader, Index: -1, Offset: len(buf),
+			Cause: fmt.Errorf("header too short (%d bytes)", len(buf)),
+		}
 	}
 	u := wirebb.NewUnpacker(buf)
 	id, _ := u.Uint16()
@@ -102,17 +105,19 @@ func Unmarshal(buf []byte) (Message, error) {
 	m := &message{id: id, flags: Flags(flags)}
 
 	m.questions = make([]Question, 0, qdcount)
-	for range int(qdcount) {
+	for i := range int(qdcount) {
 		q, err := unpackQuestion(u)
 		if err != nil {
-			return nil, fmt.Errorf("%w: question: %w", ErrInvalidMessage, err)
+			return nil, &MessageParseError{
+				Section: SectionQuestion, Index: i, Offset: u.Off(), Cause: err,
+			}
 		}
 		m.questions = append(m.questions, q)
 	}
-	if err := unpackRRs(u, &m.answers, int(ancount), "answer"); err != nil {
+	if err := unpackRRs(u, &m.answers, int(ancount), SectionAnswer); err != nil {
 		return nil, err
 	}
-	if err := unpackRRs(u, &m.authorities, int(nscount), "authority"); err != nil {
+	if err := unpackRRs(u, &m.authorities, int(nscount), SectionAuthority); err != nil {
 		return nil, err
 	}
 	if err := unpackAdditionals(u, m, int(arcount)); err != nil {
@@ -121,12 +126,14 @@ func Unmarshal(buf []byte) (Message, error) {
 	return m, nil
 }
 
-func unpackRRs(u *wirebb.Unpacker, dst *[]Record, n int, section string) error {
+func unpackRRs(u *wirebb.Unpacker, dst *[]Record, n int, section Section) error {
 	out := make([]Record, 0, n)
-	for range n {
+	for i := range n {
 		r, err := unpackRecord(u)
 		if err != nil {
-			return fmt.Errorf("%w: %s: %w", ErrInvalidMessage, section, err)
+			return &MessageParseError{
+				Section: section, Index: i, Offset: u.Off(), Cause: err,
+			}
 		}
 		out = append(out, r)
 	}
@@ -138,32 +145,35 @@ func unpackRRs(u *wirebb.Unpacker, dst *[]Record, n int, section string) error {
 // the OPT pseudo-RR (if any).
 func unpackAdditionals(u *wirebb.Unpacker, m *message, n int) error {
 	out := make([]Record, 0, n)
-	for range n {
+	for i := range n {
 		// Peek at the type without committing the unpacker.
 		save := u.Off()
 		if _, err := u.Name(); err != nil {
-			return fmt.Errorf("%w: additional: %w", ErrInvalidMessage, err)
+			return &MessageParseError{Section: SectionAdditional, Index: i, Offset: u.Off(), Cause: err}
 		}
 		t, err := u.Uint16()
 		if err != nil {
-			return fmt.Errorf("%w: additional: %w", ErrInvalidMessage, err)
+			return &MessageParseError{Section: SectionAdditional, Index: i, Offset: u.Off(), Cause: err}
 		}
 		u.SetOff(save)
 
 		if t == optTypeWire {
 			if m.edns != nil {
-				return fmt.Errorf("%w: multiple OPT pseudo-RRs", ErrInvalidMessage)
+				return &MessageParseError{
+					Section: SectionOPT, Index: i, Offset: save,
+					Cause: fmt.Errorf("multiple OPT pseudo-RRs"),
+				}
 			}
 			e, err := unpackOPT(u)
 			if err != nil {
-				return fmt.Errorf("%w: additional: %w", ErrInvalidMessage, err)
+				return &MessageParseError{Section: SectionOPT, Index: i, Offset: u.Off(), Cause: err}
 			}
 			m.edns = e
 			continue
 		}
 		r, err := unpackRecord(u)
 		if err != nil {
-			return fmt.Errorf("%w: additional: %w", ErrInvalidMessage, err)
+			return &MessageParseError{Section: SectionAdditional, Index: i, Offset: u.Off(), Cause: err}
 		}
 		out = append(out, r)
 	}
