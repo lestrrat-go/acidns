@@ -1,6 +1,8 @@
 package rdata
 
 import (
+	"fmt"
+
 	"github.com/lestrrat-go/acidns/wire/rrtype"
 	"github.com/lestrrat-go/acidns/wire/wirebb"
 )
@@ -52,6 +54,9 @@ func NewSSHFP(alg SSHFPAlgorithm, fpt SSHFPType, fingerprint []byte) SSHFP {
 
 func unpackSSHFP(u *wirebb.Unpacker, rdlen int) (SSHFP, error) {
 	var zero SSHFP
+	if rdlen < 2 {
+		return zero, fmt.Errorf("%w: SSHFP rdlen %d below minimum 2", ErrInvalidRData, rdlen)
+	}
 	alg, err := u.Uint8()
 	if err != nil {
 		return zero, err

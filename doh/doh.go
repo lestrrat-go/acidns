@@ -132,7 +132,18 @@ func New(endpoint string, opts ...Option) (acidns.Exchanger, error) {
 	if c.client == nil {
 		c.client = defaultClient()
 	}
-	return &exchanger{endpoint: endpoint, client: c.client, method: c.method, userAgent: c.userAgent, padding: c.padding}, nil
+	// Force the no-redirect contract regardless of what the caller
+	// supplied. RFC 8484 has no notion of redirected DoH; a 3xx is
+	// a protocol violation by the server, and silently following it
+	// (which any caller-supplied http.Client would do unless they
+	// explicitly disabled redirects) bypasses the scheme guard at
+	// New that refuses http:// endpoints. Shallow-copy so we don't
+	// mutate the caller's client.
+	clientCopy := *c.client
+	clientCopy.CheckRedirect = func(*http.Request, []*http.Request) error {
+		return http.ErrUseLastResponse
+	}
+	return &exchanger{endpoint: endpoint, client: &clientCopy, method: c.method, userAgent: c.userAgent, padding: c.padding}, nil
 }
 
 func (e *exchanger) Exchange(ctx context.Context, q wire.Message) (wire.Message, error) {

@@ -4,21 +4,26 @@ import (
 	"github.com/lestrrat-go/acidns/wire"
 )
 
-// preflightVerdict tells the per-transport dispatch loop whether to
+// PreflightVerdict tells the per-transport dispatch loop whether to
 // pass the request to the registered Handler, drop it silently, or
 // answer it directly with the supplied reply.
-type preflightVerdict int
+type PreflightVerdict int
 
 const (
-	preflightAccept preflightVerdict = iota
-	preflightDrop
-	preflightReply
+	// PreflightAccept means dispatch to the Handler.
+	PreflightAccept PreflightVerdict = iota
+	// PreflightDrop means silently discard the request without
+	// reply (RFC 5452 §6 for QR=1 datagrams).
+	PreflightDrop
+	// PreflightReply means write the supplied reply back instead of
+	// dispatching (typically a FORMERR).
+	PreflightReply
 )
 
-// preflightRequest applies framework-level ingress filters that the
-// transport-specific loops (UDP, TCP) share. The filters here are the
-// ones that apply uniformly regardless of transport and that no
-// reasonable handler would ever want to override:
+// PreflightRequest applies framework-level ingress filters that the
+// transport-specific loops share. The filters here are the ones that
+// apply uniformly regardless of transport and that no reasonable
+// handler would ever want to override:
 //
 //   - QR=1 datagrams are silently dropped per RFC 5452 §6 (only
 //     queries belong on the server-side socket; a response arriving
@@ -31,22 +36,25 @@ const (
 //     answered with FORMERR rather than dropped so a misbehaving
 //     client still learns its error.
 //
-// Other ingress concerns (ACL, rate limit, recursion gating) belong
-// in middleware — they are policy, not protocol.
-func preflightRequest(q wire.Message) (preflightVerdict, wire.Message) {
+// The function is exported so the transport packages outside the
+// root acidns package (dot, doh, doq, dnscrypt, forward, …) can
+// share the exact same gate. Other ingress concerns (ACL, rate
+// limit, recursion gating) belong in middleware — they are policy,
+// not protocol.
+func PreflightRequest(q wire.Message) (PreflightVerdict, wire.Message) {
 	if q.Flags().Response() {
-		return preflightDrop, nil
+		return PreflightDrop, nil
 	}
 
 	op := q.Flags().Opcode()
 	switch op {
 	case wire.OpcodeQuery, wire.OpcodeUpdate, wire.OpcodeNotify:
 		if len(q.Questions()) != 1 {
-			return preflightReply, formErrReply(q)
+			return PreflightReply, formErrReply(q)
 		}
 	}
 
-	return preflightAccept, nil
+	return PreflightAccept, nil
 }
 
 // formErrReply mints a minimal FORMERR response that echoes the ID,

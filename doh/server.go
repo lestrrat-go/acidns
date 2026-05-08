@@ -119,6 +119,19 @@ func (h *dohHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		remote: remoteAddr(r),
 		local:  localAddr(r),
 	}
+	switch verdict, reply := acidns.PreflightRequest(q); verdict {
+	case acidns.PreflightDrop:
+		// HTTP can't drop silently — the client is waiting for a
+		// response. The closest analogue is a 400 with no body so
+		// the client doesn't get a useful retry signal.
+		http.Error(w, "doh: response in request slot", http.StatusBadRequest)
+		return
+	case acidns.PreflightReply:
+		if reply != nil {
+			_ = rw.WriteMsg(reply)
+		}
+		return
+	}
 	h.h.ServeDNS(r.Context(), rw, q)
 	if !rw.wrote {
 		// Handler returned without writing — emit a SERVFAIL so the

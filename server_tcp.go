@@ -389,10 +389,10 @@ func (l *tcpLoop) serveConn(ctx context.Context, conn net.Conn) {
 				writeTimeout: l.cfg.writeTimeout,
 				writeMu:      &writeMu,
 			}
-			switch verdict, reply := preflightRequest(q); verdict {
-			case preflightDrop:
+			switch verdict, reply := PreflightRequest(q); verdict {
+			case PreflightDrop:
 				return
-			case preflightReply:
+			case PreflightReply:
 				if reply != nil {
 					_ = w.WriteMsg(reply)
 				}

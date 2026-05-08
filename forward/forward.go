@@ -97,17 +97,31 @@ func (h *Handler) Close() error {
 // forwarding to the configured upstream and caching the result.
 func (h *Handler) ServeDNS(ctx context.Context, w acidns.ResponseWriter, q wire.Message) {
 	start := time.Now()
+	// Framework-level ingress filters: drop QR=1 datagrams, FORMERR
+	// on QDCOUNT≠1. The transport layer normally applies these, but
+	// programmatic callers that invoke ServeDNS directly (tests,
+	// composed handler chains, in-process pipelines) bypass the
+	// transport — apply the gate here so the forwarder is safe to
+	// embed without re-implementing it.
+	switch verdict, reply := acidns.PreflightRequest(q); verdict {
+	case acidns.PreflightDrop:
+		h.cfg.logger.LogAttrs(ctx, slog.LevelDebug, "forward.serve",
+			slog.String("decision", "drop_qr_set"),
+			slog.Duration("elapsed", time.Since(start)))
+		return
+	case acidns.PreflightReply:
+		if reply != nil {
+			_ = w.WriteMsg(reply)
+		}
+		h.cfg.logger.LogAttrs(ctx, slog.LevelDebug, "forward.serve",
+			slog.String("decision", "preflight_reply"),
+			slog.Duration("elapsed", time.Since(start)))
+		return
+	}
 	if q.Flags().Opcode() != wire.OpcodeQuery {
 		_ = w.WriteMsg(buildErrorResponse(q, wire.RCODENotImp))
 		h.cfg.logger.LogAttrs(ctx, slog.LevelDebug, "forward.serve",
 			slog.String("decision", "notimp"),
-			slog.Duration("elapsed", time.Since(start)))
-		return
-	}
-	if len(q.Questions()) != 1 {
-		_ = w.WriteMsg(buildErrorResponse(q, wire.RCODEFormErr))
-		h.cfg.logger.LogAttrs(ctx, slog.LevelDebug, "forward.serve",
-			slog.String("decision", "formerr"),
 			slog.Duration("elapsed", time.Since(start)))
 		return
 	}
@@ -151,6 +165,7 @@ func (h *Handler) ServeDNS(ctx context.Context, w acidns.ResponseWriter, q wire.
 		return
 	}
 
+	resp = filterBailiwick(qq.Name(), resp)
 	if e, ok := makeEntry(resp, h.cfg, h.cfg.now()); ok {
 		h.cache.put(qq.Name(), qq.Type(), qq.Class(), e)
 	}
@@ -170,7 +185,7 @@ func (h *Handler) ServeDNS(ctx context.Context, w acidns.ResponseWriter, q wire.
 // multiply outbound query traffic. The leader's response (and error)
 // is shared with all waiters.
 func (h *Handler) exchangeSingleflight(ctx context.Context, in wire.Message, qq wire.Question) (wire.Message, error) {
-	key := singleflightKey(qq)
+	key := singleflightKey(qq, edsoDOBit(in))
 
 	h.inflightMu.Lock()
 	if call, ok := h.inflight[key]; ok {
@@ -206,8 +221,28 @@ func (h *Handler) exchangeSingleflight(ctx context.Context, in wire.Message, qq 
 	return resp, err
 }
 
-func singleflightKey(qq wire.Question) string {
-	return string(qq.Name().AppendWire(nil)) + "|" + qq.Type().String() + "|" + qq.Class().String()
+// singleflightKey identifies a coalescable upstream call. Includes
+// the DO bit so a DO=1 waiter (DNSSEC-aware client) does not silently
+// receive a leader response that lacks DNSSEC RRs because the leader
+// was built without DO=1. The two outcomes of an upstream are
+// genuinely different responses; treating them as one would let the
+// resolver above us cache the wrong shape.
+func singleflightKey(qq wire.Question, doBit bool) string {
+	suffix := "|0"
+	if doBit {
+		suffix = "|1"
+	}
+	return string(qq.Name().AppendWire(nil)) + "|" + qq.Type().String() + "|" + qq.Class().String() + suffix
+}
+
+// edsoDOBit returns the DO (DNSSEC OK) bit from the inbound query's
+// OPT pseudo-RR, or false when the message has no OPT.
+func edsoDOBit(q wire.Message) bool {
+	e, ok := q.EDNS()
+	if !ok || e == nil {
+		return false
+	}
+	return e.DO()
 }
 
 // buildForwardQuery returns a fresh query carrying the same question and

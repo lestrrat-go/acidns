@@ -7,6 +7,7 @@ import (
 	"net"
 	"net/netip"
 	"sync"
+	"time"
 
 	"github.com/lestrrat-go/acidns/wire"
 )
@@ -22,6 +23,7 @@ type udpListenerConfig struct {
 	bufferSize     int
 	maxResponseLen int
 	maxInflight    int
+	writeTimeout   time.Duration
 }
 
 // WithUDPListenerBufferSize sets the size of the read buffer per
@@ -53,6 +55,23 @@ func WithUDPMaxInflight(n int) UDPListenerOption {
 	return udpListenerOptionFunc(func(c *udpListenerConfig) { c.maxInflight = n })
 }
 
+// WithUDPWriteTimeout caps how long a single response WriteTo may
+// take. UDP writes are normally instant — the kernel send buffer
+// fills and the syscall returns — but on a saturated host or a
+// pathological socket configuration a write can block. Default 5s;
+// non-positive disables the deadline.
+//
+// Implementation note: the listening socket is shared across all
+// in-flight handler goroutines, so [net.PacketConn.SetWriteDeadline]
+// races across writers. The setting is therefore best-effort — each
+// write may see a deadline a peer goroutine just installed for its
+// own write. The cumulative effect is still that no write outlasts
+// the cap by more than one peer's window, which is the safety
+// property we care about.
+func WithUDPWriteTimeout(d time.Duration) UDPListenerOption {
+	return udpListenerOptionFunc(func(c *udpListenerConfig) { c.writeTimeout = d })
+}
+
 // UDPServer is an immutable configuration holder for a UDP DNS server.
 // It carries the listen address, the Handler, and applied options;
 // it does NOT carry runtime state. Call [UDPServer.Run] to spawn an
@@ -74,7 +93,12 @@ func NewUDPServer(addr netip.AddrPort, h Handler, opts ...UDPListenerOption) (*U
 	if h == nil {
 		return nil, fmt.Errorf("dnsserver: handler is nil")
 	}
-	cfg := udpListenerConfig{bufferSize: 4096, maxResponseLen: 1232, maxInflight: 4096}
+	cfg := udpListenerConfig{
+		bufferSize:     4096,
+		maxResponseLen: 1232,
+		maxInflight:    4096,
+		writeTimeout:   5 * time.Second,
+	}
 	for _, o := range opts {
 		o.applyUDPServer(&cfg)
 	}
@@ -214,16 +238,17 @@ func (l *udpLoop) handlePacket(ctx context.Context, body []byte, src netip.AddrP
 
 	ctx = contextWithRawRequest(ctx, body)
 	w := &udpResponseWriter{
-		pc:     l.pc,
-		dst:    src,
-		local:  l.addr,
-		maxLen: maxResp,
+		pc:           l.pc,
+		dst:          src,
+		local:        l.addr,
+		maxLen:       maxResp,
+		writeTimeout: l.cfg.writeTimeout,
 	}
 
-	switch verdict, reply := preflightRequest(q); verdict {
-	case preflightDrop:
+	switch verdict, reply := PreflightRequest(q); verdict {
+	case PreflightDrop:
 		return
-	case preflightReply:
+	case PreflightReply:
 		if reply != nil {
 			_ = w.WriteMsg(reply)
 		}
@@ -234,11 +259,12 @@ func (l *udpLoop) handlePacket(ctx context.Context, body []byte, src netip.AddrP
 }
 
 type udpResponseWriter struct {
-	pc     net.PacketConn
-	dst    netip.AddrPort
-	local  netip.AddrPort
-	maxLen int
-	wrote  bool
+	pc           net.PacketConn
+	dst          netip.AddrPort
+	local        netip.AddrPort
+	maxLen       int
+	writeTimeout time.Duration
+	wrote        bool
 }
 
 func (w *udpResponseWriter) RemoteAddr() netip.AddrPort { return w.dst }
@@ -284,6 +310,9 @@ func (w *udpResponseWriter) WriteMsg(m wire.Message) error {
 	}
 	w.wrote = true
 	udst := net.UDPAddrFromAddrPort(w.dst)
+	if w.writeTimeout > 0 {
+		_ = w.pc.SetWriteDeadline(time.Now().Add(w.writeTimeout))
+	}
 	_, err = w.pc.WriteTo(buf, udst)
 	return err
 }

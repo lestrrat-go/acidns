@@ -1,6 +1,8 @@
 package rdata
 
 import (
+	"fmt"
+
 	"github.com/lestrrat-go/acidns/wire/rrtype"
 	"github.com/lestrrat-go/acidns/wire/wirebb"
 )
@@ -38,6 +40,9 @@ func NewCDS(keyTag uint16, alg DNSSECAlgorithm, dt DSDigestType, digest []byte) 
 
 func unpackCDS(u *wirebb.Unpacker, rdlen int) (CDS, error) {
 	var zero CDS
+	if rdlen < 4 {
+		return zero, fmt.Errorf("%w: CDS rdlen %d below minimum 4", ErrInvalidRData, rdlen)
+	}
 	end := u.Off() + rdlen
 	tag, err := u.Uint16()
 	if err != nil {
@@ -91,6 +96,9 @@ func NewCDNSKEY(flags uint16, protocol uint8, algorithm DNSSECAlgorithm, pubkey 
 
 func unpackCDNSKEY(u *wirebb.Unpacker, rdlen int) (CDNSKEY, error) {
 	var zero CDNSKEY
+	if rdlen < 4 {
+		return zero, fmt.Errorf("%w: CDNSKEY rdlen %d below minimum 4", ErrInvalidRData, rdlen)
+	}
 	end := u.Off() + rdlen
 	flags, err := u.Uint16()
 	if err != nil {

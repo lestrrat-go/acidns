@@ -89,6 +89,9 @@ func NewDNSKEY(flags uint16, protocol uint8, algorithm DNSSECAlgorithm, pubkey [
 
 func unpackDNSKEY(u *wirebb.Unpacker, rdlen int) (DNSKEY, error) {
 	var zero DNSKEY
+	if rdlen < 4 {
+		return zero, fmt.Errorf("%w: DNSKEY rdlen %d below minimum 4", ErrInvalidRData, rdlen)
+	}
 	end := u.Off() + rdlen
 	flags, err := u.Uint16()
 	if err != nil {
@@ -141,6 +144,9 @@ func NewDS(keyTag uint16, alg DNSSECAlgorithm, dt DSDigestType, digest []byte) D
 
 func unpackDS(u *wirebb.Unpacker, rdlen int) (DS, error) {
 	var zero DS
+	if rdlen < 4 {
+		return zero, fmt.Errorf("%w: DS rdlen %d below minimum 4", ErrInvalidRData, rdlen)
+	}
 	end := u.Off() + rdlen
 	tag, err := u.Uint16()
 	if err != nil {
@@ -221,6 +227,13 @@ func NewRRSIG(typeCovered rrtype.Type, alg DNSSECAlgorithm, labels uint8,
 
 func unpackRRSIG(u *wirebb.Unpacker, rdlen int) (RRSIG, error) {
 	var zero RRSIG
+	// RRSIG fixed header: 2+1+1+4+4+4+2 = 18 bytes, then signer name
+	// (≥ 1 byte for the root label), then signature (≥ 0 bytes per
+	// the algorithm). Reject anything that can't even hold the
+	// fixed header + a one-byte root signer.
+	if rdlen < 19 {
+		return zero, fmt.Errorf("%w: RRSIG rdlen %d below minimum 19", ErrInvalidRData, rdlen)
+	}
 	end := u.Off() + rdlen
 	tc, err := u.Uint16()
 	if err != nil {
@@ -250,7 +263,7 @@ func unpackRRSIG(u *wirebb.Unpacker, rdlen int) (RRSIG, error) {
 	if err != nil {
 		return zero, err
 	}
-	signer, err := u.UncompressedName()
+	signer, err := u.UncompressedNameInRange(end)
 	if err != nil {
 		return zero, err
 	}
@@ -297,7 +310,7 @@ func NewNSEC(next wirebb.Name, types []rrtype.Type) NSEC {
 func unpackNSEC(u *wirebb.Unpacker, rdlen int) (NSEC, error) {
 	var zero NSEC
 	end := u.Off() + rdlen
-	next, err := u.UncompressedName()
+	next, err := u.UncompressedNameInRange(end)
 	if err != nil {
 		return zero, err
 	}

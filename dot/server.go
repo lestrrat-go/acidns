@@ -392,6 +392,15 @@ func (l *serverLoop) serveConn(ctx context.Context, raw net.Conn) {
 				writeTimeout: l.cfg.writeTimeout,
 				writeMu:      &writeMu,
 			}
+			switch verdict, reply := acidns.PreflightRequest(q); verdict {
+			case acidns.PreflightDrop:
+				return
+			case acidns.PreflightReply:
+				if reply != nil {
+					_ = w.WriteMsg(reply)
+				}
+				return
+			}
 			l.handler.ServeDNS(connCtx, w, q)
 		}(bufp, n)
 	}

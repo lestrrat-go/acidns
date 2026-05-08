@@ -168,8 +168,37 @@ func (u *Unpacker) Name() (Name, error) {
 // uncompressed; accepting compressed names there would let receivers
 // re-emit different wire bytes than the originator, breaking RRSIG
 // canonicalisation roundtrips.
+//
+// UncompressedName scans the entire remainder of the message; for
+// names embedded in an RDLENGTH-bounded rdata window prefer
+// [Unpacker.UncompressedNameInRange] so a malformed peer cannot
+// trick the decoder into walking past the rdata into the next
+// record's bytes.
 func (u *Unpacker) UncompressedName() (Name, error) {
 	n, next, err := DecodeWireUncompressed(u.msg, u.off)
+	if err != nil {
+		return Name{}, err
+	}
+	u.off = next
+	return n, nil
+}
+
+// UncompressedNameInRange is [Unpacker.UncompressedName] with an
+// explicit upper bound. Useful for names embedded in an
+// RDLENGTH-bounded rdata window (IPSECKEY gateway-name, AMTRELAY
+// relay-name, SVCB target, DNAME target, RRSIG signer, etc.) where
+// scanning past the window would silently read the next record's
+// bytes. The end parameter is the exclusive upper offset; if a
+// name extends past end the function returns ErrTruncated. The
+// caller passes len(msg) for the un-bounded form.
+func (u *Unpacker) UncompressedNameInRange(end int) (Name, error) {
+	if end < 0 || end > len(u.msg) {
+		end = len(u.msg)
+	}
+	if u.off > end {
+		return Name{}, ErrTruncated
+	}
+	n, next, err := DecodeWireUncompressed(u.msg[:end], u.off)
 	if err != nil {
 		return Name{}, err
 	}

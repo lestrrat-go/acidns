@@ -119,7 +119,7 @@ func unpackAMTRELAY(u *wirebb.Unpacker, rdlen int) (AMTRELAY, error) {
 		}
 		a.relayAddr = netip.AddrFrom16([16]byte(raw))
 	case AMTRELAYTypeName:
-		n, err := u.UncompressedName()
+		n, err := u.UncompressedNameInRange(end)
 		if err != nil {
 			return zero, err
 		}

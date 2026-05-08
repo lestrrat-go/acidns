@@ -18,6 +18,13 @@ const DefaultNTATTL = 24 * time.Hour
 // renew the entry explicitly so the decision is revisited.
 const MaxNTATTL = 7 * 24 * time.Hour
 
+// MaxNTAEntries caps the total number of NTAs the store retains
+// concurrently. Adding past the cap evicts the entry with the
+// soonest expiry, on the theory that the stalest decision is also
+// the one least likely still serving its operational purpose.
+// 4096 is generous for any real outage-response runbook.
+const MaxNTAEntries = 4096
+
 // NTAStore is a runtime-mutable registry of Negative Trust Anchors. An
 // owner name added to the store causes the validator to bypass validation
 // for that name and all of its descendants and return Result Indeterminate
@@ -53,6 +60,9 @@ func NewNTAStore(initial ...wire.Name) *NTAStore {
 // by [DefaultNTATTL]; a ttl exceeding [MaxNTATTL] is clamped down. Adding
 // a name that already has an entry refreshes the expiry. Returns true if
 // the entry is new (not just renewed).
+//
+// When adding a new name would push the store past [MaxNTAEntries],
+// the entry with the soonest expiry is evicted to make room.
 func (s *NTAStore) Add(n wire.Name, ttl time.Duration) bool {
 	if !n.IsValid() {
 		return false
@@ -67,8 +77,27 @@ func (s *NTAStore) Add(n wire.Name, ttl time.Duration) bool {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	_, existed := s.set[k]
+	if !existed && len(s.set) >= MaxNTAEntries {
+		s.evictSoonestLocked()
+	}
 	s.set[k] = ntaEntry{name: n, expiresAt: s.now().Add(ttl)}
 	return !existed
+}
+
+// evictSoonestLocked removes the entry whose expiry is earliest.
+// Caller holds s.mu in write mode. Caller must guarantee len(s.set) > 0.
+func (s *NTAStore) evictSoonestLocked() {
+	var victimKey string
+	var victimT time.Time
+	first := true
+	for k, e := range s.set {
+		if first || e.expiresAt.Before(victimT) {
+			victimKey = k
+			victimT = e.expiresAt
+			first = false
+		}
+	}
+	delete(s.set, victimKey)
 }
 
 // Remove deletes an NTA. Returns true if an entry existed (whether or not

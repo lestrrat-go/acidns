@@ -337,6 +337,15 @@ func (l *serverLoop) handlePacket(ctx context.Context, body []byte, src netip.Ad
 		aead:        aead,
 	}
 	_ = shared // referenced via aead's bound key
+	switch verdict, reply := acidns.PreflightRequest(q); verdict {
+	case acidns.PreflightDrop:
+		return
+	case acidns.PreflightReply:
+		if reply != nil {
+			_ = w.WriteMsg(reply)
+		}
+		return
+	}
 	l.handler.ServeDNS(ctx, w, q)
 }
 

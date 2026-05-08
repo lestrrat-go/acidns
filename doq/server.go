@@ -262,6 +262,15 @@ func (l *serverLoop) serveStream(ctx context.Context, stream *quic.Stream, remot
 		local:        l.addr,
 		writeTimeout: l.cfg.writeTimeout,
 	}
+	switch verdict, reply := acidns.PreflightRequest(q); verdict {
+	case acidns.PreflightDrop:
+		return
+	case acidns.PreflightReply:
+		if reply != nil {
+			_ = w.WriteMsg(reply)
+		}
+		return
+	}
 	l.handler.ServeDNS(ctx, w, q)
 }
 
