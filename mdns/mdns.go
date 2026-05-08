@@ -158,9 +158,12 @@ func WithBrowseConn(open func() (net.PacketConn, error)) BrowseOption {
 }
 
 // Browse sends a multicast PTR query for the named service type and
-// collects responses for at most timeout. It deduplicates services by
-// (instance, type) across responses.
-func Browse(ctx context.Context, service string, timeout time.Duration, opts ...BrowseOption) ([]Service, error) {
+// collects responses until ctx is cancelled or its deadline expires.
+// Callers SHOULD wrap ctx with context.WithTimeout to bound the wait —
+// mDNS browses by their nature are open-ended.
+//
+// Browse deduplicates services by (instance, type) across responses.
+func Browse(ctx context.Context, service string, opts ...BrowseOption) ([]Service, error) {
 	cfg := browseConfig{
 		openConn: func() (net.PacketConn, error) { return openMulticast() },
 	}
@@ -188,11 +191,9 @@ func Browse(ctx context.Context, service string, timeout time.Duration, opts ...
 		return nil, fmt.Errorf("mdns: send: %w", err)
 	}
 
-	deadline := time.Now().Add(timeout)
-	if dl, ok := ctx.Deadline(); ok && dl.Before(deadline) {
-		deadline = dl
+	if dl, ok := ctx.Deadline(); ok {
+		_ = conn.SetReadDeadline(dl)
 	}
-	_ = conn.SetReadDeadline(deadline)
 
 	stop := make(chan struct{})
 	defer close(stop)
