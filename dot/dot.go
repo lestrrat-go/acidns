@@ -1,8 +1,33 @@
-// Package dot implements DNS over TLS (RFC 7858).
+// Package dot implements DNS over TLS (RFC 7858) — encrypted DNS on
+// port 853 over a TLS-wrapped TCP connection. Use it as the substrate
+// for a privacy-preserving stub resolver, or as the upstream of a
+// caching forwarder.
+//
+// # Connection model
 //
 // Each Exchange opens a fresh TLS connection on top of TCP. Connection
-// reuse, idle timeouts, and pipelining are out of scope for this primitive
-// transport.
+// reuse, idle timeouts, and pipelining are out of scope for this
+// primitive transport — for keep-alive, use the TCP keep-alive
+// exchanger from the root acidns package and wrap it with TLS yourself,
+// or wait for a future dot.NewKeepAlive helper.
+//
+// Stream returns a MessageStream so the caller can pull AXFR / IXFR
+// responses (RFC 9103, "XFR over TLS") on the same connection without
+// re-handshaking.
+//
+// # Padding
+//
+// Outgoing queries are padded to a 128-byte boundary per RFC 8467 §4.1
+// before TLS encryption, so the encrypted record's size cannot leak
+// the queried name. Disable with WithPadding(false) for byte-exact
+// fixtures.
+//
+// # TLS
+//
+// Use WithTLSConfig to pin certificate roots, supply a session-resume
+// cache, or enable mTLS. Use WithServerName to set the SNI / cert
+// verification name when targeting an IP literal whose certificate is
+// bound to a hostname.
 package dot
 
 import (

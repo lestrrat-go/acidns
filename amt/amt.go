@@ -1,7 +1,21 @@
-// Package amt implements the DNS-based discovery procedure for Automatic
-// Multicast Tunneling (AMT) relays per RFC 8777. Discovery is a simple SRV
-// lookup at `_amt._udp.<domain>`; the helpers here construct the canonical
-// query name and rank the results per RFC 2782 priority/weight.
+// Package amt implements the DNS-based discovery procedure for
+// Automatic Multicast Tunneling (AMT) relays per RFC 8777. AMT lets a
+// host that has unicast Internet connectivity but no native multicast
+// (e.g. behind a NAT or a non-multicast-aware ISP) tunnel into a
+// multicast-enabled network through a relay; the relay is found by
+// running a DNS SRV lookup.
+//
+// # Usage
+//
+// Pass a Resolver and the source-address domain to Discover; it issues
+// the SRV lookup at `_amt._udp.<domain>`, ranks the answers per RFC
+// 2782 priority/weight, and returns the relay candidates. Higher-level
+// callers iterate the result list, attempting each relay in order
+// until one accepts the AMT request.
+//
+// Production callers also typically want the typed AMTRELAY rdata
+// payload (rdata.AMTRELAY) advertised by the discovered relays
+// themselves; that record is parsed by the wire/rdata package.
 package amt
 
 import (

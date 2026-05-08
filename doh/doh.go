@@ -1,8 +1,37 @@
-// Package doh implements DNS over HTTPS (RFC 8484).
+// Package doh implements DNS over HTTPS (RFC 8484) — DNS messages
+// carried inside HTTP/2 (or HTTP/1.1) requests with content type
+// application/dns-message. Use it for stub resolvers in environments
+// where DoT is blocked but HTTPS is allowed, or as the upstream of a
+// caching forwarder.
 //
-// The Exchange method always uses POST with content type
-// application/dns-message; GET (base64url-encoded query) is supported via
-// WithMethod for caches that prefer it.
+// # Method
+//
+// Exchange defaults to POST: a single HTTP request carries the wire
+// query in its body and receives the wire response in the body of the
+// 200 reply. WithMethod(MethodGET) selects RFC 8484 §4.1's
+// base64url-encoded GET form, which interacts better with caching
+// proxies but exposes the query in URL logs.
+//
+// # HTTP transport
+//
+// WithHTTPClient overrides the default *http.Client so callers can
+// pass their own connection pool, dialer, or TLS config (including
+// HTTP/3 once net/http supports it natively). WithUserAgent sets a
+// custom User-Agent header.
+//
+// # Padding
+//
+// Outgoing queries are padded to a 128-byte boundary per RFC 8467 §4.1
+// before HTTP/2 framing, so the encrypted frame size cannot leak the
+// queried name. Disable with WithPadding(false).
+//
+// # Errors
+//
+// Non-200 HTTP responses surface as *HTTPStatusError, which carries
+// the status code, status line, and (capped) response body so callers
+// can log the upstream's diagnostic text without re-issuing the
+// request. errors.Is matches by exact StatusCode; .Class() returns the
+// 1/2/3/4/5 class for "any 5xx" branching.
 package doh
 
 import (
