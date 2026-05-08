@@ -12,22 +12,12 @@ import (
 	"github.com/lestrrat-go/acidns/wire/rrtype"
 )
 
-// stubAnswer is a minimal acidns.Answer used to feed scripted records to
-// amt.Discover without going through a real resolver.
-type stubAnswer struct{ records []wire.Record }
-
-func (a *stubAnswer) Question() wire.Question { return nil }
-func (a *stubAnswer) Records() []wire.Record  { return a.records }
-func (a *stubAnswer) Raw() wire.Message       { return nil }
-func (a *stubAnswer) RCODE() wire.RCODE       { return wire.RCODENoError }
-func (a *stubAnswer) Authoritative() bool     { return false }
-func (a *stubAnswer) Truncated() bool         { return false }
-
 // stubResolver hands every Resolve call the same record list.
 type stubResolver struct{ records []wire.Record }
 
-func (s *stubResolver) Resolve(_ context.Context, _ wire.Name, _ rrtype.Type) (acidns.Answer, error) {
-	return &stubAnswer{records: s.records}, nil
+func (s *stubResolver) Resolve(_ context.Context, _ wire.Name, _ rrtype.Type) (*acidns.Answer, error) {
+	raw, _ := wire.NewBuilder().Response(true).Build()
+	return acidns.NewAnswer(nil, s.records, raw), nil
 }
 
 func Example_amt_discover() {

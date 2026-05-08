@@ -15,24 +15,17 @@ import (
 )
 
 type fakeResolver struct {
-	answer acidns.Answer
+	answer *acidns.Answer
 }
 
-func (f *fakeResolver) Resolve(_ context.Context, _ wire.Name, _ rrtype.Type) (acidns.Answer, error) {
+func (f *fakeResolver) Resolve(_ context.Context, _ wire.Name, _ rrtype.Type) (*acidns.Answer, error) {
 	return f.answer, nil
 }
 
-type fakeAnswer struct {
-	q       wire.Question
-	records []wire.Record
+func newFakeAnswer(q wire.Question, records []wire.Record) *acidns.Answer {
+	raw, _ := wire.NewBuilder().Response(true).Build()
+	return acidns.NewAnswer(q, records, raw)
 }
-
-func (f *fakeAnswer) Question() wire.Question { return f.q }
-func (f *fakeAnswer) Records() []wire.Record  { return f.records }
-func (f *fakeAnswer) Raw() wire.Message       { return nil }
-func (f *fakeAnswer) RCODE() wire.RCODE       { return wire.RCODENoError }
-func (f *fakeAnswer) Authoritative() bool     { return false }
-func (f *fakeAnswer) Truncated() bool         { return false }
 
 func TestDiscover(t *testing.T) {
 	t.Parallel()
@@ -58,7 +51,7 @@ func TestDiscover(t *testing.T) {
 	rec1 := wire.NewRecord(ddr.ResolverDomain, 60*time.Second, dohSVCB)
 	rec2 := wire.NewRecord(ddr.ResolverDomain, 60*time.Second, dotSVCB)
 
-	r := &fakeResolver{answer: &fakeAnswer{records: []wire.Record{rec1, rec2}}}
+	r := &fakeResolver{answer: newFakeAnswer(nil, []wire.Record{rec1, rec2})}
 	endpoints, err := ddr.Discover(context.Background(), r)
 	require.NoError(t, err)
 	require.Len(t, endpoints, 2)

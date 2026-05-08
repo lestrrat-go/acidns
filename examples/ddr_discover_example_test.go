@@ -12,22 +12,14 @@ import (
 	"github.com/lestrrat-go/acidns/wire/rrtype"
 )
 
-// fakeAnswer + fakeResolver give us a network-free DDR demo. In production
+// fakeResolver gives us a network-free DDR demo. In production
 // you pass a real Resolver bound to your unencrypted upstream and trust the
 // IPv4Hints/IPv6Hints to match the resolver address you bootstrapped from.
-type fakeAnswer struct{ records []wire.Record }
-
-func (f *fakeAnswer) Question() wire.Question { return nil }
-func (f *fakeAnswer) Records() []wire.Record  { return f.records }
-func (f *fakeAnswer) Raw() wire.Message       { return nil }
-func (f *fakeAnswer) RCODE() wire.RCODE       { return wire.RCODENoError }
-func (f *fakeAnswer) Authoritative() bool     { return false }
-func (f *fakeAnswer) Truncated() bool         { return false }
-
 type fakeResolver struct{ records []wire.Record }
 
-func (f *fakeResolver) Resolve(_ context.Context, _ wire.Name, _ rrtype.Type) (acidns.Answer, error) {
-	return &fakeAnswer{records: f.records}, nil
+func (f *fakeResolver) Resolve(_ context.Context, _ wire.Name, _ rrtype.Type) (*acidns.Answer, error) {
+	raw, _ := wire.NewBuilder().Response(true).Build()
+	return acidns.NewAnswer(nil, f.records, raw), nil
 }
 
 func Example_ddr_discover() {

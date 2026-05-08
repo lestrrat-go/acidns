@@ -39,7 +39,7 @@ type Resolver interface {
 	// with the raw response. A non-NoError RCODE is returned as a typed
 	// *RCodeError carrying the response; the matched record list is empty
 	// in that case.
-	Resolve(ctx context.Context, name wire.Name, t rrtype.Type) (Answer, error)
+	Resolve(ctx context.Context, name wire.Name, t rrtype.Type) (*Answer, error)
 }
 
 // SearchLister is an optional capability satisfied by resolver impls that
@@ -52,27 +52,25 @@ type SearchLister interface {
 }
 
 // Answer is the typed result of a Resolve call.
-type Answer interface {
-	Question() wire.Question
-	Records() []wire.Record
-	Raw() wire.Message
-	RCODE() wire.RCODE
-	Authoritative() bool
-	Truncated() bool
-}
-
-type answer struct {
+type Answer struct {
 	q       wire.Question
 	records []wire.Record
 	raw     wire.Message
 }
 
-func (a *answer) Question() wire.Question { return a.q }
-func (a *answer) Records() []wire.Record  { return a.records }
-func (a *answer) Raw() wire.Message       { return a.raw }
-func (a *answer) RCODE() wire.RCODE       { return a.raw.Flags().RCODE() }
-func (a *answer) Authoritative() bool     { return a.raw.Flags().Authoritative() }
-func (a *answer) Truncated() bool         { return a.raw.Flags().Truncated() }
+// NewAnswer wraps a question, the matched records, and the raw response into
+// an Answer. Intended for resolver implementations and test fakes that need
+// to synthesise an Answer outside the package.
+func NewAnswer(q wire.Question, records []wire.Record, raw wire.Message) *Answer {
+	return &Answer{q: q, records: records, raw: raw}
+}
+
+func (a *Answer) Question() wire.Question { return a.q }
+func (a *Answer) Records() []wire.Record  { return a.records }
+func (a *Answer) Raw() wire.Message       { return a.raw }
+func (a *Answer) RCODE() wire.RCODE       { return a.raw.Flags().RCODE() }
+func (a *Answer) Authoritative() bool     { return a.raw.Flags().Authoritative() }
+func (a *Answer) Truncated() bool         { return a.raw.Flags().Truncated() }
 
 // ResolverOption configures a Resolver.
 type ResolverOption interface{ applyResolver(*resolverConfig) }
@@ -232,7 +230,7 @@ func NewResolver(opts ...ResolverOption) (Resolver, error) {
 	}, nil
 }
 
-func (r *resolver) Resolve(ctx context.Context, name wire.Name, t rrtype.Type) (Answer, error) {
+func (r *resolver) Resolve(ctx context.Context, name wire.Name, t rrtype.Type) (*Answer, error) {
 	if !r.disableSpecialUse {
 		if ans, ok := r.specialUseAnswer(name, t); ok {
 			return wrapRCode(ans)
@@ -267,12 +265,12 @@ func (r *resolver) Resolve(ctx context.Context, name wire.Name, t rrtype.Type) (
 	}
 
 	matched := matchAnswers(resp.Answers(), name, t)
-	return wrapRCode(&answer{q: question, records: matched, raw: resp})
+	return wrapRCode(&Answer{q: question, records: matched, raw: resp})
 }
 
 // wrapRCode converts an Answer with a non-NoError RCODE into an RCodeError
 // carrying that answer. NoError responses are returned (Answer, nil).
-func wrapRCode(ans Answer) (Answer, error) {
+func wrapRCode(ans *Answer) (*Answer, error) {
 	if rcode := ans.RCODE(); rcode != wire.RCODENoError {
 		return nil, &RCodeError{Code: rcode, Answer: ans}
 	}
@@ -281,7 +279,7 @@ func wrapRCode(ans Answer) (Answer, error) {
 
 // specialUseAnswer applies the RFC 6761 short-circuit. It returns
 // (answer, true) when the resolver should NOT issue a network query.
-func (r *resolver) specialUseAnswer(name wire.Name, t rrtype.Type) (Answer, bool) {
+func (r *resolver) specialUseAnswer(name wire.Name, t rrtype.Type) (*Answer, bool) {
 	switch specialuse.For(name) {
 	case specialuse.SynthLocalhost:
 		records := make([]wire.Record, 0, 1)
@@ -299,10 +297,10 @@ func (r *resolver) specialUseAnswer(name wire.Name, t rrtype.Type) (Answer, bool
 			}
 		}
 		raw := synthMessage(name, t, records, wire.RCODENoError)
-		return &answer{q: wire.NewQuestion(name, t), records: records, raw: raw}, true
+		return &Answer{q: wire.NewQuestion(name, t), records: records, raw: raw}, true
 	case specialuse.Refuse, specialuse.Local:
 		raw := synthMessage(name, t, nil, wire.RCODENXDomain)
-		return &answer{q: wire.NewQuestion(name, t), raw: raw}, true
+		return &Answer{q: wire.NewQuestion(name, t), raw: raw}, true
 	default:
 		return nil, false
 	}

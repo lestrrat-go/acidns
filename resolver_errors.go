@@ -13,7 +13,7 @@ import (
 // errors.Is against the package-level sentinels.
 type RCodeError struct {
 	Code   wire.RCODE
-	Answer Answer
+	Answer *Answer
 }
 
 func (e *RCodeError) Error() string {

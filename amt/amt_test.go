@@ -17,28 +17,18 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// fakeAnswer is a minimal acidns.Answer implementation that exposes a
-// canned record list.
-type fakeAnswer struct{ records []wire.Record }
-
-func (f *fakeAnswer) Question() wire.Question { return nil }
-func (f *fakeAnswer) Records() []wire.Record  { return f.records }
-func (f *fakeAnswer) Raw() wire.Message       { return nil }
-func (f *fakeAnswer) RCODE() wire.RCODE       { return wire.RCODENoError }
-func (f *fakeAnswer) Authoritative() bool     { return false }
-func (f *fakeAnswer) Truncated() bool         { return false }
-
 // fakeResolver returns either a canned answer or an error.
 type fakeResolver struct {
 	records []wire.Record
 	err     error
 }
 
-func (f *fakeResolver) Resolve(_ context.Context, _ wire.Name, _ rrtype.Type) (acidns.Answer, error) {
+func (f *fakeResolver) Resolve(_ context.Context, _ wire.Name, _ rrtype.Type) (*acidns.Answer, error) {
 	if f.err != nil {
 		return nil, f.err
 	}
-	return &fakeAnswer{records: f.records}, nil
+	raw, _ := wire.NewBuilder().Response(true).Build()
+	return acidns.NewAnswer(nil, f.records, raw), nil
 }
 
 // mismatchRecord pretends to be a SRV-typed record while carrying an

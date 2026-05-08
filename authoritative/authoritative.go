@@ -172,7 +172,7 @@ const axfrChunkBudget = 16 * 1024
 // reassembles the zone by concatenating answer sections in arrival order.
 func (a *authoritative) serveAXFR(w acidns.ResponseWriter, q wire.Message) {
 	question := q.Questions()[0]
-	header := func() wire.Builder {
+	header := func() *wire.Builder {
 		return wire.NewBuilder().
 			ID(q.ID()).
 			Response(true).
@@ -276,7 +276,7 @@ func (a *authoritative) answer(q wire.Message) wire.Message {
 	return mustBuild(b)
 }
 
-func mustBuild(b wire.Builder) wire.Message {
+func mustBuild(b *wire.Builder) wire.Message {
 	m, err := b.Build()
 	if err != nil {
 		// Builder errors at this level are programmer errors — a malformed

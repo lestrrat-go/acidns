@@ -57,7 +57,7 @@ func (f *fakeStreamEx) Stream(_ context.Context, _ wire.Message) (acidns.Message
 	return f.stream, nil
 }
 
-func mustBuild(t *testing.T, b wire.Builder) wire.Message {
+func mustBuild(t *testing.T, b *wire.Builder) wire.Message {
 	t.Helper()
 	m, err := b.Build()
 	require.NoError(t, err)

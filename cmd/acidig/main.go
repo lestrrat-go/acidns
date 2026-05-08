@@ -184,7 +184,7 @@ func serverAddr(o opts, defaultPort int) (netip.AddrPort, error) {
 	return netip.AddrPortFrom(addr, uint16(port)), nil
 }
 
-func render(w *os.File, name wire.Name, rt rrtype.Type, ans acidns.Answer, elapsed time.Duration, o opts) {
+func render(w *os.File, name wire.Name, rt rrtype.Type, ans *acidns.Answer, elapsed time.Duration, o opts) {
 	if o.short {
 		for _, rec := range ans.Records() {
 			_, _ = fmt.Fprintln(w, formatRData(rec.RData()))
