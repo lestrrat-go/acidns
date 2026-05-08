@@ -78,7 +78,6 @@ acidns/                root: high-level convenience layer + UDP/TCP exchangers +
     acidig/            dig-style CLI
     acidns-server/     authoritative / recursive / hybrid daemon
   examples/            runnable Example_<area>_<op> tests, one file per example
-    lookup/            minimal SDK usage example (binary)
 ```
 
 ### Naming conventions
