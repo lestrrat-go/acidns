@@ -113,11 +113,39 @@ func (c *controllerCore) Done() <-chan struct{} { return c.done }
 // nil before Done is closed and after a clean shutdown via context
 // cancellation. Non-nil only when an unexpected condition (e.g. an
 // Accept failure outside the recoverable set) ended the loop.
+//
+// Note: Err does NOT surface Handler panics. The Server framework
+// has no `recover()` around handler dispatch (by design — see the
+// [Handler] doc); a panicking handler propagates up to the listener
+// goroutine and crashes the process before the work loop exits.
+// Use a process-level supervisor for crash detection.
 func (c *controllerCore) Err() error {
 	if p := c.err.Load(); p != nil {
 		return *p
 	}
 	return nil
+}
+
+// Wait blocks until the server's work goroutine has exited and
+// returns its terminal error. It is equivalent to:
+//
+//	<-c.Done()
+//	return c.Err()
+//
+// and is provided as a convenience for the common "start the server,
+// wait for it to finish, check why it exited" call shape:
+//
+//	ctrl, err := srv.Run(ctx)
+//	if err != nil {
+//	    return err
+//	}
+//	return ctrl.Wait()
+//
+// For composing with other channels (e.g. waiting on multiple
+// controllers via select) use [controllerCore.Done] directly.
+func (c *controllerCore) Wait() error {
+	<-c.done
+	return c.Err()
 }
 
 func (c *controllerCore) setErr(err error) {

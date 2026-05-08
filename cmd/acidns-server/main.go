@@ -114,12 +114,10 @@ func run(argv []string) error {
 		o.mode, addr, udpCtrl.Addr(), tcpCtrl.Addr())
 
 	<-ctx.Done()
-	<-udpCtrl.Done()
-	<-tcpCtrl.Done()
-	if err := udpCtrl.Err(); err != nil {
+	if err := udpCtrl.Wait(); err != nil {
 		return fmt.Errorf("udp server: %w", err)
 	}
-	if err := tcpCtrl.Err(); err != nil {
+	if err := tcpCtrl.Wait(); err != nil {
 		return fmt.Errorf("tcp server: %w", err)
 	}
 	return nil
