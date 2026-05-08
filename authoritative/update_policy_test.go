@@ -57,6 +57,54 @@ func TestUpdateRefusedByDefault(t *testing.T) {
 		"the unauthenticated UPDATE must NOT have inserted the record")
 }
 
+// TestUpdatePolicyReceivesRawRequest confirms that an UpdatePolicy can
+// recover the original wire bytes via [acidns.RawRequest], which is the
+// only way to perform RFC 3007 TSIG verification (re-marshalling q
+// isn't byte-stable).
+func TestUpdatePolicyReceivesRawRequest(t *testing.T) {
+	t.Parallel()
+
+	z, err := zonefile.Parse(strings.NewReader(updateZone))
+	require.NoError(t, err)
+
+	var rawSeen []byte
+	a, err := authoritative.New(
+		authoritative.WithZone(z),
+		authoritative.WithUpdatePolicy(func(ctx context.Context, _ acidns.ResponseWriter, _ wire.Message) bool {
+			b, ok := acidns.RawRequest(ctx)
+			if ok {
+				rawSeen = append([]byte(nil), b...)
+			}
+			return true
+		}),
+	)
+	require.NoError(t, err)
+
+	srv, err := acidns.ListenUDP(netip.MustParseAddrPort("127.0.0.1:0"), a)
+	require.NoError(t, err)
+	ctx, cancel := context.WithCancel(t.Context())
+	t.Cleanup(cancel)
+	go func() { _ = srv.Serve(ctx) }()
+
+	ex, err := acidns.NewUDPExchanger(srv.Addr())
+	require.NoError(t, err)
+	msg, err := update.NewBuilder(wire.MustParseName("example.com")).
+		AddRRset(wire.NewRecord(wire.MustParseName("blog.example.com"),
+			60*time.Second, rdata.NewA(netip.MustParseAddr("198.51.100.5")))).
+		Build()
+	require.NoError(t, err)
+
+	expectedBytes, err := wire.Marshal(msg)
+	require.NoError(t, err)
+
+	_, err = ex.Exchange(ctx, msg)
+	require.NoError(t, err)
+
+	require.NotEmpty(t, rawSeen, "policy must observe raw request bytes via RawRequest()")
+	require.Equal(t, expectedBytes, rawSeen,
+		"raw bytes received by the policy must equal the wire bytes the client sent")
+}
+
 func TestUpdatePolicyAllowsExplicitOptIn(t *testing.T) {
 	t.Parallel()
 
@@ -66,7 +114,7 @@ func TestUpdatePolicyAllowsExplicitOptIn(t *testing.T) {
 	var called atomic.Bool
 	a, err := authoritative.New(
 		authoritative.WithZone(z),
-		authoritative.WithUpdatePolicy(func(_ acidns.ResponseWriter, _ wire.Message) bool {
+		authoritative.WithUpdatePolicy(func(_ context.Context, _ acidns.ResponseWriter, _ wire.Message) bool {
 			called.Store(true)
 			return true
 		}),

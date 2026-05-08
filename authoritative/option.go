@@ -1,6 +1,8 @@
 package authoritative
 
 import (
+	"context"
+
 	"github.com/lestrrat-go/acidns"
 	"github.com/lestrrat-go/acidns/wire"
 	"github.com/lestrrat-go/acidns/zonefile"
@@ -27,8 +29,11 @@ type config struct {
 // A nil policy means the server refuses all UPDATEs — callers that want
 // to accept dynamic updates MUST install a policy explicitly. A typical
 // implementation runs [tsig.VerifyMAC] against a configured keyring
-// before returning true (RFC 3007).
-type UpdatePolicy func(w acidns.ResponseWriter, q wire.Message) bool
+// before returning true (RFC 3007). The raw on-the-wire request bytes
+// (which TSIG signs over) are available via [acidns.RawRequest](ctx);
+// re-marshalling q is not byte-stable and won't verify against a TSIG
+// MAC produced by the originator.
+type UpdatePolicy func(ctx context.Context, w acidns.ResponseWriter, q wire.Message) bool
 
 // WithZone adds z to the server's zones.
 func WithZone(z zonefile.Zone) Option {

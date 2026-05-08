@@ -118,9 +118,9 @@ func (a *authoritative) Zones() []wire.Name {
 }
 
 // ServeDNS implements acidns.Handler.
-func (a *authoritative) ServeDNS(_ context.Context, w acidns.ResponseWriter, q wire.Message) {
+func (a *authoritative) ServeDNS(ctx context.Context, w acidns.ResponseWriter, q wire.Message) {
 	if q.Flags().Opcode() == wire.OpcodeUpdate {
-		a.serveUpdate(w, q)
+		a.serveUpdate(ctx, w, q)
 		return
 	}
 	if q.Flags().Opcode() == wire.OpcodeNotify {

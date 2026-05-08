@@ -183,7 +183,7 @@ func (s *tcpListener) serveConn(ctx context.Context, conn net.Conn) {
 		}
 
 		w := &tcpResponseWriter{conn: conn, remote: remote, local: s.addr}
-		s.handler.ServeDNS(ctx, w, q)
+		s.handler.ServeDNS(contextWithRawRequest(ctx, body), w, q)
 	}
 }
 

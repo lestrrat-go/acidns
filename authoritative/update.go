@@ -2,6 +2,7 @@ package authoritative
 
 import (
 	"bytes"
+	"context"
 
 	"github.com/lestrrat-go/acidns"
 	"github.com/lestrrat-go/acidns/wire"
@@ -15,7 +16,7 @@ import (
 // UPDATE is refused with REFUSED. Production deployments are expected
 // to install a policy that performs TSIG (RFC 3007) or SIG(0)
 // verification before admitting an update.
-func (a *authoritative) serveUpdate(w acidns.ResponseWriter, q wire.Message) {
+func (a *authoritative) serveUpdate(ctx context.Context, w acidns.ResponseWriter, q wire.Message) {
 	b := wire.NewBuilder().
 		ID(q.ID()).
 		Response(true).
@@ -40,7 +41,7 @@ func (a *authoritative) serveUpdate(w acidns.ResponseWriter, q wire.Message) {
 
 	// Authorisation gate. With no policy installed, every UPDATE is
 	// refused — we won't accept unauthenticated mutation by default.
-	if a.updatePolicy == nil || !a.updatePolicy(w, q) {
+	if a.updatePolicy == nil || !a.updatePolicy(ctx, w, q) {
 		_ = w.WriteMsg(mustBuild(setRCODE(b, q, wire.RCODERefused), q))
 		return
 	}

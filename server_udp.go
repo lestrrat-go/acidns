@@ -172,6 +172,7 @@ func (s *udpListener) handlePacket(ctx context.Context, body []byte, src netip.A
 		maxResp = s.cfg.maxResponseLen
 	}
 
+	ctx = contextWithRawRequest(ctx, body)
 	w := &udpResponseWriter{
 		pc:     s.pc,
 		dst:    src,
