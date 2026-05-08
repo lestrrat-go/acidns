@@ -8,6 +8,7 @@ import (
 	"io"
 	"net"
 	"net/netip"
+	"strings"
 	"sync"
 	"time"
 
@@ -113,6 +114,16 @@ func (s *tcpListener) Serve(ctx context.Context) error {
 		}
 	}()
 
+	// Backoff bounds for transient Accept errors (e.g. EMFILE/ENFILE
+	// from process or kernel FD exhaustion). The pattern mirrors the
+	// canonical net/http.Server.Serve loop: never terminate Serve on
+	// recoverable errors, sleep with capped exponential backoff and
+	// retry; the kernel listen backlog absorbs queued SYNs while we
+	// wait.
+	const acceptBackoffStart = 5 * time.Millisecond
+	const acceptBackoffCap = time.Second
+	tempBackoff := time.Duration(0)
+
 	for {
 		if s.sem != nil {
 			select {
@@ -128,12 +139,34 @@ func (s *tcpListener) Serve(ctx context.Context) error {
 			if s.sem != nil {
 				<-s.sem
 			}
-			s.wg.Wait()
 			if ctx.Err() != nil || errors.Is(err, net.ErrClosed) {
+				s.wg.Wait()
 				return ErrServerClosed
 			}
+			if isAcceptTransient(err) {
+				if tempBackoff == 0 {
+					tempBackoff = acceptBackoffStart
+				} else {
+					tempBackoff *= 2
+					if tempBackoff > acceptBackoffCap {
+						tempBackoff = acceptBackoffCap
+					}
+				}
+				timer := time.NewTimer(tempBackoff)
+				select {
+				case <-timer.C:
+				case <-ctx.Done():
+					timer.Stop()
+					_ = s.ln.Close()
+					s.wg.Wait()
+					return ErrServerClosed
+				}
+				continue
+			}
+			s.wg.Wait()
 			return fmt.Errorf("dnsserver: tcp accept: %w", err)
 		}
+		tempBackoff = 0
 		s.wg.Add(1)
 		go func(c net.Conn) {
 			defer func() {
@@ -145,6 +178,28 @@ func (s *tcpListener) Serve(ctx context.Context) error {
 			s.serveConn(ctx, c)
 		}(conn)
 	}
+}
+
+// isAcceptTransient reports whether err is a transient Accept failure
+// that should not terminate the Serve loop. The standard library
+// removed the Temporary() distinction, so we substring-match the
+// well-known kernel exhaustion modes — the same approach
+// net/http.Server.Serve takes today.
+func isAcceptTransient(err error) bool {
+	if err == nil {
+		return false
+	}
+	msg := err.Error()
+	for _, s := range []string{
+		"too many open files",
+		"file table overflow",
+		"resource temporarily unavailable",
+	} {
+		if strings.Contains(msg, s) {
+			return true
+		}
+	}
+	return false
 }
 
 func (s *tcpListener) serveConn(ctx context.Context, conn net.Conn) {
