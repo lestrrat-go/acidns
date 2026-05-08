@@ -39,6 +39,83 @@ func TestUnmarshalSectionCountClamp(t *testing.T) {
 		"single-call alloc delta %d bytes; clamp may be missing", delta)
 }
 
+// TestCompressedRdataNameRejected confirms that a record whose rdata
+// embeds a domain name in a slot the relevant RFC says MUST be
+// uncompressed (RFC 3597 §4 plus per-RR specs) is rejected if the
+// sender used a compression pointer there. Accepting compressed bytes
+// here would let attackers re-emit different wire bytes than the
+// originator, breaking RRSIG canonicalisation.
+func TestCompressedRdataNameRejected(t *testing.T) {
+	t.Parallel()
+
+	// Header: 0 questions, 1 answer, 0 authority, 0 additional.
+	hdr := []byte{
+		0x00, 0x00, // ID
+		0x00, 0x00, // flags
+		0x00, 0x00, // qdcount
+		0x00, 0x01, // ancount = 1
+		0x00, 0x00, // nscount
+		0x00, 0x00, // arcount
+	}
+
+	tests := []struct {
+		name   string
+		rrType uint16
+		rdata  []byte
+	}{
+		{
+			// SRV: priority(2) + weight(2) + port(2) + target.
+			// Target is a compression pointer back to the owner name.
+			name:   "SRV",
+			rrType: 33,
+			rdata: []byte{
+				0x00, 0x10, // priority
+				0x00, 0x20, // weight
+				0x00, 0x35, // port
+				0xc0, 0x0c, // pointer
+			},
+		},
+		{
+			// KX: preference(2) + exchanger.
+			name:   "KX",
+			rrType: 36,
+			rdata: []byte{
+				0x00, 0x05, // preference
+				0xc0, 0x0c, // pointer
+			},
+		},
+		{
+			// NAPTR: order(2)+pref(2)+flags(charstring)+services(charstring)+
+			// regexp(charstring)+replacement.
+			name:   "NAPTR",
+			rrType: 35,
+			rdata: []byte{
+				0x00, 0x01, // order
+				0x00, 0x02, // pref
+				0x00,       // flags (empty char-string)
+				0x00,       // services
+				0x00,       // regexp
+				0xc0, 0x0c, // replacement = pointer
+			},
+		},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			rec := []byte{0x00} // owner name = root
+			rec = append(rec, byte(tc.rrType>>8), byte(tc.rrType))
+			rec = append(rec, 0x00, 0x01)             // class IN
+			rec = append(rec, 0x00, 0x00, 0x00, 0x00) // ttl
+			rec = append(rec, byte(len(tc.rdata)>>8), byte(len(tc.rdata)))
+			rec = append(rec, tc.rdata...)
+
+			_, err := wire.Unmarshal(append(hdr, rec...))
+			require.Error(t, err,
+				"%s with compressed name in rdata must be rejected", tc.name)
+		})
+	}
+}
+
 // TestDNAMECompressedTargetRejected confirms that a DNAME record whose
 // target uses compression-pointer encoding is rejected. RFC 6672 §3.0
 // forbids compression in the DNAME target — accepting it would let

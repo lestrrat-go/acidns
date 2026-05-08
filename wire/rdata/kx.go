@@ -32,7 +32,7 @@ func unpackKX(u *wirebb.Unpacker) (KX, error) {
 	if err != nil {
 		return zero, err
 	}
-	n, err := u.Name()
+	n, err := u.UncompressedName()
 	if err != nil {
 		return zero, err
 	}
