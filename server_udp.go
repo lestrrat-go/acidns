@@ -37,11 +37,12 @@ func WithUDPMaxResponse(n int) UDPListenerOption {
 }
 
 type udpListener struct {
-	pc      net.PacketConn
-	addr    netip.AddrPort
-	handler Handler
-	cfg     udpListenerConfig
-	wg      sync.WaitGroup
+	pc        net.PacketConn
+	addr      netip.AddrPort
+	handler   Handler
+	cfg       udpListenerConfig
+	wg        sync.WaitGroup
+	closeOnce sync.Once
 }
 
 // ListenUDP binds a UDP socket on addr and returns a Server that dispatches
@@ -74,6 +75,22 @@ func ListenUDP(addr netip.AddrPort, h Handler, opts ...UDPListenerOption) (Serve
 }
 
 func (s *udpListener) Addr() netip.AddrPort { return s.addr }
+
+// Shutdown closes the listening socket so Serve returns ErrServerClosed,
+// then waits for in-flight handler goroutines to finish. If ctx expires
+// before that happens, the context error is returned and the dangling
+// handlers continue running until they exit on their own.
+func (s *udpListener) Shutdown(ctx context.Context) error {
+	s.closeOnce.Do(func() { _ = s.pc.Close() })
+	done := make(chan struct{})
+	go func() { s.wg.Wait(); close(done) }()
+	select {
+	case <-done:
+		return nil
+	case <-ctx.Done():
+		return ctx.Err()
+	}
+}
 
 func (s *udpListener) Serve(ctx context.Context) error {
 	stop := make(chan struct{})

@@ -16,6 +16,7 @@ import (
 	"encoding/binary"
 	"errors"
 	"fmt"
+	"io"
 	"time"
 
 	"github.com/lestrrat-go/acidns"
@@ -63,6 +64,22 @@ func (h *Handler) UpstreamName() string { return h.cfg.upstreamName }
 
 // CacheSize returns the current number of entries in the cache.
 func (h *Handler) CacheSize() int { return h.cache.len() }
+
+// Close drops the cache and, if the configured upstream Exchanger
+// implements io.Closer, propagates the Close call to it. Callers SHOULD
+// stop sending queries through the handler before calling Close: any
+// in-flight ServeDNS goroutine will continue to use the (now possibly
+// closed) upstream until it completes.
+//
+// Returns the upstream's Close error, or nil if the upstream does not
+// implement io.Closer.
+func (h *Handler) Close() error {
+	h.cache.clear()
+	if c, ok := h.cfg.upstream.(io.Closer); ok {
+		return c.Close()
+	}
+	return nil
+}
 
 // ServeDNS answers q by serving from cache when fresh, otherwise by
 // forwarding to the configured upstream and caching the result.

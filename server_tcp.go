@@ -33,11 +33,12 @@ func WithTCPIdleTimeout(d time.Duration) TCPListenerOption {
 }
 
 type tcpListener struct {
-	ln      net.Listener
-	addr    netip.AddrPort
-	handler Handler
-	cfg     tcpListenerConfig
-	wg      sync.WaitGroup
+	ln        net.Listener
+	addr      netip.AddrPort
+	handler   Handler
+	cfg       tcpListenerConfig
+	wg        sync.WaitGroup
+	closeOnce sync.Once
 }
 
 // ListenTCP binds a TCP socket on addr and returns a Server. Each
@@ -70,6 +71,22 @@ func ListenTCP(addr netip.AddrPort, h Handler, opts ...TCPListenerOption) (Serve
 }
 
 func (s *tcpListener) Addr() netip.AddrPort { return s.addr }
+
+// Shutdown closes the listener and any pending connection deadlines so
+// Serve returns ErrServerClosed, then waits for in-flight per-connection
+// goroutines to finish. If ctx expires before that happens, the context
+// error is returned.
+func (s *tcpListener) Shutdown(ctx context.Context) error {
+	s.closeOnce.Do(func() { _ = s.ln.Close() })
+	done := make(chan struct{})
+	go func() { s.wg.Wait(); close(done) }()
+	select {
+	case <-done:
+		return nil
+	case <-ctx.Done():
+		return ctx.Err()
+	}
+}
 
 func (s *tcpListener) Serve(ctx context.Context) error {
 	stop := make(chan struct{})

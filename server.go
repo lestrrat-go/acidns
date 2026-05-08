@@ -50,8 +50,19 @@ type ResponseWriter interface {
 }
 
 // Server is a bound, ready-to-serve DNS listener. Serve blocks until the
-// supplied context is cancelled or an unrecoverable error occurs.
+// supplied context is cancelled, Shutdown is called, or an unrecoverable
+// error occurs; in any of those cases ErrServerClosed is returned.
+//
+// Shutdown closes the underlying socket and waits for in-flight handler
+// goroutines to return. If the supplied context expires before all
+// handlers complete, Shutdown returns the context's error and the
+// dangling goroutines may still be running. Shutdown is idempotent:
+// repeated calls are safe.
+//
+// Server implementations MUST be safe for concurrent use by multiple
+// goroutines.
 type Server interface {
 	Serve(ctx context.Context) error
+	Shutdown(ctx context.Context) error
 	Addr() netip.AddrPort
 }

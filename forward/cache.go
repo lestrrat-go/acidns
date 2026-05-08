@@ -110,6 +110,18 @@ func (c *cache) len() int {
 	return c.lru.Len()
 }
 
+func (c *cache) clear() {
+	if c == nil {
+		return
+	}
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.lru.Init()
+	for k := range c.m {
+		delete(c.m, k)
+	}
+}
+
 func makeKey(name wire.Name, qtype rrtype.Type, class rrtype.Class) cacheKey {
 	return cacheKey{
 		name:  string(name.AppendWire(nil)),
