@@ -60,7 +60,11 @@ func ListenUDP(addr netip.AddrPort, h Handler, opts ...UDPListenerOption) (Serve
 	if err != nil {
 		return nil, fmt.Errorf("dnsserver: udp listen %s: %w", addr, err)
 	}
-	la := pc.LocalAddr().(*net.UDPAddr)
+	la, ok := pc.LocalAddr().(*net.UDPAddr)
+	if !ok {
+		_ = pc.Close()
+		return nil, fmt.Errorf("dnsserver: udp listen %s: unexpected addr type %T", addr, pc.LocalAddr())
+	}
 	return &udpListener{
 		pc:      pc,
 		addr:    netip.AddrPortFrom(la.AddrPort().Addr(), uint16(la.Port)),

@@ -227,28 +227,36 @@ Status legend: **Implemented** = working code with tests; **Partial** = document
 
 ## Dispatching on rdata type
 
-Each typed rdata is a concrete struct (`rdata.A`, `rdata.AAAA`, `rdata.MX`, ..., `rdata.SVCB`, `rdata.HTTPS`) with unexported fields. `rdata.RData` is the umbrella interface implemented by all of them; `rdata.Typed` further requires a compile-time-constant `Type()` (every typed rdata satisfies Typed; `rdata.Unknown` deliberately does not). Type assertions like `rec.RData().(rdata.A)` only succeed when the dynamic type is exactly `rdata.A`, so the structural-satisfaction collisions of the old interface-typed era (A vs AAAA, CNAME vs SVCB) no longer apply.
+Each typed rdata is a concrete struct (`rdata.A`, `rdata.AAAA`, `rdata.MX`, ..., `rdata.SVCB`, `rdata.HTTPS`) with unexported fields. `rdata.RData` is the umbrella interface implemented by all of them; `rdata.Typed` further requires a compile-time-constant `Type()` (every typed rdata satisfies Typed; `rdata.Unknown` deliberately does not). Type assertions on the concrete struct are precise: `rec.RData().(rdata.A)` matches only when the dynamic type is exactly `rdata.A`.
 
-**Recommended dispatch pattern** — switch on `rec.Type()` (or `rd.Type()`) for clarity, then assert:
+**Many-case dispatch — Go type switch:**
 
 ```go
-switch rec.Type() {
-case rrtype.A:
-    addr := rec.RData().(rdata.A).Addr()
-case rrtype.AAAA:
-    addr := rec.RData().(rdata.AAAA).Addr()
-case rrtype.SVCB:
-    s := rec.RData().(rdata.SVCB)
+switch v := rec.RData().(type) {
+case rdata.A:
+    addr := v.Addr()
+case rdata.AAAA:
+    addr := v.Addr()
+case rdata.SVCB:
     ...
-case rrtype.HTTPS:
-    s := rec.RData().(rdata.HTTPS)
+case rdata.HTTPS:
     ...
 }
 ```
 
-`switch rd := rec.RData().(type)` is now safe (no false matches), but type-on-rec.Type() reads more directly and pairs with the rrtype constants used elsewhere.
+This is the cleanest form when handling several rdata types. forcetypeassert is happy because the type switch is checked by construction, and there are no naked `x.(T)` assertions.
 
-For helpers that share logic across SVCB and HTTPS (or other shape-equivalent rdata pairs), use a generic with a type-set constraint that includes the shared methods:
+**Single-record extraction — `wire.RDataAs[T]`:**
+
+```go
+if soa, ok := wire.RDataAs[rdata.SOA](rec); ok {
+    serial := soa.Serial()
+}
+```
+
+`RDataAs[T]` returns `(T, bool)`; the rrtype is inferred from `T`'s zero value. Prefer it over a manual `Type()` check followed by a naked assertion.
+
+**Generic helpers across shape-equivalent rdata pairs** (e.g. SVCB and HTTPS) — type-set constraint:
 
 ```go
 type svcbLike interface {
@@ -260,7 +268,9 @@ type svcbLike interface {
 func formatSVCB[T svcbLike](s T) string { ... }
 ```
 
-For single-record assertions, prefer `wire.RDataAs[T rdata.Typed](rec)` — the rrtype is inferred from T's zero value. For slice extraction, use `acidns.Extract[T rdata.RData](records)` (allows Unknown via a special case) or `acidns.ResolveAs[T rdata.Typed](ctx, r, name)`.
+**Slice extraction:** `acidns.Extract[T rdata.RData](records)` (allows Unknown via a special case) or `acidns.ResolveAs[T rdata.Typed](ctx, r, name)`.
+
+**Note:** the older `switch rec.Type() { case rrtype.A: rec.RData().(rdata.A).Addr() }` form is no longer recommended — `forcetypeassert` flags the unchecked assertion, and the Go type switch reads just as clearly.
 
 ## Pre-flight for any task in this repo
 

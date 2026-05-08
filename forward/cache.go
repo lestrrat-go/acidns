@@ -64,7 +64,7 @@ func (c *cache) get(name wire.Name, qtype rrtype.Type, class rrtype.Class, now t
 	if !ok {
 		return entry{}, false
 	}
-	it := el.Value.(*cacheItem)
+	it, _ := el.Value.(*cacheItem)
 	if !now.Before(it.val.expiresAt) {
 		c.lru.Remove(el)
 		delete(c.m, k)
@@ -82,7 +82,9 @@ func (c *cache) put(name wire.Name, qtype rrtype.Type, class rrtype.Class, e ent
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	if el, ok := c.m[k]; ok {
-		el.Value.(*cacheItem).val = e
+		if it, ok := el.Value.(*cacheItem); ok {
+			it.val = e
+		}
 		c.lru.MoveToFront(el)
 		return
 	}
@@ -92,7 +94,9 @@ func (c *cache) put(name wire.Name, qtype rrtype.Type, class rrtype.Class, e ent
 		oldest := c.lru.Back()
 		if oldest != nil {
 			c.lru.Remove(oldest)
-			delete(c.m, oldest.Value.(*cacheItem).key)
+			if it, ok := oldest.Value.(*cacheItem); ok {
+				delete(c.m, it.key)
+			}
 		}
 	}
 }

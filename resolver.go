@@ -337,10 +337,14 @@ func matchAnswers(answers []wire.Record, qname wire.Name, qtype rrtype.Type) []w
 			var next wire.Name
 			found := false
 			for _, rec := range answers {
-				if rec.Type() != rrtype.CNAME || !rec.Name().Equal(target) {
+				if !rec.Name().Equal(target) {
 					continue
 				}
-				next = rec.RData().(rdata.CNAME).Target()
+				cn, ok := wire.RDataAs[rdata.CNAME](rec)
+				if !ok {
+					continue
+				}
+				next = cn.Target()
 				found = true
 				break
 			}

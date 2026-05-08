@@ -8,7 +8,6 @@ import (
 
 	"github.com/lestrrat-go/acidns/wire"
 	"github.com/lestrrat-go/acidns/wire/rdata"
-	"github.com/lestrrat-go/acidns/wire/rrtype"
 )
 
 // Write emits z as RFC 1035 master-file text. The output begins with
@@ -85,42 +84,37 @@ func relativise(n, origin wire.Name) string {
 }
 
 func formatRDataPresentation(rd rdata.RData, _ wire.Name) (string, error) {
-	switch rd.Type() {
-	case rrtype.A:
-		return rd.(rdata.A).Addr().String(), nil
-	case rrtype.AAAA:
-		return rd.(rdata.AAAA).Addr().String(), nil
-	case rrtype.CNAME:
-		return rd.(rdata.CNAME).Target().String(), nil
-	case rrtype.NS:
-		return rd.(rdata.NS).NSDName().String(), nil
-	case rrtype.PTR:
-		return rd.(rdata.PTR).PtrDName().String(), nil
-	case rrtype.MX:
-		v := rd.(rdata.MX)
+	switch v := rd.(type) {
+	case rdata.A:
+		return v.Addr().String(), nil
+	case rdata.AAAA:
+		return v.Addr().String(), nil
+	case rdata.CNAME:
+		return v.Target().String(), nil
+	case rdata.NS:
+		return v.NSDName().String(), nil
+	case rdata.PTR:
+		return v.PtrDName().String(), nil
+	case rdata.MX:
 		return fmt.Sprintf("%d %s", v.Preference(), v.Exchange()), nil
-	case rrtype.TXT:
-		v := rd.(rdata.TXT)
+	case rdata.TXT:
 		var parts []string
 		for _, s := range v.Strings() {
 			parts = append(parts, quoteCharString(s))
 		}
 		return strings.Join(parts, " "), nil
-	case rrtype.SOA:
-		v := rd.(rdata.SOA)
+	case rdata.SOA:
 		return fmt.Sprintf("%s %s (\n\t\t%d\t; serial\n\t\t%d\t; refresh\n\t\t%d\t; retry\n\t\t%d\t; expire\n\t\t%d )\t; minimum",
 			v.MName(), v.RName(), v.Serial(),
 			int(v.Refresh().Seconds()), int(v.Retry().Seconds()),
 			int(v.Expire().Seconds()), int(v.Minimum().Seconds())), nil
-	case rrtype.CAA:
-		v := rd.(rdata.CAA)
+	case rdata.CAA:
 		return fmt.Sprintf("%d %s %s", v.Flags(), v.Tag(), quoteCharString(string(v.Value()))), nil
-	default:
+	case rdata.Unknown:
 		// RFC 3597 generic form: \# <length> <hex>
-		if u, ok := rd.(rdata.Unknown); ok {
-			b := u.Bytes()
-			return fmt.Sprintf("\\# %d %s", len(b), hex.EncodeToString(b)), nil
-		}
+		b := v.Bytes()
+		return fmt.Sprintf("\\# %d %s", len(b), hex.EncodeToString(b)), nil
+	default:
 		return "", fmt.Errorf("dnszone: cannot present rdata of type %s", rd.Type())
 	}
 }

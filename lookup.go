@@ -90,11 +90,12 @@ func lookupHostAbsolute(ctx context.Context, r Resolver, name wire.Name) ([]neti
 		}
 		out := make([]netip.Addr, 0, len(ans.Records()))
 		for _, rec := range ans.Records() {
-			switch rec.Type() {
-			case rrtype.A:
-				out = append(out, rec.RData().(rdata.A).Addr())
-			case rrtype.AAAA:
-				out = append(out, rec.RData().(rdata.AAAA).Addr())
+			if a, ok := wire.RDataAs[rdata.A](rec); ok {
+				out = append(out, a.Addr())
+				continue
+			}
+			if aaaa, ok := wire.RDataAs[rdata.AAAA](rec); ok {
+				out = append(out, aaaa.Addr())
 			}
 		}
 		ch <- result{addrs: out}

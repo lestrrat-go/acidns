@@ -236,44 +236,39 @@ func formatRecord(rec wire.Record) string {
 }
 
 func formatRData(rd rdata.RData) string {
-	switch rd.Type() {
-	case rrtype.A:
-		return rd.(rdata.A).Addr().String()
-	case rrtype.AAAA:
-		return rd.(rdata.AAAA).Addr().String()
-	case rrtype.CNAME:
-		return rd.(rdata.CNAME).Target().String()
-	case rrtype.NS:
-		return rd.(rdata.NS).NSDName().String()
-	case rrtype.PTR:
-		return rd.(rdata.PTR).PtrDName().String()
-	case rrtype.MX:
-		v := rd.(rdata.MX)
+	switch v := rd.(type) {
+	case rdata.A:
+		return v.Addr().String()
+	case rdata.AAAA:
+		return v.Addr().String()
+	case rdata.CNAME:
+		return v.Target().String()
+	case rdata.NS:
+		return v.NSDName().String()
+	case rdata.PTR:
+		return v.PtrDName().String()
+	case rdata.MX:
 		return fmt.Sprintf("%d %s", v.Preference(), v.Exchange())
-	case rrtype.TXT:
-		v := rd.(rdata.TXT)
+	case rdata.TXT:
 		var parts []string
 		for _, s := range v.Strings() {
 			parts = append(parts, fmt.Sprintf("%q", s))
 		}
 		return strings.Join(parts, " ")
-	case rrtype.SOA:
-		v := rd.(rdata.SOA)
+	case rdata.SOA:
 		return fmt.Sprintf("%s %s %d %d %d %d %d",
 			v.MName(), v.RName(), v.Serial(),
 			int(v.Refresh().Seconds()), int(v.Retry().Seconds()),
 			int(v.Expire().Seconds()), int(v.Minimum().Seconds()))
-	case rrtype.SVCB:
-		return formatSvcbBody(rd.(rdata.SVCB).Priority(), rd.(rdata.SVCB).Target().String(), rd.(rdata.SVCB).Params())
-	case rrtype.HTTPS:
-		return formatSvcbBody(rd.(rdata.HTTPS).Priority(), rd.(rdata.HTTPS).Target().String(), rd.(rdata.HTTPS).Params())
-	case rrtype.CAA:
-		v := rd.(rdata.CAA)
+	case rdata.SVCB:
+		return formatSvcbBody(v.Priority(), v.Target().String(), v.Params())
+	case rdata.HTTPS:
+		return formatSvcbBody(v.Priority(), v.Target().String(), v.Params())
+	case rdata.CAA:
 		return fmt.Sprintf("%d %s %q", v.Flags(), v.Tag(), v.Value())
+	case rdata.Unknown:
+		return fmt.Sprintf("\\# %d (opaque)", len(v.Bytes()))
 	default:
-		if u, ok := rd.(rdata.Unknown); ok {
-			return fmt.Sprintf("\\# %d (opaque)", len(u.Bytes()))
-		}
 		return fmt.Sprintf("(%s)", rd.Type())
 	}
 }

@@ -56,7 +56,11 @@ func ListenTCP(addr netip.AddrPort, h Handler, opts ...TCPListenerOption) (Serve
 	if err != nil {
 		return nil, fmt.Errorf("dnsserver: tcp listen %s: %w", addr, err)
 	}
-	la := ln.Addr().(*net.TCPAddr)
+	la, ok := ln.Addr().(*net.TCPAddr)
+	if !ok {
+		_ = ln.Close()
+		return nil, fmt.Errorf("dnsserver: tcp listen %s: unexpected addr type %T", addr, ln.Addr())
+	}
 	return &tcpListener{
 		ln:      ln,
 		addr:    netip.AddrPortFrom(la.AddrPort().Addr(), uint16(la.Port)),

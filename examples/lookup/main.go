@@ -66,55 +66,50 @@ func main() {
 }
 
 func formatRData(rd rdata.RData) string {
-	// Switching on Type() rather than on Go interface — interfaces with
-	// overlapping method sets (e.g. CNAME and SVCB both have Target())
-	// would otherwise route to the wrong case.
-	switch rd.Type() {
-	case rrtype.A:
-		return rd.(rdata.A).Addr().String()
-	case rrtype.AAAA:
-		return rd.(rdata.AAAA).Addr().String()
-	case rrtype.CNAME:
-		return rd.(rdata.CNAME).Target().String()
-	case rrtype.NS:
-		return rd.(rdata.NS).NSDName().String()
-	case rrtype.PTR:
-		return rd.(rdata.PTR).PtrDName().String()
-	case rrtype.MX:
-		v := rd.(rdata.MX)
+	// Type switch on the concrete rdata struct: each case binds v to the
+	// specific type so we can call its accessors without a separate
+	// assertion. rdata structs no longer share method sets across types
+	// (CNAME and SVCB both have Target() but different concrete types),
+	// so a Go type switch routes each value correctly.
+	switch v := rd.(type) {
+	case rdata.A:
+		return v.Addr().String()
+	case rdata.AAAA:
+		return v.Addr().String()
+	case rdata.CNAME:
+		return v.Target().String()
+	case rdata.NS:
+		return v.NSDName().String()
+	case rdata.PTR:
+		return v.PtrDName().String()
+	case rdata.MX:
 		return fmt.Sprintf("%d %s", v.Preference(), v.Exchange())
-	case rrtype.TXT:
-		return fmt.Sprintf("%q", rd.(rdata.TXT).Strings())
-	case rrtype.SOA:
-		v := rd.(rdata.SOA)
+	case rdata.TXT:
+		return fmt.Sprintf("%q", v.Strings())
+	case rdata.SOA:
 		return fmt.Sprintf("%s %s %d %d %d %d %d",
 			v.MName(), v.RName(), v.Serial(),
 			int(v.Refresh().Seconds()), int(v.Retry().Seconds()),
 			int(v.Expire().Seconds()), int(v.Minimum().Seconds()))
-	case rrtype.SVCB:
-		return formatSVCB(rd.(rdata.SVCB))
-	case rrtype.HTTPS:
-		return formatSVCB(rd.(rdata.HTTPS))
-	case rrtype.CAA:
-		v := rd.(rdata.CAA)
+	case rdata.SVCB:
+		return formatSVCB(v)
+	case rdata.HTTPS:
+		return formatSVCB(v)
+	case rdata.CAA:
 		return fmt.Sprintf("%d %s %q", v.Flags(), v.Tag(), v.Value())
-	case rrtype.DNSKEY:
-		v := rd.(rdata.DNSKEY)
+	case rdata.DNSKEY:
 		return fmt.Sprintf("%d 3 %d %x...", v.Flags(), v.Algorithm(), truncate(v.PublicKey(), 8))
-	case rrtype.DS:
-		v := rd.(rdata.DS)
+	case rdata.DS:
 		return fmt.Sprintf("%d %d %d %x", v.KeyTag(), v.Algorithm(), v.DigestType(), v.Digest())
-	case rrtype.RRSIG:
-		v := rd.(rdata.RRSIG)
+	case rdata.RRSIG:
 		return fmt.Sprintf("%s %d %d %d %d %d %d %s %x...",
 			v.TypeCovered(), v.Algorithm(), v.Labels(),
 			int(v.OriginalTTL().Seconds()),
 			v.SignatureExpiration().Unix(), v.SignatureInception().Unix(),
 			v.KeyTag(), v.SignerName(), truncate(v.Signature(), 8))
+	case rdata.Unknown:
+		return fmt.Sprintf("(opaque %d bytes)", len(v.Bytes()))
 	default:
-		if u, ok := rd.(rdata.Unknown); ok {
-			return fmt.Sprintf("(opaque %d bytes)", len(u.Bytes()))
-		}
 		return fmt.Sprintf("(unhandled type %s)", rd.Type())
 	}
 }
