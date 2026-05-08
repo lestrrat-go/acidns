@@ -20,7 +20,7 @@ func startEcho(t *testing.T) netip.AddrPort {
 	t.Helper()
 	pc, err := net.ListenPacket("udp", "127.0.0.1:0")
 	require.NoError(t, err)
-	t.Cleanup(func() { pc.Close() })
+	t.Cleanup(func() { _ = pc.Close() })
 
 	go func() {
 		buf := make([]byte, 4096)
@@ -50,7 +50,7 @@ func startEcho(t *testing.T) netip.AddrPort {
 			if err != nil {
 				continue
 			}
-			pc.WriteTo(wire, src)
+			_, _ = pc.WriteTo(wire, src)
 		}
 	}()
 
@@ -89,7 +89,7 @@ func TestExchangeContextCancelled(t *testing.T) {
 	// Bind a port but never respond — exchange must return when ctx fires.
 	pc, err := net.ListenPacket("udp", "127.0.0.1:0")
 	require.NoError(t, err)
-	t.Cleanup(func() { pc.Close() })
+	t.Cleanup(func() { _ = pc.Close() })
 	a := pc.LocalAddr().(*net.UDPAddr)
 	addr := netip.AddrPortFrom(netip.MustParseAddr("127.0.0.1"), uint16(a.Port))
 
@@ -112,7 +112,7 @@ func TestExchangeMismatchedID(t *testing.T) {
 
 	pc, err := net.ListenPacket("udp", "127.0.0.1:0")
 	require.NoError(t, err)
-	t.Cleanup(func() { pc.Close() })
+	t.Cleanup(func() { _ = pc.Close() })
 	a := pc.LocalAddr().(*net.UDPAddr)
 	addr := netip.AddrPortFrom(netip.MustParseAddr("127.0.0.1"), uint16(a.Port))
 
@@ -133,7 +133,7 @@ func TestExchangeMismatchedID(t *testing.T) {
 			Question(req.Questions()[0]).
 			Build()
 		bw, _ := wire.Marshal(bad)
-		pc.WriteTo(bw, src)
+		_, _ = pc.WriteTo(bw, src)
 
 		good, _ := wire.NewBuilder().
 			ID(req.ID()).
@@ -143,7 +143,7 @@ func TestExchangeMismatchedID(t *testing.T) {
 				rdata.NewA(netip.MustParseAddr("203.0.113.2")))).
 			Build()
 		gw, _ := wire.Marshal(good)
-		pc.WriteTo(gw, src)
+		_, _ = pc.WriteTo(gw, src)
 	}()
 
 	ex, err := acidns.NewUDPExchanger(addr, acidns.WithUDPTimeout(2*time.Second))

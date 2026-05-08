@@ -22,7 +22,7 @@ func startSearchServer(t *testing.T, wanted string) (netip.AddrPort, func() []st
 
 	pc, err := net.ListenPacket("udp", "127.0.0.1:0")
 	require.NoError(t, err)
-	t.Cleanup(func() { pc.Close() })
+	t.Cleanup(func() { _ = pc.Close() })
 
 	var queriedAtomic atomic.Pointer[[]string]
 	queriedAtomic.Store(&[]string{})
@@ -59,7 +59,7 @@ func startSearchServer(t *testing.T, wanted string) (netip.AddrPort, func() []st
 			}
 			resp, _ := b.Build()
 			wire, _ := wire.Marshal(resp)
-			pc.WriteTo(wire, src)
+			_, _ = pc.WriteTo(wire, src)
 		}
 	}()
 

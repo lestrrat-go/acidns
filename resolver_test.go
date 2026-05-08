@@ -20,7 +20,7 @@ func startServer(t *testing.T, v4 []netip.Addr, v6 []netip.Addr) netip.AddrPort 
 	t.Helper()
 	pc, err := net.ListenPacket("udp", "127.0.0.1:0")
 	require.NoError(t, err)
-	t.Cleanup(func() { pc.Close() })
+	t.Cleanup(func() { _ = pc.Close() })
 
 	go func() {
 		buf := make([]byte, 4096)
@@ -58,7 +58,7 @@ func startServer(t *testing.T, v4 []netip.Addr, v6 []netip.Addr) netip.AddrPort 
 			if err != nil {
 				continue
 			}
-			pc.WriteTo(wire, src)
+			_, _ = pc.WriteTo(wire, src)
 		}
 	}()
 	a := pc.LocalAddr().(*net.UDPAddr)

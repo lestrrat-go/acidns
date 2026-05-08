@@ -96,7 +96,7 @@ func (s *tcpListener) Serve(ctx context.Context) error {
 }
 
 func (s *tcpListener) serveConn(ctx context.Context, conn net.Conn) {
-	defer conn.Close()
+	defer func() { _ = conn.Close() }()
 
 	// Cancel pending I/O when the server context is cancelled.
 	stop := make(chan struct{})

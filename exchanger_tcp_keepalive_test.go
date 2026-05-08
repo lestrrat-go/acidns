@@ -48,7 +48,7 @@ func startKeepAliveServer(t *testing.T, srv *keepAliveServer) (netip.AddrPort, f
 }
 
 func (s *keepAliveServer) handle(c net.Conn, stop <-chan struct{}) {
-	defer c.Close()
+	defer func() { _ = c.Close() }()
 	for {
 		select {
 		case <-stop:

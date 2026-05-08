@@ -64,7 +64,7 @@ func ReadFrame(r io.Reader) (wire.Message, error) {
 // before this function returns. Cancellation of ctx aborts a pending I/O by
 // setting an immediate connection deadline.
 func Exchange(ctx context.Context, conn net.Conn, q wire.Message, fallbackTimeout time.Duration) (wire.Message, error) {
-	defer conn.Close()
+	defer func() { _ = conn.Close() }()
 
 	if dl, ok := ctx.Deadline(); ok {
 		_ = conn.SetDeadline(dl)

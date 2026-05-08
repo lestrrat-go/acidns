@@ -181,7 +181,7 @@ func Browse(ctx context.Context, service string, timeout time.Duration, opts ...
 	if err != nil {
 		return nil, err
 	}
-	defer conn.Close()
+	defer func() { _ = conn.Close() }()
 
 	dst := &net.UDPAddr{IP: net.ParseIP(GroupV4), Port: Port}
 	if _, err := conn.WriteTo(msg, dst); err != nil {

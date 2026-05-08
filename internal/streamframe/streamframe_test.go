@@ -62,7 +62,7 @@ func TestReadFrameTruncatedBody(t *testing.T) {
 func TestExchange(t *testing.T) {
 	t.Parallel()
 	c1, c2 := net.Pipe()
-	defer c2.Close()
+	defer func() { _ = c2.Close() }()
 
 	go func() {
 		// Server-side: read request, send response.
@@ -80,7 +80,7 @@ func TestExchange(t *testing.T) {
 func TestExchangeIDMismatch(t *testing.T) {
 	t.Parallel()
 	c1, c2 := net.Pipe()
-	defer c2.Close()
+	defer func() { _ = c2.Close() }()
 	go func() {
 		_, _ = streamframe.ReadFrame(c2)
 		_ = streamframe.WriteFrame(c2, mustResponse(t, 0xdead, "example.com"))
@@ -93,7 +93,7 @@ func TestExchangeIDMismatch(t *testing.T) {
 func TestConnStream(t *testing.T) {
 	t.Parallel()
 	c1, c2 := net.Pipe()
-	defer c2.Close()
+	defer func() { _ = c2.Close() }()
 
 	go func() {
 		_, _ = streamframe.ReadFrame(c2)
@@ -105,7 +105,7 @@ func TestConnStream(t *testing.T) {
 	q := mustQuery(t, 0x4242, "example.com")
 	stream, err := streamframe.NewConnStream(context.Background(), c1, q, time.Second)
 	require.NoError(t, err)
-	defer stream.Close()
+	defer func() { _ = stream.Close() }()
 
 	r1, err := stream.Next(context.Background())
 	require.NoError(t, err)

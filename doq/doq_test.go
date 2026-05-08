@@ -63,14 +63,14 @@ func startDoQ(t *testing.T) (netip.AddrPort, *tls.Config) {
 
 	udpConn, err := net.ListenUDP("udp", &net.UDPAddr{IP: net.IPv4(127, 0, 0, 1), Port: 0})
 	require.NoError(t, err)
-	t.Cleanup(func() { udpConn.Close() })
+	t.Cleanup(func() { _ = udpConn.Close() })
 
 	tr := &quic.Transport{Conn: udpConn}
-	t.Cleanup(func() { tr.Close() })
+	t.Cleanup(func() { _ = tr.Close() })
 
 	ln, err := tr.Listen(srvTLS, &quic.Config{MaxIdleTimeout: 30 * time.Second})
 	require.NoError(t, err)
-	t.Cleanup(func() { ln.Close() })
+	t.Cleanup(func() { _ = ln.Close() })
 
 	go func() {
 		for {
@@ -83,7 +83,7 @@ func startDoQ(t *testing.T) (netip.AddrPort, *tls.Config) {
 				if err != nil {
 					return
 				}
-				defer stream.Close()
+				defer func() { _ = stream.Close() }()
 				var hdr [2]byte
 				if _, err := io.ReadFull(stream, hdr[:]); err != nil {
 					return
@@ -106,8 +106,8 @@ func startDoQ(t *testing.T) (netip.AddrPort, *tls.Config) {
 					Build()
 				out, _ := wire.Marshal(resp)
 				binary.BigEndian.PutUint16(hdr[:], uint16(len(out)))
-				stream.Write(hdr[:])
-				stream.Write(out)
+				_, _ = stream.Write(hdr[:])
+				_, _ = stream.Write(out)
 			}(conn)
 		}
 	}()
@@ -142,7 +142,7 @@ func TestDoQContextCancel(t *testing.T) {
 	// Bind a UDP port but never accept QUIC handshakes.
 	udpConn, err := net.ListenUDP("udp", &net.UDPAddr{IP: net.IPv4(127, 0, 0, 1), Port: 0})
 	require.NoError(t, err)
-	t.Cleanup(func() { udpConn.Close() })
+	t.Cleanup(func() { _ = udpConn.Close() })
 	a := udpConn.LocalAddr().(*net.UDPAddr)
 	addr := netip.AddrPortFrom(netip.MustParseAddr("127.0.0.1"), uint16(a.Port))
 

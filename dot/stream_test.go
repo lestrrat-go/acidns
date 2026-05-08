@@ -30,7 +30,7 @@ func TestDoTStream(t *testing.T) {
 	require.True(t, ok)
 	stream, err := se.Stream(t.Context(), q)
 	require.NoError(t, err)
-	defer stream.Close()
+	defer func() { _ = stream.Close() }()
 	resp, err := stream.Next(t.Context())
 	require.NoError(t, err)
 	require.Equal(t, q.ID(), resp.ID())

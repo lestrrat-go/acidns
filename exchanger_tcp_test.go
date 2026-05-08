@@ -20,7 +20,7 @@ func startTCPEcho(t *testing.T) netip.AddrPort {
 	t.Helper()
 	ln, err := net.Listen("tcp", "127.0.0.1:0")
 	require.NoError(t, err)
-	t.Cleanup(func() { ln.Close() })
+	t.Cleanup(func() { _ = ln.Close() })
 
 	go func() {
 		for {
@@ -29,7 +29,7 @@ func startTCPEcho(t *testing.T) netip.AddrPort {
 				return
 			}
 			go func(c net.Conn) {
-				defer c.Close()
+				defer func() { _ = c.Close() }()
 				var lenBuf [2]byte
 				if _, err := io.ReadFull(c, lenBuf[:]); err != nil {
 					return
@@ -59,8 +59,8 @@ func startTCPEcho(t *testing.T) netip.AddrPort {
 					return
 				}
 				binary.BigEndian.PutUint16(lenBuf[:], uint16(len(wire)))
-				c.Write(lenBuf[:])
-				c.Write(wire)
+				_, _ = c.Write(lenBuf[:])
+				_, _ = c.Write(wire)
 			}(conn)
 		}
 	}()
@@ -93,7 +93,7 @@ func TestTCPContextDeadline(t *testing.T) {
 	t.Parallel()
 	ln, err := net.Listen("tcp", "127.0.0.1:0")
 	require.NoError(t, err)
-	t.Cleanup(func() { ln.Close() })
+	t.Cleanup(func() { _ = ln.Close() })
 	a := ln.Addr().(*net.TCPAddr)
 
 	ex, err := acidns.NewTCPExchanger(netip.AddrPortFrom(netip.MustParseAddr("127.0.0.1"), uint16(a.Port)))

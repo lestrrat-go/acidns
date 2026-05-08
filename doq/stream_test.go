@@ -33,7 +33,7 @@ func TestDoQStream(t *testing.T) {
 	defer cancel()
 	stream, err := se.Stream(ctx, q)
 	require.NoError(t, err)
-	defer stream.Close()
+	defer func() { _ = stream.Close() }()
 	resp, err := stream.Next(ctx)
 	require.NoError(t, err)
 	require.Equal(t, q.ID(), resp.ID())

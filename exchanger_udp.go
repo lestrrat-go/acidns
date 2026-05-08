@@ -70,7 +70,7 @@ func (e *udpExchanger) Exchange(ctx context.Context, q wire.Message) (wire.Messa
 	if err != nil {
 		return nil, fmt.Errorf("udp: dial %s: %w", e.addr, err)
 	}
-	defer conn.Close()
+	defer func() { _ = conn.Close() }()
 
 	if dl, ok := ctx.Deadline(); ok {
 		_ = conn.SetDeadline(dl)
