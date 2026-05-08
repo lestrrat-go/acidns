@@ -256,7 +256,15 @@ func verifyWithPrefix(msg []byte, key Key, priorMAC []byte, timersOnly bool, now
 	if err != nil {
 		return nil, nil, signed, err
 	}
-	if !hmac.Equal(mac, tsig.mac) {
+	// RFC 8945 §5.2.2.1 permits the peer to send a MAC truncated to the
+	// per-algorithm floor. Compare against a matching prefix of the
+	// recomputed MAC so a spec-conformant truncated signature still
+	// verifies; the prior length check already rejected anything shorter
+	// than the floor.
+	if len(tsig.mac) > len(mac) {
+		return nil, nil, signed, fmt.Errorf("tsig: received MAC longer than %s output", key.Algorithm)
+	}
+	if !hmac.Equal(mac[:len(tsig.mac)], tsig.mac) {
 		return nil, nil, signed, ErrBadSignature
 	}
 	return bodyForMAC, tsig.mac, signed, nil
