@@ -24,7 +24,9 @@ func (f tcpListenerOptionFunc) applyTCPServer(c *tcpListenerConfig) { f(c) }
 
 type tcpListenerConfig struct {
 	idleTimeout    time.Duration
+	writeTimeout   time.Duration
 	maxConnections int
+	maxMessageSize int
 }
 
 // WithTCPIdleTimeout sets how long an idle connection is kept open between
@@ -34,12 +36,31 @@ func WithTCPIdleTimeout(d time.Duration) TCPListenerOption {
 	return tcpListenerOptionFunc(func(c *tcpListenerConfig) { c.idleTimeout = d })
 }
 
+// WithTCPWriteTimeout caps how long a single response write may take.
+// Without a write deadline a slow-read attacker (TCP receive window 0)
+// can pin a server goroutine indefinitely. Default 5s; non-positive
+// disables the deadline.
+func WithTCPWriteTimeout(d time.Duration) TCPListenerOption {
+	return tcpListenerOptionFunc(func(c *tcpListenerConfig) { c.writeTimeout = d })
+}
+
 // WithTCPMaxConnections caps the number of concurrent TCP connections.
 // Once the cap is reached the accept loop blocks until a slot frees,
 // providing natural backpressure via the kernel's TCP listen backlog.
 // A non-positive value disables the cap. Defaults to 1024.
 func WithTCPMaxConnections(n int) TCPListenerOption {
 	return tcpListenerOptionFunc(func(c *tcpListenerConfig) { c.maxConnections = n })
+}
+
+// WithTCPMaxMessageSize caps the length-prefixed body the server is
+// willing to read from a single TCP query. The 16-bit length prefix
+// permits up to 65535 bytes per message; without a tighter ceiling, a
+// hostile client can force the server to allocate a 64 KiB buffer per
+// connection. Default 16 KiB — wide enough for the largest envelopes
+// the bundled AXFR chunker emits while keeping per-connection memory
+// bounded. A non-positive value disables the cap (allows up to 65535).
+func WithTCPMaxMessageSize(n int) TCPListenerOption {
+	return tcpListenerOptionFunc(func(c *tcpListenerConfig) { c.maxMessageSize = n })
 }
 
 type tcpListener struct {
@@ -60,7 +81,12 @@ func ListenTCP(addr netip.AddrPort, h Handler, opts ...TCPListenerOption) (Serve
 	if h == nil {
 		return nil, fmt.Errorf("dnsserver: handler is nil")
 	}
-	cfg := tcpListenerConfig{idleTimeout: 10 * time.Second, maxConnections: 1024}
+	cfg := tcpListenerConfig{
+		idleTimeout:    10 * time.Second,
+		writeTimeout:   5 * time.Second,
+		maxConnections: 1024,
+		maxMessageSize: 16 * 1024,
+	}
 	for _, o := range opts {
 		o.applyTCPServer(&cfg)
 	}
@@ -205,7 +231,11 @@ func isAcceptTransient(err error) bool {
 func (s *tcpListener) serveConn(ctx context.Context, conn net.Conn) {
 	defer func() { _ = conn.Close() }()
 
-	// Cancel pending I/O when the server context is cancelled.
+	// Cancel pending I/O when the server context is cancelled, and tear
+	// down per-request contexts so handlers chasing upstreams don't keep
+	// running after this connection has gone away.
+	connCtx, connCancel := context.WithCancel(ctx)
+	defer connCancel()
 	stop := make(chan struct{})
 	defer close(stop)
 	go func() {
@@ -226,7 +256,14 @@ func (s *tcpListener) serveConn(ctx context.Context, conn net.Conn) {
 		if _, err := io.ReadFull(conn, hdr[:]); err != nil {
 			return // EOF or idle timeout — close the connection
 		}
-		n := binary.BigEndian.Uint16(hdr[:])
+		n := int(binary.BigEndian.Uint16(hdr[:]))
+		if s.cfg.maxMessageSize > 0 && n > s.cfg.maxMessageSize {
+			// Hostile or misconfigured peer — close the connection
+			// rather than allocate up to 64 KiB. The 16-bit length
+			// prefix is fixed by the wire format; the only defense
+			// is to refuse oversized claims at the read boundary.
+			return
+		}
 		body := make([]byte, n)
 		if _, err := io.ReadFull(conn, body); err != nil {
 			return
@@ -237,15 +274,16 @@ func (s *tcpListener) serveConn(ctx context.Context, conn net.Conn) {
 			return // malformed — close
 		}
 
-		w := &tcpResponseWriter{conn: conn, remote: remote, local: s.addr}
-		s.handler.ServeDNS(contextWithRawRequest(ctx, body), w, q)
+		w := &tcpResponseWriter{conn: conn, remote: remote, local: s.addr, writeTimeout: s.cfg.writeTimeout}
+		s.handler.ServeDNS(contextWithRawRequest(connCtx, body), w, q)
 	}
 }
 
 type tcpResponseWriter struct {
-	conn   net.Conn
-	remote netip.AddrPort
-	local  netip.AddrPort
+	conn         net.Conn
+	remote       netip.AddrPort
+	local        netip.AddrPort
+	writeTimeout time.Duration
 }
 
 func (w *tcpResponseWriter) RemoteAddr() netip.AddrPort { return w.remote }
@@ -253,18 +291,25 @@ func (w *tcpResponseWriter) LocalAddr() netip.AddrPort  { return w.local }
 func (w *tcpResponseWriter) Network() string            { return "tcp" }
 
 func (w *tcpResponseWriter) WriteMsg(m wire.Message) error {
-	wire, err := wire.Marshal(m)
+	buf, err := wire.Marshal(m)
 	if err != nil {
 		return err
 	}
-	if len(wire) > 0xffff {
+	if len(buf) > 0xffff {
 		return fmt.Errorf("dnsserver: tcp response exceeds 65535 bytes")
 	}
+	// Slow-read protection: a peer that opens the TCP receive window to
+	// zero can otherwise pin this goroutine forever. RFC 7766 has no
+	// guidance here; net/http uses 5–30 s for analogous cases.
+	if w.writeTimeout > 0 {
+		_ = w.conn.SetWriteDeadline(time.Now().Add(w.writeTimeout))
+		defer func() { _ = w.conn.SetWriteDeadline(time.Time{}) }()
+	}
 	var hdr [2]byte
-	binary.BigEndian.PutUint16(hdr[:], uint16(len(wire)))
+	binary.BigEndian.PutUint16(hdr[:], uint16(len(buf)))
 	if _, err := w.conn.Write(hdr[:]); err != nil {
 		return err
 	}
-	_, err = w.conn.Write(wire)
+	_, err = w.conn.Write(buf)
 	return err
 }
