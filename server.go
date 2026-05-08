@@ -21,6 +21,16 @@ import (
 var ErrServerClosed = errors.New("dnsserver: server closed")
 
 // Handler is the interface implemented by anything that answers DNS queries.
+//
+// # Panics
+//
+// A Handler MUST NOT panic during normal operation. The Server framework
+// does NOT install a recover() around handler dispatch — by design, so
+// the operator can choose its policy (process restart, structured log,
+// crash-loop detector) without the library laundering panics into
+// SERVFAILs that mask the underlying bug. If your handler chain may
+// panic and you want it converted into a response, wrap the chain in a
+// middleware of your own that calls recover().
 type Handler interface {
 	ServeDNS(ctx context.Context, w ResponseWriter, q wire.Message)
 }
