@@ -20,8 +20,8 @@ func TestNTAStoreCovers(t *testing.T) {
 func TestNTAStoreAddRemove(t *testing.T) {
 	t.Parallel()
 	s := validator.NewNTAStore()
-	require.True(t, s.Add(wire.MustParseName("test.example")))
-	require.False(t, s.Add(wire.MustParseName("test.example")), "second add returns false")
+	require.True(t, s.Add(wire.MustParseName("test.example"), 0))
+	require.False(t, s.Add(wire.MustParseName("test.example"), 0), "second add returns false")
 	require.True(t, s.Covers(wire.MustParseName("a.test.example")))
 	require.True(t, s.Remove(wire.MustParseName("test.example")))
 	require.False(t, s.Covers(wire.MustParseName("a.test.example")))

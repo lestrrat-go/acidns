@@ -10,10 +10,12 @@ import (
 func Example_validator_nta() {
 	// NTAStore is a runtime-mutable Negative Trust Anchor registry. Add
 	// names whose subtree should bypass validation — useful during a TLD
-	// outage (cf. the May-2025 .de incident). Covers reports whether a
-	// name falls under any registered NTA.
+	// outage (cf. the May-2025 .de incident). Each entry expires after the
+	// supplied TTL (RFC 7646 §3 caps NTAs at one week so a forgotten entry
+	// cannot become a permanent validation hole). A zero TTL falls back to
+	// validator.DefaultNTATTL (24h).
 	store := validator.NewNTAStore()
-	store.Add(wire.MustParseName("de"))
+	store.Add(wire.MustParseName("de"), 0)
 
 	fmt.Println("de:", store.Covers(wire.MustParseName("de")))
 	fmt.Println("denic.de:", store.Covers(wire.MustParseName("denic.de")))

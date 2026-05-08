@@ -150,7 +150,7 @@ func TestNewAnchorRejectsInvalidInputs(t *testing.T) {
 func TestNTAStoreRejectsInvalidName(t *testing.T) {
 	t.Parallel()
 	s := validator.NewNTAStore()
-	require.False(t, s.Add(wire.Name{}))
+	require.False(t, s.Add(wire.Name{}, 0))
 	require.False(t, s.Remove(wire.Name{}))
 	require.False(t, s.Covers(wire.Name{}))
 }

@@ -212,7 +212,7 @@ func TestValidateRRsetNTACovers(t *testing.T) {
 		wire.NewRecord(owner, time.Hour, rdata.NewA(netip.MustParseAddr("192.0.2.1"))),
 	}
 	ntas := validator.NewNTAStore()
-	require.True(t, ntas.Add(owner))
+	require.True(t, ntas.Add(owner, 0))
 	v := validator.New(validator.Options{NTAs: ntas})
 	res, _, err := v.ValidateRRset(set, nil, nil)
 	require.Equal(t, validator.Indeterminate, res)
@@ -225,7 +225,7 @@ func TestVerifyDelegationNTACovers(t *testing.T) {
 	t.Parallel()
 	owner := wire.MustParseName("nta.example.")
 	ntas := validator.NewNTAStore()
-	require.True(t, ntas.Add(owner))
+	require.True(t, ntas.Add(owner, 0))
 	v := validator.New(validator.Options{NTAs: ntas})
 	res, err := v.VerifyDelegation(owner, nil, nil)
 	require.NoError(t, err)
