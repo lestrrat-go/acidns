@@ -1,13 +1,17 @@
 package acidns
 
 // RateLimitDebugLen returns the number of buckets the rate-limiter is
-// currently tracking. Test-only.
+// currently tracking across all shards. Test-only.
 func RateLimitDebugLen(h Handler) int {
 	l, ok := h.(*limiter)
 	if !ok {
 		return -1
 	}
-	l.mu.Lock()
-	defer l.mu.Unlock()
-	return len(l.buckets)
+	total := 0
+	for _, sh := range l.shards {
+		sh.mu.Lock()
+		total += len(sh.buckets)
+		sh.mu.Unlock()
+	}
+	return total
 }

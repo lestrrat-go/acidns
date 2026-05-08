@@ -123,24 +123,37 @@ func TestRateLimitGroupPrefix(t *testing.T) {
 func TestRateLimitMaxKeysCap(t *testing.T) {
 	t.Parallel()
 
-	const limit = 8
+	// MaxKeys is sharded across 64 buckets (ceil(n/64) per shard);
+	// pick a global cap that yields a meaningful per-shard cap and
+	// then verify the total stays within the multi-shard ceiling.
+	const limit = 640
+	const numShards = 64
+	const perShardCap = (limit + numShards - 1) / numShards
+	const ceiling = perShardCap * numShards
+
 	h := acidns.NewRateLimit(rateLimitMkInner(),
 		acidns.WithRateLimitQPS(0.0001),
 		acidns.WithRateLimitBurst(1),
 		acidns.WithRateLimitMaxKeys(limit),
 	)
 
-	// Fire from many distinct sources; the limiter must never grow above limit.
+	// Fire from many distinct sources; the limiter must never grow above
+	// the per-shard ceiling summed across shards.
 	for i := range 4 * limit {
-		src := netip.AddrPortFrom(
-			netip.AddrFrom4([4]byte{198, 51, 100, byte(i + 1)}), 1)
+		ip := [4]byte{
+			198,
+			51,
+			byte((i >> 8) & 0xff),
+			byte(i & 0xff),
+		}
+		src := netip.AddrPortFrom(netip.AddrFrom4(ip), 1)
 		w := &rlFakeWriter{src: src}
 		h.ServeDNS(context.Background(), w, rateLimitMkQuery(t))
 	}
 
 	n := acidns.RateLimitDebugLen(h)
-	require.LessOrEqual(t, n, limit,
-		"map must be bounded by WithRateLimitMaxKeys; got %d, limit %d", n, limit)
+	require.LessOrEqual(t, n, ceiling,
+		"map must be bounded by per-shard cap; got %d, ceiling %d", n, ceiling)
 }
 
 func TestRateLimitRefillOverTime(t *testing.T) {

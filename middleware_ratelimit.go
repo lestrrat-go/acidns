@@ -9,12 +9,18 @@ package acidns
 
 import (
 	"context"
+	"hash/maphash"
 	"net/netip"
 	"sync"
 	"time"
 
 	"github.com/lestrrat-go/acidns/wire"
 )
+
+// numLimiterShards stripes the bucket map so a flood of distinct
+// sources doesn't serialize through one mutex. 64 is a power of two
+// to make the modulo a mask.
+const numLimiterShards = 64
 
 // RateLimitOption configures the limiter.
 type RateLimitOption interface{ applyRateLimit(*rateLimitConfig) }
@@ -55,12 +61,14 @@ func WithRateLimitGroupPrefix(maskBits int) RateLimitOption {
 	return rateLimitOptionFunc(func(c *rateLimitConfig) { c.prefix = maskBits })
 }
 
-// WithRateLimitMaxKeys caps how many distinct source buckets are kept in
-// memory. Without this cap, a flood of spoofed source addresses fills the
-// internal map until the process OOMs — defeating the very protection the
-// limiter is supposed to provide. When the cap is reached, idle (refilled)
-// buckets are evicted first, then the oldest-updated bucket. A non-positive
-// value disables the cap. Defaults to 100000.
+// WithRateLimitMaxKeys caps the total number of distinct source buckets
+// kept in memory across all internal shards (64). The cap is applied
+// per-shard as ceil(n/64), so the actual ceiling fluctuates near n
+// depending on how the source addresses hash across shards. Without
+// this cap a flood of spoofed source addresses fills the internal map
+// until the process OOMs. When a shard reaches its cap, idle (refilled)
+// buckets are evicted first, then the oldest-updated bucket within that
+// shard. A non-positive value disables the cap. Defaults to 100000.
 func WithRateLimitMaxKeys(n int) RateLimitOption {
 	return rateLimitOptionFunc(func(c *rateLimitConfig) { c.maxKeys = n })
 }
@@ -70,15 +78,20 @@ type bucket struct {
 	updated time.Time
 }
 
+type limiterShard struct {
+	mu      sync.Mutex
+	buckets map[string]*bucket
+}
+
 type limiter struct {
 	inner   Handler
 	qps     float64
 	burst   float64
 	drop    bool
 	prefix  int
-	maxKeys int
-	mu      sync.Mutex
-	buckets map[string]*bucket
+	maxKeys int // per-shard cap (config / numLimiterShards)
+	seed    maphash.Seed
+	shards  [numLimiterShards]*limiterShard
 }
 
 // NewRateLimit returns a Handler that applies the configured rate limit before
@@ -88,15 +101,21 @@ func NewRateLimit(inner Handler, opts ...RateLimitOption) Handler {
 	for _, o := range opts {
 		o.applyRateLimit(&c)
 	}
-	return &limiter{
-		inner:   inner,
-		qps:     c.qps,
-		burst:   float64(c.burst),
-		drop:    c.drop,
-		prefix:  c.prefix,
-		maxKeys: c.maxKeys,
-		buckets: make(map[string]*bucket),
+	l := &limiter{
+		inner:  inner,
+		qps:    c.qps,
+		burst:  float64(c.burst),
+		drop:   c.drop,
+		prefix: c.prefix,
+		seed:   maphash.MakeSeed(),
 	}
+	if c.maxKeys > 0 {
+		l.maxKeys = (c.maxKeys + numLimiterShards - 1) / numLimiterShards
+	}
+	for i := range l.shards {
+		l.shards[i] = &limiterShard{buckets: make(map[string]*bucket)}
+	}
+	return l
 }
 
 func (l *limiter) ServeDNS(ctx context.Context, w ResponseWriter, q wire.Message) {
@@ -113,16 +132,17 @@ func (l *limiter) ServeDNS(ctx context.Context, w ResponseWriter, q wire.Message
 func (l *limiter) allow(src netip.Addr) bool {
 	key := l.key(src)
 	now := time.Now()
+	sh := l.shardFor(key)
 
-	l.mu.Lock()
-	defer l.mu.Unlock()
-	b, ok := l.buckets[key]
+	sh.mu.Lock()
+	defer sh.mu.Unlock()
+	b, ok := sh.buckets[key]
 	if !ok {
-		if l.maxKeys > 0 && len(l.buckets) >= l.maxKeys {
-			l.evictLocked(now)
+		if l.maxKeys > 0 && len(sh.buckets) >= l.maxKeys {
+			l.evictLocked(sh, now)
 		}
 		b = &bucket{tokens: l.burst, updated: now}
-		l.buckets[key] = b
+		sh.buckets[key] = b
 	}
 	elapsed := now.Sub(b.updated).Seconds()
 	b.tokens += elapsed * l.qps
@@ -137,40 +157,44 @@ func (l *limiter) allow(src netip.Addr) bool {
 	return true
 }
 
-// evictLocked makes room in the bucket map. Two passes:
+func (l *limiter) shardFor(key string) *limiterShard {
+	h := maphash.String(l.seed, key)
+	return l.shards[h&(numLimiterShards-1)]
+}
+
+// evictLocked makes room in a single shard's bucket map. Two passes:
 //
 //  1. Drop any bucket that has been idle long enough to be fully refilled
 //     to the burst capacity — those buckets are equivalent to a fresh
 //     allocation and contain no useful state.
-//  2. If the map is still at the cap, drop the single oldest-updated entry
-//     so a new key can be inserted.
+//  2. If the shard is still at the cap, drop the single oldest-updated
+//     entry so a new key can be inserted.
 //
-// Caller holds l.mu.
-func (l *limiter) evictLocked(now time.Time) {
+// Caller holds sh.mu.
+func (l *limiter) evictLocked(sh *limiterShard, now time.Time) {
 	if l.qps > 0 {
-		// Time required to refill an empty bucket to full burst.
 		idleFor := time.Duration(l.burst/l.qps*float64(time.Second)) + time.Second
 		threshold := now.Add(-idleFor)
-		for k, b := range l.buckets {
+		for k, b := range sh.buckets {
 			if b.updated.Before(threshold) {
-				delete(l.buckets, k)
+				delete(sh.buckets, k)
 			}
 		}
 	}
-	if l.maxKeys <= 0 || len(l.buckets) < l.maxKeys {
+	if l.maxKeys <= 0 || len(sh.buckets) < l.maxKeys {
 		return
 	}
 	var oldestKey string
 	var oldestTime time.Time
 	first := true
-	for k, b := range l.buckets {
+	for k, b := range sh.buckets {
 		if first || b.updated.Before(oldestTime) {
 			oldestKey = k
 			oldestTime = b.updated
 			first = false
 		}
 	}
-	delete(l.buckets, oldestKey)
+	delete(sh.buckets, oldestKey)
 }
 
 func (l *limiter) key(src netip.Addr) string {

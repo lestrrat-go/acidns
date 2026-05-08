@@ -14,12 +14,17 @@ package acidns
 
 import (
 	"context"
+	"hash/maphash"
 	"net/netip"
 	"sync"
 	"time"
 
 	"github.com/lestrrat-go/acidns/wire"
 )
+
+// numRRLShards stripes the bucket map so high-rate RRL traffic isn't
+// serialized through one mutex. Power of two for mask-based modulo.
+const numRRLShards = 64
 
 // RRLOption configures the limiter.
 type RRLOption interface{ applyRRL(*rrlConfig) }
@@ -87,10 +92,12 @@ func WithRRLIPv6Prefix(maskBits int) RRLOption {
 	return rrlOptionFunc(func(c *rrlConfig) { c.v6Prefix = maskBits })
 }
 
-// WithRRLMaxKeys caps the number of distinct (source, name, class)
-// buckets retained in memory. Once at the cap, idle (refilled)
-// buckets are evicted first; if still at the cap, the oldest-updated
-// bucket is dropped. Defaults to 100000.
+// WithRRLMaxKeys caps the total number of distinct (source, name, class)
+// buckets retained in memory across all internal shards (64). Applied
+// per-shard as ceil(n/64), so the actual ceiling fluctuates near n.
+// Once at the per-shard cap, idle (refilled) buckets are evicted first;
+// if still at the cap, the oldest-updated bucket is dropped. Defaults
+// to 100000.
 func WithRRLMaxKeys(n int) RRLOption {
 	return rrlOptionFunc(func(c *rrlConfig) { c.maxKeys = n })
 }
@@ -99,6 +106,11 @@ type rrlBucket struct {
 	tokens      float64
 	updated     time.Time
 	slipCounter int
+}
+
+type rrlShard struct {
+	mu      sync.Mutex
+	buckets map[string]*rrlBucket
 }
 
 type rrl struct {
@@ -110,9 +122,9 @@ type rrl struct {
 	slip            int
 	v4Prefix        int
 	v6Prefix        int
-	maxKeys         int
-	mu              sync.Mutex
-	buckets         map[string]*rrlBucket
+	maxKeys         int // per-shard cap (config / numRRLShards)
+	seed            maphash.Seed
+	shards          [numRRLShards]*rrlShard
 }
 
 // NewRRL returns a Handler that wraps inner with RFC-style Response
@@ -156,7 +168,7 @@ func NewRRL(inner Handler, opts ...RRLOption) Handler {
 		}
 		c.burst = int(2 * largest)
 	}
-	return &rrl{
+	r := &rrl{
 		inner:           inner,
 		respPerSecond:   c.respPerSecond,
 		nxdomainsPerS:   c.nxdomainsPerS,
@@ -165,9 +177,15 @@ func NewRRL(inner Handler, opts ...RRLOption) Handler {
 		slip:            c.slip,
 		v4Prefix:        c.v4Prefix,
 		v6Prefix:        c.v6Prefix,
-		maxKeys:         c.maxKeys,
-		buckets:         make(map[string]*rrlBucket),
+		seed:            maphash.MakeSeed(),
 	}
+	if c.maxKeys > 0 {
+		r.maxKeys = (c.maxKeys + numRRLShards - 1) / numRRLShards
+	}
+	for i := range r.shards {
+		r.shards[i] = &rrlShard{buckets: make(map[string]*rrlBucket)}
+	}
+	return r
 }
 
 func (r *rrl) ServeDNS(ctx context.Context, w ResponseWriter, q wire.Message) {
@@ -289,15 +307,16 @@ func classString(c rrlClass) string {
 // slipped through as a truncated answer.
 func (r *rrl) consume(key string, rate float64) (bool, bool) {
 	now := time.Now()
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	b, ok := r.buckets[key]
+	sh := r.shardFor(key)
+	sh.mu.Lock()
+	defer sh.mu.Unlock()
+	b, ok := sh.buckets[key]
 	if !ok {
-		if r.maxKeys > 0 && len(r.buckets) >= r.maxKeys {
-			r.evictLocked(now)
+		if r.maxKeys > 0 && len(sh.buckets) >= r.maxKeys {
+			r.evictLocked(sh, now)
 		}
 		b = &rrlBucket{tokens: r.burst, updated: now}
-		r.buckets[key] = b
+		sh.buckets[key] = b
 	}
 	elapsed := now.Sub(b.updated).Seconds()
 	b.tokens += elapsed * rate
@@ -321,9 +340,15 @@ func (r *rrl) consume(key string, rate float64) (bool, bool) {
 	return false, false
 }
 
-// evictLocked drops idle (refilled) buckets first; if still at the cap,
-// drops the oldest-updated entry. Caller holds r.mu.
-func (r *rrl) evictLocked(now time.Time) {
+func (r *rrl) shardFor(key string) *rrlShard {
+	h := maphash.String(r.seed, key)
+	return r.shards[h&(numRRLShards-1)]
+}
+
+// evictLocked drops idle (refilled) buckets first within a shard; if
+// still at the cap, drops the shard's oldest-updated entry.
+// Caller holds sh.mu.
+func (r *rrl) evictLocked(sh *rrlShard, now time.Time) {
 	largestRate := r.respPerSecond
 	if r.nxdomainsPerS > largestRate {
 		largestRate = r.nxdomainsPerS
@@ -334,26 +359,26 @@ func (r *rrl) evictLocked(now time.Time) {
 	if largestRate > 0 {
 		idleFor := time.Duration(r.burst/largestRate*float64(time.Second)) + time.Second
 		threshold := now.Add(-idleFor)
-		for k, b := range r.buckets {
+		for k, b := range sh.buckets {
 			if b.updated.Before(threshold) {
-				delete(r.buckets, k)
+				delete(sh.buckets, k)
 			}
 		}
 	}
-	if r.maxKeys <= 0 || len(r.buckets) < r.maxKeys {
+	if r.maxKeys <= 0 || len(sh.buckets) < r.maxKeys {
 		return
 	}
 	var oldestKey string
 	var oldestTime time.Time
 	first := true
-	for k, b := range r.buckets {
+	for k, b := range sh.buckets {
 		if first || b.updated.Before(oldestTime) {
 			oldestKey = k
 			oldestTime = b.updated
 			first = false
 		}
 	}
-	delete(r.buckets, oldestKey)
+	delete(sh.buckets, oldestKey)
 }
 
 // responseKeyName is the canonical name to bucket a response by. We
