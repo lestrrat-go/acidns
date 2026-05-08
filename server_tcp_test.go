@@ -16,7 +16,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func startTCP(t *testing.T, h acidns.Handler, opts ...acidns.TCPListenerOption) *acidns.Controller {
+func startTCP(t *testing.T, h acidns.Handler, opts ...acidns.TCPListenerOption) *acidns.TCPController {
 	t.Helper()
 	srv, err := acidns.NewTCPServer(netip.MustParseAddrPort("127.0.0.1:0"), h, opts...)
 	require.NoError(t, err)

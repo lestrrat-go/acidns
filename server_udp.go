@@ -52,7 +52,7 @@ func WithUDPMaxInflight(n int) UDPListenerOption {
 // independent server instance — the same UDPServer may be Run any
 // number of times to spawn parallel instances, useful for testing
 // or multi-socket deployments. The running instance is reachable
-// only through the returned [*Controller].
+// only through the returned [*UDPController].
 type UDPServer struct {
 	addr    netip.AddrPort
 	handler Handler
@@ -77,12 +77,12 @@ func NewUDPServer(addr netip.AddrPort, h Handler, opts ...UDPListenerOption) (*U
 // Run binds a fresh UDP socket and spawns a new dispatch goroutine.
 // Each call constructs an independent server instance; the receiver
 // holds only configuration and is unchanged by Run. The returned
-// Controller is the sole handle to the new instance: it exposes the
-// bound address (which may differ from the requested address when
-// port=0) and a Done channel that closes once the goroutine has
-// exited cleanly. Cancel ctx to stop the instance; the goroutine
-// drains in-flight handlers before closing.
-func (s *UDPServer) Run(ctx context.Context) (*Controller, error) {
+// UDPController is the sole handle to the new instance: it exposes
+// the bound address (which may differ from the requested address
+// when port=0) and a Done channel that closes once the goroutine
+// has exited cleanly. Cancel ctx to stop the instance; the
+// goroutine drains in-flight handlers before closing.
+func (s *UDPServer) Run(ctx context.Context) (*UDPController, error) {
 	pc, err := net.ListenPacket("udp", s.addr.String()) //nolint:noctx // socket lifetime is bound to Run's ctx, not the bind call
 	if err != nil {
 		return nil, fmt.Errorf("dnsserver: udp listen %s: %w", s.addr, err)
@@ -94,7 +94,7 @@ func (s *UDPServer) Run(ctx context.Context) (*Controller, error) {
 	}
 	bound := netip.AddrPortFrom(la.AddrPort().Addr(), uint16(la.Port))
 
-	ctrl := newController(bound)
+	ctrl := &UDPController{controllerCore: newCore(bound)}
 	loop := &udpLoop{
 		pc:      pc,
 		addr:    bound,

@@ -97,7 +97,7 @@ func WithTCPMaxInflightPerConn(n int) TCPListenerOption {
 // it does NOT carry runtime state. Call [TCPServer.Run] to spawn an
 // independent server instance — the same TCPServer may be Run any
 // number of times to spawn parallel instances. The running instance
-// is reachable only through the returned [*Controller].
+// is reachable only through the returned [*TCPController].
 type TCPServer struct {
 	addr    netip.AddrPort
 	handler Handler
@@ -128,12 +128,12 @@ func NewTCPServer(addr netip.AddrPort, h Handler, opts ...TCPListenerOption) (*T
 // Run binds a fresh TCP socket and spawns a new accept-and-dispatch
 // goroutine. Each call constructs an independent server instance;
 // the receiver holds only configuration and is unchanged by Run. The
-// returned Controller is the sole handle to the new instance: it
+// returned TCPController is the sole handle to the new instance: it
 // exposes the bound address (which may differ from the requested
 // address when port=0) and a Done channel that closes once the loop
 // has exited cleanly. Cancel ctx to stop the instance; the goroutine
 // drains in-flight per-connection goroutines before closing.
-func (s *TCPServer) Run(ctx context.Context) (*Controller, error) {
+func (s *TCPServer) Run(ctx context.Context) (*TCPController, error) {
 	ln, err := net.Listen("tcp", s.addr.String()) //nolint:noctx // socket lifetime is bound to Run's ctx, not the bind call
 	if err != nil {
 		return nil, fmt.Errorf("dnsserver: tcp listen %s: %w", s.addr, err)
@@ -163,7 +163,7 @@ func (s *TCPServer) Run(ctx context.Context) (*Controller, error) {
 		return &b
 	}
 
-	ctrl := newController(bound)
+	ctrl := &TCPController{controllerCore: newCore(bound)}
 	go func() {
 		defer close(ctrl.done)
 		err := loop.run(ctx)

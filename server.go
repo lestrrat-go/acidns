@@ -80,44 +80,70 @@ type ResponseWriter interface {
 	Network() string
 }
 
-// Controller is the runtime handle returned by a server's Run method.
-// It exposes the bound address, a Done channel that closes when the
-// work goroutine has exited cleanly (ctx cancellation or unrecoverable
-// error), and Err() to inspect the exit reason.
+// controllerCore is the shared runtime state behind every concrete
+// per-protocol Controller. Embedded by value so the public types
+// promote Addr / Done / Err / setErr without re-declaring them.
 //
-// Controllers are concurrency-safe.
-type Controller struct {
+// Each protocol gets its own Controller type ([UDPController],
+// [TCPController]) so protocol-specific runtime queries — e.g.
+// "current TCP connections", "UDP packets dropped at the inflight
+// semaphore" — can be added without polluting the shape of the
+// other protocols' handles. Today the public types are equivalent;
+// the split exists for forward-compatibility, not present need.
+type controllerCore struct {
 	addr netip.AddrPort
 	done chan struct{}
 	err  atomic.Pointer[error]
 }
 
-func newController(addr netip.AddrPort) *Controller {
-	return &Controller{addr: addr, done: make(chan struct{})}
+func newCore(addr netip.AddrPort) controllerCore {
+	return controllerCore{addr: addr, done: make(chan struct{})}
 }
 
 // Addr returns the address the server is bound to. When the caller
 // asked for port 0, this reflects the kernel-assigned ephemeral port.
-func (c *Controller) Addr() netip.AddrPort { return c.addr }
+func (c *controllerCore) Addr() netip.AddrPort { return c.addr }
 
 // Done returns a channel that is closed when the server's work
 // goroutine has fully exited (in-flight handlers drained, listening
 // socket closed). Wait on this in tests or in process shutdown.
-func (c *Controller) Done() <-chan struct{} { return c.done }
+func (c *controllerCore) Done() <-chan struct{} { return c.done }
 
 // Err returns the error that terminated the work goroutine. Returns
 // nil before Done is closed and after a clean shutdown via context
 // cancellation. Non-nil only when an unexpected condition (e.g. an
 // Accept failure outside the recoverable set) ended the loop.
-func (c *Controller) Err() error {
+func (c *controllerCore) Err() error {
 	if p := c.err.Load(); p != nil {
 		return *p
 	}
 	return nil
 }
 
-func (c *Controller) setErr(err error) {
+func (c *controllerCore) setErr(err error) {
 	if err != nil {
 		c.err.Store(&err)
 	}
+}
+
+// UDPController is the runtime handle returned by [UDPServer.Run].
+// It is the only path to the running UDP server instance: cancelling
+// the ctx passed to Run is the only way to stop the instance, and
+// Done() / Err() / Addr() are the only public observations.
+//
+// Future protocol-specific runtime queries (e.g. inflight-handler
+// count, packets dropped at the semaphore) belong on this type.
+type UDPController struct {
+	controllerCore
+}
+
+// TCPController is the runtime handle returned by [TCPServer.Run].
+// It is the only path to the running TCP server instance: cancelling
+// the ctx passed to Run is the only way to stop the instance, and
+// Done() / Err() / Addr() are the only public observations.
+//
+// Future protocol-specific runtime queries (e.g. open-connection
+// count, queries-in-flight per connection) belong on this type.
+type TCPController struct {
+	controllerCore
 }

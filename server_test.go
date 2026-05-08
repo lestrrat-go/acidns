@@ -13,7 +13,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func startUDP(t *testing.T, h acidns.Handler) (*acidns.Controller, context.CancelFunc) {
+func startUDP(t *testing.T, h acidns.Handler) (*acidns.UDPController, context.CancelFunc) {
 	t.Helper()
 	srv, err := acidns.NewUDPServer(netip.MustParseAddrPort("127.0.0.1:0"), h)
 	require.NoError(t, err)
