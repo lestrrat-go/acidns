@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"net/netip"
+	"sync"
 	"time"
 
 	"github.com/lestrrat-go/acidns"
@@ -26,6 +27,14 @@ var ErrCNAMELoop = errors.New("recursive: CNAME loop or chain too deep")
 // ErrAllServersLame is returned when every candidate server returned an
 // unusable response (REFUSED, SERVFAIL, or no progress).
 var ErrAllServersLame = errors.New("recursive: all candidate servers lame")
+
+// ErrTruncatedAfterTCPFail is returned when a UDP response had TC=1 and
+// the TCP fallback failed: the truncated answer is incomplete and must
+// not be cached or surfaced as authoritative. A network adversary that
+// can drop packets on 53/tcp would otherwise be able to force the
+// resolver to operate on partial data — including missing AD bits or
+// stripped DNSSEC RRSIGs.
+var ErrTruncatedAfterTCPFail = errors.New("recursive: TC=1 with TCP fallback failure")
 
 // Recursive is the public face of the resolver. It implements
 // acidns.Handler so it can be plugged into ListenUDP / ListenTCP directly,
@@ -81,6 +90,21 @@ type recursive struct {
 	validator     Validator
 	queryTimeout  time.Duration
 	maxNegTTL     time.Duration
+
+	inflightMu sync.Mutex
+	inflight   map[string]*inflightCall
+}
+
+// inflightCall coalesces concurrent resolveDepth invocations for the
+// same (qname, qtype). When N goroutines miss the cache for the same
+// key, only one performs the iterative walk; the others wait on done
+// and reuse the result. RFC 5452 §6: each independent transmission is
+// a fresh spoofing window, so without coalescing a thundering herd
+// quadratically multiplies the attacker's chances.
+type inflightCall struct {
+	done  chan struct{}
+	entry Entry
+	err   error
 }
 
 // New returns a Recursive resolver.
@@ -115,6 +139,7 @@ func New(opts ...Option) Recursive {
 		validator:     c.validator,
 		queryTimeout:  c.queryTimeout,
 		maxNegTTL:     c.maxNegTTL,
+		inflight:      make(map[string]*inflightCall),
 	}
 }
 
@@ -132,16 +157,24 @@ func (defaultDialer) Exchange(ctx context.Context, server netip.AddrPort, q wire
 	if err != nil {
 		return nil, err
 	}
-	if resp.Flags().Truncated() {
-		tex, terr := acidns.NewTCPExchanger(server)
-		if terr != nil {
-			return resp, nil //nolint:nilerr // truncated UDP answer is still useful when TCP setup fails
-		}
-		if r2, terr := tex.Exchange(ctx, q); terr == nil {
-			return r2, nil
-		}
+	if !resp.Flags().Truncated() {
+		return resp, nil
 	}
-	return resp, nil
+	// TC=1 means the response is incomplete. Re-issue over TCP per
+	// RFC 7766 §5.2; if the TCP exchange cannot complete, the partial
+	// UDP answer is unsafe to cache or surface (DNSSEC RRSIGs may
+	// have been the records that didn't fit). Surface an error so the
+	// caller can move on to the next candidate server rather than
+	// quietly accept a degraded answer.
+	tex, terr := acidns.NewTCPExchanger(server)
+	if terr != nil {
+		return nil, fmt.Errorf("%w: tcp dial: %v", ErrTruncatedAfterTCPFail, terr)
+	}
+	r2, terr := tex.Exchange(ctx, q)
+	if terr != nil {
+		return nil, fmt.Errorf("%w: tcp exchange: %v", ErrTruncatedAfterTCPFail, terr)
+	}
+	return r2, nil
 }
 
 // ServeDNS implements acidns.Handler.
@@ -316,6 +349,35 @@ func (r *recursive) resolveDepth(ctx context.Context, name wire.Name, t rrtype.T
 		return e, nil
 	}
 
+	// Singleflight: coalesce concurrent misses for the same key.
+	key := nameKey(name) + "\x00" + fmt.Sprintf("%d", t)
+	r.inflightMu.Lock()
+	if call, ok := r.inflight[key]; ok {
+		r.inflightMu.Unlock()
+		select {
+		case <-call.done:
+			return call.entry, call.err
+		case <-ctx.Done():
+			return Entry{}, ctx.Err()
+		}
+	}
+	call := &inflightCall{done: make(chan struct{})}
+	r.inflight[key] = call
+	r.inflightMu.Unlock()
+	defer func() {
+		r.inflightMu.Lock()
+		delete(r.inflight, key)
+		r.inflightMu.Unlock()
+		close(call.done)
+	}()
+
+	entry, err := r.resolveDepthInner(ctx, name, t, depth)
+	call.entry = entry
+	call.err = err
+	return entry, err
+}
+
+func (r *recursive) resolveDepthInner(ctx context.Context, name wire.Name, t rrtype.Type, depth int) (Entry, error) {
 	servers := append([]netip.AddrPort(nil), r.roots...)
 	for range r.maxIterations {
 		if len(servers) == 0 {
@@ -341,14 +403,14 @@ func (r *recursive) resolveDepth(ctx context.Context, name wire.Name, t rrtype.T
 
 		// Authoritative answer or NXDOMAIN is terminal.
 		if resp.Flags().Authoritative() {
-			entry := r.entryFromResponse(resp)
+			entry := r.entryFromResponse(name, resp)
 			r.cache.Put(name, t, entry)
 			return entry, nil
 		}
 		// Some servers don't set AA but still answer; if there are matching
 		// records in the answer section, treat it as terminal.
 		if hasAnswerFor(resp, name, t) {
-			entry := r.entryFromResponse(resp)
+			entry := r.entryFromResponse(name, resp)
 			r.cache.Put(name, t, entry)
 			return entry, nil
 		}
@@ -578,7 +640,7 @@ func removeServer(servers []netip.AddrPort, target netip.AddrPort) []netip.AddrP
 	return out
 }
 
-func (r *recursive) entryFromResponse(resp wire.Message) Entry {
+func (r *recursive) entryFromResponse(qname wire.Name, resp wire.Message) Entry {
 	ttl := minTTL(60*time.Second, resp.Answers(), resp.Authorities())
 	if len(resp.Answers()) == 0 {
 		if neg := negativeCacheTTL(resp.Authorities()); neg > 0 && neg < ttl {
@@ -592,15 +654,125 @@ func (r *recursive) entryFromResponse(resp wire.Message) Entry {
 			ttl = r.maxNegTTL
 		}
 	}
+	answers, authority, additional := bailiwickFilter(qname, resp)
 	return Entry{
-		Answer:     append([]wire.Record(nil), resp.Answers()...),
-		Authority:  append([]wire.Record(nil), resp.Authorities()...),
-		Additional: append([]wire.Record(nil), resp.Additionals()...),
+		Answer:     answers,
+		Authority:  authority,
+		Additional: additional,
 		RCODE:      resp.Flags().RCODE(),
 		AA:         resp.Flags().Authoritative(),
 		AD:         resp.Flags().AuthenticData(),
 		ExpiresAt:  time.Now().Add(ttl),
 	}
+}
+
+// bailiwickFilter sanitises a terminal response before it is cached or
+// returned to the caller. It enforces RFC 5452 §6: a malicious upstream
+// must not be able to insert records for unrelated owners by stuffing the
+// answer/authority/additional sections of a response to qname.
+//
+//   - Answer: keep records whose owner is qname or a CNAME target reachable
+//     from qname through the answer's own chain. Out-of-chain records (the
+//     "Kashpureff" injection) are dropped.
+//   - Authority: keep records whose owner is at-or-above qname (zone-level
+//     SOA/NS), since those are the only authority records relevant to a
+//     terminal answer for qname.
+//   - Additional: keep OPT and records whose owner is referenced by a kept
+//     Answer-section CNAME target or Authority-section NS rdata, and whose
+//     owner is at-or-below the deepest ancestor we kept in Authority (the
+//     closest enclosing zone). Everything else — and in particular A/AAAA
+//     records for unrelated names — is discarded.
+func bailiwickFilter(qname wire.Name, resp wire.Message) (answers, authority, additional []wire.Record) {
+	chain := map[string]struct{}{nameKey(qname): {}}
+	for {
+		grew := false
+		for _, r := range resp.Answers() {
+			if r.Type() != rrtype.CNAME {
+				continue
+			}
+			if _, ok := chain[nameKey(r.Name())]; !ok {
+				continue
+			}
+			c, ok := wire.RDataAs[rdata.CNAME](r)
+			if !ok {
+				continue
+			}
+			tk := nameKey(c.Target())
+			if _, exists := chain[tk]; exists {
+				continue
+			}
+			chain[tk] = struct{}{}
+			grew = true
+		}
+		if !grew {
+			break
+		}
+	}
+
+	answers = make([]wire.Record, 0, len(resp.Answers()))
+	for _, r := range resp.Answers() {
+		if _, ok := chain[nameKey(r.Name())]; ok {
+			answers = append(answers, r)
+		}
+	}
+
+	authority = make([]wire.Record, 0, len(resp.Authorities()))
+	for _, r := range resp.Authorities() {
+		if inBailiwick(r.Name(), qname) {
+			authority = append(authority, r)
+		}
+	}
+
+	zoneCut := deepestAncestor(authority, qname)
+
+	referenced := map[string]struct{}{}
+	for _, r := range answers {
+		if c, ok := wire.RDataAs[rdata.CNAME](r); ok {
+			referenced[nameKey(c.Target())] = struct{}{}
+		}
+	}
+	for _, r := range authority {
+		if ns, ok := wire.RDataAs[rdata.NS](r); ok {
+			referenced[nameKey(ns.NSDName())] = struct{}{}
+		}
+	}
+
+	additional = make([]wire.Record, 0, len(resp.Additionals()))
+	for _, r := range resp.Additionals() {
+		if r.Type() == rrtype.OPT {
+			additional = append(additional, r)
+			continue
+		}
+		if _, ok := referenced[nameKey(r.Name())]; !ok {
+			continue
+		}
+		if zoneCut.IsValid() && !inBailiwick(zoneCut, r.Name()) {
+			continue
+		}
+		additional = append(additional, r)
+	}
+	return answers, authority, additional
+}
+
+// deepestAncestor returns the deepest owner among authority records that
+// is at-or-above qname; this is the closest enclosing zone the response
+// claims authority over and bounds what owners we will accept in the
+// additional section.
+func deepestAncestor(authority []wire.Record, qname wire.Name) wire.Name {
+	var best wire.Name
+	for _, r := range authority {
+		if !inBailiwick(r.Name(), qname) {
+			continue
+		}
+		if !best.IsValid() || r.Name().WireLen() > best.WireLen() {
+			best = r.Name()
+		}
+	}
+	return best
+}
+
+func nameKey(n wire.Name) string {
+	return string(n.AppendWire(nil))
 }
 
 // negativeCacheTTL implements RFC 2308 §5.

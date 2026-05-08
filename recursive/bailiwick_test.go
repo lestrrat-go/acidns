@@ -101,9 +101,57 @@ func TestEntryFromResponseCapsNegativeTTL(t *testing.T) {
 	require.NoError(t, err)
 
 	before := time.Now()
-	entry := r.entryFromResponse(resp)
+	entry := r.entryFromResponse(wire.MustParseName("ghost.evil.example."), resp)
 	require.LessOrEqual(t, entry.ExpiresAt.Sub(before), time.Hour+time.Second,
 		"negative TTL must be clamped to maxNegTTL regardless of SOA MINIMUM")
+}
+
+// TestBailiwickFilterDropsForgedAnswerRecords reproduces the off-path
+// cache poisoning vector where a malicious authoritative for `evil.example`
+// stuffs the answer/authority/additional sections of a query for
+// `www.evil.example` with records for `bank.com`. The resolver must not
+// cache or surface those records to the caller.
+func TestBailiwickFilterDropsForgedAnswerRecords(t *testing.T) {
+	t.Parallel()
+	qname := wire.MustParseName("www.evil.example.")
+
+	good := wire.NewRecord(qname, 60*time.Second,
+		rdata.NewA(netip.MustParseAddr("198.51.100.1")))
+	forgedAnswer := wire.NewRecord(wire.MustParseName("bank.com."), 60*time.Second,
+		rdata.NewA(netip.MustParseAddr("203.0.113.1")))
+	forgedAuthority := wire.NewRecord(wire.MustParseName("bank.com."), 60*time.Second,
+		rdata.NewNS(wire.MustParseName("ns.evil.example.")))
+	forgedAdditional := wire.NewRecord(wire.MustParseName("bank.com."), 60*time.Second,
+		rdata.NewA(netip.MustParseAddr("203.0.113.2")))
+	zoneNS := wire.NewRecord(wire.MustParseName("evil.example."), 60*time.Second,
+		rdata.NewNS(wire.MustParseName("ns.evil.example.")))
+
+	resp, err := wire.NewBuilder().
+		ID(1).
+		Response(true).
+		Authoritative(true).
+		Question(wire.NewQuestion(qname, rrtype.A)).
+		Answer(good).
+		Answer(forgedAnswer).
+		Authority(zoneNS).
+		Authority(forgedAuthority).
+		Additional(forgedAdditional).
+		Build()
+	require.NoError(t, err)
+
+	answers, authority, additional := bailiwickFilter(qname, resp)
+
+	require.Len(t, answers, 1)
+	require.True(t, answers[0].Name().Equal(qname))
+
+	for _, r := range authority {
+		require.True(t, inBailiwick(r.Name(), qname),
+			"authority record %s out of bailiwick for %s", r.Name(), qname)
+	}
+	for _, r := range additional {
+		require.NotEqual(t, "bank.com.", r.Name().String(),
+			"forged additional must be dropped")
+	}
 }
 
 func TestReferralZone(t *testing.T) {

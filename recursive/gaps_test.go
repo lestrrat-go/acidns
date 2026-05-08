@@ -555,8 +555,10 @@ func TestTCPFallbackOnTruncated(t *testing.T) {
 }
 
 // TestTCPFallbackTCPDialFails covers the path where TC=1 triggers a TCP
-// retry but no TCP listener exists — Exchange must return the original
-// truncated UDP response rather than fail.
+// retry but no TCP listener exists. The dialer must surface the failure
+// rather than return the truncated UDP answer — a network adversary
+// that can drop 53/tcp would otherwise force the resolver to operate
+// on partial data (DNSSEC RRSIGs typically don't fit in 512 bytes).
 func TestTCPFallbackTCPDialFails(t *testing.T) {
 	t.Parallel()
 	udpHandler := acidns.HandlerFunc(func(_ context.Context, w acidns.ResponseWriter, q wire.Message) {
@@ -584,9 +586,8 @@ func TestTCPFallbackTCPDialFails(t *testing.T) {
 	require.NoError(t, err)
 	rctx, rcancel := context.WithTimeout(t.Context(), 2*time.Second)
 	defer rcancel()
-	resp, err := d.Exchange(rctx, udpSrv.Addr(), q)
-	require.NoError(t, err)
-	require.True(t, resp.Flags().Truncated())
+	_, err = d.Exchange(rctx, udpSrv.Addr(), q)
+	require.ErrorIs(t, err, recursive.ErrTruncatedAfterTCPFail)
 }
 
 // TestNonAAResponseTreatedAsAuthoritative exercises the path where the
@@ -739,4 +740,58 @@ func TestIterationLimitReached(t *testing.T) {
 	defer cancel()
 	_, err := r.Resolve(rctx, wire.MustParseName("www.example."), rrtype.A)
 	require.ErrorIs(t, err, recursive.ErrIterationLimit)
+}
+
+// TestResolveSingleflightCoalesces verifies that concurrent goroutines
+// missing the cache for the same (qname, qtype) produce a single
+// upstream exchange. RFC 5452 §6: each independent transmission is a
+// fresh forgery window — a thundering herd quadratically multiplies an
+// off-path attacker's chances. With singleflight in place, N callers
+// share one window.
+func TestResolveSingleflightCoalesces(t *testing.T) {
+	t.Parallel()
+	release := make(chan struct{})
+	var calls atomic.Int64
+	dialer := stubDialer{
+		fn: func(_ context.Context, _ netip.AddrPort, q wire.Message) (wire.Message, error) {
+			calls.Add(1)
+			<-release // hold all callers until they have all joined
+			question := q.Questions()[0]
+			a := wire.NewRecord(question.Name(), 60*time.Second,
+				rdata.NewA(netip.MustParseAddr("203.0.113.99")))
+			return mkResp(t, q, func(b *wire.Builder) *wire.Builder {
+				return b.Authoritative(true).Answer(a)
+			}), nil
+		},
+	}
+	r := recursive.New(
+		recursive.WithRoots(netip.MustParseAddrPort("127.0.0.1:1")),
+		recursive.WithDialer(dialer),
+	)
+
+	const callers = 16
+	var wg sync.WaitGroup
+	results := make([]error, callers)
+	for i := range callers {
+		wg.Add(1)
+		go func(i int) {
+			defer wg.Done()
+			rctx, cancel := context.WithTimeout(t.Context(), 2*time.Second)
+			defer cancel()
+			_, err := r.Resolve(rctx, wire.MustParseName("herd.example."), rrtype.A)
+			results[i] = err
+		}(i)
+	}
+
+	// Give the callers a chance to all enter resolveDepth and join the
+	// in-flight call before we release the upstream response.
+	time.Sleep(50 * time.Millisecond)
+	close(release)
+	wg.Wait()
+
+	for i, err := range results {
+		require.NoError(t, err, "caller %d", i)
+	}
+	require.Equal(t, int64(1), calls.Load(),
+		"singleflight must collapse %d concurrent identical queries to one upstream exchange", callers)
 }
