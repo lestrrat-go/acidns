@@ -5,9 +5,20 @@ package acidns
 //
 // Apply on top of any Handler:
 //
-//	srv, _ := acidns.ListenUDP(addr, acidns.NewACL(inner,
+//	srv, _ := acidns.NewUDPServer(addr, acidns.NewACL(inner,
 //	    acl.WithACLAllow(netip.MustParsePrefix("10.0.0.0/8")),
 //	))
+//	ctrl, _ := srv.Run(ctx)
+//
+// # Default policy
+//
+// An ACL constructed with NO options (no allow list and no deny list)
+// is allow-all: every source is permitted. This makes NewACL safely
+// composable into a middleware chain ahead of policy decisions
+// without changing observed behaviour, but means a misconfigured
+// caller that thinks it's tightening access by adding the middleware
+// in isolation will get no protection. Always pair NewACL with at
+// least one of WithACLAllow / WithACLDeny in production.
 
 import (
 	"context"
@@ -93,6 +104,13 @@ func (a *acl) refuse(w ResponseWriter, q wire.Message) {
 	}
 	resp, err := b.Build()
 	if err != nil {
+		// Builder failure is implausible for a fixed-shape REFUSED;
+		// fall back to a header-only SERVFAIL so the peer at least
+		// sees something rather than a silent drop.
+		fb, ferr := wire.NewBuilder().ID(q.ID()).Response(true).RCODE(wire.RCODEServFail).Build()
+		if ferr == nil {
+			_ = w.WriteMsg(fb)
+		}
 		return
 	}
 	_ = w.WriteMsg(resp)

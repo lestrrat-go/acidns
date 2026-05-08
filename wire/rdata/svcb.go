@@ -254,11 +254,20 @@ func unpackSvcbBody(u *wirebb.Unpacker, rdlen int) (svcbBody, error) {
 		return zero, err
 	}
 	var params []SVCBParam
+	// RFC 9460 §2.2 requires SvcParams to appear in strictly-increasing
+	// key order with no duplicates. Permitting arbitrary order would
+	// make first-match accessors (Port(), ALPN(), ...) silently shadow
+	// duplicate keys and disagree with peers that enforce the rule.
+	lastKey := -1
 	for u.Off() < end {
 		key, err := u.Uint16()
 		if err != nil {
 			return zero, err
 		}
+		if int(key) <= lastKey {
+			return zero, fmt.Errorf("%w: SVCB params out of order or duplicate (key %d after %d)", ErrInvalidRData, key, lastKey)
+		}
+		lastKey = int(key)
 		l, err := u.Uint16()
 		if err != nil {
 			return zero, err

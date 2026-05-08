@@ -154,39 +154,30 @@ func (c *MemoryCache) Put(name wire.Name, t rrtype.Type, e Entry) {
 }
 
 // capEntryRecords trims an Entry's record slices so the sum across
-// Answer/Authority/Additional does not exceed cap. Trimming favours
+// Answer/Authority/Additional does not exceed limit. Trimming favours
 // dropping Additional first (least operationally important), then
 // Authority, then Answer — keeping the answer path intact for as long
 // as possible.
-func capEntryRecords(e Entry, cap int) Entry {
+func capEntryRecords(e Entry, limit int) Entry {
 	total := len(e.Answer) + len(e.Authority) + len(e.Additional)
-	if total <= cap {
+	if total <= limit {
 		return e
 	}
-	trim := total - cap
+	trim := total - limit
 	if n := len(e.Additional); n > 0 {
-		drop := n
-		if drop > trim {
-			drop = trim
-		}
+		drop := min(n, trim)
 		e.Additional = e.Additional[:n-drop]
 		trim -= drop
 	}
 	if trim > 0 && len(e.Authority) > 0 {
 		n := len(e.Authority)
-		drop := n
-		if drop > trim {
-			drop = trim
-		}
+		drop := min(n, trim)
 		e.Authority = e.Authority[:n-drop]
 		trim -= drop
 	}
 	if trim > 0 && len(e.Answer) > 0 {
 		n := len(e.Answer)
-		drop := n
-		if drop > trim {
-			drop = trim
-		}
+		drop := min(n, trim)
 		e.Answer = e.Answer[:n-drop]
 	}
 	return e

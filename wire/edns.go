@@ -204,9 +204,16 @@ func packOPT(p *wirebb.Packer, e EDNS) error {
 // unpacker to be at the start of a record whose type is OPT, and consumes
 // the whole record.
 func unpackOPT(u *wirebb.Unpacker) (EDNS, error) {
-	// NAME (must be root, but we don't enforce — just consume).
-	if _, err := u.Name(); err != nil {
+	// RFC 6891 §6.1.2 — OPT NAME MUST be the root domain (a single
+	// zero-length octet). Accepting non-root names lets a broken or
+	// hostile peer smuggle compression-pointer payloads into the OPT
+	// owner field and pass them off as protocol-conformant.
+	name, err := u.Name()
+	if err != nil {
 		return nil, err
+	}
+	if name.NumLabels() != 0 {
+		return nil, fmt.Errorf("%w: OPT NAME must be root (RFC 6891 §6.1.2)", ErrInvalidMessage)
 	}
 	t, err := u.Uint16()
 	if err != nil {

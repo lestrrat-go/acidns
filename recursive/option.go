@@ -23,6 +23,7 @@ type config struct {
 	validator     Validator
 	queryTimeout  time.Duration
 	maxNegTTL     time.Duration
+	resolveBudget time.Duration
 }
 
 // WithRoots overrides the default root server list.
@@ -71,6 +72,15 @@ func WithValidator(v Validator) Option {
 // WithDialer sets a custom Dialer.
 func WithDialer(d Dialer) Option {
 	return optionFunc(func(c *config) { c.dialer = d })
+}
+
+// WithResolveBudget sets a hard wall-clock cap on a single Resolve call,
+// independent of WithQueryTimeout (which is per-exchange). Without this
+// cap an adversarial graph can multiply (depth × iterations ×
+// per-query timeout) into many minutes for a single query. Defaults
+// to 30 seconds. A non-positive value disables the cap.
+func WithResolveBudget(d time.Duration) Option {
+	return optionFunc(func(c *config) { c.resolveBudget = d })
 }
 
 // WithMaxNegativeTTL caps the lifetime of negative cache entries. RFC

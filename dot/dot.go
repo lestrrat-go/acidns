@@ -36,6 +36,7 @@ import (
 	"fmt"
 	"net"
 	"net/netip"
+	"slices"
 	"time"
 
 	"github.com/lestrrat-go/acidns"
@@ -101,12 +102,7 @@ func isHostnameAddr(addr netip.AddrPort) bool {
 }
 
 func containsALPN(list []string, p string) bool {
-	for _, e := range list {
-		if e == p {
-			return true
-		}
-	}
-	return false
+	return slices.Contains(list, p)
 }
 
 func (e *exchanger) Exchange(ctx context.Context, q wire.Message) (wire.Message, error) {

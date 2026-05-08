@@ -13,8 +13,13 @@ import (
 func Example_cookies_roundtrip() {
 	// Server side: a SecretPool drives the HMAC key for RFC 9018 server
 	// cookies. Pass 0 to disable automatic rotation in this example.
-	pool, cancel := cookies.NewSecretPool(0)
+	pool, cancel, err := cookies.NewSecretPool(0)
+	if err != nil {
+		fmt.Println("secret pool:", err)
+		return
+	}
 	defer cancel()
+	_ = err // avoid unused-var if future control flow drops the early return
 	srv := cookies.NewServer(pool, time.Hour)
 
 	clientCookie := [8]byte{1, 2, 3, 4, 5, 6, 7, 8}

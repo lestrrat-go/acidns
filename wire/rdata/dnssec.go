@@ -353,11 +353,25 @@ func encodeTypeBitmap(p *wirebb.Packer, types []rrtype.Type) {
 func decodeTypeBitmap(u *wirebb.Unpacker, n int) ([]rrtype.Type, error) {
 	end := u.Off() + n
 	var out []rrtype.Type
+	// RFC 4034 §4.1.2 mandates that bitmap window blocks appear in
+	// strictly increasing order of window number with no duplicates.
+	// Permitting non-canonical ordering or duplicates lets a hostile
+	// authoritative craft an NSEC the resolver accepts but a peer
+	// using a strict decoder rejects, opening a small canonicalisation
+	// attack surface. Track the last-seen window and reject any block
+	// that violates the ordering.
+	lastWin := -1
+	first := true
 	for u.Off() < end {
 		win, err := u.Uint8()
 		if err != nil {
 			return nil, err
 		}
+		if !first && int(win) <= lastWin {
+			return nil, fmt.Errorf("%w: NSEC bitmap windows out of order (saw %d after %d)", ErrInvalidRData, win, lastWin)
+		}
+		first = false
+		lastWin = int(win)
 		ln, err := u.Uint8()
 		if err != nil {
 			return nil, err
@@ -443,6 +457,9 @@ func unpackNSEC3(u *wirebb.Unpacker, rdlen int) (NSEC3, error) {
 	if err != nil {
 		return zero, err
 	}
+	if u.Off()+int(saltLen) > end {
+		return zero, fmt.Errorf("%w: NSEC3 salt length %d exceeds rdata window", ErrInvalidRData, saltLen)
+	}
 	salt, err := u.Bytes(int(saltLen))
 	if err != nil {
 		return zero, err
@@ -451,9 +468,15 @@ func unpackNSEC3(u *wirebb.Unpacker, rdlen int) (NSEC3, error) {
 	if err != nil {
 		return zero, err
 	}
+	if u.Off()+int(hashLen) > end {
+		return zero, fmt.Errorf("%w: NSEC3 hash length %d exceeds rdata window", ErrInvalidRData, hashLen)
+	}
 	hash, err := u.Bytes(int(hashLen))
 	if err != nil {
 		return zero, err
+	}
+	if u.Off() > end {
+		return zero, fmt.Errorf("%w: NSEC3 over-read", ErrInvalidRData)
 	}
 	types, err := decodeTypeBitmap(u, end-u.Off())
 	if err != nil {

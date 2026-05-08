@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
+	"sync"
 	"time"
 
 	"github.com/lestrrat-go/acidns"
@@ -27,6 +28,20 @@ var ErrNoUpstream = errors.New("forward: no upstream configured")
 type Handler struct {
 	cfg   config
 	cache *cache
+
+	// inflight coalesces concurrent cache misses for the same
+	// (name, type, class). Without this, a thundering herd on a cold
+	// cache key would multiply outbound query volume one-for-one with
+	// inbound; with it, only one goroutine talks to the upstream and
+	// the rest reuse its result.
+	inflightMu sync.Mutex
+	inflight   map[string]*inflightCall
+}
+
+type inflightCall struct {
+	done chan struct{}
+	resp wire.Message
+	err  error
 }
 
 // New returns a Handler. Exactly one of WithUpstream, WithUDPUpstream,
@@ -52,7 +67,7 @@ func New(opts ...Option) (*Handler, error) {
 	if c.logger == nil {
 		c.logger = slog.New(slog.DiscardHandler)
 	}
-	return &Handler{cfg: c, cache: newCache(c.cacheSize)}, nil
+	return &Handler{cfg: c, cache: newCache(c.cacheSize), inflight: make(map[string]*inflightCall)}, nil
 }
 
 // UpstreamName reports a human-readable description of the configured
@@ -111,14 +126,7 @@ func (h *Handler) ServeDNS(ctx context.Context, w acidns.ResponseWriter, q wire.
 		return
 	}
 
-	fwd := buildForwardQuery(q)
-	exchangeCtx := ctx
-	if _, ok := ctx.Deadline(); !ok && h.cfg.queryTimeout > 0 {
-		var cancel context.CancelFunc
-		exchangeCtx, cancel = context.WithTimeout(ctx, h.cfg.queryTimeout)
-		defer cancel()
-	}
-	resp, err := h.cfg.upstream.Exchange(exchangeCtx, fwd)
+	resp, err := h.exchangeSingleflight(ctx, q, qq)
 	if err != nil {
 		_ = w.WriteMsg(buildErrorResponse(q, wire.RCODEServFail))
 		h.cfg.logger.LogAttrs(ctx, slog.LevelError, "forward.serve",
@@ -143,6 +151,51 @@ func (h *Handler) ServeDNS(ctx context.Context, w acidns.ResponseWriter, q wire.
 		slog.String("upstream", h.cfg.upstreamName),
 		slog.String("rcode", resp.Flags().RCODE().String()),
 		slog.Duration("elapsed", time.Since(start)))
+}
+
+// exchangeSingleflight wraps the upstream Exchange call with
+// per-(name,type,class) coalescing so concurrent cache misses don't
+// multiply outbound query traffic. The leader's response (and error)
+// is shared with all waiters.
+func (h *Handler) exchangeSingleflight(ctx context.Context, in wire.Message, qq wire.Question) (wire.Message, error) {
+	key := singleflightKey(qq)
+
+	h.inflightMu.Lock()
+	if call, ok := h.inflight[key]; ok {
+		h.inflightMu.Unlock()
+		select {
+		case <-call.done:
+			return call.resp, call.err
+		case <-ctx.Done():
+			return nil, ctx.Err()
+		}
+	}
+	call := &inflightCall{done: make(chan struct{})}
+	h.inflight[key] = call
+	h.inflightMu.Unlock()
+
+	defer func() {
+		h.inflightMu.Lock()
+		delete(h.inflight, key)
+		h.inflightMu.Unlock()
+		close(call.done)
+	}()
+
+	fwd := buildForwardQuery(in)
+	exchangeCtx := ctx
+	if _, ok := ctx.Deadline(); !ok && h.cfg.queryTimeout > 0 {
+		var cancel context.CancelFunc
+		exchangeCtx, cancel = context.WithTimeout(ctx, h.cfg.queryTimeout)
+		defer cancel()
+	}
+	resp, err := h.cfg.upstream.Exchange(exchangeCtx, fwd)
+	call.resp = resp
+	call.err = err
+	return resp, err
+}
+
+func singleflightKey(qq wire.Question) string {
+	return string(qq.Name().AppendWire(nil)) + "|" + qq.Type().String() + "|" + qq.Class().String()
 }
 
 // buildForwardQuery returns a fresh query carrying the same question and

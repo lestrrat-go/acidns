@@ -15,7 +15,7 @@ import (
 // changes within a generous window.
 func TestSecretPoolAutoRotation(t *testing.T) {
 	t.Parallel()
-	pool, cancel := cookies.NewSecretPool(5 * time.Millisecond)
+	pool, cancel, _ := cookies.NewSecretPool(5 * time.Millisecond)
 	t.Cleanup(cancel)
 
 	first := append([]byte(nil), pool.Current()...)
@@ -31,7 +31,7 @@ func TestSecretPoolAutoRotation(t *testing.T) {
 // stops the background rotation loop without panicking.
 func TestSecretPoolCancelStopsRotation(t *testing.T) {
 	t.Parallel()
-	_, cancel := cookies.NewSecretPool(time.Hour)
+	_, cancel, _ := cookies.NewSecretPool(time.Hour)
 	cancel() // immediately stop; should not block / panic.
 }
 
@@ -39,7 +39,7 @@ func TestSecretPoolCancelStopsRotation(t *testing.T) {
 // one hour, and that explicit non-zero values are preserved.
 func TestServerMaxAgeDefault(t *testing.T) {
 	t.Parallel()
-	pool, cancel := cookies.NewSecretPool(0)
+	pool, cancel, _ := cookies.NewSecretPool(0)
 	t.Cleanup(cancel)
 
 	srv := cookies.NewServer(pool, 0)
@@ -52,7 +52,7 @@ func TestServerMaxAgeDefault(t *testing.T) {
 // TestServerValidateMalformedCookies covers length and version validation.
 func TestServerValidateMalformedCookies(t *testing.T) {
 	t.Parallel()
-	pool, cancel := cookies.NewSecretPool(0)
+	pool, cancel, _ := cookies.NewSecretPool(0)
 	t.Cleanup(cancel)
 	srv := cookies.NewServer(pool, time.Hour)
 	cc := [8]byte{1, 2, 3, 4, 5, 6, 7, 8}
@@ -74,7 +74,7 @@ func TestServerValidateMalformedCookies(t *testing.T) {
 // guard rejects clearly bogus cookies.
 func TestServerValidateFutureTimestamp(t *testing.T) {
 	t.Parallel()
-	pool, cancel := cookies.NewSecretPool(0)
+	pool, cancel, _ := cookies.NewSecretPool(0)
 	t.Cleanup(cancel)
 	srv := cookies.NewServer(pool, time.Hour)
 	cc := [8]byte{}
@@ -90,7 +90,7 @@ func TestServerValidateFutureTimestamp(t *testing.T) {
 // TestServerCookieIPv6 exercises the addr.Is6() branch of mintCookie.
 func TestServerCookieIPv6(t *testing.T) {
 	t.Parallel()
-	pool, cancel := cookies.NewSecretPool(0)
+	pool, cancel, _ := cookies.NewSecretPool(0)
 	t.Cleanup(cancel)
 	srv := cookies.NewServer(pool, time.Hour)
 	cc := [8]byte{9, 9, 9, 9, 9, 9, 9, 9}
@@ -111,7 +111,7 @@ func TestServerCookieIPv6(t *testing.T) {
 // addr is the zero value (neither Is4 nor Is6).
 func TestServerCookieZeroAddr(t *testing.T) {
 	t.Parallel()
-	pool, cancel := cookies.NewSecretPool(0)
+	pool, cancel, _ := cookies.NewSecretPool(0)
 	t.Cleanup(cancel)
 	srv := cookies.NewServer(pool, time.Hour)
 	cc := [8]byte{}

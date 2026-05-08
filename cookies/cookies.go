@@ -205,10 +205,14 @@ type SecretPool interface {
 //
 // The caller is responsible for stopping the rotation by invoking the
 // returned cancel function on shutdown.
-func NewSecretPool(rotateEvery time.Duration) (SecretPool, func()) {
+//
+// An error is returned if the initial random-secret generation fails
+// (a constructor running at server start-up should not panic on a
+// transient crypto/rand error).
+func NewSecretPool(rotateEvery time.Duration) (SecretPool, func(), error) {
 	p := &secretPool{}
 	if err := p.Rotate(); err != nil {
-		panic(err)
+		return nil, nil, err
 	}
 	cancel := func() {}
 	if rotateEvery > 0 {
@@ -227,7 +231,7 @@ func NewSecretPool(rotateEvery time.Duration) (SecretPool, func()) {
 			}
 		}()
 	}
-	return p, cancel
+	return p, cancel, nil
 }
 
 type secretPool struct {

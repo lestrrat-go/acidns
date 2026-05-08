@@ -82,9 +82,15 @@ func unpackHIP(u *wirebb.Unpacker, rdlen int) (HIP, error) {
 	if err != nil {
 		return zero, err
 	}
+	if u.Off()+int(hitLen) > end {
+		return zero, fmt.Errorf("%w: HIP hit length %d exceeds rdata window", ErrInvalidRData, hitLen)
+	}
 	hit, err := u.Bytes(int(hitLen))
 	if err != nil {
 		return zero, err
+	}
+	if u.Off()+int(pkLen) > end {
+		return zero, fmt.Errorf("%w: HIP pubkey length %d exceeds rdata window", ErrInvalidRData, pkLen)
 	}
 	pk, err := u.Bytes(int(pkLen))
 	if err != nil {

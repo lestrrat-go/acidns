@@ -17,6 +17,26 @@
 //
 //	body, _, err := tsig.Verify(received, key)
 //	m, _ := wire.Unmarshal(body)
+//
+// # Replay protection
+//
+// Verify enforces the RFC 8945 §5.2.3 fudge-window time check: a
+// signed message whose timestamp is more than fudge seconds away
+// from the verifier's clock is rejected as BADTIME. That bounds the
+// window in which a captured-and-replayed message can be valid, but
+// does NOT prevent replay within the fudge window. RFC 8945 leaves
+// stronger replay protection (a (key, time, MAC)-tuple cache,
+// monotonic-counter validation, etc.) to the caller because the
+// right policy depends on the message semantics: a re-signed AXFR
+// answer is harmless to replay, but a re-played dynamic UPDATE can
+// re-execute a no-longer-intended mutation.
+//
+// Callers handling UPDATE or other side-effecting opcodes that
+// arrive over TSIG-protected channels MUST add their own replay
+// defence — typically a bounded LRU of recently-seen MACs scoped to
+// the fudge window. This package deliberately stays a stateless
+// verifier so it can be used in both authoritative and middleware
+// roles without coupling to a particular cache implementation.
 package tsig
 
 import (

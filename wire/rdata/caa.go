@@ -56,9 +56,15 @@ func unpackCAA(u *wirebb.Unpacker, rdlen int) (CAA, error) {
 	if err != nil {
 		return zero, err
 	}
+	if u.Off()+int(tlen) > end {
+		return zero, fmt.Errorf("%w: CAA tag length %d exceeds rdata window", ErrInvalidRData, tlen)
+	}
 	tag, err := u.Bytes(int(tlen))
 	if err != nil {
 		return zero, err
+	}
+	if u.Off() > end {
+		return zero, fmt.Errorf("%w: CAA over-read", ErrInvalidRData)
 	}
 	val, err := u.Bytes(end - u.Off())
 	if err != nil {

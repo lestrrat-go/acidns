@@ -54,8 +54,8 @@ func TestVerifyRRsetAllAlgsRejectsMissingAlgorithm(t *testing.T) {
 	// no sig of that algorithm produces a successful verification.
 	w := &walker{maxRRSIGsTry: 4, now: time.Now}
 	required := map[rdata.DNSSECAlgorithm]struct{}{
-		rdata.AlgRSASHA256:        {},
-		rdata.AlgECDSAP256SHA256:  {},
+		rdata.AlgRSASHA256:       {},
+		rdata.AlgECDSAP256SHA256: {},
 	}
 	// One placeholder record so the "empty rrset" guard does not fire
 	// before we reach the algorithm-coverage check.

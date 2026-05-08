@@ -12,7 +12,7 @@ import (
 
 func TestServerCookieRoundTrip(t *testing.T) {
 	t.Parallel()
-	pool, cancel := cookies.NewSecretPool(0)
+	pool, cancel, _ := cookies.NewSecretPool(0)
 	t.Cleanup(cancel)
 	srv := cookies.NewServer(pool, time.Hour)
 	cc := [8]byte{1, 2, 3, 4, 5, 6, 7, 8}
@@ -29,7 +29,7 @@ func TestServerCookieRoundTrip(t *testing.T) {
 
 func TestServerCookieRejectsWrongAddr(t *testing.T) {
 	t.Parallel()
-	pool, cancel := cookies.NewSecretPool(0)
+	pool, cancel, _ := cookies.NewSecretPool(0)
 	t.Cleanup(cancel)
 	srv := cookies.NewServer(pool, time.Hour)
 	cc := [8]byte{0xab, 0xcd, 0xef, 1, 2, 3, 4, 5}
@@ -42,7 +42,7 @@ func TestServerCookieRejectsWrongAddr(t *testing.T) {
 
 func TestServerCookieRejectsExpired(t *testing.T) {
 	t.Parallel()
-	pool, cancel := cookies.NewSecretPool(0)
+	pool, cancel, _ := cookies.NewSecretPool(0)
 	t.Cleanup(cancel)
 	srv := cookies.NewServer(pool, 30*time.Minute)
 	cc := [8]byte{}
@@ -57,7 +57,7 @@ func TestServerCookieRejectsExpired(t *testing.T) {
 
 func TestServerCookieAcceptsPreviousSecretAfterRotation(t *testing.T) {
 	t.Parallel()
-	pool, cancel := cookies.NewSecretPool(0)
+	pool, cancel, _ := cookies.NewSecretPool(0)
 	t.Cleanup(cancel)
 	srv := cookies.NewServer(pool, time.Hour)
 	cc := [8]byte{42, 42, 42, 42, 42, 42, 42, 42}

@@ -42,21 +42,43 @@ func NewAnchor(name wire.Name, dss ...rdata.DS) (Anchor, error) {
 	return anchor{name: name, dss: cp}, nil
 }
 
-// IANARootAnchor returns the IANA root KSK trust anchor pinned at the
-// values published in the root-anchors.xml file (KSK-2017, key tag 20326,
-// SHA-256). When the root rolls a new KSK, callers MUST update or replace
-// this anchor; the value is provided as a convenience for clients that
-// just want "DNSSEC works against the live root" without shipping their
-// own RFC 5011 trust-anchor file.
+// IANARootKSK2017DS returns the DS record for the 2017 root KSK
+// (key tag 20326). Provided as a building block so callers composing
+// their own anchor (e.g. with custom NTAs or extra anchors) can
+// reference the IANA-published material directly.
+func IANARootKSK2017DS() rdata.DS {
+	digest := validatorbb.MustHex("E06D44B80B8F1D39A95C0B0D7C65D08458E880409BBC683457104237C7F8EC8D")
+	return rdata.NewDS(20326, rdata.AlgRSASHA256, rdata.DigestSHA256, digest)
+}
+
+// IANARootKSK2024DS returns the DS record for the 2024 root KSK
+// (key tag 38696). Pinned at the values published in the IANA
+// root-anchors.xml file.
 //
-// Last verified: 2024-01-22 against
-// https://data.iana.org/root-anchors/root-anchors.xml — only the SHA-256
-// digest is encoded here. KSK-2024, when published, will need to be added.
+// Last verified: 2024-12-15 against
+// https://data.iana.org/root-anchors/root-anchors.xml.
+func IANARootKSK2024DS() rdata.DS {
+	digest := validatorbb.MustHex("683D2D0ACB8C9B712A1948B27F741219298D0A450D612C483AF444A4C0FB2B16")
+	return rdata.NewDS(38696, rdata.AlgRSASHA256, rdata.DigestSHA256, digest)
+}
+
+// IANARootAnchor returns the IANA root KSK trust anchor pinned at the
+// values published in the root-anchors.xml file. The returned anchor
+// includes BOTH KSK-2017 (key tag 20326) and KSK-2024 (key tag 38696)
+// so the validator continues to function across the rollover from
+// KSK-2017 to KSK-2024.
+//
+// When ICANN publishes future KSK rollover material, callers SHOULD
+// either update this library or compose their own anchor via
+// [NewAnchor] using [IANARootKSK2017DS] / [IANARootKSK2024DS] /
+// future helpers and an RFC 5011-managed local copy.
+//
+// The value is provided as a convenience for clients that just want
+// "DNSSEC works against the live root" without shipping their own
+// RFC 5011 trust-anchor file.
 func IANARootAnchor() Anchor {
 	root := wire.RootName()
-	digest := validatorbb.MustHex("E06D44B80B8F1D39A95C0B0D7C65D08458E880409BBC683457104237C7F8EC8D")
-	ds := rdata.NewDS(20326, rdata.AlgRSASHA256, rdata.DigestSHA256, digest)
-	a, err := NewAnchor(root, ds)
+	a, err := NewAnchor(root, IANARootKSK2017DS(), IANARootKSK2024DS())
 	if err != nil {
 		panic(err) // unreachable
 	}

@@ -90,6 +90,7 @@ type recursive struct {
 	validator     Validator
 	queryTimeout  time.Duration
 	maxNegTTL     time.Duration
+	resolveBudget time.Duration
 
 	inflightMu sync.Mutex
 	inflight   map[string]*inflightCall
@@ -115,6 +116,7 @@ func New(opts ...Option) Recursive {
 		maxCNAMEs:     8,
 		queryTimeout:  4 * time.Second,
 		maxNegTTL:     time.Hour,
+		resolveBudget: 30 * time.Second,
 	}
 	for _, o := range opts {
 		o.applyRecursive(&c)
@@ -139,6 +141,7 @@ func New(opts ...Option) Recursive {
 		validator:     c.validator,
 		queryTimeout:  c.queryTimeout,
 		maxNegTTL:     c.maxNegTTL,
+		resolveBudget: c.resolveBudget,
 		inflight:      make(map[string]*inflightCall),
 	}
 }
@@ -236,6 +239,17 @@ var errBogusAnswer = errors.New("recursive: dnssec bogus")
 
 // Resolve returns a cached or freshly-iterated entry for (name, t).
 func (r *recursive) Resolve(ctx context.Context, name wire.Name, t rrtype.Type) (Entry, error) {
+	if r.resolveBudget > 0 {
+		var cancel context.CancelFunc
+		ctx, cancel = context.WithTimeout(ctx, r.resolveBudget)
+		defer cancel()
+	}
+	// Per-Resolve in-progress NS-resolution set. Recursive NS lookups
+	// (serversFromReferral) check this set before recursing so an
+	// adversarial graph where ns.a.example needs ns.b.example which
+	// needs ns.a.example cannot loop indefinitely under the
+	// (depth × iterations × budget) ceiling.
+	ctx = withNSInProgress(ctx)
 	entry, err := r.resolveDepthFollow(ctx, name, t, 0, 0, nil)
 	if err != nil {
 		return Entry{}, err
@@ -515,22 +529,58 @@ func (r *recursive) serversFromReferral(ctx context.Context, resp wire.Message, 
 		return glued
 	}
 	var out []netip.AddrPort
+	nsSet := nsInProgress(ctx)
 	for _, ns := range ungluedNS {
-		entry, err := r.resolveDepth(ctx, ns, rrtype.A, depth+1)
-		if err != nil {
-			continue
-		}
-		for _, rec := range entry.Answer {
-			if rec.Type() == rrtype.A {
-				a, ok := wire.RDataAs[rdata.A](rec)
-				if !ok {
-					continue
-				}
-				out = append(out, netip.AddrPortFrom(a.Addr(), 53))
+		nsKey := nameKey(ns)
+		if nsSet != nil {
+			if _, busy := nsSet[nsKey]; busy {
+				continue // already resolving this NS up-stack — would cycle
 			}
+			nsSet[nsKey] = struct{}{}
+		}
+		// Resolve A first; on networks without v4 (or zones whose NS
+		// targets only have AAAA glue under their own zone), fall back
+		// to AAAA so we still have somewhere to send the next query.
+		if a4Entry, err := r.resolveDepth(ctx, ns, rrtype.A, depth+1); err == nil {
+			for _, rec := range a4Entry.Answer {
+				if a, ok := wire.RDataAs[rdata.A](rec); ok {
+					out = append(out, netip.AddrPortFrom(a.Addr(), 53))
+				}
+			}
+		}
+		if a6Entry, err := r.resolveDepth(ctx, ns, rrtype.AAAA, depth+1); err == nil {
+			for _, rec := range a6Entry.Answer {
+				if aaaa, ok := wire.RDataAs[rdata.AAAA](rec); ok {
+					out = append(out, netip.AddrPortFrom(aaaa.Addr(), 53))
+				}
+			}
+		}
+		if nsSet != nil {
+			delete(nsSet, nsKey)
 		}
 	}
 	return out
+}
+
+type nsInProgressKey struct{}
+
+// withNSInProgress attaches a fresh per-Resolve set to ctx so nested
+// NS-resolution recursion can detect cycles. Uses a plain map (not
+// sync.Map) because all access is on the single Resolve goroutine —
+// the recursive walker is not concurrent within a single Resolve
+// call.
+func withNSInProgress(ctx context.Context) context.Context {
+	if nsInProgress(ctx) != nil {
+		return ctx
+	}
+	return context.WithValue(ctx, nsInProgressKey{}, make(map[string]struct{}))
+}
+
+func nsInProgress(ctx context.Context) map[string]struct{} {
+	if v, ok := ctx.Value(nsInProgressKey{}).(map[string]struct{}); ok {
+		return v
+	}
+	return nil
 }
 
 // referralZone returns the owner name of the NS RRset in resp's
