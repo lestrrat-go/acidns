@@ -37,7 +37,7 @@ func mkQuery(t *testing.T, name string, rt rrtype.Type) wire.Message {
 func TestUDPServerEcho(t *testing.T) {
 	t.Parallel()
 
-	h := acidns.HandlerFunc(func(ctx context.Context, w acidns.ResponseWriter, q wire.Message) {
+	h := acidns.HandlerFunc(func(_ context.Context, w acidns.ResponseWriter, q wire.Message) {
 		ans := wire.NewRecord(q.Questions()[0].Name(), time.Minute,
 			rdata.NewA(netip.MustParseAddr("203.0.113.77")))
 		resp, _ := wire.NewBuilder().
@@ -84,7 +84,7 @@ func TestUDPServerTruncation(t *testing.T) {
 
 	// Build a response so large it can't fit in the default 512-byte UDP
 	// limit: 50 long TXT records.
-	h := acidns.HandlerFunc(func(ctx context.Context, w acidns.ResponseWriter, q wire.Message) {
+	h := acidns.HandlerFunc(func(_ context.Context, w acidns.ResponseWriter, q wire.Message) {
 		b := wire.NewBuilder().
 			ID(q.ID()).
 			Response(true).
@@ -121,7 +121,7 @@ func TestUDPServerTruncation(t *testing.T) {
 func TestUDPServerEDNSPayloadSize(t *testing.T) {
 	t.Parallel()
 
-	h := acidns.HandlerFunc(func(ctx context.Context, w acidns.ResponseWriter, q wire.Message) {
+	h := acidns.HandlerFunc(func(_ context.Context, w acidns.ResponseWriter, q wire.Message) {
 		b := wire.NewBuilder().
 			ID(q.ID()).
 			Response(true).

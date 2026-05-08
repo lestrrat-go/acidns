@@ -84,7 +84,7 @@ func relativise(n, origin wire.Name) string {
 	return full
 }
 
-func formatRDataPresentation(rd rdata.RData, origin wire.Name) (string, error) {
+func formatRDataPresentation(rd rdata.RData, _ wire.Name) (string, error) {
 	switch rd.Type() {
 	case rrtype.A:
 		return rd.(rdata.A).Addr().String(), nil

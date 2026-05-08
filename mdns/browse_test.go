@@ -88,7 +88,7 @@ func (f *fakePacketConn) ReadFrom(p []byte) (int, net.Addr, error) {
 	}
 }
 
-func (f *fakePacketConn) WriteTo(p []byte, addr net.Addr) (int, error) {
+func (f *fakePacketConn) WriteTo(p []byte, _ net.Addr) (int, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	if f.writeErr != nil {
@@ -140,7 +140,7 @@ func (f *fakePacketConn) SetReadDeadline(t time.Time) error {
 	return nil
 }
 
-func (f *fakePacketConn) SetWriteDeadline(t time.Time) error { return nil }
+func (f *fakePacketConn) SetWriteDeadline(_ time.Time) error { return nil }
 
 type timeoutError struct{}
 

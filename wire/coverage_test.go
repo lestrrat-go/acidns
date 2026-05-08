@@ -481,7 +481,7 @@ func TestUnmarshalDoubleOPTRejected(t *testing.T) {
 // findOPTLen finds the length of the trailing OPT pseudo-RR in a serialised
 // query that contains exactly one question and one OPT in additionals.
 // OPT wire layout: NAME(1) + TYPE(2) + CLASS(2) + TTL(4) + RDLEN(2) + RDATA.
-func findOPTLen(buf []byte) int {
+func findOPTLen(_ []byte) int {
 	// Walk backward: last record is OPT. The OPT NAME is always the root
 	// (single 0x00 byte), so the OPT is exactly 11 + rdlen bytes.
 	// rdlen is the two bytes 9 from the end of the record (i.e. positions

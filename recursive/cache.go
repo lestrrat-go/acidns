@@ -69,16 +69,16 @@ func key(n wire.Name, t rrtype.Type) string {
 // minTTL returns the smallest TTL across the supplied record sets, or the
 // provided floor if all sets are empty.
 func minTTL(floor time.Duration, sets ...[]wire.Record) time.Duration {
-	min := time.Duration(-1)
+	smallest := time.Duration(-1)
 	for _, set := range sets {
 		for _, r := range set {
-			if min < 0 || r.TTL() < min {
-				min = r.TTL()
+			if smallest < 0 || r.TTL() < smallest {
+				smallest = r.TTL()
 			}
 		}
 	}
-	if min < 0 {
+	if smallest < 0 {
 		return floor
 	}
-	return min
+	return smallest
 }

@@ -99,7 +99,7 @@ func TestDoHGet(t *testing.T) {
 
 func TestDoHHTTPError(t *testing.T) {
 	t.Parallel()
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		http.Error(w, "nope", http.StatusInternalServerError)
 	}))
 	t.Cleanup(srv.Close)
@@ -117,7 +117,7 @@ func TestDoHHTTPError(t *testing.T) {
 
 func TestDoHContextCancel(t *testing.T) {
 	t.Parallel()
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	srv := httptest.NewServer(http.HandlerFunc(func(_ http.ResponseWriter, r *http.Request) {
 		select {
 		case <-time.After(2 * time.Second):
 		case <-r.Context().Done():

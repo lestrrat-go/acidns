@@ -82,7 +82,7 @@ func TestExchangerEndToEnd(t *testing.T) {
 
 // buildFakeResponse decrypts the encrypted query, builds a DNS response
 // with a fixed A record, and returns the encrypted DNSCrypt packet.
-func buildFakeResponse(query []byte, cert *dnscrypt.Cert, resolverSK [32]byte) ([]byte, error) {
+func buildFakeResponse(query []byte, _ *dnscrypt.Cert, resolverSK [32]byte) ([]byte, error) {
 	var clientPK [32]byte
 	copy(clientPK[:], query[8:40])
 	var clientNonce [12]byte

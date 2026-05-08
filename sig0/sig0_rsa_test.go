@@ -46,7 +46,7 @@ func TestVerifyUnsupportedAlgorithm(t *testing.T) {
 	msg := mkMessage(t)
 	signer := wire.MustParseName("s")
 	signed, err := sig0.Sign(msg, signer, rdata.DNSSECAlgorithm(99), 1,
-		func(p []byte) ([]byte, error) { return []byte{1, 2, 3}, nil },
+		func(_ []byte) ([]byte, error) { return []byte{1, 2, 3}, nil },
 		time.Now(), time.Hour)
 	require.NoError(t, err)
 	_, err = sig0.Verify(signed, rdata.DNSSECAlgorithm(99), nil, signer, time.Now())

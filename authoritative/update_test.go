@@ -44,13 +44,13 @@ func TestUpdateAddRRset(t *testing.T) {
 	a, addr := startUpdatable(t)
 
 	// Add new record at "blog.example.com".
-	new := wire.NewRecord(wire.MustParseName("blog.example.com"), 60*time.Second,
+	added := wire.NewRecord(wire.MustParseName("blog.example.com"), 60*time.Second,
 		rdata.NewA(netip.MustParseAddr("198.51.100.5")))
 
 	ex, err := acidns.NewUDPExchanger(addr)
 	require.NoError(t, err)
 	msg, err := update.NewBuilder(wire.MustParseName("example.com")).
-		AddRRset(new).
+		AddRRset(added).
 		Build()
 	require.NoError(t, err)
 	resp, err := ex.Exchange(t.Context(), msg)

@@ -45,6 +45,6 @@ func (e *udpTCPFallback) Exchange(ctx context.Context, q wire.Message) (wire.Mes
 // New time, matching the pattern used elsewhere in the toolkit.
 type errExchanger struct{ err error }
 
-func (e errExchanger) Exchange(ctx context.Context, q wire.Message) (wire.Message, error) {
+func (e errExchanger) Exchange(_ context.Context, _ wire.Message) (wire.Message, error) {
 	return nil, e.err
 }

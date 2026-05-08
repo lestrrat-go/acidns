@@ -237,7 +237,7 @@ func TestExchangeAcceptsZeroID(t *testing.T) {
 // TestExchangeMalformedResponse covers the unmarshal-failure branch.
 func TestExchangeMalformedResponse(t *testing.T) {
 	t.Parallel()
-	addr, cfg := startCustomDoQ(t, func(t *testing.T, req wire.Message, stream *quic.Stream) {
+	addr, cfg := startCustomDoQ(t, func(_ *testing.T, _ wire.Message, stream *quic.Stream) {
 		// Length-prefixed garbage that is not a parseable DNS message.
 		writeFrame(stream, []byte{0x00, 0x01, 0x02})
 	})
@@ -257,7 +257,7 @@ func TestExchangeMalformedResponse(t *testing.T) {
 // server advertises a length but FINs before sending the bytes.
 func TestExchangeReadBodyTruncated(t *testing.T) {
 	t.Parallel()
-	addr, cfg := startCustomDoQ(t, func(t *testing.T, req wire.Message, stream *quic.Stream) {
+	addr, cfg := startCustomDoQ(t, func(_ *testing.T, _ wire.Message, stream *quic.Stream) {
 		// Promise 100 bytes, send none, then close.
 		var hdr [2]byte
 		binary.BigEndian.PutUint16(hdr[:], 100)
@@ -280,7 +280,7 @@ func TestExchangeReadBodyTruncated(t *testing.T) {
 // server FINs without writing any bytes.
 func TestExchangeReadLengthEOF(t *testing.T) {
 	t.Parallel()
-	addr, cfg := startCustomDoQ(t, func(t *testing.T, req wire.Message, stream *quic.Stream) {
+	addr, cfg := startCustomDoQ(t, func(_ *testing.T, _ wire.Message, stream *quic.Stream) {
 		_ = stream.Close()
 	})
 
@@ -391,7 +391,7 @@ func TestStreamContextCancelDuringNext(t *testing.T) {
 	// Server sends nothing — it just keeps the stream open until the
 	// connection is torn down by the client's Close().
 	hold := make(chan struct{})
-	addr, cfg := startCustomDoQ(t, func(t *testing.T, req wire.Message, stream *quic.Stream) {
+	addr, cfg := startCustomDoQ(t, func(_ *testing.T, _ wire.Message, _ *quic.Stream) {
 		<-hold
 	})
 	t.Cleanup(func() { close(hold) })

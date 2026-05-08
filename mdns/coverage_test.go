@@ -24,7 +24,7 @@ type errorTransport struct {
 	failOn  int // 0 = always; >0 = succeed first N-1 then fail
 }
 
-func (e *errorTransport) Send(m wire.Message) error {
+func (e *errorTransport) Send(_ wire.Message) error {
 	e.mu.Lock()
 	defer e.mu.Unlock()
 	e.sentN++
@@ -157,14 +157,14 @@ type recvErrTransport struct {
 	recvE error
 }
 
-func (r *recvErrTransport) Send(m wire.Message) error {
+func (r *recvErrTransport) Send(_ wire.Message) error {
 	r.mu.Lock()
 	r.sent++
 	r.mu.Unlock()
 	return nil
 }
 
-func (r *recvErrTransport) Recv(ctx context.Context) (wire.Message, error) {
+func (r *recvErrTransport) Recv(_ context.Context) (wire.Message, error) {
 	return nil, r.recvE
 }
 

@@ -43,7 +43,7 @@ func TestNewNilHTTPClient(t *testing.T) {
 // TestExchangeBadContentType covers the unexpected-content-type branch.
 func TestExchangeBadContentType(t *testing.T) {
 	t.Parallel()
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Content-Type", "text/plain")
 		_, _ = w.Write([]byte("hello"))
 	}))
@@ -61,7 +61,7 @@ func TestExchangeBadContentType(t *testing.T) {
 // header, the client should still attempt to decode the body.
 func TestExchangeEmptyContentType(t *testing.T) {
 	t.Parallel()
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		// Force the default Content-Type detection to be suppressed by
 		// sending zero bytes with no header — net/http will not set
 		// Content-Type when the body is empty and no Write happens.
@@ -83,7 +83,7 @@ func TestExchangeEmptyContentType(t *testing.T) {
 // well-formed Content-Type but garbage body bytes.
 func TestExchangeUnmarshalError(t *testing.T) {
 	t.Parallel()
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Content-Type", "application/dns-message")
 		_, _ = w.Write([]byte{0x00, 0x01}) // truncated DNS header
 	}))
@@ -101,7 +101,7 @@ func TestExchangeUnmarshalError(t *testing.T) {
 // server return a valid response with a different transaction ID.
 func TestExchangeIDMismatch(t *testing.T) {
 	t.Parallel()
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		// Build a response that is well-formed but uses a different ID.
 		resp, err := wire.NewBuilder().
 			ID(0xbeef). // does not match the query (0x4567)
@@ -134,7 +134,7 @@ func TestExchangeIDMismatch(t *testing.T) {
 // at a closed listener.
 func TestExchangeRequestError(t *testing.T) {
 	t.Parallel()
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {}))
+	srv := httptest.NewServer(http.HandlerFunc(func(_ http.ResponseWriter, _ *http.Request) {}))
 	url := srv.URL
 	srv.Close() // close immediately so subsequent dial fails.
 

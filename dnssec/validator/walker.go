@@ -693,11 +693,11 @@ func (w *walker) verifyRRsetWithKeys(set []wire.Record, sigs []rdata.RRSIG, keys
 			if dnssec.KeyTag(key) != sig.KeyTag() || key.Algorithm() != sig.Algorithm() {
 				continue
 			}
-			if err := dnssec.Verify(set, sig, key); err == nil {
+			err := dnssec.Verify(set, sig, key)
+			if err == nil {
 				return sig, key, nil
-			} else {
-				lastErr = err
 			}
+			lastErr = err
 		}
 	}
 	if lastErr == nil {
@@ -707,14 +707,14 @@ func (w *walker) verifyRRsetWithKeys(set []wire.Record, sigs []rdata.RRSIG, keys
 }
 
 // indeterminate builds an Answer with Result=Indeterminate.
-func (w *walker) indeterminate(qname wire.Name, qtype rrtype.Type, err error, note string) Answer {
+func (w *walker) indeterminate(_ wire.Name, _ rrtype.Type, err error, note string) Answer {
 	if err == nil && note != "" {
 		err = fmt.Errorf("validator: %s", note)
 	}
 	return &answer{result: Indeterminate, reason: err}
 }
 
-func (w *walker) bogus(qname wire.Name, qtype rrtype.Type, chain []ChainStep, err error) (Answer, error) {
+func (w *walker) bogus(_ wire.Name, _ rrtype.Type, chain []ChainStep, err error) (Answer, error) {
 	a := &answer{result: Bogus, chain: chain, reason: err}
 	if w.bogusPolicy == BogusReturnAnswer {
 		return a, nil

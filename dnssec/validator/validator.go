@@ -121,11 +121,11 @@ func (v *Validator) ValidateRRset(set []wire.Record, rrsigs []rdata.RRSIG, keys 
 				sig.Algorithm(), sig.KeyTag())
 			continue
 		}
-		if err := dnssec.Verify(set, sig, key); err == nil {
+		err := dnssec.Verify(set, sig, key)
+		if err == nil {
 			return Secure, sig, nil
-		} else {
-			lastErr = err
 		}
+		lastErr = err
 	}
 	if v.opts.BogusPolicy == BogusReturnAnswer {
 		return Bogus, rdata.RRSIG{}, lastErr

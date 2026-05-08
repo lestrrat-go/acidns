@@ -278,18 +278,18 @@ func negativeTTLFromSOA(authority []wire.Record, maxNeg time.Duration) (time.Dur
 }
 
 func minTTL(sets ...[]wire.Record) time.Duration {
-	min := time.Duration(-1)
+	smallest := time.Duration(-1)
 	for _, s := range sets {
 		for _, r := range s {
-			if min < 0 || r.TTL() < min {
-				min = r.TTL()
+			if smallest < 0 || r.TTL() < smallest {
+				smallest = r.TTL()
 			}
 		}
 	}
-	if min < 0 {
+	if smallest < 0 {
 		return 0
 	}
-	return min
+	return smallest
 }
 
 func clamp(v, lo, hi time.Duration) time.Duration {

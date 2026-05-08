@@ -622,11 +622,11 @@ func negativeCacheTTL(authority []wire.Record) time.Duration {
 		if !ok {
 			continue
 		}
-		min := soa.Minimum()
-		if r.TTL() < min {
+		minTTL := soa.Minimum()
+		if r.TTL() < minTTL {
 			return r.TTL()
 		}
-		return min
+		return minTTL
 	}
 	return 0
 }

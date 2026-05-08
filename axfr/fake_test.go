@@ -25,7 +25,7 @@ type fakeStream struct {
 	closed bool
 }
 
-func (f *fakeStream) Next(ctx context.Context) (wire.Message, error) {
+func (f *fakeStream) Next(_ context.Context) (wire.Message, error) {
 	if f.idx >= len(f.msgs) {
 		return nil, io.EOF
 	}
@@ -49,7 +49,7 @@ type fakeStreamEx struct {
 	called bool
 }
 
-func (f *fakeStreamEx) Stream(ctx context.Context, q wire.Message) (acidns.MessageStream, error) {
+func (f *fakeStreamEx) Stream(_ context.Context, _ wire.Message) (acidns.MessageStream, error) {
 	f.called = true
 	if f.err != nil {
 		return nil, f.err

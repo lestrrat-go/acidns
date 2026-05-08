@@ -146,7 +146,7 @@ func (p *parser) handleLine(fields []fieldTok, leadingWS bool) error {
 	return nil
 }
 
-func ownerOrPrev(tok *fieldTok, prev wire.Name) string {
+func ownerOrPrev(tok *fieldTok, _ wire.Name) string {
 	if tok == nil {
 		return ""
 	}
