@@ -1,13 +1,3 @@
-// Package forward implements a caching DNS forwarder. A forward.Handler
-// answers queries by relaying them to a configured upstream Exchanger
-// (UDP-with-TCP-fallback, DoT, or any custom transport) and caches both
-// positive and negative responses honoring per-record TTLs and RFC 2308
-// SOA MINIMUM, with a hard cap on negative-cache lifetime.
-//
-// The forwarder is a Handler — drop it into a UDP and a TCP listener
-// from the acidns root package to expose it on the network. It does not
-// implement DNSSEC validation; if the upstream sets AD on the response,
-// AD is propagated, otherwise it is cleared.
 package forward
 
 import (
