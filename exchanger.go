@@ -16,6 +16,10 @@ import (
 // Exchanger performs a single DNS request/response exchange. Implementations
 // MUST honor the context deadline and cancellation. They MUST NOT retry; the
 // caller's resolver is responsible for retry policy.
+//
+// Implementations MUST be safe for concurrent use by multiple goroutines:
+// the resolver dispatches A and AAAA queries in parallel and shares one
+// Exchanger across the whole process.
 type Exchanger interface {
 	Exchange(ctx context.Context, q wire.Message) (wire.Message, error)
 }
@@ -29,6 +33,10 @@ type Exchanger interface {
 // connection-oriented framed transports (TCP, DoT, DoQ) do. Implementations
 // MUST honor the context deadline and cancellation; closing the returned
 // stream MUST close the underlying connection.
+//
+// StreamExchanger.Stream itself MUST be safe for concurrent calls; the
+// returned MessageStream is owned by a single caller and is NOT required
+// to be safe for concurrent use.
 type StreamExchanger interface {
 	Stream(ctx context.Context, q wire.Message) (MessageStream, error)
 }
@@ -37,6 +45,9 @@ type StreamExchanger interface {
 // until the next message arrives; it returns io.EOF when the peer cleanly
 // closes the stream. Callers MUST Close the stream when done — including on
 // error and after EOF — to release the underlying connection.
+//
+// A MessageStream is owned by a single goroutine. Implementations are NOT
+// required to be safe for concurrent use.
 type MessageStream interface {
 	Next(ctx context.Context) (wire.Message, error)
 	Close() error

@@ -35,6 +35,10 @@ var ErrNoResolver = errors.New("dnsclient: no exchanger or servers configured")
 // Implementations are free to satisfy additional capability interfaces such
 // as SearchLister; helpers type-assert for those capabilities and fall back
 // gracefully when they are absent.
+//
+// Resolver implementations MUST be safe for concurrent use by multiple
+// goroutines. The resolver returned by NewResolver and SystemResolver
+// satisfies this contract.
 type Resolver interface {
 	// Resolve performs a single query and returns the matched records along
 	// with the raw response. A non-NoError RCODE is returned as a typed

@@ -5,6 +5,9 @@ package wire
 //
 // Errors accumulated by the Builder (e.g. mismatched section sizes after
 // future EDNS handling is added) are surfaced from Build.
+//
+// A Builder is owned by a single goroutine and is NOT safe for concurrent
+// use. The Message returned by Build is immutable and may be shared.
 type Builder struct {
 	id          uint16
 	flags       Flags

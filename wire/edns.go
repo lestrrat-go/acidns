@@ -135,7 +135,9 @@ func (e *edns) Version() uint8        { return e.version }
 func (e *edns) DO() bool              { return e.do }
 func (e *edns) Options() []EDNSOption { return e.opts }
 
-// EDNSBuilder constructs an EDNS payload.
+// EDNSBuilder constructs an EDNS payload. Like Builder, an EDNSBuilder
+// is owned by a single goroutine and is NOT safe for concurrent use; the
+// EDNS value returned by Build is immutable and may be shared.
 type EDNSBuilder interface {
 	UDPSize(uint16) EDNSBuilder
 	ExtendedRCODE(uint8) EDNSBuilder

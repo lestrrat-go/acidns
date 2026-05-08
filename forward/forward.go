@@ -30,7 +30,10 @@ import (
 // configured.
 var ErrNoUpstream = errors.New("forward: no upstream configured")
 
-// Handler is the caching forwarder.
+// Handler is the caching forwarder. It is safe for concurrent use by
+// multiple goroutines: ServeDNS serialises cache reads/writes internally
+// and the configured upstream Exchanger is required to be concurrency-safe
+// (see acidns.Exchanger).
 type Handler struct {
 	cfg   config
 	cache *cache
