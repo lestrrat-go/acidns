@@ -4,6 +4,7 @@ import (
 	"context"
 	"net/netip"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -67,13 +68,18 @@ func TestUpdatePolicyReceivesRawRequest(t *testing.T) {
 	z, err := zonefile.Parse(strings.NewReader(updateZone))
 	require.NoError(t, err)
 
-	var rawSeen []byte
+	var (
+		rawMu   sync.Mutex
+		rawSeen []byte
+	)
 	a, err := authoritative.New(
 		authoritative.WithZone(z),
 		authoritative.WithUpdatePolicy(func(ctx context.Context, _ acidns.ResponseWriter, _ wire.Message) bool {
 			b, ok := acidns.RawRequest(ctx)
 			if ok {
+				rawMu.Lock()
 				rawSeen = append([]byte(nil), b...)
+				rawMu.Unlock()
 			}
 			return true
 		}),
@@ -100,6 +106,8 @@ func TestUpdatePolicyReceivesRawRequest(t *testing.T) {
 	_, err = ex.Exchange(ctx, msg)
 	require.NoError(t, err)
 
+	rawMu.Lock()
+	defer rawMu.Unlock()
 	require.NotEmpty(t, rawSeen, "policy must observe raw request bytes via RawRequest()")
 	require.Equal(t, expectedBytes, rawSeen,
 		"raw bytes received by the policy must equal the wire bytes the client sent")

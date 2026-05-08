@@ -1,6 +1,7 @@
 package validator
 
 import (
+	"sync"
 	"testing"
 	"time"
 
@@ -59,6 +60,33 @@ func TestNTAStoreAddRefreshesExpiry(t *testing.T) {
 	// Past the renewed expiry too.
 	advance = 100 * time.Minute
 	require.False(t, s.Covers(wire.MustParseName("denic.de")))
+}
+
+// TestNTAStoreCoversConcurrent exercises the RLock fast path: many
+// readers calling Covers in parallel should not serialise on a write
+// lock when no entries have expired. The race detector also verifies
+// that the read-then-upgrade pattern does not corrupt the map.
+func TestNTAStoreCoversConcurrent(t *testing.T) {
+	t.Parallel()
+	s := NewNTAStore()
+	for i := range 16 {
+		// Each entry far from expiring.
+		_ = s.Add(wire.MustParseName("zone"+string(rune('a'+i))+".test"), time.Hour)
+	}
+
+	var wg sync.WaitGroup
+	const workers = 32
+	const queries = 1000
+	for range workers {
+		wg.Go(func() {
+			for range queries {
+				_ = s.Covers(wire.MustParseName("name.zonea.test"))
+				_ = s.Covers(wire.MustParseName("not-covered.example."))
+			}
+		})
+	}
+	wg.Wait()
+	require.Len(t, s.Names(), 16, "no entries should have been swept")
 }
 
 func TestNTAStoreClampsTTL(t *testing.T) {

@@ -90,41 +90,101 @@ func (s *NTAStore) Remove(n wire.Name) bool {
 // Names returns a snapshot of currently-active (unexpired) NTAs.
 func (s *NTAStore) Names() []wire.Name {
 	now := s.now()
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	s.sweepExpiredLocked(now)
+	s.mu.RLock()
+	hasExpired := s.hasExpiredLocked(now)
+	s.mu.RUnlock()
+	if hasExpired {
+		s.mu.Lock()
+		s.sweepExpiredLocked(now)
+		s.mu.Unlock()
+	}
+	s.mu.RLock()
+	defer s.mu.RUnlock()
 	out := make([]wire.Name, 0, len(s.set))
 	for _, e := range s.set {
-		out = append(out, e.name)
+		if e.expiresAt.After(now) {
+			out = append(out, e.name)
+		}
 	}
 	return out
 }
 
 // Covers reports whether n falls under any active NTA. Expired entries
 // are ignored (and lazily evicted). The empty store always reports false.
+//
+// The fast path holds only an RLock — under heavy DNSSEC validation
+// traffic this lets concurrent Covers callers run in parallel. The
+// store upgrades to a write lock only when an expired entry is observed
+// during the scan, which is rare in steady state.
 func (s *NTAStore) Covers(n wire.Name) bool {
 	if !n.IsValid() {
 		return false
 	}
 	now := s.now()
-	s.mu.Lock()
-	defer s.mu.Unlock()
+	s.mu.RLock()
 	if len(s.set) == 0 {
+		s.mu.RUnlock()
 		return false
 	}
-	s.sweepExpiredLocked(now)
+	matched, sawExpired := s.coverScanLocked(n, now)
+	s.mu.RUnlock()
+	if sawExpired {
+		s.mu.Lock()
+		s.sweepExpiredLocked(now)
+		s.mu.Unlock()
+	}
+	return matched
+}
+
+// coverScanLocked walks n's ancestor chain looking for an active match.
+// Returns (matched, sawExpired); sawExpired triggers a lazy sweep
+// after the read lock is released. Caller holds s.mu in any mode.
+func (s *NTAStore) coverScanLocked(n wire.Name, now time.Time) (bool, bool) {
+	matched := false
+	sawExpired := false
 	cur := n
 	for {
 		k := strings.ToLower(cur.String())
-		if _, ok := s.set[k]; ok {
-			return true
+		if e, ok := s.set[k]; ok {
+			if e.expiresAt.After(now) {
+				matched = true
+				break
+			}
+			sawExpired = true
 		}
 		parent, hasParent := cur.Parent()
 		if !hasParent || cur.Equal(parent) {
-			return false
+			break
 		}
 		cur = parent
 	}
+	if !sawExpired {
+		// Quick check for any other expired entries; bound work to a
+		// few entries so the read path stays cheap.
+		i := 0
+		for _, e := range s.set {
+			if !e.expiresAt.After(now) {
+				sawExpired = true
+				break
+			}
+			i++
+			if i >= 8 {
+				break
+			}
+		}
+	}
+	return matched, sawExpired
+}
+
+// hasExpiredLocked reports whether any entry has expired by now. Caller
+// holds s.mu in any mode.
+func (s *NTAStore) hasExpiredLocked(now time.Time) bool {
+	for _, e := range s.set {
+		if !e.expiresAt.After(now) {
+			return true
+		}
+	}
+	return false
 }
 
 // sweepExpiredLocked removes entries whose expiry is at or before now.
