@@ -65,7 +65,18 @@ func ReadFrame(r io.Reader) (wire.Message, error) {
 // setting an immediate connection deadline.
 func Exchange(ctx context.Context, conn net.Conn, q wire.Message, fallbackTimeout time.Duration) (wire.Message, error) {
 	defer func() { _ = conn.Close() }()
+	return ExchangeOnConn(ctx, conn, q, fallbackTimeout)
+}
 
+// ExchangeOnConn is like [Exchange] but does NOT close conn — callers
+// that maintain a persistent connection (TCP/DoT keep-alive, RFC 7766
+// pipelining) own the lifecycle and reuse the same conn across
+// exchanges. Cancellation of ctx aborts a pending I/O by setting an
+// immediate connection deadline; the conn is left open afterwards so a
+// subsequent exchange can reuse it (the watcher goroutine joins before
+// return so concurrent Exchange calls on the same conn cannot race on
+// SetDeadline).
+func ExchangeOnConn(ctx context.Context, conn net.Conn, q wire.Message, fallbackTimeout time.Duration) (wire.Message, error) {
 	if dl, ok := ctx.Deadline(); ok {
 		_ = conn.SetDeadline(dl)
 	} else if fallbackTimeout > 0 {

@@ -105,7 +105,7 @@ func (e *tcpKAExchanger) Exchange(ctx context.Context, q wire.Message) (wire.Mes
 		e.conn = c
 	}
 
-	resp, err := exchangeOverConn(ctx, e.conn, q, e.cfg.timeout)
+	resp, err := streamframe.ExchangeOnConn(ctx, e.conn, q, e.cfg.timeout)
 	if err != nil {
 		_ = e.conn.Close()
 		e.conn = nil
@@ -144,42 +144,6 @@ func (e *tcpKAExchanger) Close() error {
 		return err
 	}
 	return nil
-}
-
-// exchangeOverConn performs a single length-framed request/response
-// exchange on conn without closing the connection. Cancellation of ctx
-// aborts a pending I/O by setting an immediate deadline.
-func exchangeOverConn(ctx context.Context, conn net.Conn, q wire.Message, fallbackTimeout time.Duration) (wire.Message, error) {
-	if dl, ok := ctx.Deadline(); ok {
-		_ = conn.SetDeadline(dl)
-	} else if fallbackTimeout > 0 {
-		_ = conn.SetDeadline(time.Now().Add(fallbackTimeout))
-	}
-
-	stop := make(chan struct{})
-	defer close(stop)
-	go func() {
-		select {
-		case <-ctx.Done():
-			_ = conn.SetDeadline(time.Now())
-		case <-stop:
-		}
-	}()
-
-	if err := streamframe.WriteFrame(conn, q); err != nil {
-		return nil, err
-	}
-	resp, err := streamframe.ReadFrame(conn)
-	if err != nil {
-		if cerr := ctx.Err(); cerr != nil {
-			return nil, cerr
-		}
-		return nil, err
-	}
-	if resp.ID() != q.ID() {
-		return nil, fmt.Errorf("tcp-keepalive: id mismatch: got %#x, want %#x", resp.ID(), q.ID())
-	}
-	return resp, nil
 }
 
 // ensureKeepAliveOption returns q with an edns-tcp-keepalive option
