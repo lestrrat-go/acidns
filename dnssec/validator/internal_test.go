@@ -2,6 +2,7 @@ package validator
 
 import (
 	"context"
+	"net/netip"
 	"testing"
 	"time"
 
@@ -11,6 +12,58 @@ import (
 	"github.com/lestrrat-go/acidns/wire/rrtype"
 	"github.com/stretchr/testify/require"
 )
+
+// TestSigningAlgorithmsFromChain verifies that the parent DS algorithms
+// driving the RFC 6840 §5.11 algorithm-completeness check are pulled
+// from the deepest secured zone, and that an Insecure tail step is
+// skipped (Insecure subtrees do not constrain answer signing).
+func TestSigningAlgorithmsFromChain(t *testing.T) {
+	t.Parallel()
+	chain := []ChainStep{
+		chainStep{zone: wire.MustParseName("."), dss: []rdata.DS{
+			fakeDS(rdata.AlgRSASHA256),
+		}, res: Secure},
+		chainStep{zone: wire.MustParseName("example."), dss: []rdata.DS{
+			fakeDS(rdata.AlgECDSAP256SHA256),
+			fakeDS(rdata.AlgED25519),
+		}, res: Secure},
+		chainStep{zone: wire.MustParseName("sub.example."), res: Insecure},
+	}
+	algs := signingAlgorithms(chain)
+	require.Len(t, algs, 2)
+	_, ok := algs[rdata.AlgECDSAP256SHA256]
+	require.True(t, ok)
+	_, ok = algs[rdata.AlgED25519]
+	require.True(t, ok)
+	_, ok = algs[rdata.AlgRSASHA256]
+	require.False(t, ok, "deeper secure step shadows the root anchor's algs")
+}
+
+func fakeDS(alg rdata.DNSSECAlgorithm) rdata.DS {
+	return rdata.NewDS(0, alg, rdata.DigestSHA256, []byte{0})
+}
+
+// TestVerifyRRsetAllAlgsRejectsMissingAlgorithm constructs an answer
+// whose only RRSIG is from the weaker of two parent-DS algorithms; the
+// stripped algorithm causes algorithm-completeness to fail Bogus, even
+// though the surviving RRSIG would otherwise verify on its own.
+func TestVerifyRRsetAllAlgsRejectsMissingAlgorithm(t *testing.T) {
+	t.Parallel()
+	// Empty inputs short-circuit on the "no required algs" path; the
+	// missing-algorithm guard fires when requiredAlgs is non-empty and
+	// no sig of that algorithm produces a successful verification.
+	w := &walker{maxRRSIGsTry: 4, now: time.Now}
+	required := map[rdata.DNSSECAlgorithm]struct{}{
+		rdata.AlgRSASHA256:        {},
+		rdata.AlgECDSAP256SHA256:  {},
+	}
+	// One placeholder record so the "empty rrset" guard does not fire
+	// before we reach the algorithm-coverage check.
+	rec := wire.NewRecord(wire.MustParseName("example."), 0,
+		rdata.NewA(netip.MustParseAddr("192.0.2.1")))
+	err := w.verifyRRsetAllAlgs([]wire.Record{rec}, nil, nil, required)
+	require.ErrorIs(t, err, ErrAlgorithmIncomplete)
+}
 
 func TestNSEC3OwnerHashErrors(t *testing.T) {
 	t.Parallel()

@@ -73,16 +73,20 @@ func TestWalkerValidateNegativeNXDOMAINBogus(t *testing.T) {
 }
 
 // nxdomainForger wraps a Source so that for the configured (qname, qtype),
-// the response is rebuilt as RCODENXDomain with a freshly-synthesised
-// covering NSEC signed by the zone's keys. This drives validateNegative
-// through the secure NXDOMAIN branch.
+// the response is rebuilt as RCODENXDomain with freshly-synthesised
+// covering NSEC records signed by the zone's keys. RFC 4035 §5.4 requires
+// two proofs: one NSEC covers qname, and a second NSEC proves no
+// "*.<closest_encloser>" wildcard exists. wildOwner/wildNext supply the
+// wildcard-covering pair; owner/next supply the qname-covering pair.
 type nxdomainForger struct {
-	inner  validator.Source
-	zone   *signedZone
-	target wire.Name
-	qtype  rrtype.Type
-	owner  wire.Name
-	next   wire.Name
+	inner     validator.Source
+	zone      *signedZone
+	target    wire.Name
+	qtype     rrtype.Type
+	owner     wire.Name
+	next      wire.Name
+	wildOwner wire.Name
+	wildNext  wire.Name
 }
 
 func (s *nxdomainForger) Lookup(ctx context.Context, qname wire.Name, qtype rrtype.Type) (wire.Message, error) {
@@ -93,20 +97,30 @@ func (s *nxdomainForger) Lookup(ctx context.Context, qname wire.Name, qtype rrty
 	if !qname.Equal(s.target) || qtype != s.qtype {
 		return m, nil
 	}
-	// Build a covering NSEC at s.owner whose next field is s.next, signed
-	// by the leaf zone. The validator's NameCoveredBy check accepts this
-	// because s.owner < s.target < s.next in canonical order.
-	nsec := rdata.NewNSEC(s.next, []rrtype.Type{rrtype.A, rrtype.NSEC, rrtype.RRSIG})
-	rec := wire.NewRecord(s.owner, time.Hour, nsec)
-	sig := s.zone.signRRset([]wire.Record{rec})
-	return wire.NewBuilder().
+	// Covering NSEC for qname.
+	qnameNSEC := rdata.NewNSEC(s.next, []rrtype.Type{rrtype.A, rrtype.NSEC, rrtype.RRSIG})
+	qnameRec := wire.NewRecord(s.owner, time.Hour, qnameNSEC)
+	qnameSig := s.zone.signRRset([]wire.Record{qnameRec})
+
+	b := wire.NewBuilder().
 		ID(m.ID()).
 		Response(true).
 		RCODE(wire.RCODENXDomain).
 		Question(wire.NewQuestion(qname, qtype)).
-		Authority(rec).
-		Authority(wire.NewRecord(s.owner, time.Hour, sig)).
-		Build()
+		Authority(qnameRec).
+		Authority(wire.NewRecord(s.owner, time.Hour, qnameSig))
+
+	// Covering NSEC for the wildcard "*.<closest_encloser>". Required by
+	// RFC 4035 §5.4. If the test omits wildOwner/wildNext, the response
+	// is intentionally missing this proof — used to drive Bogus paths.
+	if s.wildOwner.IsValid() && s.wildNext.IsValid() {
+		wildNSEC := rdata.NewNSEC(s.wildNext, []rrtype.Type{rrtype.A, rrtype.NSEC, rrtype.RRSIG})
+		wildRec := wire.NewRecord(s.wildOwner, time.Hour, wildNSEC)
+		wildSig := s.zone.signRRset([]wire.Record{wildRec})
+		b = b.Authority(wildRec).
+			Authority(wire.NewRecord(s.wildOwner, time.Hour, wildSig))
+	}
+	return b.Build()
 }
 
 // findLeafZone digs into a fixtureSource for the deepest zone matching apex.
@@ -148,14 +162,22 @@ func TestWalkerValidateNegativeNXDOMAINSecure(t *testing.T) {
 	target := wire.MustParseName("sub.example.")
 	owner := wire.MustParseName("s.example.")
 	next := wire.MustParseName("tub.example.")
+	// Closest encloser is "example.", so the wildcard whose
+	// non-existence we must also prove is "*.example.". Canonical
+	// ordering: "example." < "*.example." < "s.example.", so an NSEC
+	// at "example." with next "s.example." covers the wildcard.
+	wildOwner := wire.MustParseName("example.")
+	wildNext := wire.MustParseName("s.example.")
 
 	wrapped := &nxdomainForger{
-		inner:  src,
-		zone:   leaf,
-		target: target,
-		qtype:  rrtype.AAAA,
-		owner:  owner,
-		next:   next,
+		inner:     src,
+		zone:      leaf,
+		target:    target,
+		qtype:     rrtype.AAAA,
+		owner:     owner,
+		next:      next,
+		wildOwner: wildOwner,
+		wildNext:  wildNext,
 	}
 
 	w, err := validator.NewWalker(wrapped,
@@ -172,6 +194,45 @@ func TestWalkerValidateNegativeNXDOMAINSecure(t *testing.T) {
 	}())
 	require.Equal(t, validator.Secure, ans.Result(), "reason: %v", ans.Reason())
 	require.Equal(t, wire.RCODENXDomain, ans.RCODE())
+}
+
+// TestWalkerValidateNegativeNXDOMAINMissingWildcardProof checks the
+// RFC 4035 §5.4 requirement that NXDOMAIN must also prove no wildcard
+// at the closest encloser exists. A forger that supplies only the
+// qname-covering NSEC (omitting the wildcard-covering NSEC) must be
+// classified Bogus — without this rule, a malicious authoritative could
+// suppress wildcard-synthesised answers and have NXDOMAIN validate as
+// Secure.
+func TestWalkerValidateNegativeNXDOMAINMissingWildcardProof(t *testing.T) {
+	t.Parallel()
+	now := time.Now().UTC().Truncate(time.Second)
+	src, _, anchor := buildChain(t, rdata.AlgECDSAP256SHA256, now)
+	leaf := findLeafZone(src, wire.MustParseName("sub.example."))
+	require.NotNil(t, leaf)
+
+	target := wire.MustParseName("sub.example.")
+	wrapped := &nxdomainForger{
+		inner:  src,
+		zone:   leaf,
+		target: target,
+		qtype:  rrtype.AAAA,
+		owner:  wire.MustParseName("s.example."),
+		next:   wire.MustParseName("tub.example."),
+		// wildOwner/wildNext intentionally omitted — only the
+		// qname-covering NSEC is supplied. Validator must reject.
+	}
+
+	w, err := validator.NewWalker(wrapped,
+		validator.WithAnchors(anchor),
+		validator.WithNow(func() time.Time { return now }),
+		validator.WithBogusPolicy(validator.BogusReturnAnswer),
+	)
+	require.NoError(t, err)
+	ans, err := w.Resolve(t.Context(), target, rrtype.AAAA)
+	require.NoError(t, err)
+	require.Equal(t, validator.Bogus, ans.Result(),
+		"NXDOMAIN with only qname-covering NSEC must be Bogus per RFC 4035 §5.4")
+	require.ErrorContains(t, ans.Reason(), "wildcard")
 }
 
 // nodataSigStripper wraps a Source so that the configured (qname, qtype)

@@ -111,3 +111,34 @@ func WildcardOf(encloser wire.Name) (wire.Name, error) {
 	}
 	return wire.NameFromLabels(labels...)
 }
+
+// LongestCommonAncestor returns the deepest name that is an ancestor of
+// (or equal to) both a and b. The root name covers everything, so this
+// always returns at least a valid root. Used by the NSEC NXDOMAIN proof
+// (RFC 4035 §5.4) to derive the closest encloser from a covering NSEC's
+// owner and next field.
+func LongestCommonAncestor(a, b wire.Name) wire.Name {
+	aL := collectLabels(a)
+	bL := collectLabels(b)
+	n := min(len(aL), len(bL))
+	matched := 0
+	for matched < n && bytes.Equal(aL[matched], bL[matched]) {
+		matched++
+	}
+	if matched == 0 {
+		return rootName()
+	}
+	parts := make([]string, 0, matched)
+	for i := matched - 1; i >= 0; i-- {
+		parts = append(parts, string(aL[i]))
+	}
+	out, err := wire.NameFromLabels(parts...)
+	if err != nil {
+		return rootName()
+	}
+	return out
+}
+
+func rootName() wire.Name {
+	return wire.RootName()
+}

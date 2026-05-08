@@ -209,7 +209,8 @@ func (w *walker) Resolve(ctx context.Context, qname wire.Name, qtype rrtype.Type
 		if len(sigs) == 0 {
 			return w.bogus(qname, qtype, chain, ErrUnsignedAnswer)
 		}
-		err := w.verifyRRsetWithKeys(matching, sigs, parentKeys)
+		requiredAlgs := signingAlgorithms(chain)
+		err := w.verifyRRsetAllAlgs(matching, sigs, parentKeys, requiredAlgs)
 		if err != nil {
 			return w.bogus(qname, qtype, chain, fmt.Errorf("validator: answer rrsig: %w", err))
 		}
@@ -498,12 +499,20 @@ func (w *walker) classifyDSViaNSEC3(candidate, parentZone wire.Name, parentKeys 
 }
 
 // validateNXDomain validates an NXDOMAIN response using NSEC OR NSEC3.
+// When the authority section carries NSEC records, the NSEC proof's
+// success or failure is authoritative — falling through to NSEC3 on
+// NSEC failure would mask a forged-but-incomplete NSEC NXDOMAIN proof
+// (RFC 4035 §5.4) behind a generic "no NSEC3 in authority" error.
 func (w *walker) validateNXDomain(qname, parentZone wire.Name, parentKeys []rdata.DNSKEY, msg wire.Message) error {
-	if err := w.validateNSECNXDomain(qname, parentKeys, msg); err == nil {
-		return nil
+	hasNSEC := len(allNSEC(msg.Authorities())) > 0
+	hasNSEC3 := len(recordsOfType3(msg.Authorities())) > 0
+	if hasNSEC {
+		return w.validateNSECNXDomain(qname, parentKeys, msg)
 	}
-	// Fall through to NSEC3.
-	return w.validateNSEC3NXDomain(qname, parentZone, parentKeys, msg)
+	if hasNSEC3 {
+		return w.validateNSEC3NXDomain(qname, parentZone, parentKeys, msg)
+	}
+	return fmt.Errorf("validator: NXDOMAIN proof: no NSEC or NSEC3 in authority")
 }
 
 // validateNSEC3NXDomain validates an NXDOMAIN response using NSEC3
@@ -546,15 +555,23 @@ func (w *walker) verifyNSEC3Set(nsec3RRs, authority []wire.Record, parentKeys []
 	return nil
 }
 
-// validateNSECNXDomain performs a minimal NSEC NXDOMAIN check: the
-// authority section must contain an NSEC record whose owner is a
-// predecessor of candidate and whose Next field is an ancestor strictly
-// above candidate (the "covering" NSEC). Closest-encloser proof for
-// wildcard-aware NXDOMAIN is RFC 5155 NSEC3 territory (task #2).
+// validateNSECNXDomain implements the RFC 4035 §5.4 NSEC NXDOMAIN proof.
+// Two NSEC records are required:
 //
-// For the chain walker this is invoked when an intermediate DS query
-// returns NXDOMAIN — a relatively rare edge case. We require the NSEC to
-// be signed by parentKeys.
+//  1. A "covering" NSEC for qname: owner < qname < next in canonical
+//     order (RFC 4034 §6.1), proving qname does not exist.
+//  2. A second NSEC that proves no wildcard at the closest encloser
+//     could have synthesised an answer — that is, an NSEC covering
+//     "*.<closest_encloser>". An NSEC whose owner is exactly the
+//     wildcard means the wildcard exists, in which case NXDOMAIN
+//     should not have been the response and we treat the proof as
+//     bogus.
+//
+// Without check (2) a malicious authoritative for a zone that has a
+// wildcard could suppress the wildcard answer and serve NXDOMAIN with a
+// single covering NSEC, having it validate as Secure. RFC 4035 §5.4
+// makes the wildcard-non-existence proof mandatory; earlier versions of
+// this function only enforced check (1).
 func (w *walker) validateNSECNXDomain(qname wire.Name, parentKeys []rdata.DNSKEY, msg wire.Message) error {
 	nsecRRs := allNSEC(msg.Authorities())
 	if len(nsecRRs) == 0 {
@@ -572,19 +589,57 @@ func (w *walker) validateNSECNXDomain(qname wire.Name, parentKeys []rdata.DNSKEY
 			return fmt.Errorf("NSEC rrsig: %w", err)
 		}
 	}
-	// Coverage check: at least one verified NSEC must "cover" qname (owner
-	// < qname < next). This is intentionally simplified pending NSEC3
-	// closest-encloser support.
+	// 1. Find a covering NSEC for qname and capture its bounds for the
+	//    closest-encloser derivation.
+	var (
+		coverOwner wire.Name
+		coverNext  wire.Name
+		covered    bool
+	)
 	for _, r := range nsecRRs {
 		nsec, ok := wire.RDataAs[rdata.NSEC](r)
 		if !ok {
 			continue
 		}
 		if validatorbb.NameCoveredBy(qname, r.Name(), nsec.NextDomainName()) {
+			coverOwner = r.Name()
+			coverNext = nsec.NextDomainName()
+			covered = true
+			break
+		}
+	}
+	if !covered {
+		return fmt.Errorf("no NSEC covers %s", qname)
+	}
+	// 2. Closest encloser is the deeper of LCA(qname, coverOwner) and
+	//    LCA(qname, coverNext). Both NSEC bounds bracket qname in
+	//    canonical order, so each common ancestor is itself an existing
+	//    name in the zone; the deeper one is the closest encloser.
+	encA := validatorbb.LongestCommonAncestor(qname, coverOwner)
+	encB := validatorbb.LongestCommonAncestor(qname, coverNext)
+	encloser := encA
+	if encB.NumLabels() > encloser.NumLabels() {
+		encloser = encB
+	}
+	wildcard, err := validatorbb.WildcardOf(encloser)
+	if err != nil {
+		return fmt.Errorf("validator: derive wildcard at %s: %w", encloser, err)
+	}
+	for _, r := range nsecRRs {
+		nsec, ok := wire.RDataAs[rdata.NSEC](r)
+		if !ok {
+			continue
+		}
+		if r.Name().Equal(wildcard) {
+			// The wildcard exists; NXDOMAIN should have been a wildcard
+			// expansion. Treat the proof as bogus.
+			return fmt.Errorf("validator: NSEC proves wildcard %s exists; NXDOMAIN bogus", wildcard)
+		}
+		if validatorbb.NameCoveredBy(wildcard, r.Name(), nsec.NextDomainName()) {
 			return nil
 		}
 	}
-	return fmt.Errorf("no NSEC covers %s", qname)
+	return fmt.Errorf("validator: no NSEC covers wildcard %s for closest encloser %s", wildcard, encloser)
 }
 
 // validateNoData returns Secure with empty records when a NoData answer is
@@ -669,6 +724,76 @@ func (w *walker) validateNegative(qname wire.Name, qtype rrtype.Type, parentKeys
 		rcode:   wire.RCODENXDomain,
 		chain:   chain,
 	}, nil
+}
+
+// signingAlgorithms returns the set of DNSSEC algorithms that the parent
+// zone signaled via its DS rrset for the deepest secured zone in chain.
+// RFC 6840 §5.11 requires every such algorithm to have a verifying RRSIG
+// over each signed RRset; without this rule an attacker who can strip a
+// stronger algorithm's RRSIGs effectively forces a downgrade to the
+// weakest algorithm the zone advertises.
+func signingAlgorithms(chain []ChainStep) map[rdata.DNSSECAlgorithm]struct{} {
+	algs := map[rdata.DNSSECAlgorithm]struct{}{}
+	for i := len(chain) - 1; i >= 0; i-- {
+		if chain[i].Result() != Secure {
+			continue
+		}
+		dss := chain[i].DSs()
+		if len(dss) == 0 {
+			continue
+		}
+		for _, ds := range dss {
+			algs[ds.Algorithm()] = struct{}{}
+		}
+		return algs
+	}
+	return algs
+}
+
+// verifyRRsetAllAlgs implements RFC 6840 §5.11 algorithm-completeness on
+// the answer rrset: for each algorithm in requiredAlgs, at least one
+// matching RRSIG in sigs must validly cover set under one of keys. When
+// requiredAlgs is empty (no DS algorithms tracked — typically the chain
+// is anchored directly without traversing a DS step) the function falls
+// back to "any RRSIG verifies" semantics.
+func (w *walker) verifyRRsetAllAlgs(set []wire.Record, sigs []rdata.RRSIG, keys []rdata.DNSKEY, requiredAlgs map[rdata.DNSSECAlgorithm]struct{}) error {
+	if len(requiredAlgs) == 0 {
+		return w.verifyRRsetWithKeys(set, sigs, keys)
+	}
+	if len(set) == 0 {
+		return fmt.Errorf("validator: empty rrset")
+	}
+	if len(sigs) > w.maxRRSIGsTry {
+		sigs = sigs[:w.maxRRSIGsTry]
+	}
+	now := w.now()
+	covered := map[rdata.DNSSECAlgorithm]struct{}{}
+	for _, sig := range sigs {
+		if _, need := requiredAlgs[sig.Algorithm()]; !need {
+			continue
+		}
+		if _, done := covered[sig.Algorithm()]; done {
+			continue
+		}
+		if !validatorbb.RRSIGValidNowWithSkew(sig, now, w.skew) {
+			continue
+		}
+		for _, key := range keys {
+			if dnssec.KeyTag(key) != sig.KeyTag() || key.Algorithm() != sig.Algorithm() {
+				continue
+			}
+			if err := dnssec.Verify(set, sig, key); err == nil {
+				covered[sig.Algorithm()] = struct{}{}
+				break
+			}
+		}
+	}
+	for alg := range requiredAlgs {
+		if _, ok := covered[alg]; !ok {
+			return fmt.Errorf("%w: alg %d not signed over answer", ErrAlgorithmIncomplete, alg)
+		}
+	}
+	return nil
 }
 
 // verifyRRsetWithKeys verifies set against any of sigs using any of keys.
