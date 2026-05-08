@@ -104,6 +104,7 @@ func containsALPN(list []string, want string) bool {
 }
 
 func (e *exchanger) Exchange(ctx context.Context, q wire.Message) (wire.Message, error) {
+	q = wire.PadEncrypted(q)
 	msg, err := wire.Marshal(q)
 	if err != nil {
 		return nil, fmt.Errorf("doq: marshal: %w", err)
@@ -168,6 +169,7 @@ func (e *exchanger) Exchange(ctx context.Context, q wire.Message) (wire.Message,
 // §4.4): one query, then a stream of responses on the same QUIC stream
 // until the server FINs the read side.
 func (e *exchanger) Stream(ctx context.Context, q wire.Message) (acidns.MessageStream, error) {
+	q = wire.PadEncrypted(q)
 	dialCtx := ctx
 	if _, ok := ctx.Deadline(); !ok && e.timeout > 0 {
 		var cancel context.CancelFunc

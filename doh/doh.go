@@ -84,6 +84,7 @@ func New(endpoint string, opts ...Option) (acidns.Exchanger, error) {
 }
 
 func (e *exchanger) Exchange(ctx context.Context, q wire.Message) (wire.Message, error) {
+	q = wire.PadEncrypted(q)
 	msg, err := wire.Marshal(q)
 	if err != nil {
 		return nil, fmt.Errorf("doh: marshal: %w", err)

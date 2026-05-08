@@ -85,6 +85,7 @@ func New(addr netip.AddrPort, opts ...Option) (acidns.Exchanger, error) {
 }
 
 func (e *exchanger) Exchange(ctx context.Context, q wire.Message) (wire.Message, error) {
+	q = wire.PadEncrypted(q)
 	d := tls.Dialer{Config: e.tlsConfig, NetDialer: &net.Dialer{}}
 	conn, err := d.DialContext(ctx, "tcp", e.addr.String())
 	if err != nil {
@@ -97,6 +98,7 @@ func (e *exchanger) Exchange(ctx context.Context, q wire.Message) (wire.Message,
 // from which the caller pulls responses. Implements XoT (RFC 9103) when
 // q is an AXFR/IXFR query.
 func (e *exchanger) Stream(ctx context.Context, q wire.Message) (acidns.MessageStream, error) {
+	q = wire.PadEncrypted(q)
 	d := tls.Dialer{Config: e.tlsConfig, NetDialer: &net.Dialer{}}
 	conn, err := d.DialContext(ctx, "tcp", e.addr.String())
 	if err != nil {
