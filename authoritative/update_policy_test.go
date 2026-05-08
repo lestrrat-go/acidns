@@ -4,6 +4,7 @@ import (
 	"context"
 	"net/netip"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -62,11 +63,11 @@ func TestUpdatePolicyAllowsExplicitOptIn(t *testing.T) {
 	z, err := zonefile.Parse(strings.NewReader(updateZone))
 	require.NoError(t, err)
 
-	called := false
+	var called atomic.Bool
 	a, err := authoritative.New(
 		authoritative.WithZone(z),
 		authoritative.WithUpdatePolicy(func(_ acidns.ResponseWriter, _ wire.Message) bool {
-			called = true
+			called.Store(true)
 			return true
 		}),
 	)
@@ -89,5 +90,5 @@ func TestUpdatePolicyAllowsExplicitOptIn(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, wire.RCODENoError, resp.Flags().RCODE(),
 		"policy returning true must admit the UPDATE")
-	require.True(t, called, "policy must be invoked")
+	require.True(t, called.Load(), "policy must be invoked")
 }
