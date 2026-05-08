@@ -22,3 +22,23 @@ func (e *HTTPStatusError) Error() string {
 	}
 	return fmt.Sprintf("doh: http %d: %s", e.StatusCode, e.Body)
 }
+
+// Class returns the HTTP status-code class — 1, 2, 3, 4, or 5 — so callers
+// can branch on "any 5xx" without remembering the exact code:
+//
+//	var hse *doh.HTTPStatusError
+//	if errors.As(err, &hse) && hse.Class() == 5 {
+//	    // upstream is unhealthy
+//	}
+func (e *HTTPStatusError) Class() int { return e.StatusCode / 100 }
+
+// Is reports whether target is an *HTTPStatusError with the same
+// StatusCode. This lets callers use errors.Is against pre-built
+// sentinels (e.g. &HTTPStatusError{StatusCode: 503}).
+func (e *HTTPStatusError) Is(target error) bool {
+	t, ok := target.(*HTTPStatusError)
+	if !ok {
+		return false
+	}
+	return e.StatusCode == t.StatusCode
+}

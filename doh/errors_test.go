@@ -35,4 +35,10 @@ func TestExchange_HTTPStatusError(t *testing.T) {
 	require.Equal(t, []byte("backend down"), hse.Body)
 	require.Contains(t, hse.Error(), "503")
 	require.Contains(t, hse.Error(), "backend down")
+	require.Equal(t, 5, hse.Class())
+
+	require.True(t, errors.Is(err, &doh.HTTPStatusError{StatusCode: 503}),
+		"errors.Is must match by exact StatusCode")
+	require.False(t, errors.Is(err, &doh.HTTPStatusError{StatusCode: 502}),
+		"errors.Is must not match a different StatusCode")
 }
