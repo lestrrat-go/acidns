@@ -38,6 +38,8 @@ const (
 	EDNSOptionCookie       uint16 = 10 // RFC 7873
 	EDNSOptionTCPKeepalive uint16 = 11 // RFC 7828
 	EDNSOptionPadding      uint16 = 12 // RFC 7830
+	EDNSOptionChain        uint16 = 13 // RFC 7901
+	EDNSOptionKeyTag       uint16 = 14 // RFC 8145
 	EDNSOptionExtendedDNS  uint16 = 15 // RFC 8914 — Extended DNS Errors
 )
 
