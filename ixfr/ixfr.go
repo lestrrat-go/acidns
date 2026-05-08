@@ -181,10 +181,11 @@ func (t *transfer) init(ctx context.Context, clientSerial uint32) error {
 	if err != nil {
 		return err
 	}
-	if rec1.Type() != rrtype.SOA {
+	soa1, ok := wire.RDataAs[rdata.SOA](rec1)
+	if !ok {
 		return errors.New("ixfr: stream must begin with SOA")
 	}
-	t.newSOA = rec1.RData().(rdata.SOA)
+	t.newSOA = soa1
 
 	rec2, err := t.reader.Read(ctx)
 	if err == io.EOF {
@@ -195,14 +196,13 @@ func (t *transfer) init(ctx context.Context, clientSerial uint32) error {
 		return err
 	}
 
-	if rec2.Type() != rrtype.SOA {
+	rec2SOA, ok := wire.RDataAs[rdata.SOA](rec2)
+	if !ok {
 		t.kind = KindAXFRFallback
 		t.reader.Push(rec1)
 		t.reader.Push(rec2)
 		return nil
 	}
-
-	rec2SOA := rec2.RData().(rdata.SOA)
 	if serialIsOlder(rec2SOA.Serial(), t.newSOA.Serial()) {
 		// Incremental: rec1=SOA_new (already captured), rec2=SOA_old of first sub-diff.
 		t.kind = KindIncremental
@@ -245,7 +245,7 @@ func (t *transfer) nextAXFR(ctx context.Context) (Event, error) {
 	if err != nil {
 		return nil, err
 	}
-	if rec.Type() == rrtype.SOA && rec.RData().(rdata.SOA).Serial() == t.newSOA.Serial() {
+	if soa, ok := wire.RDataAs[rdata.SOA](rec); ok && soa.Serial() == t.newSOA.Serial() {
 		if !t.axfrEmittedFirst {
 			t.axfrEmittedFirst = true
 		} else {
@@ -264,10 +264,11 @@ func (t *transfer) nextIncremental(ctx context.Context) (Event, error) {
 	if err != nil {
 		return nil, fmt.Errorf("ixfr: read sub-diff start: %w", err)
 	}
-	if soaOld.Type() != rrtype.SOA {
+	soaOldRD, ok := wire.RDataAs[rdata.SOA](soaOld)
+	if !ok {
 		return nil, errors.New("ixfr: expected SOA at sub-diff start")
 	}
-	soaOldSerial := soaOld.RData().(rdata.SOA).Serial()
+	soaOldSerial := soaOldRD.Serial()
 
 	if soaOldSerial == t.newSOA.Serial() {
 		// Closing bracket. Verify nothing follows.
@@ -294,7 +295,11 @@ func (t *transfer) nextIncremental(ctx context.Context) (Event, error) {
 		}
 		removed = append(removed, rec)
 	}
-	soaNewSerial := soaNew.RData().(rdata.SOA).Serial()
+	soaNewRD, ok := wire.RDataAs[rdata.SOA](soaNew)
+	if !ok {
+		return nil, errors.New("ixfr: expected SOA at sub-diff end")
+	}
+	soaNewSerial := soaNewRD.Serial()
 
 	var added []wire.Record
 	for {

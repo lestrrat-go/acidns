@@ -17,7 +17,6 @@ import (
 
 	"github.com/lestrrat-go/acidns/wire"
 	"github.com/lestrrat-go/acidns/wire/rdata"
-	"github.com/lestrrat-go/acidns/wire/rrtype"
 )
 
 // ErrParse is returned when a master file fails to parse.
@@ -40,8 +39,8 @@ func (z *zone) Origin() wire.Name      { return z.origin }
 func (z *zone) Records() []wire.Record { return z.records }
 func (z *zone) SOA() (rdata.SOA, wire.Record, bool) {
 	for _, r := range z.records {
-		if r.Type() == rrtype.SOA {
-			return r.RData().(rdata.SOA), r, true
+		if soa, ok := wire.RDataAs[rdata.SOA](r); ok {
+			return soa, r, true
 		}
 	}
 	return rdata.SOA{}, nil, false

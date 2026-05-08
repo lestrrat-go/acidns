@@ -111,10 +111,11 @@ func (t *transfer) init(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	if rec.Type() != rrtype.SOA {
+	soa, ok := wire.RDataAs[rdata.SOA](rec)
+	if !ok {
 		return errors.New("axfr: stream must begin with SOA")
 	}
-	t.newSOA = rec.RData().(rdata.SOA)
+	t.newSOA = soa
 	t.reader.Push(rec)
 	return nil
 }
@@ -127,7 +128,7 @@ func (t *transfer) Next(ctx context.Context) (RecordEvent, error) {
 	if err != nil {
 		return nil, err
 	}
-	if rec.Type() == rrtype.SOA && rec.RData().(rdata.SOA).Serial() == t.newSOA.Serial() {
+	if soa, ok := wire.RDataAs[rdata.SOA](rec); ok && soa.Serial() == t.newSOA.Serial() {
 		if !t.emittedFirstSOA {
 			t.emittedFirstSOA = true
 		} else {

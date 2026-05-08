@@ -409,8 +409,8 @@ func (z *zoneIndex) matchRRSet(recs []wire.Record, qtype rrtype.Type) (ans []wir
 	}
 	if qtype != rrtype.CNAME {
 		for _, r := range recs {
-			if r.Type() == rrtype.CNAME {
-				return []wire.Record{r}, r.RData().(rdata.CNAME).Target(), false
+			if c, ok := wire.RDataAs[rdata.CNAME](r); ok {
+				return []wire.Record{r}, c.Target(), false
 			}
 		}
 	}
@@ -501,8 +501,11 @@ func (z *zoneIndex) findDelegation(qname wire.Name) (wire.Name, []wire.Record) {
 func (z *zoneIndex) collectGlue(nsRecs []wire.Record) []wire.Record {
 	var glue []wire.Record
 	for _, ns := range nsRecs {
-		target := ns.RData().(rdata.NS).NSDName()
-		recs, ok := z.byName[nameKey(target)]
+		nsRD, ok := wire.RDataAs[rdata.NS](ns)
+		if !ok {
+			continue
+		}
+		recs, ok := z.byName[nameKey(nsRD.NSDName())]
 		if !ok {
 			continue
 		}
