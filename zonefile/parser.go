@@ -89,10 +89,11 @@ func (p *parser) handleLine(fields []fieldTok, leadingWS bool) error {
 	}
 
 	var ownerTok *fieldTok
+	lineNum := fields[0].line
 	if leadingWS {
 		// blank owner: re-use previous name
 		if !p.prevName.IsValid() {
-			return fmt.Errorf("line %d: blank owner with no preceding RR", fields[0].line)
+			return fmt.Errorf("line %d: blank owner with no preceding RR", lineNum)
 		}
 	} else {
 		ownerTok = &fields[0]
@@ -101,7 +102,7 @@ func (p *parser) handleLine(fields []fieldTok, leadingWS bool) error {
 
 	owner, err := p.resolveName(ownerOrPrev(ownerTok, p.prevName))
 	if err != nil {
-		return fmt.Errorf("line %d: %w", fields[0].line, err)
+		return fmt.Errorf("line %d: %w", lineNum, err)
 	}
 
 	// [TTL] [CLASS] TYPE RDATA   — TTL and CLASS are interchangeable in any
@@ -126,7 +127,7 @@ func (p *parser) handleLine(fields []fieldTok, leadingWS bool) error {
 		break
 	}
 	if len(fields) == 0 {
-		return fmt.Errorf("line %d: missing RR type", fields[0].line)
+		return fmt.Errorf("line %d: missing RR type", lineNum)
 	}
 	t, ok := rrtype.Parse(fields[0].text)
 	if !ok {
