@@ -117,7 +117,7 @@ func (e *exchanger) Exchange(ctx context.Context, q wire.Message) (wire.Message,
 	if err != nil {
 		return nil, fmt.Errorf("doq: dial %s: %w", e.addr, err)
 	}
-	defer conn.CloseWithError(0, "")
+	defer func() { _ = conn.CloseWithError(0, "") }()
 
 	stream, err := conn.OpenStreamSync(ctx)
 	if err != nil {

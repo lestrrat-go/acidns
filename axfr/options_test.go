@@ -35,7 +35,7 @@ func TestStartWithTimeoutAndNewSOA(t *testing.T) {
 		wire.MustParseName("example.com"),
 		axfr.WithTimeout(2*time.Second))
 	require.NoError(t, err)
-	defer xfer.Close()
+	defer func() { _ = xfer.Close() }()
 
 	soa := xfer.NewSOA()
 	require.NotNil(t, soa)

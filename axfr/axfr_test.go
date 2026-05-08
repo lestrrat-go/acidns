@@ -56,7 +56,7 @@ func TestTransferRoundTrip(t *testing.T) {
 	defer xcancel()
 	xfer, err := axfr.Start(xferCtx, newStreamEx(t, srv.Addr()), wire.MustParseName("example.com"))
 	require.NoError(t, err)
-	defer xfer.Close()
+	defer func() { _ = xfer.Close() }()
 
 	var records []wire.Record
 	for {
@@ -100,7 +100,7 @@ func TestTransferRefusedOutOfZone(t *testing.T) {
 	if err == nil {
 		// Some servers send a single SERVFAIL/REFUSED message — the recReader
 		// surfaces that as an error on the first Next call.
-		defer xfer.Close()
+		defer func() { _ = xfer.Close() }()
 		_, err = xfer.Next(t.Context())
 	}
 	require.Error(t, err)

@@ -22,7 +22,7 @@ import (
 
 func main() {
 	if err := run(os.Args[1:]); err != nil {
-		fmt.Fprintln(os.Stderr, "error:", err)
+		_, _ = fmt.Fprintln(os.Stderr, "error:", err)
 		os.Exit(1)
 	}
 }
@@ -54,7 +54,7 @@ func run(argv []string) error {
 	fs.StringVar(&o.tlsName, "tls-name", "", "TLS server name (for --tls when server is an IP)")
 	fs.BoolVar(&o.useSys, "system", false, "use /etc/resolv.conf for servers and search list")
 	fs.Usage = func() {
-		fmt.Fprintf(os.Stderr, "usage: acidig [options] [@server] <name> [type]\n\noptions:\n")
+		_, _ = fmt.Fprintf(os.Stderr, "usage: acidig [options] [@server] <name> [type]\n\noptions:\n")
 		fs.PrintDefaults()
 	}
 
@@ -188,37 +188,37 @@ func serverAddr(o opts, defaultPort int) (netip.AddrPort, error) {
 func render(w *os.File, name wire.Name, rt rrtype.Type, ans acidns.Answer, elapsed time.Duration, o opts) {
 	if o.short {
 		for _, rec := range ans.Records() {
-			fmt.Fprintln(w, formatRData(rec.RData()))
+			_, _ = fmt.Fprintln(w, formatRData(rec.RData()))
 		}
 		return
 	}
-	fmt.Fprintf(w, ";; QUESTION SECTION:\n;%s\t\tIN\t%s\n\n", name, rt)
+	_, _ = fmt.Fprintf(w, ";; QUESTION SECTION:\n;%s\t\tIN\t%s\n\n", name, rt)
 	if rcode := ans.RCODE(); rcode != wire.RCODENoError {
-		fmt.Fprintf(w, ";; ->>HEADER<<- rcode: %s\n", rcode)
+		_, _ = fmt.Fprintf(w, ";; ->>HEADER<<- rcode: %s\n", rcode)
 	}
 
 	if records := ans.Raw().Answers(); len(records) > 0 {
-		fmt.Fprintln(w, ";; ANSWER SECTION:")
+		_, _ = fmt.Fprintln(w, ";; ANSWER SECTION:")
 		for _, rec := range records {
-			fmt.Fprintln(w, formatRecord(rec))
+			_, _ = fmt.Fprintln(w, formatRecord(rec))
 		}
-		fmt.Fprintln(w)
+		_, _ = fmt.Fprintln(w)
 	}
 	if records := ans.Raw().Authorities(); len(records) > 0 {
-		fmt.Fprintln(w, ";; AUTHORITY SECTION:")
+		_, _ = fmt.Fprintln(w, ";; AUTHORITY SECTION:")
 		for _, rec := range records {
-			fmt.Fprintln(w, formatRecord(rec))
+			_, _ = fmt.Fprintln(w, formatRecord(rec))
 		}
-		fmt.Fprintln(w)
+		_, _ = fmt.Fprintln(w)
 	}
 	if records := ans.Raw().Additionals(); len(records) > 0 {
-		fmt.Fprintln(w, ";; ADDITIONAL SECTION:")
+		_, _ = fmt.Fprintln(w, ";; ADDITIONAL SECTION:")
 		for _, rec := range records {
-			fmt.Fprintln(w, formatRecord(rec))
+			_, _ = fmt.Fprintln(w, formatRecord(rec))
 		}
-		fmt.Fprintln(w)
+		_, _ = fmt.Fprintln(w)
 	}
-	fmt.Fprintf(w, ";; Query time: %s\n", elapsed.Round(time.Microsecond))
+	_, _ = fmt.Fprintf(w, ";; Query time: %s\n", elapsed.Round(time.Microsecond))
 	flags := []string{}
 	if ans.Authoritative() {
 		flags = append(flags, "AA")
@@ -227,7 +227,7 @@ func render(w *os.File, name wire.Name, rt rrtype.Type, ans acidns.Answer, elaps
 		flags = append(flags, "TC")
 	}
 	if len(flags) > 0 {
-		fmt.Fprintf(w, ";; Flags: %s\n", strings.Join(flags, " "))
+		_, _ = fmt.Fprintf(w, ";; Flags: %s\n", strings.Join(flags, " "))
 	}
 }
 

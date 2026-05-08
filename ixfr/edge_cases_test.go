@@ -143,7 +143,7 @@ func TestStartEmptyAXFRFallback(t *testing.T) {
 	ex := &fakeStreamExchanger{stream: &fakeStream{msgs: []wire.Message{resp}}}
 	xfer, err := ixfr.Start(t.Context(), ex, wire.MustParseName("example.com"), mkSOA(50))
 	require.NoError(t, err)
-	defer xfer.Close()
+	defer func() { _ = xfer.Close() }()
 	require.Equal(t, ixfr.KindAXFRFallback, xfer.Kind())
 
 	// First event is the leading SOA(100); second is closing SOA(100).
@@ -177,7 +177,7 @@ func TestStartUpToDateTwoSOAs(t *testing.T) {
 	ex := &fakeStreamExchanger{stream: &fakeStream{msgs: []wire.Message{resp}}}
 	xfer, err := ixfr.Start(t.Context(), ex, wire.MustParseName("example.com"), mkSOA(50))
 	require.NoError(t, err)
-	defer xfer.Close()
+	defer func() { _ = xfer.Close() }()
 	require.Equal(t, ixfr.KindUpToDate, xfer.Kind())
 
 	// Next on UpToDate immediately returns io.EOF.
@@ -219,7 +219,7 @@ func TestNextAXFRReadError(t *testing.T) {
 	ex := &errStreamExchangerOpens{s: &firstThenErrStream{first: resp, err: sentinel}}
 	xfer, err := ixfr.Start(t.Context(), ex, wire.MustParseName("example.com"), mkSOA(50))
 	require.NoError(t, err)
-	defer xfer.Close()
+	defer func() { _ = xfer.Close() }()
 	require.Equal(t, ixfr.KindAXFRFallback, xfer.Kind())
 
 	// Drain the two pushed-back records.
@@ -254,7 +254,7 @@ func TestNextIncrementalUnexpectedAfterClosing(t *testing.T) {
 	ex := &fakeStreamExchanger{stream: &fakeStream{msgs: []wire.Message{resp}}}
 	xfer, err := ixfr.Start(t.Context(), ex, zone, mkSOA(100))
 	require.NoError(t, err)
-	defer xfer.Close()
+	defer func() { _ = xfer.Close() }()
 	require.Equal(t, ixfr.KindIncremental, xfer.Kind())
 
 	// First Next yields the diff event; the trailing SOA gets pushed back.
@@ -288,7 +288,7 @@ func TestNextIncrementalAfterDoneEOF(t *testing.T) {
 	ex := &fakeStreamExchanger{stream: &fakeStream{msgs: []wire.Message{resp}}}
 	xfer, err := ixfr.Start(t.Context(), ex, zone, mkSOA(100))
 	require.NoError(t, err)
-	defer xfer.Close()
+	defer func() { _ = xfer.Close() }()
 
 	_, err = xfer.Next(t.Context())
 	require.NoError(t, err)
@@ -322,7 +322,7 @@ func TestNextIncrementalReadRemovedError(t *testing.T) {
 	ex := &errStreamExchangerOpens{s: &firstThenErrStream{first: first, err: sentinel}}
 	xfer, err := ixfr.Start(t.Context(), ex, zone, mkSOA(100))
 	require.NoError(t, err)
-	defer xfer.Close()
+	defer func() { _ = xfer.Close() }()
 	require.Equal(t, ixfr.KindIncremental, xfer.Kind())
 
 	_, err = xfer.Next(t.Context())
@@ -352,7 +352,7 @@ func TestNextIncrementalReadAddedError(t *testing.T) {
 	ex := &errStreamExchangerOpens{s: &firstThenErrStream{first: first, err: sentinel}}
 	xfer, err := ixfr.Start(t.Context(), ex, zone, mkSOA(100))
 	require.NoError(t, err)
-	defer xfer.Close()
+	defer func() { _ = xfer.Close() }()
 
 	_, err = xfer.Next(t.Context())
 	require.Error(t, err)
@@ -377,7 +377,7 @@ func TestNextIncrementalNoClosingSOA(t *testing.T) {
 	ex := &fakeStreamExchanger{stream: &fakeStream{msgs: []wire.Message{resp}}}
 	xfer, err := ixfr.Start(t.Context(), ex, zone, mkSOA(100))
 	require.NoError(t, err)
-	defer xfer.Close()
+	defer func() { _ = xfer.Close() }()
 
 	_, err = xfer.Next(t.Context())
 	require.Error(t, err)
@@ -406,7 +406,7 @@ func TestNextIncrementalMultiMessage(t *testing.T) {
 	ex := &fakeStreamExchanger{stream: &fakeStream{msgs: []wire.Message{msg1, msg2}}}
 	xfer, err := ixfr.Start(t.Context(), ex, zone, mkSOA(100))
 	require.NoError(t, err)
-	defer xfer.Close()
+	defer func() { _ = xfer.Close() }()
 
 	ev, err := xfer.Next(t.Context())
 	require.NoError(t, err)
@@ -437,7 +437,7 @@ func TestRecReaderRcodeError(t *testing.T) {
 	ex := &fakeStreamExchanger{stream: &fakeStream{msgs: []wire.Message{msg1, msg2}}}
 	xfer, err := ixfr.Start(t.Context(), ex, zone, mkSOA(100))
 	require.NoError(t, err)
-	defer xfer.Close()
+	defer func() { _ = xfer.Close() }()
 
 	_, err = xfer.Next(t.Context())
 	require.Error(t, err)
@@ -479,7 +479,7 @@ func TestSerialWrapAroundIncremental(t *testing.T) {
 	ex := &fakeStreamExchanger{stream: &fakeStream{msgs: []wire.Message{resp}}}
 	xfer, err := ixfr.Start(t.Context(), ex, zone, mkSOA(oldSerial))
 	require.NoError(t, err)
-	defer xfer.Close()
+	defer func() { _ = xfer.Close() }()
 	require.Equal(t, ixfr.KindIncremental, xfer.Kind())
 	require.Equal(t, newSerial, xfer.NewSOA().Serial())
 
@@ -508,6 +508,6 @@ func TestWithTimeoutOption(t *testing.T) {
 	xfer, err := ixfr.Start(t.Context(), ex, wire.MustParseName("example.com"),
 		mkSOA(50), ixfr.WithTimeout(2*time.Second))
 	require.NoError(t, err)
-	defer xfer.Close()
+	defer func() { _ = xfer.Close() }()
 	require.Equal(t, ixfr.KindUpToDate, xfer.Kind())
 }

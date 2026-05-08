@@ -101,7 +101,7 @@ func run(argv []string) error {
 	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer cancel()
 
-	fmt.Fprintf(os.Stdout, "acidns-server: %s mode listening on %s (UDP %s, TCP %s)\n",
+	_, _ = fmt.Fprintf(os.Stdout, "acidns-server: %s mode listening on %s (UDP %s, TCP %s)\n",
 		o.mode, addr, udpSrv.Addr(), tcpSrv.Addr())
 
 	errCh := make(chan error, 2)
@@ -175,7 +175,7 @@ func buildAuthoritative(files []string) (acidns.Handler, error) {
 			return nil, fmt.Errorf("open %s: %w", p, err)
 		}
 		z, err := zonefile.Parse(f)
-		f.Close()
+		_ = f.Close()
 		if err != nil {
 			return nil, fmt.Errorf("parse %s: %w", p, err)
 		}

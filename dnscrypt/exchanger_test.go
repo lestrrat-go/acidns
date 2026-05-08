@@ -46,7 +46,7 @@ func TestExchangerEndToEnd(t *testing.T) {
 
 	pc, err := net.ListenPacket("udp", "127.0.0.1:0")
 	require.NoError(t, err)
-	t.Cleanup(func() { pc.Close() })
+	t.Cleanup(func() { _ = pc.Close() })
 
 	go func() {
 		buf := make([]byte, 4096)
@@ -58,7 +58,7 @@ func TestExchangerEndToEnd(t *testing.T) {
 		if err != nil {
 			return
 		}
-		pc.WriteTo(respPkt, src)
+		_, _ = pc.WriteTo(respPkt, src)
 	}()
 
 	a := pc.LocalAddr().(*net.UDPAddr)

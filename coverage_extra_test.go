@@ -198,7 +198,7 @@ func TestTCPWriteMsgTooLarge(t *testing.T) {
 	// server fails to send a response.
 	conn, err := net.Dial("tcp", srv.Addr().String())
 	require.NoError(t, err)
-	defer conn.Close()
+	defer func() { _ = conn.Close() }()
 
 	q, _ := wire.NewBuilder().
 		ID(0xff01).
@@ -516,7 +516,7 @@ func TestTCFallbackOnTruncation(t *testing.T) {
 				return
 			}
 			go func(conn net.Conn) {
-				defer conn.Close()
+				defer func() { _ = conn.Close() }()
 				var hdr [2]byte
 				if _, err := io.ReadFull(conn, hdr[:]); err != nil {
 					return

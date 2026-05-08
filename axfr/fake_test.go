@@ -166,7 +166,7 @@ func TestNextStreamErrorMidTransfer(t *testing.T) {
 	ex := &fakeStreamEx{stream: stream}
 	xfer, err := axfr.Start(t.Context(), ex, wire.MustParseName("example.com"))
 	require.NoError(t, err)
-	defer xfer.Close()
+	defer func() { _ = xfer.Close() }()
 
 	// Pull leading SOA, then A, then trigger the error fetching the next
 	// message.
@@ -199,7 +199,7 @@ func TestNextSingleMessageZone(t *testing.T) {
 
 	xfer, err := axfr.Start(t.Context(), ex, wire.MustParseName("example.com"))
 	require.NoError(t, err)
-	defer xfer.Close()
+	defer func() { _ = xfer.Close() }()
 
 	require.Equal(t, uint32(7), xfer.NewSOA().Serial())
 
@@ -236,7 +236,7 @@ func TestNextMultiMessageZone(t *testing.T) {
 
 	xfer, err := axfr.Start(t.Context(), ex, wire.MustParseName("example.com"))
 	require.NoError(t, err)
-	defer xfer.Close()
+	defer func() { _ = xfer.Close() }()
 
 	var types []rrtype.Type
 	for {
@@ -262,7 +262,7 @@ func TestNextStreamEarlyEOF(t *testing.T) {
 
 	xfer, err := axfr.Start(t.Context(), ex, wire.MustParseName("example.com"))
 	require.NoError(t, err)
-	defer xfer.Close()
+	defer func() { _ = xfer.Close() }()
 
 	// SOA, A, then io.EOF (no closing SOA).
 	_, err = xfer.Next(t.Context())
@@ -296,7 +296,7 @@ func TestNextMismatchedClosingSOA(t *testing.T) {
 
 	xfer, err := axfr.Start(t.Context(), ex, wire.MustParseName("example.com"))
 	require.NoError(t, err)
-	defer xfer.Close()
+	defer func() { _ = xfer.Close() }()
 
 	var types []rrtype.Type
 	for {

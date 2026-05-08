@@ -51,7 +51,7 @@ func TestTransferLargeZone(t *testing.T) {
 	sx := ex.(acidns.StreamExchanger)
 	xfer, err := axfr.Start(xferCtx, sx, wire.MustParseName("big.example"))
 	require.NoError(t, err)
-	defer xfer.Close()
+	defer func() { _ = xfer.Close() }()
 
 	var records []wire.Record
 	for {

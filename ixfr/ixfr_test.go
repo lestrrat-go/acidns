@@ -56,7 +56,7 @@ func TestTransferAXFRFallback(t *testing.T) {
 
 	xfer, err := ixfr.Start(xferCtx, sx, wire.MustParseName("example.com"), clientSOA)
 	require.NoError(t, err)
-	defer xfer.Close()
+	defer func() { _ = xfer.Close() }()
 
 	require.Equal(t, ixfr.KindAXFRFallback, xfer.Kind())
 	require.Equal(t, uint32(100), xfer.NewSOA().Serial())

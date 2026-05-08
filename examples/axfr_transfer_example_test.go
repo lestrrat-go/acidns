@@ -55,7 +55,7 @@ www IN  A    192.0.2.42
 		fmt.Println("axfr start:", err)
 		return
 	}
-	defer xfer.Close()
+	defer func() { _ = xfer.Close() }()
 
 	var soaCount, aCount int
 	for {

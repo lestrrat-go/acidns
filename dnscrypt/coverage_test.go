@@ -216,7 +216,7 @@ func TestNewWithTimeoutOption(t *testing.T) {
 
 	pc, err := net.ListenPacket("udp", "127.0.0.1:0")
 	require.NoError(t, err)
-	t.Cleanup(func() { pc.Close() })
+	t.Cleanup(func() { _ = pc.Close() })
 
 	go func() {
 		buf := make([]byte, 4096)
@@ -228,7 +228,7 @@ func TestNewWithTimeoutOption(t *testing.T) {
 		if err != nil {
 			return
 		}
-		pc.WriteTo(respPkt, src)
+		_, _ = pc.WriteTo(respPkt, src)
 	}()
 
 	a := pc.LocalAddr().(*net.UDPAddr)
@@ -279,7 +279,7 @@ func TestExchangeReadTimeout(t *testing.T) {
 
 	pc, err := net.ListenPacket("udp", "127.0.0.1:0")
 	require.NoError(t, err)
-	t.Cleanup(func() { pc.Close() })
+	t.Cleanup(func() { _ = pc.Close() })
 	// Drain one packet but never reply.
 	go func() {
 		buf := make([]byte, 4096)
@@ -310,7 +310,7 @@ func TestExchangeBadResponse(t *testing.T) {
 
 	pc, err := net.ListenPacket("udp", "127.0.0.1:0")
 	require.NoError(t, err)
-	t.Cleanup(func() { pc.Close() })
+	t.Cleanup(func() { _ = pc.Close() })
 
 	go func() {
 		buf := make([]byte, 4096)
@@ -322,7 +322,7 @@ func TestExchangeBadResponse(t *testing.T) {
 		// failing the resolver-magic comparison.
 		junk := make([]byte, 64)
 		copy(junk[0:8], []byte("ZZZZZZZZ"))
-		pc.WriteTo(junk, src)
+		_, _ = pc.WriteTo(junk, src)
 	}()
 
 	a := pc.LocalAddr().(*net.UDPAddr)
@@ -351,7 +351,7 @@ func TestExchangeUnmarshalFailure(t *testing.T) {
 
 	pc, err := net.ListenPacket("udp", "127.0.0.1:0")
 	require.NoError(t, err)
-	t.Cleanup(func() { pc.Close() })
+	t.Cleanup(func() { _ = pc.Close() })
 
 	go func() {
 		buf := make([]byte, 4096)
@@ -380,7 +380,7 @@ func TestExchangeUnmarshalFailure(t *testing.T) {
 		out = append(out, clientNonce[:]...)
 		out = append(out, serverNonce[:]...)
 		out = append(out, respCT...)
-		pc.WriteTo(out, src)
+		_, _ = pc.WriteTo(out, src)
 		_ = n
 	}()
 

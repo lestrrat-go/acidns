@@ -56,7 +56,7 @@ func makeServer(t *testing.T, expectedMethod string) *httptest.Server {
 			Build()
 		out, _ := wire.Marshal(resp)
 		w.Header().Set("Content-Type", "application/dns-message")
-		w.Write(out)
+		_, _ = w.Write(out)
 	}))
 }
 

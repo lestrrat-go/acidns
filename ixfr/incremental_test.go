@@ -85,7 +85,7 @@ func TestIncrementalDiffEvents(t *testing.T) {
 	ex := &fakeStreamExchanger{stream: &fakeStream{msgs: []wire.Message{resp}}}
 	xfer, err := ixfr.Start(t.Context(), ex, zone, mkSOA(100), ixfr.WithTimeout(time.Second))
 	require.NoError(t, err)
-	defer xfer.Close()
+	defer func() { _ = xfer.Close() }()
 	require.Equal(t, ixfr.KindIncremental, xfer.Kind())
 	require.Equal(t, uint32(101), xfer.NewSOA().Serial())
 
@@ -115,6 +115,6 @@ func TestUpToDate(t *testing.T) {
 	ex := &fakeStreamExchanger{stream: &fakeStream{msgs: []wire.Message{resp}}}
 	xfer, err := ixfr.Start(t.Context(), ex, wire.MustParseName("example.com"), mkSOA(50))
 	require.NoError(t, err)
-	defer xfer.Close()
+	defer func() { _ = xfer.Close() }()
 	require.Equal(t, ixfr.KindUpToDate, xfer.Kind())
 }
