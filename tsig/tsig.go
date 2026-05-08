@@ -419,7 +419,6 @@ func parseTSIGRData(msg []byte, start, end int) (parsedTSIG, error) {
 	if err != nil {
 		return parsedTSIG{}, fmt.Errorf("tsig: parse alg: %w", err)
 	}
-	need := 6 + 2 + 2 + 2 + 2 + 2 // time + fudge + macSize + (mac after) + origID + err + otherLen
 	if off+6+2+2 > end {
 		return parsedTSIG{}, fmt.Errorf("tsig: truncated time/fudge/mac-size")
 	}
@@ -444,7 +443,6 @@ func parseTSIGRData(msg []byte, start, end int) (parsedTSIG, error) {
 		return parsedTSIG{}, fmt.Errorf("tsig: truncated other-data")
 	}
 	other := append([]byte(nil), msg[off:off+otherLen]...)
-	_ = need
 	return parsedTSIG{
 		algorithm:  algName,
 		timeSigned: timeSigned,
