@@ -56,7 +56,7 @@ func ListenUDP(addr netip.AddrPort, h Handler, opts ...UDPListenerOption) (Serve
 		o.applyUDPServer(&cfg)
 	}
 
-	pc, err := net.ListenPacket("udp", addr.String())
+	pc, err := net.ListenPacket("udp", addr.String()) //nolint:noctx // listen lifetime is bound to Serve, not the caller's ctx
 	if err != nil {
 		return nil, fmt.Errorf("dnsserver: udp listen %s: %w", addr, err)
 	}

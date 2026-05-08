@@ -52,7 +52,7 @@ func ListenTCP(addr netip.AddrPort, h Handler, opts ...TCPListenerOption) (Serve
 	for _, o := range opts {
 		o.applyTCPServer(&cfg)
 	}
-	ln, err := net.Listen("tcp", addr.String())
+	ln, err := net.Listen("tcp", addr.String()) //nolint:noctx // listen lifetime is bound to Serve, not the caller's ctx
 	if err != nil {
 		return nil, fmt.Errorf("dnsserver: tcp listen %s: %w", addr, err)
 	}
