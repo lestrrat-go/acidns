@@ -95,6 +95,9 @@ func Exchange(ctx context.Context, conn net.Conn, q wire.Message, fallbackTimeou
 	if resp.ID() != q.ID() {
 		return nil, fmt.Errorf("streamframe: id mismatch: got %#x, want %#x", resp.ID(), q.ID())
 	}
+	if !wire.QuestionsMatch(q, resp) {
+		return nil, fmt.Errorf("streamframe: response question does not match request")
+	}
 	return resp, nil
 }
 

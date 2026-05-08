@@ -40,6 +40,21 @@ func compareRecords(a, b Record) int {
 	return bytes.Compare(rdata.Pack(a.RData()), rdata.Pack(b.RData()))
 }
 
+// QuestionsMatch reports whether a and b carry the same question
+// section (count, name, type, class). Name comparison is
+// case-insensitive in line with RFC 4343.
+//
+// Use this to validate a response against the request that triggered
+// it: RFC 5452 §9.2 makes ID-only validation insufficient against
+// Kaminsky-style spoofing, since the 16-bit transaction ID can be
+// guessed at scale.
+func QuestionsMatch(a, b Message) bool {
+	if a == nil || b == nil {
+		return a == nil && b == nil
+	}
+	return questionsEqual(a.Questions(), b.Questions())
+}
+
 // MessageEqual reports whether a and b are semantically equivalent. The
 // comparison is order-insensitive within each section: answers,
 // authorities, additionals, and EDNS options are sorted before being

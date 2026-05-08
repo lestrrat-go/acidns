@@ -131,25 +131,29 @@ func (e *exchanger) Exchange(ctx context.Context, q wire.Message) (wire.Message,
 	if _, err := io.ReadFull(stream, body); err != nil {
 		return nil, fmt.Errorf("doq: read body: %w", err)
 	}
-	return decodeDoQResponse(body, q.ID())
+	return decodeDoQResponse(body, q)
 }
 
 // decodeDoQResponse validates RFC 9250 §4.2.1 (wire ID MUST be 0) and
-// then restores the caller's requested ID on the parsed message so
-// higher layers (resolver, retry logic) keying on Message.ID see the
-// value they sent. The on-the-wire ID is intentionally lost to callers
-// — DoQ multiplexes via QUIC streams, not via DNS IDs.
-func decodeDoQResponse(body []byte, requestID uint16) (wire.Message, error) {
+// the response's question section against the request's, then restores
+// the caller's requested ID on the parsed message so higher layers
+// (resolver, retry logic) keying on Message.ID see the value they sent.
+// The on-the-wire ID is intentionally lost to callers — DoQ multiplexes
+// via QUIC streams, not via DNS IDs.
+func decodeDoQResponse(body []byte, q wire.Message) (wire.Message, error) {
 	if len(body) < 2 {
 		return nil, fmt.Errorf("doq: response too short")
 	}
 	if got := binary.BigEndian.Uint16(body[0:2]); got != 0 {
 		return nil, fmt.Errorf("doq: response ID must be 0 per RFC 9250 §4.2.1, got %#x", got)
 	}
-	binary.BigEndian.PutUint16(body[0:2], requestID)
+	binary.BigEndian.PutUint16(body[0:2], q.ID())
 	resp, err := wire.Unmarshal(body)
 	if err != nil {
 		return nil, fmt.Errorf("doq: unmarshal: %w", err)
+	}
+	if !wire.QuestionsMatch(q, resp) {
+		return nil, fmt.Errorf("doq: response question does not match request")
 	}
 	return resp, nil
 }
@@ -205,7 +209,7 @@ func (e *exchanger) Stream(ctx context.Context, q wire.Message) (acidns.MessageS
 		_ = conn.CloseWithError(0, "")
 		return nil, fmt.Errorf("doq: close write side: %w", err)
 	}
-	return &doqStream{conn: conn, stream: stream, expectID: q.ID()}, nil
+	return &doqStream{conn: conn, stream: stream, query: q}, nil
 }
 
 // doqStream wraps a single QUIC stream that has had a query written to it.
@@ -214,7 +218,7 @@ func (e *exchanger) Stream(ctx context.Context, q wire.Message) (acidns.MessageS
 type doqStream struct {
 	conn      *quic.Conn
 	stream    *quic.Stream
-	expectID  uint16
+	query     wire.Message
 	closeOnce sync.Once
 }
 
@@ -238,7 +242,7 @@ func (s *doqStream) Next(ctx context.Context) (wire.Message, error) {
 		}
 		return nil, err
 	}
-	return decodeDoQResponse(body, s.expectID)
+	return decodeDoQResponse(body, s.query)
 }
 
 // readDoQFrameBytes reads a length-prefixed DoQ response frame and

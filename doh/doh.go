@@ -145,6 +145,9 @@ func (e *exchanger) Exchange(ctx context.Context, q wire.Message) (wire.Message,
 	if m.ID() != q.ID() {
 		return nil, fmt.Errorf("doh: id mismatch")
 	}
+	if !wire.QuestionsMatch(q, m) {
+		return nil, fmt.Errorf("doh: response question does not match request")
+	}
 	return m, nil
 }
 
