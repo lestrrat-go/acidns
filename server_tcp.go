@@ -9,7 +9,6 @@ import (
 	"net"
 	"net/netip"
 	"sync"
-	"sync/atomic"
 	"syscall"
 	"time"
 
@@ -93,17 +92,22 @@ func WithTCPMaxInflightPerConn(n int) TCPListenerOption {
 	return tcpListenerOptionFunc(func(c *tcpListenerConfig) { c.maxInflightPer = n })
 }
 
-// TCPServer is a configured but not-yet-bound TCP DNS server. Call
-// [TCPServer.Run] to bind and start the accept loop.
+// TCPServer is an immutable configuration holder for a TCP DNS server.
+// It carries the listen address, the Handler, and applied options;
+// it does NOT carry runtime state. Call [TCPServer.Run] to spawn an
+// independent server instance — the same TCPServer may be Run any
+// number of times to spawn parallel instances. The running instance
+// is reachable only through the returned [*Controller].
 type TCPServer struct {
 	addr    netip.AddrPort
 	handler Handler
 	cfg     tcpListenerConfig
-	started atomic.Bool
 }
 
 // NewTCPServer validates the configuration. It does NOT bind a socket;
-// pass the result to Run when you're ready to start serving.
+// pass the result to Run when you're ready to start serving. The
+// returned value is safe to share across goroutines and may be Run
+// multiple times to spawn multiple independent server instances.
 func NewTCPServer(addr netip.AddrPort, h Handler, opts ...TCPListenerOption) (*TCPServer, error) {
 	if h == nil {
 		return nil, fmt.Errorf("dnsserver: handler is nil")
@@ -121,23 +125,17 @@ func NewTCPServer(addr netip.AddrPort, h Handler, opts ...TCPListenerOption) (*T
 	return &TCPServer{addr: addr, handler: h, cfg: cfg}, nil
 }
 
-// Run binds the TCP socket and spawns the accept-and-dispatch
-// goroutine. It returns a Controller exposing the bound address (which
-// may differ from the requested address when port=0) and a Done
-// channel that closes once the loop has exited cleanly. Cancel ctx to
-// stop the server; the goroutine drains in-flight per-connection
-// goroutines before closing.
-//
-// Run may only be called once per server. A second call returns an
-// error.
+// Run binds a fresh TCP socket and spawns a new accept-and-dispatch
+// goroutine. Each call constructs an independent server instance;
+// the receiver holds only configuration and is unchanged by Run. The
+// returned Controller is the sole handle to the new instance: it
+// exposes the bound address (which may differ from the requested
+// address when port=0) and a Done channel that closes once the loop
+// has exited cleanly. Cancel ctx to stop the instance; the goroutine
+// drains in-flight per-connection goroutines before closing.
 func (s *TCPServer) Run(ctx context.Context) (*Controller, error) {
-	if !s.started.CompareAndSwap(false, true) {
-		return nil, fmt.Errorf("dnsserver: TCPServer.Run called more than once")
-	}
-
 	ln, err := net.Listen("tcp", s.addr.String()) //nolint:noctx // socket lifetime is bound to Run's ctx, not the bind call
 	if err != nil {
-		s.started.Store(false)
 		return nil, fmt.Errorf("dnsserver: tcp listen %s: %w", s.addr, err)
 	}
 	la, ok := ln.Addr().(*net.TCPAddr)

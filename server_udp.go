@@ -7,7 +7,6 @@ import (
 	"net"
 	"net/netip"
 	"sync"
-	"sync/atomic"
 
 	"github.com/lestrrat-go/acidns/wire"
 )
@@ -47,17 +46,23 @@ func WithUDPMaxInflight(n int) UDPListenerOption {
 	return udpListenerOptionFunc(func(c *udpListenerConfig) { c.maxInflight = n })
 }
 
-// UDPServer is a configured but not-yet-bound UDP DNS server. Call
-// [UDPServer.Run] to bind a socket and start the dispatch loop.
+// UDPServer is an immutable configuration holder for a UDP DNS server.
+// It carries the listen address, the Handler, and applied options;
+// it does NOT carry runtime state. Call [UDPServer.Run] to spawn an
+// independent server instance — the same UDPServer may be Run any
+// number of times to spawn parallel instances, useful for testing
+// or multi-socket deployments. The running instance is reachable
+// only through the returned [*Controller].
 type UDPServer struct {
 	addr    netip.AddrPort
 	handler Handler
 	cfg     udpListenerConfig
-	started atomic.Bool
 }
 
 // NewUDPServer validates the configuration. It does NOT bind a socket;
-// pass the result to Run when you're ready to start serving.
+// pass the result to Run when you're ready to start serving. The
+// returned value is safe to share across goroutines and may be Run
+// multiple times to spawn multiple independent server instances.
 func NewUDPServer(addr netip.AddrPort, h Handler, opts ...UDPListenerOption) (*UDPServer, error) {
 	if h == nil {
 		return nil, fmt.Errorf("dnsserver: handler is nil")
@@ -69,23 +74,17 @@ func NewUDPServer(addr netip.AddrPort, h Handler, opts ...UDPListenerOption) (*U
 	return &UDPServer{addr: addr, handler: h, cfg: cfg}, nil
 }
 
-// Run binds the UDP socket and spawns the dispatch goroutine. It
-// returns a Controller exposing the bound address (which may differ
-// from the requested address when port=0) and a Done channel that
-// closes once the goroutine has exited cleanly. Cancel ctx to stop
-// the server; the goroutine drains in-flight handlers before
-// closing.
-//
-// Run may only be called once per server. A second call returns an
-// error.
+// Run binds a fresh UDP socket and spawns a new dispatch goroutine.
+// Each call constructs an independent server instance; the receiver
+// holds only configuration and is unchanged by Run. The returned
+// Controller is the sole handle to the new instance: it exposes the
+// bound address (which may differ from the requested address when
+// port=0) and a Done channel that closes once the goroutine has
+// exited cleanly. Cancel ctx to stop the instance; the goroutine
+// drains in-flight handlers before closing.
 func (s *UDPServer) Run(ctx context.Context) (*Controller, error) {
-	if !s.started.CompareAndSwap(false, true) {
-		return nil, fmt.Errorf("dnsserver: UDPServer.Run called more than once")
-	}
-
 	pc, err := net.ListenPacket("udp", s.addr.String()) //nolint:noctx // socket lifetime is bound to Run's ctx, not the bind call
 	if err != nil {
-		s.started.Store(false)
 		return nil, fmt.Errorf("dnsserver: udp listen %s: %w", s.addr, err)
 	}
 	la, ok := pc.LocalAddr().(*net.UDPAddr)

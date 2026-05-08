@@ -52,15 +52,20 @@ func TestTCPServer_CleanShutdownOnCtxCancel(t *testing.T) {
 }
 
 // TestUDPServer_RunTwiceFails verifies that calling Run a second time on
-// the same server returns an error — the started flag is one-way.
-func TestUDPServer_RunTwiceFails(t *testing.T) {
+// the same UDPServer config holder spawns independent instances. The
+// config is immutable; each Run binds a fresh socket and returns its
+// own Controller, so a UDPServer can fan out to N parallel listeners
+// (different ports via the kernel's port=0 ephemeral assignment).
+func TestUDPServer_RunSpawnsIndependentInstances(t *testing.T) {
 	t.Parallel()
 	srv, err := acidns.NewUDPServer(netip.MustParseAddrPort("127.0.0.1:0"), echoHandler{})
 	require.NoError(t, err)
 	ctx, cancel := context.WithCancel(t.Context())
 	t.Cleanup(cancel)
-	_, err = srv.Run(ctx)
+	c1, err := srv.Run(ctx)
 	require.NoError(t, err)
-	_, err = srv.Run(ctx)
-	require.Error(t, err)
+	c2, err := srv.Run(ctx)
+	require.NoError(t, err)
+	require.NotEqual(t, c1.Addr(), c2.Addr(),
+		"each Run should bind a distinct ephemeral port")
 }
