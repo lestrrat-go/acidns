@@ -22,6 +22,7 @@ type config struct {
 	dialer        Dialer
 	validator     Validator
 	queryTimeout  time.Duration
+	maxNegTTL     time.Duration
 }
 
 // WithRoots overrides the default root server list.
@@ -70,4 +71,14 @@ func WithValidator(v Validator) Option {
 // WithDialer sets a custom Dialer.
 func WithDialer(d Dialer) Option {
 	return optionFunc(func(c *config) { c.dialer = d })
+}
+
+// WithMaxNegativeTTL caps the lifetime of negative cache entries. RFC
+// 2308 §4 mandates a 24-hour upper bound regardless of the SOA's
+// MINIMUM field; without this cap a hostile or misconfigured zone with
+// a multi-year MINIMUM can pin NXDOMAIN/NoData entries far longer than
+// operationally reasonable. A non-positive value disables the cap.
+// Defaults to 1 hour.
+func WithMaxNegativeTTL(d time.Duration) Option {
+	return optionFunc(func(c *config) { c.maxNegTTL = d })
 }

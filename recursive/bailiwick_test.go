@@ -3,9 +3,11 @@ package recursive
 import (
 	"net/netip"
 	"testing"
+	"time"
 
 	"github.com/lestrrat-go/acidns/wire"
 	"github.com/lestrrat-go/acidns/wire/rdata"
+	"github.com/lestrrat-go/acidns/wire/rrtype"
 	"github.com/stretchr/testify/require"
 )
 
@@ -71,6 +73,37 @@ func TestRecordsAtFiltersByOwner(t *testing.T) {
 	got := recordsAt(records, cur)
 	require.Len(t, got, 1, "only records owned by cur must survive")
 	require.True(t, got[0].Name().Equal(cur))
+}
+
+// TestEntryFromResponseCapsNegativeTTL confirms that a hostile or
+// misconfigured zone with a multi-year SOA MINIMUM cannot pin an
+// NXDOMAIN/NoData entry past the configured maxNegTTL. RFC 2308 §4
+// caps negative caching at 24 hours; the resolver's default is 1 hour.
+func TestEntryFromResponseCapsNegativeTTL(t *testing.T) {
+	t.Parallel()
+	r := &recursive{maxNegTTL: time.Hour}
+
+	soa := wire.NewRecord(wire.MustParseName("evil.example."), 365*24*time.Hour,
+		rdata.NewSOA(
+			wire.MustParseName("ns.evil.example."),
+			wire.MustParseName("hm.evil.example."),
+			1, 7200, 3600, 1209600,
+			365*24*time.Hour, // SOA MINIMUM = 1 year
+		))
+
+	resp, err := wire.NewBuilder().
+		ID(1).
+		Response(true).
+		RCODE(wire.RCODENXDomain).
+		Question(wire.NewQuestion(wire.MustParseName("ghost.evil.example."), rrtype.A)).
+		Authority(soa).
+		Build()
+	require.NoError(t, err)
+
+	before := time.Now()
+	entry := r.entryFromResponse(resp)
+	require.LessOrEqual(t, entry.ExpiresAt.Sub(before), time.Hour+time.Second,
+		"negative TTL must be clamped to maxNegTTL regardless of SOA MINIMUM")
 }
 
 func TestReferralZone(t *testing.T) {

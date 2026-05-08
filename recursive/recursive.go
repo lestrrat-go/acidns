@@ -80,6 +80,7 @@ type recursive struct {
 	dialer        Dialer
 	validator     Validator
 	queryTimeout  time.Duration
+	maxNegTTL     time.Duration
 }
 
 // New returns a Recursive resolver.
@@ -89,6 +90,7 @@ func New(opts ...Option) Recursive {
 		maxDepth:      8,
 		maxCNAMEs:     8,
 		queryTimeout:  4 * time.Second,
+		maxNegTTL:     time.Hour,
 	}
 	for _, o := range opts {
 		o.applyRecursive(&c)
@@ -112,6 +114,7 @@ func New(opts ...Option) Recursive {
 		dialer:        c.dialer,
 		validator:     c.validator,
 		queryTimeout:  c.queryTimeout,
+		maxNegTTL:     c.maxNegTTL,
 	}
 }
 
@@ -338,14 +341,14 @@ func (r *recursive) resolveDepth(ctx context.Context, name wire.Name, t rrtype.T
 
 		// Authoritative answer or NXDOMAIN is terminal.
 		if resp.Flags().Authoritative() {
-			entry := entryFromResponse(resp)
+			entry := r.entryFromResponse(resp)
 			r.cache.Put(name, t, entry)
 			return entry, nil
 		}
 		// Some servers don't set AA but still answer; if there are matching
 		// records in the answer section, treat it as terminal.
 		if hasAnswerFor(resp, name, t) {
-			entry := entryFromResponse(resp)
+			entry := r.entryFromResponse(resp)
 			r.cache.Put(name, t, entry)
 			return entry, nil
 		}
@@ -575,11 +578,18 @@ func removeServer(servers []netip.AddrPort, target netip.AddrPort) []netip.AddrP
 	return out
 }
 
-func entryFromResponse(resp wire.Message) Entry {
+func (r *recursive) entryFromResponse(resp wire.Message) Entry {
 	ttl := minTTL(60*time.Second, resp.Answers(), resp.Authorities())
 	if len(resp.Answers()) == 0 {
 		if neg := negativeCacheTTL(resp.Authorities()); neg > 0 && neg < ttl {
 			ttl = neg
+		}
+		// RFC 2308 §4 caps negative caching at 24 hours; we apply
+		// the configured (smaller-by-default) limit here so a
+		// hostile zone with a multi-year SOA MINIMUM cannot pin
+		// NXDOMAIN/NoData entries.
+		if r.maxNegTTL > 0 && ttl > r.maxNegTTL {
+			ttl = r.maxNegTTL
 		}
 	}
 	return Entry{
