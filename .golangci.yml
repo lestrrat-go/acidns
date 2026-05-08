@@ -73,6 +73,12 @@ linters:
           - forbidigo
         path: /*_example_test.go
       - linters:
+          - forbidigo
+        path: examples/lookup/main.go
+      - linters:
+          - forbidigo
+        path: cmd/
+      - linters:
           - revive
         path: /*_test.go
         text: 'var-naming: '

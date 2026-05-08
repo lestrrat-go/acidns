@@ -67,7 +67,7 @@ func Send(ctx context.Context, ex acidns.Exchanger, zone wire.Name, opts ...Opti
 		Authoritative(true).
 		Question(wire.NewQuestion(zone, rrtype.SOA))
 	if c.hasSOA {
-		b = b.Answer(wire.NewRecord(zone, time.Duration(c.soa.Minimum()), c.soa))
+		b = b.Answer(wire.NewRecord(zone, c.soa.Minimum(), c.soa))
 	}
 	q, err := b.Build()
 	if err != nil {

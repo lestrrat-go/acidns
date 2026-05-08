@@ -358,7 +358,7 @@ type keyMat struct {
 
 func newKey(t *testing.T, alg rdata.DNSSECAlgorithm, ksk bool) keyMat {
 	t.Helper()
-	flags := uint16(rdata.DNSKEYFlagZone)
+	flags := rdata.DNSKEYFlagZone
 	if ksk {
 		flags |= rdata.DNSKEYFlagSEP
 	}

@@ -34,7 +34,7 @@ func (e *RCodeError) Is(target error) bool {
 // the Answer field is nil. A Resolve call that matches one of these returns
 // a fresh RCodeError with both Code and Answer populated.
 var (
-	ErrFormErr  = &RCodeError{Code: wire.RCODEFormErr}
+	ErrFormErr  = &RCodeError{Code: wire.RCODEFormErr} //nolint:errname // mirrors RCODE FormErr label
 	ErrServFail = &RCodeError{Code: wire.RCODEServFail}
 	ErrNXDOMAIN = &RCodeError{Code: wire.RCODENXDomain}
 	ErrNotImp   = &RCodeError{Code: wire.RCODENotImp}

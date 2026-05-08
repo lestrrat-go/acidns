@@ -77,7 +77,7 @@ func TestEncryptUnsupportedESVersion(t *testing.T) {
 func TestDecryptErrors(t *testing.T) {
 	t.Parallel()
 
-	cert, _, _, _ := makeCert(t)
+	cert := makeCert(t).cert
 
 	t.Run("unsupported ES version", func(t *testing.T) {
 		bad := *cert
@@ -136,7 +136,8 @@ func TestDecryptErrors(t *testing.T) {
 func TestUnpadErrorsViaDecrypt(t *testing.T) {
 	t.Parallel()
 
-	cert, _, _, resolverSK := makeCert(t)
+	tc := makeCert(t)
+	cert, resolverSK := tc.cert, tc.resolverSK
 
 	// We need a valid encrypted payload whose plaintext lacks the 0x80
 	// sentinel. Easiest: bypass dnscrypt.Encrypt's pad() by encrypting
@@ -212,7 +213,8 @@ func TestNewUnsupportedESVersion(t *testing.T) {
 func TestNewWithTimeoutOption(t *testing.T) {
 	t.Parallel()
 
-	cert, _, _, resolverSK := makeCert(t)
+	tc := makeCert(t)
+	cert, resolverSK := tc.cert, tc.resolverSK
 
 	pc, err := net.ListenPacket("udp", "127.0.0.1:0")
 	require.NoError(t, err)
@@ -251,7 +253,7 @@ func TestNewWithTimeoutOption(t *testing.T) {
 func TestExchangeDialFailure(t *testing.T) {
 	t.Parallel()
 
-	cert, _, _, _ := makeCert(t)
+	cert := makeCert(t).cert
 
 	// Use a routeable but unreachable address; cancel ctx immediately so
 	// DialContext returns quickly with ctx.Err().
@@ -275,7 +277,7 @@ func TestExchangeDialFailure(t *testing.T) {
 func TestExchangeReadTimeout(t *testing.T) {
 	t.Parallel()
 
-	cert, _, _, _ := makeCert(t)
+	cert := makeCert(t).cert
 
 	pc, err := net.ListenPacket("udp", "127.0.0.1:0")
 	require.NoError(t, err)
@@ -306,7 +308,7 @@ func TestExchangeReadTimeout(t *testing.T) {
 func TestExchangeBadResponse(t *testing.T) {
 	t.Parallel()
 
-	cert, _, _, _ := makeCert(t)
+	cert := makeCert(t).cert
 
 	pc, err := net.ListenPacket("udp", "127.0.0.1:0")
 	require.NoError(t, err)
@@ -347,7 +349,8 @@ func TestExchangeBadResponse(t *testing.T) {
 func TestExchangeUnmarshalFailure(t *testing.T) {
 	t.Parallel()
 
-	cert, _, _, resolverSK := makeCert(t)
+	tc := makeCert(t)
+	cert, resolverSK := tc.cert, tc.resolverSK
 
 	pc, err := net.ListenPacket("udp", "127.0.0.1:0")
 	require.NoError(t, err)

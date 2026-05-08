@@ -12,7 +12,14 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func makeCert(t *testing.T) (*dnscrypt.Cert, ed25519.PublicKey, [32]byte, [32]byte) {
+type testCert struct {
+	cert        *dnscrypt.Cert
+	providerPub ed25519.PublicKey
+	resolverPK  [32]byte
+	resolverSK  [32]byte
+}
+
+func makeCert(t *testing.T) testCert {
 	t.Helper()
 
 	providerPub, providerPriv, err := ed25519.GenerateKey(rand.Reader)
@@ -36,41 +43,42 @@ func makeCert(t *testing.T) (*dnscrypt.Cert, ed25519.PublicKey, [32]byte, [32]by
 		ValidUntil:    time.Now().Add(24 * time.Hour).UTC().Truncate(time.Second),
 	}
 	dnscrypt.SignCert(cert, providerPriv)
-	return cert, providerPub, resolverPK, resolverSK
+	return testCert{cert: cert, providerPub: providerPub, resolverPK: resolverPK, resolverSK: resolverSK}
 }
 
 func TestCertEncodeDecodeVerify(t *testing.T) {
 	t.Parallel()
 
-	cert, providerPub, _, _ := makeCert(t)
+	tc := makeCert(t)
 
-	wire := dnscrypt.EncodeCert(cert)
+	wire := dnscrypt.EncodeCert(tc.cert)
 	require.Equal(t, 124, len(wire))
 
 	parsed, err := dnscrypt.ParseCert(wire)
 	require.NoError(t, err)
-	require.NoError(t, parsed.Verify(providerPub, time.Now()))
+	require.NoError(t, parsed.Verify(tc.providerPub, time.Now()))
 }
 
 func TestCertVerifyExpired(t *testing.T) {
 	t.Parallel()
-	cert, providerPub, _, _ := makeCert(t)
-	err := cert.Verify(providerPub, time.Now().Add(48*time.Hour))
+	tc := makeCert(t)
+	err := tc.cert.Verify(tc.providerPub, time.Now().Add(48*time.Hour))
 	require.ErrorIs(t, err, dnscrypt.ErrCertExpired)
 }
 
 func TestCertVerifyTampered(t *testing.T) {
 	t.Parallel()
-	cert, providerPub, _, _ := makeCert(t)
-	cert.Serial = 999 // not part of original signed data
-	err := cert.Verify(providerPub, time.Now())
+	tc := makeCert(t)
+	tc.cert.Serial = 999 // not part of original signed data
+	err := tc.cert.Verify(tc.providerPub, time.Now())
 	require.ErrorIs(t, err, dnscrypt.ErrCertSignatureInvalid)
 }
 
 func TestEncryptDecryptRoundTrip(t *testing.T) {
 	t.Parallel()
 
-	cert, _, _, resolverSK := makeCert(t)
+	tc := makeCert(t)
+	cert, resolverSK := tc.cert, tc.resolverSK
 
 	// Client side keys.
 	var clientSK [32]byte

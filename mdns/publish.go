@@ -219,7 +219,7 @@ func (a *announcer) listenForConflict(ctx context.Context, p Publication) (bool,
 		msg, err := a.cfg.transport.Recv(ctx)
 		if err != nil {
 			if ctx.Err() != nil {
-				return false, nil
+				return false, nil //nolint:nilerr // ctx expiry means "no conflict observed within window"
 			}
 			return false, err
 		}

@@ -5,7 +5,7 @@ package wire
 //
 // Errors accumulated by the Builder (e.g. mismatched section sizes after
 // future EDNS handling is added) are surfaced from Build.
-type Builder interface {
+type Builder interface { //nolint:interfacebloat // builder fluent API
 	ID(uint16) Builder
 	Flags(Flags) Builder
 	Response(bool) Builder

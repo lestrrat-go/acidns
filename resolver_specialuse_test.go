@@ -18,7 +18,7 @@ type failExchanger struct{ t *testing.T }
 
 func (f failExchanger) Exchange(_ context.Context, _ wire.Message) (wire.Message, error) {
 	f.t.Fatal("network exchange must not be invoked for special-use names")
-	return nil, nil
+	return nil, nil //nolint:nilnil // unreachable after t.Fatal
 }
 
 func TestSpecialUseLocalhostA(t *testing.T) {

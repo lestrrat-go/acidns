@@ -223,7 +223,7 @@ func (defaultDialer) Exchange(ctx context.Context, server netip.AddrPort, q wire
 	if resp.Flags().Truncated() {
 		tex, terr := acidns.NewTCPExchanger(server)
 		if terr != nil {
-			return resp, nil
+			return resp, nil //nolint:nilerr // truncated UDP answer is still useful when TCP setup fails
 		}
 		if r2, terr := tex.Exchange(ctx, q); terr == nil {
 			return r2, nil

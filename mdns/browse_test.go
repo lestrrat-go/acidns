@@ -72,7 +72,7 @@ func (f *fakePacketConn) ReadFrom(p []byte) (int, net.Addr, error) {
 		if !dl.IsZero() {
 			d := time.Until(dl)
 			if d <= 0 {
-				return 0, nil, &timeoutErr{}
+				return 0, nil, &timeoutError{}
 			}
 			timer = time.NewTimer(d)
 			timeoutCh = timer.C
@@ -83,7 +83,7 @@ func (f *fakePacketConn) ReadFrom(p []byte) (int, net.Addr, error) {
 				timer.Stop()
 			}
 		case <-timeoutCh:
-			return 0, nil, &timeoutErr{}
+			return 0, nil, &timeoutError{}
 		}
 	}
 }
@@ -142,11 +142,11 @@ func (f *fakePacketConn) SetReadDeadline(t time.Time) error {
 
 func (f *fakePacketConn) SetWriteDeadline(t time.Time) error { return nil }
 
-type timeoutErr struct{}
+type timeoutError struct{}
 
-func (timeoutErr) Error() string   { return "i/o timeout" }
-func (timeoutErr) Timeout() bool   { return true }
-func (timeoutErr) Temporary() bool { return true }
+func (timeoutError) Error() string   { return "i/o timeout" }
+func (timeoutError) Timeout() bool   { return true }
+func (timeoutError) Temporary() bool { return true }
 
 func canonicalBrowseResponse(t *testing.T) []byte {
 	t.Helper()

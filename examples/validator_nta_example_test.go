@@ -15,9 +15,9 @@ func Example_validator_nta() {
 	store := validator.NewNTAStore()
 	store.Add(wire.MustParseName("de"))
 
-	fmt.Println(store.Covers(wire.MustParseName("de")))
-	fmt.Println(store.Covers(wire.MustParseName("denic.de")))
-	fmt.Println(store.Covers(wire.MustParseName("example.com")))
+	fmt.Println("de:", store.Covers(wire.MustParseName("de")))
+	fmt.Println("denic.de:", store.Covers(wire.MustParseName("denic.de")))
+	fmt.Println("example.com:", store.Covers(wire.MustParseName("example.com")))
 
 	// Wire the store into a Validator; ValidateRRset short-circuits to
 	// Indeterminate (and skips signature checks) for any name covered by
@@ -27,8 +27,8 @@ func Example_validator_nta() {
 	fmt.Println("result:", res, "err:", err == nil)
 
 	// OUTPUT:
-	// true
-	// true
-	// false
+	// de: true
+	// denic.de: true
+	// example.com: false
 	// result: indeterminate err: true
 }
