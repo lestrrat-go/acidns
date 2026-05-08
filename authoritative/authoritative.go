@@ -165,18 +165,18 @@ func (a *authoritative) serveAXFR(w acidns.ResponseWriter, q wire.Message) {
 
 	// AXFR over UDP is not allowed.
 	if w.Network() != "tcp" {
-		_ = w.WriteMsg(mustBuild(header().RCODE(wire.RCODERefused)))
+		_ = w.WriteMsg(mustBuild(echoEDNS(header(), q).RCODE(wire.RCODERefused), q))
 		return
 	}
 
 	zone := a.findZone(question.Name())
 	if zone == nil {
-		_ = w.WriteMsg(mustBuild(header().RCODE(wire.RCODERefused)))
+		_ = w.WriteMsg(mustBuild(echoEDNS(header(), q).RCODE(wire.RCODERefused), q))
 		return
 	}
 	if !zone.origin.Equal(question.Name()) {
 		// AXFR target must equal a zone's apex.
-		_ = w.WriteMsg(mustBuild(header().RCODE(wire.RCODENotAuth)))
+		_ = w.WriteMsg(mustBuild(echoEDNS(header(), q).RCODE(wire.RCODENotAuth), q))
 		return
 	}
 
@@ -185,7 +185,7 @@ func (a *authoritative) serveAXFR(w acidns.ResponseWriter, q wire.Message) {
 	used := soaSize
 
 	flush := func() bool {
-		if err := w.WriteMsg(mustBuild(b)); err != nil {
+		if err := w.WriteMsg(mustBuild(b, q)); err != nil {
 			return false
 		}
 		b = header().Authoritative(true)
@@ -214,7 +214,7 @@ func (a *authoritative) serveAXFR(w acidns.ResponseWriter, q wire.Message) {
 		}
 	}
 	b = b.Answer(zone.soaRec)
-	_ = w.WriteMsg(mustBuild(b))
+	_ = w.WriteMsg(mustBuild(b, q))
 }
 
 // estimateRecordSize returns an upper-bound on the wire size of rec
@@ -232,14 +232,15 @@ func (a *authoritative) answer(q wire.Message) wire.Message {
 		RecursionDesired(q.Flags().RecursionDesired())
 
 	if len(q.Questions()) == 0 {
-		return mustBuild(b.RCODE(wire.RCODEFormErr))
+		return mustBuild(echoEDNS(b, q).RCODE(wire.RCODEFormErr), q)
 	}
 	question := q.Questions()[0]
 	b = b.Question(question)
+	b = echoEDNS(b, q)
 
 	zone := a.findZone(question.Name())
 	if zone == nil {
-		return mustBuild(b.RCODE(wire.RCODERefused))
+		return mustBuild(b.RCODE(wire.RCODERefused), q)
 	}
 
 	res := zone.lookup(question.Name(), question.Type())
@@ -256,18 +257,49 @@ func (a *authoritative) answer(q wire.Message) wire.Message {
 	if res.rcode != wire.RCODENoError {
 		b = b.RCODE(res.rcode)
 	}
-	return mustBuild(b)
+	return mustBuild(b, q)
 }
 
-func mustBuild(b *wire.Builder) wire.Message {
-	m, err := b.Build()
-	if err != nil {
-		// Builder errors at this level are programmer errors — a malformed
-		// authoritative response is preferable to a hang.
-		fb, _ := wire.NewBuilder().Response(true).RCODE(wire.RCODEServFail).Build()
-		return fb
+// echoEDNS attaches an OPT pseudo-RR to the response builder if the
+// request carried one (RFC 6891 §6.1.1: a response to a query with OPT
+// MUST contain an OPT in the response). The echoed OPT advertises this
+// server's UDP buffer size and mirrors the requestor's DO bit.
+func echoEDNS(b *wire.Builder, q wire.Message) *wire.Builder {
+	qe, ok := q.EDNS()
+	if !ok || qe == nil {
+		return b
 	}
-	return m
+	resp := wire.NewEDNSBuilder().
+		UDPSize(1232). // DNS Flag Day 2020 default
+		DO(qe.DO()).
+		Build()
+	return b.EDNS(resp)
+}
+
+// mustBuild builds m. On builder error it returns a SERVFAIL that still
+// echoes the original ID and (if present) question — RFC 1035 §4.1.1
+// requires the question section to be copied from the request, and an
+// unsolicited response with no question is dropped by clients that index
+// outstanding queries by ID+question.
+func mustBuild(b *wire.Builder, q wire.Message) wire.Message {
+	m, err := b.Build()
+	if err == nil {
+		return m
+	}
+	fb := wire.NewBuilder().
+		ID(q.ID()).
+		Response(true).
+		RecursionDesired(q.Flags().RecursionDesired()).
+		RCODE(wire.RCODEServFail)
+	if qs := q.Questions(); len(qs) > 0 {
+		fb = fb.Question(qs[0])
+	}
+	if out, err := fb.Build(); err == nil {
+		return out
+	}
+	// Last resort — must not hang the caller; this should never trigger.
+	out, _ := wire.NewBuilder().Response(true).RCODE(wire.RCODEServFail).Build()
+	return out
 }
 
 // findZone returns the deepest zone whose origin is an ancestor of name.

@@ -23,12 +23,12 @@ func (a *authoritative) serveUpdate(w acidns.ResponseWriter, q wire.Message) {
 	}
 
 	if len(q.Questions()) != 1 {
-		_ = w.WriteMsg(mustBuild(b.RCODE(wire.RCODEFormErr)))
+		_ = w.WriteMsg(mustBuild(echoEDNS(b, q).RCODE(wire.RCODEFormErr), q))
 		return
 	}
 	zoneQ := q.Questions()[0]
 	if zoneQ.Type() != rrtype.SOA {
-		_ = w.WriteMsg(mustBuild(b.RCODE(wire.RCODEFormErr)))
+		_ = w.WriteMsg(mustBuild(echoEDNS(b, q).RCODE(wire.RCODEFormErr), q))
 		return
 	}
 
@@ -36,14 +36,14 @@ func (a *authoritative) serveUpdate(w acidns.ResponseWriter, q wire.Message) {
 	defer a.mu.Unlock()
 	zone, ok := a.zones[nameKey(zoneQ.Name())]
 	if !ok {
-		_ = w.WriteMsg(mustBuild(b.RCODE(wire.RCODENotAuth)))
+		_ = w.WriteMsg(mustBuild(echoEDNS(b, q).RCODE(wire.RCODENotAuth), q))
 		return
 	}
 
 	// Prerequisites — RFC 2136 §3.2.
 	for _, p := range q.Answers() {
 		if rcode := zone.checkPrereq(p); rcode != wire.RCODENoError {
-			_ = w.WriteMsg(mustBuild(b.RCODE(rcode)))
+			_ = w.WriteMsg(mustBuild(echoEDNS(b, q).RCODE(rcode), q))
 			return
 		}
 	}
@@ -52,7 +52,7 @@ func (a *authoritative) serveUpdate(w acidns.ResponseWriter, q wire.Message) {
 	for _, u := range q.Authorities() {
 		zone.applyUpdate(u)
 	}
-	_ = w.WriteMsg(mustBuild(b))
+	_ = w.WriteMsg(mustBuild(echoEDNS(b, q), q))
 }
 
 func (z *zoneIndex) checkPrereq(p wire.Record) wire.RCODE {

@@ -202,8 +202,12 @@ func (w *udpResponseWriter) WriteMsg(m wire.Message) error {
 		return err
 	}
 	if w.maxLen > 0 && len(buf) > w.maxLen {
-		// Truncate per RFC 1035 §4.1.1: keep header + question, drop the
-		// rest, set the TC bit.
+		// Truncate per RFC 1035 §4.1.1: set the TC bit and keep the
+		// header + question. Per RFC 6891 §6.1.1 we must echo the OPT
+		// pseudo-RR if the original response carried one, otherwise the
+		// client cannot tell EDNS-aware servers from broken ones and may
+		// permanently downgrade. Opcode and RCODE are preserved so the
+		// client can still classify the response.
 		var question wire.Question
 		if qs := m.Questions(); len(qs) > 0 {
 			question = qs[0]
@@ -213,6 +217,9 @@ func (w *udpResponseWriter) WriteMsg(m wire.Message) error {
 			Flags(m.Flags().WithTruncated(true).WithResponse(true))
 		if question != nil {
 			b = b.Question(question)
+		}
+		if e, ok := m.EDNS(); ok && e != nil {
+			b = b.EDNS(e)
 		}
 		stripped, err := b.Build()
 		if err != nil {
