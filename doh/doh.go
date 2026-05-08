@@ -39,6 +39,7 @@ type config struct {
 	client    *http.Client
 	method    Method
 	userAgent string
+	padding   bool
 }
 
 // WithHTTPClient overrides the default *http.Client.
@@ -56,11 +57,20 @@ func WithUserAgent(ua string) Option {
 	return optionFunc(func(c *config) { c.userAgent = ua })
 }
 
+// WithPadding toggles RFC 8467 §4.1 block-padding. Default is true:
+// outgoing queries are padded to a 128-byte boundary so the encrypted
+// HTTP/2 frame's size cannot leak the queried name. Pass false to
+// disable padding.
+func WithPadding(v bool) Option {
+	return optionFunc(func(c *config) { c.padding = v })
+}
+
 type exchanger struct {
 	endpoint  string
 	client    *http.Client
 	method    Method
 	userAgent string
+	padding   bool
 }
 
 // New returns an Exchanger that talks DoH to the given endpoint URL
@@ -73,18 +83,20 @@ func New(endpoint string, opts ...Option) (acidns.Exchanger, error) {
 	if u.Scheme != "https" && u.Scheme != "http" {
 		return nil, fmt.Errorf("doh: endpoint scheme must be http(s)")
 	}
-	c := config{client: http.DefaultClient, method: MethodPOST, userAgent: "acidns-doh/0.1"}
+	c := config{client: http.DefaultClient, method: MethodPOST, userAgent: "acidns-doh/0.1", padding: true}
 	for _, o := range opts {
 		o.applyDoH(&c)
 	}
 	if c.client == nil {
 		c.client = http.DefaultClient
 	}
-	return &exchanger{endpoint: endpoint, client: c.client, method: c.method, userAgent: c.userAgent}, nil
+	return &exchanger{endpoint: endpoint, client: c.client, method: c.method, userAgent: c.userAgent, padding: c.padding}, nil
 }
 
 func (e *exchanger) Exchange(ctx context.Context, q wire.Message) (wire.Message, error) {
-	q = wire.PadEncrypted(q)
+	if e.padding {
+		q = wire.PadEncrypted(q)
+	}
 	msg, err := wire.Marshal(q)
 	if err != nil {
 		return nil, fmt.Errorf("doh: marshal: %w", err)

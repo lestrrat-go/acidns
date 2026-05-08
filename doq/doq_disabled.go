@@ -31,6 +31,9 @@ func WithTLSConfig(*tls.Config) Option { return stubOption{} }
 // WithServerName is a no-op stub.
 func WithServerName(string) Option { return stubOption{} }
 
+// WithPadding is a no-op stub.
+func WithPadding(bool) Option { return stubOption{} }
+
 type stubOption struct{}
 
 func (stubOption) applyDoQ() {}

@@ -47,6 +47,7 @@ type config struct {
 	timeout    time.Duration
 	tlsConfig  *tls.Config
 	serverName string
+	padding    bool
 }
 
 // WithTimeout sets a per-exchange timeout used when ctx has no deadline.
@@ -65,10 +66,16 @@ func WithServerName(name string) Option {
 	return optionFunc(func(c *config) { c.serverName = name })
 }
 
+// WithPadding toggles RFC 8467 §4.1 block-padding. Default is true.
+func WithPadding(v bool) Option {
+	return optionFunc(func(c *config) { c.padding = v })
+}
+
 type exchanger struct {
 	addr      netip.AddrPort
 	timeout   time.Duration
 	tlsConfig *tls.Config
+	padding   bool
 }
 
 // New returns an Exchanger that talks DoQ to addr.
@@ -76,7 +83,7 @@ func New(addr netip.AddrPort, opts ...Option) (acidns.Exchanger, error) {
 	if !addr.IsValid() {
 		return nil, fmt.Errorf("doq: invalid server address")
 	}
-	c := config{timeout: 10 * time.Second}
+	c := config{timeout: 10 * time.Second, padding: true}
 	for _, o := range opts {
 		o.applyDoQ(&c)
 	}
@@ -96,7 +103,7 @@ func New(addr netip.AddrPort, opts ...Option) (acidns.Exchanger, error) {
 		tcfg.ServerName = addr.Addr().String()
 	}
 
-	return &exchanger{addr: addr, timeout: c.timeout, tlsConfig: tcfg}, nil
+	return &exchanger{addr: addr, timeout: c.timeout, tlsConfig: tcfg, padding: c.padding}, nil
 }
 
 func containsALPN(list []string, want string) bool {
@@ -104,7 +111,9 @@ func containsALPN(list []string, want string) bool {
 }
 
 func (e *exchanger) Exchange(ctx context.Context, q wire.Message) (wire.Message, error) {
-	q = wire.PadEncrypted(q)
+	if e.padding {
+		q = wire.PadEncrypted(q)
+	}
 	msg, err := wire.Marshal(q)
 	if err != nil {
 		return nil, fmt.Errorf("doq: marshal: %w", err)
@@ -169,7 +178,9 @@ func (e *exchanger) Exchange(ctx context.Context, q wire.Message) (wire.Message,
 // §4.4): one query, then a stream of responses on the same QUIC stream
 // until the server FINs the read side.
 func (e *exchanger) Stream(ctx context.Context, q wire.Message) (acidns.MessageStream, error) {
-	q = wire.PadEncrypted(q)
+	if e.padding {
+		q = wire.PadEncrypted(q)
+	}
 	dialCtx := ctx
 	if _, ok := ctx.Deadline(); !ok && e.timeout > 0 {
 		var cancel context.CancelFunc

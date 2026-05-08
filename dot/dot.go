@@ -29,6 +29,7 @@ type config struct {
 	timeout    time.Duration
 	tlsConfig  *tls.Config
 	serverName string
+	padding    bool
 }
 
 // WithTimeout sets a per-exchange timeout used when the caller's context
@@ -51,10 +52,20 @@ func WithServerName(name string) Option {
 	return optionFunc(func(c *config) { c.serverName = name })
 }
 
+// WithPadding toggles RFC 8467 §4.1 block-padding. Default is true:
+// outgoing queries are padded to a 128-byte boundary so an on-path
+// observer cannot infer the queried name from the encrypted record's
+// length. Pass false to disable padding — useful for byte-exact test
+// fixtures and for callers that pre-pad queries themselves.
+func WithPadding(v bool) Option {
+	return optionFunc(func(c *config) { c.padding = v })
+}
+
 type exchanger struct {
 	addr      netip.AddrPort
 	timeout   time.Duration
 	tlsConfig *tls.Config
+	padding   bool
 }
 
 // New returns an Exchanger that talks DoT to addr. addr is typically
@@ -64,7 +75,7 @@ func New(addr netip.AddrPort, opts ...Option) (acidns.Exchanger, error) {
 	if !addr.IsValid() {
 		return nil, fmt.Errorf("dot: invalid server address")
 	}
-	c := config{timeout: 10 * time.Second}
+	c := config{timeout: 10 * time.Second, padding: true}
 	for _, o := range opts {
 		o.applyDoT(&c)
 	}
@@ -81,11 +92,13 @@ func New(addr netip.AddrPort, opts ...Option) (acidns.Exchanger, error) {
 		tcfg.ServerName = addr.Addr().String()
 	}
 
-	return &exchanger{addr: addr, timeout: c.timeout, tlsConfig: tcfg}, nil
+	return &exchanger{addr: addr, timeout: c.timeout, tlsConfig: tcfg, padding: c.padding}, nil
 }
 
 func (e *exchanger) Exchange(ctx context.Context, q wire.Message) (wire.Message, error) {
-	q = wire.PadEncrypted(q)
+	if e.padding {
+		q = wire.PadEncrypted(q)
+	}
 	d := tls.Dialer{Config: e.tlsConfig, NetDialer: &net.Dialer{}}
 	conn, err := d.DialContext(ctx, "tcp", e.addr.String())
 	if err != nil {
@@ -98,7 +111,9 @@ func (e *exchanger) Exchange(ctx context.Context, q wire.Message) (wire.Message,
 // from which the caller pulls responses. Implements XoT (RFC 9103) when
 // q is an AXFR/IXFR query.
 func (e *exchanger) Stream(ctx context.Context, q wire.Message) (acidns.MessageStream, error) {
-	q = wire.PadEncrypted(q)
+	if e.padding {
+		q = wire.PadEncrypted(q)
+	}
 	d := tls.Dialer{Config: e.tlsConfig, NetDialer: &net.Dialer{}}
 	conn, err := d.DialContext(ctx, "tcp", e.addr.String())
 	if err != nil {
