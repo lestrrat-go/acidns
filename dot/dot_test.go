@@ -151,20 +151,29 @@ func TestDoTNewInvalidAddr(t *testing.T) {
 	require.Contains(t, err.Error(), "invalid server address")
 }
 
-// TestDoTNewDefaultServerName exercises the branch where neither
-// WithServerName nor a pre-set ServerName on a custom TLS config is given,
-// so New falls back to the address's host part.
+// TestDoTNewDefaultServerName confirms that constructing a DoT
+// exchanger against an IP-literal address without a ServerName is a
+// hard error (the implicit "use the IP as SNI" fallback is unsafe and
+// has been removed).
 func TestDoTNewDefaultServerName(t *testing.T) {
 	t.Parallel()
 
 	addr := netip.AddrPortFrom(netip.MustParseAddr("127.0.0.1"), 853)
-	ex, err := dot.New(addr)
+	_, err := dot.New(addr)
+	require.Error(t, err, "IP-literal addr without ServerName must be refused")
+
+	_, err = dot.New(addr, dot.WithTLSConfig(&tls.Config{MinVersion: tls.VersionTLS12}))
+	require.Error(t, err, "TLSConfig with empty ServerName must also be refused")
+
+	// With ServerName supplied, construction succeeds.
+	ex, err := dot.New(addr, dot.WithServerName("example.test"))
 	require.NoError(t, err)
 	require.NotNil(t, ex)
 
-	// And again with a TLSConfig that has an empty ServerName: should still
-	// fall through to the address-derived default.
-	ex2, err := dot.New(addr, dot.WithTLSConfig(&tls.Config{MinVersion: tls.VersionTLS12}))
+	ex2, err := dot.New(addr, dot.WithTLSConfig(&tls.Config{
+		MinVersion: tls.VersionTLS12,
+		ServerName: "example.test",
+	}))
 	require.NoError(t, err)
 	require.NotNil(t, ex2)
 }

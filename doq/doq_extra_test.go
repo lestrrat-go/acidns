@@ -163,6 +163,7 @@ func TestNewALPNAlreadyPresent(t *testing.T) {
 	tlsCfg := &tls.Config{
 		MinVersion: tls.VersionTLS13,
 		NextProtos: []string{"doq", "h3"},
+		ServerName: "127.0.0.1",
 	}
 	addr := netip.AddrPortFrom(netip.MustParseAddr("127.0.0.1"), 8530)
 	_, err := doq.New(addr, doq.WithTLSConfig(tlsCfg))
@@ -179,7 +180,9 @@ func TestExchangeFallbackTimeout(t *testing.T) {
 	a := udpConn.LocalAddr().(*net.UDPAddr)
 	addr := netip.AddrPortFrom(netip.MustParseAddr("127.0.0.1"), uint16(a.Port))
 
-	ex, err := doq.New(addr, doq.WithTimeout(150*time.Millisecond))
+	ex, err := doq.New(addr,
+		doq.WithTimeout(150*time.Millisecond),
+		doq.WithServerName("127.0.0.1"))
 	require.NoError(t, err)
 
 	q := buildQuery(t, 1)
@@ -211,11 +214,14 @@ func TestExchangeIDMismatch(t *testing.T) {
 	defer cancel()
 	_, err = ex.Exchange(ctx, q)
 	require.Error(t, err)
-	require.Contains(t, err.Error(), "id mismatch")
+	require.Contains(t, err.Error(), "ID must be 0",
+		"non-zero response ID must be rejected per RFC 9250 §4.2.1")
 }
 
-// TestExchangeAcceptsZeroID covers RFC 9250 §4.2.1's allowance of an ID-0
-// response.
+// TestExchangeAcceptsZeroID confirms that a response carrying the
+// spec-mandated wire ID=0 is accepted, and that the exchanger restores
+// the caller's requested ID on the returned message so callers don't
+// have to special-case DoQ.
 func TestExchangeAcceptsZeroID(t *testing.T) {
 	t.Parallel()
 	addr, cfg := startCustomDoQ(t, func(t *testing.T, req wire.Message, stream *quic.Stream) {
@@ -233,15 +239,18 @@ func TestExchangeAcceptsZeroID(t *testing.T) {
 	defer cancel()
 	resp, err := ex.Exchange(ctx, q)
 	require.NoError(t, err)
-	require.Equal(t, uint16(0), resp.ID())
+	require.Equal(t, uint16(0xbeef), resp.ID(),
+		"caller-side resp.ID() must be the requested ID, not the wire 0")
 }
 
 // TestExchangeMalformedResponse covers the unmarshal-failure branch.
+// The bytes start with a valid wire ID=0 (passing the RFC 9250 §4.2.1
+// check) but the rest is too short to be a valid DNS header, so
+// wire.Unmarshal must fail.
 func TestExchangeMalformedResponse(t *testing.T) {
 	t.Parallel()
 	addr, cfg := startCustomDoQ(t, func(_ *testing.T, _ wire.Message, stream *quic.Stream) {
-		// Length-prefixed garbage that is not a parseable DNS message.
-		writeFrame(stream, []byte{0x00, 0x01, 0x02})
+		writeFrame(stream, []byte{0x00, 0x00, 0x42})
 	})
 
 	ex, err := doq.New(addr, doq.WithTLSConfig(cfg))
@@ -306,7 +315,9 @@ func TestStreamFallbackTimeout(t *testing.T) {
 	a := udpConn.LocalAddr().(*net.UDPAddr)
 	addr := netip.AddrPortFrom(netip.MustParseAddr("127.0.0.1"), uint16(a.Port))
 
-	ex, err := doq.New(addr, doq.WithTimeout(150*time.Millisecond))
+	ex, err := doq.New(addr,
+		doq.WithTimeout(150*time.Millisecond),
+		doq.WithServerName("127.0.0.1"))
 	require.NoError(t, err)
 	se, ok := ex.(acidns.StreamExchanger)
 	require.True(t, ok)
@@ -341,7 +352,8 @@ func TestStreamIDMismatch(t *testing.T) {
 	defer func() { _ = stream.Close() }()
 	_, err = stream.Next(ctx)
 	require.Error(t, err)
-	require.Contains(t, err.Error(), "id mismatch")
+	require.Contains(t, err.Error(), "ID must be 0",
+		"non-zero response ID on a streamed frame must be rejected")
 }
 
 // TestStreamMultipleResponses verifies Next() returns each frame in turn
@@ -431,7 +443,7 @@ func TestStreamDialFailureWithDeadline(t *testing.T) {
 	a := udpConn.LocalAddr().(*net.UDPAddr)
 	addr := netip.AddrPortFrom(netip.MustParseAddr("127.0.0.1"), uint16(a.Port))
 
-	ex, err := doq.New(addr)
+	ex, err := doq.New(addr, doq.WithServerName("127.0.0.1"))
 	require.NoError(t, err)
 	se, ok := ex.(acidns.StreamExchanger)
 	require.True(t, ok)
@@ -769,7 +781,7 @@ func TestExchangeMarshalError(t *testing.T) {
 	// Use an unbound port; we never reach the dial because Marshal fails
 	// first.
 	addr := netip.AddrPortFrom(netip.MustParseAddr("127.0.0.1"), 1)
-	ex, err := doq.New(addr)
+	ex, err := doq.New(addr, doq.WithServerName("127.0.0.1"))
 	require.NoError(t, err)
 	_, err = ex.Exchange(t.Context(), bad)
 	require.Error(t, err)

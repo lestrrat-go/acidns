@@ -29,7 +29,6 @@ import (
 	"github.com/quic-go/quic-go"
 
 	"github.com/lestrrat-go/acidns"
-	"github.com/lestrrat-go/acidns/internal/streamframe"
 	"github.com/lestrrat-go/acidns/wire"
 )
 
@@ -64,8 +63,11 @@ func New(addr netip.AddrPort, opts ...Option) (acidns.Exchanger, error) {
 	}
 	if c.serverName != "" {
 		tcfg.ServerName = c.serverName
-	} else if tcfg.ServerName == "" {
-		tcfg.ServerName = addr.Addr().String()
+	}
+	// IP-literal address with no ServerName: refuse, mirroring [dot.New].
+	// Authenticating a TLS handshake against an IP-as-SNI is a footgun.
+	if tcfg.ServerName == "" {
+		return nil, fmt.Errorf("doq: WithServerName (or *tls.Config.ServerName) required when addr is an IP literal")
 	}
 
 	return &exchanger{addr: addr, timeout: c.timeout, tlsConfig: tcfg, padding: c.padding}, nil
@@ -83,6 +85,11 @@ func (e *exchanger) Exchange(ctx context.Context, q wire.Message) (wire.Message,
 	if err != nil {
 		return nil, fmt.Errorf("doq: marshal: %w", err)
 	}
+	// RFC 9250 §4.2.1: the message ID on the wire MUST be 0. Multiplexing
+	// happens via the QUIC stream, not the DNS ID, so a non-zero ID here
+	// is a spec violation regardless of what q carries.
+	msg[0] = 0
+	msg[1] = 0
 
 	if _, ok := ctx.Deadline(); !ok && e.timeout > 0 {
 		var cancel context.CancelFunc
@@ -124,16 +131,25 @@ func (e *exchanger) Exchange(ctx context.Context, q wire.Message) (wire.Message,
 	if _, err := io.ReadFull(stream, body); err != nil {
 		return nil, fmt.Errorf("doq: read body: %w", err)
 	}
+	return decodeDoQResponse(body, q.ID())
+}
 
+// decodeDoQResponse validates RFC 9250 §4.2.1 (wire ID MUST be 0) and
+// then restores the caller's requested ID on the parsed message so
+// higher layers (resolver, retry logic) keying on Message.ID see the
+// value they sent. The on-the-wire ID is intentionally lost to callers
+// — DoQ multiplexes via QUIC streams, not via DNS IDs.
+func decodeDoQResponse(body []byte, requestID uint16) (wire.Message, error) {
+	if len(body) < 2 {
+		return nil, fmt.Errorf("doq: response too short")
+	}
+	if got := binary.BigEndian.Uint16(body[0:2]); got != 0 {
+		return nil, fmt.Errorf("doq: response ID must be 0 per RFC 9250 §4.2.1, got %#x", got)
+	}
+	binary.BigEndian.PutUint16(body[0:2], requestID)
 	resp, err := wire.Unmarshal(body)
 	if err != nil {
 		return nil, fmt.Errorf("doq: unmarshal: %w", err)
-	}
-	// RFC 9250 §4.2.1: query MUST set ID=0; response MUST set ID=0.
-	// Many real-world servers echo the requested ID instead of mandating
-	// zero. Validate either form.
-	if resp.ID() != q.ID() && resp.ID() != 0 {
-		return nil, fmt.Errorf("doq: id mismatch: got %#x", resp.ID())
 	}
 	return resp, nil
 }
@@ -163,9 +179,25 @@ func (e *exchanger) Stream(ctx context.Context, q wire.Message) (acidns.MessageS
 		_ = conn.CloseWithError(0, "")
 		return nil, fmt.Errorf("doq: open stream: %w", err)
 	}
-	if err := streamframe.WriteFrame(stream, q); err != nil {
+	// Force ID=0 per RFC 9250 §4.2.1 by re-marshalling and patching the
+	// header in place; we cannot use streamframe.WriteFrame because it
+	// would marshal q's original ID.
+	qBytes, err := wire.Marshal(q)
+	if err != nil {
 		_ = conn.CloseWithError(0, "")
-		return nil, fmt.Errorf("doq: %w", err)
+		return nil, fmt.Errorf("doq: marshal: %w", err)
+	}
+	qBytes[0] = 0
+	qBytes[1] = 0
+	var hdr [2]byte
+	binary.BigEndian.PutUint16(hdr[:], uint16(len(qBytes)))
+	if _, err := stream.Write(hdr[:]); err != nil {
+		_ = conn.CloseWithError(0, "")
+		return nil, fmt.Errorf("doq: write length: %w", err)
+	}
+	if _, err := stream.Write(qBytes); err != nil {
+		_ = conn.CloseWithError(0, "")
+		return nil, fmt.Errorf("doq: write body: %w", err)
 	}
 	// RFC 9250 §4.2: client MUST send the FIN after the query body. The
 	// server then writes responses on the same stream until it FINs.
@@ -199,17 +231,31 @@ func (s *doqStream) Next(ctx context.Context) (wire.Message, error) {
 		case <-stop:
 		}
 	}()
-	m, err := streamframe.ReadFrame(s.stream)
+	body, err := readDoQFrameBytes(s.stream)
 	if err != nil {
 		if cerr := ctx.Err(); cerr != nil {
 			return nil, cerr
 		}
 		return nil, err
 	}
-	if m.ID() != s.expectID && m.ID() != 0 {
-		return nil, fmt.Errorf("doq: id mismatch: got %#x", m.ID())
+	return decodeDoQResponse(body, s.expectID)
+}
+
+// readDoQFrameBytes reads a length-prefixed DoQ response frame and
+// returns the raw body so [decodeDoQResponse] can validate the wire ID
+// before [wire.Unmarshal] runs. Sharing [streamframe.ReadFrame] would
+// give us a parsed Message that already carries the (zero) wire ID,
+// losing the chance to patch it back to the caller's value.
+func readDoQFrameBytes(r io.Reader) ([]byte, error) {
+	var hdr [2]byte
+	if _, err := io.ReadFull(r, hdr[:]); err != nil {
+		return nil, err
 	}
-	return m, nil
+	body := make([]byte, binary.BigEndian.Uint16(hdr[:]))
+	if _, err := io.ReadFull(r, body); err != nil {
+		return nil, fmt.Errorf("doq: read body: %w", err)
+	}
+	return body, nil
 }
 
 func (s *doqStream) Close() error {

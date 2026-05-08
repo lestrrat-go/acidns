@@ -57,14 +57,13 @@ func TestExchangeBadContentType(t *testing.T) {
 	require.Contains(t, err.Error(), "unexpected content type")
 }
 
-// TestExchangeEmptyContentType — when the server omits the Content-Type
-// header, the client should still attempt to decode the body.
+// TestExchangeEmptyContentType — RFC 8484 §6 mandates the server set
+// Content-Type to application/dns-message; we treat an absent header as
+// a hard error rather than trusting whatever bytes follow.
 func TestExchangeEmptyContentType(t *testing.T) {
 	t.Parallel()
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-		// Force the default Content-Type detection to be suppressed by
-		// sending zero bytes with no header — net/http will not set
-		// Content-Type when the body is empty and no Write happens.
+		// Suppress net/http's default Content-Type sniffing.
 		w.Header()["Content-Type"] = nil
 		w.WriteHeader(http.StatusOK)
 	}))
@@ -75,8 +74,8 @@ func TestExchangeEmptyContentType(t *testing.T) {
 
 	_, err = ex.Exchange(t.Context(), newQuery(t, 0x2345))
 	require.Error(t, err)
-	// Empty body -> wire.Unmarshal failure path.
-	require.Contains(t, err.Error(), "unmarshal")
+	require.Contains(t, err.Error(), "missing Content-Type",
+		"empty Content-Type from a DoH server must be rejected (RFC 8484 §6)")
 }
 
 // TestExchangeUnmarshalError covers the wire.Unmarshal error branch with a

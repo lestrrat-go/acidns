@@ -70,11 +70,26 @@ func New(addr netip.AddrPort, opts ...Option) (acidns.Exchanger, error) {
 	}
 	if c.serverName != "" {
 		tcfg.ServerName = c.serverName
-	} else if tcfg.ServerName == "" {
-		tcfg.ServerName = addr.Addr().String()
+	}
+	// An IP-literal address with no ServerName falls back to the IP as
+	// SNI / cert verification name, which silently authenticates against
+	// any cert that happens to include the IP — typically not what the
+	// caller wants. Refuse this combination so a misuse is loud, not
+	// silent. Use WithServerName or pre-configure the *tls.Config.
+	if tcfg.ServerName == "" && !isHostnameAddr(addr) {
+		return nil, fmt.Errorf("dot: WithServerName (or *tls.Config.ServerName) required when addr is an IP literal")
 	}
 
 	return &exchanger{addr: addr, timeout: c.timeout, tlsConfig: tcfg, padding: c.padding}, nil
+}
+
+// isHostnameAddr reports whether addr is a hostname:port form rather
+// than an ip:port form. netip.AddrPort always represents a parsed IP,
+// so this currently returns false for any valid AddrPort — the helper
+// is here for symmetry with future hostname-aware constructors.
+func isHostnameAddr(addr netip.AddrPort) bool {
+	_ = addr
+	return false
 }
 
 func (e *exchanger) Exchange(ctx context.Context, q wire.Message) (wire.Message, error) {

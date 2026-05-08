@@ -113,7 +113,17 @@ func (e *exchanger) Exchange(ctx context.Context, q wire.Message) (wire.Message,
 			Body:       body,
 		}
 	}
-	if ct := resp.Header.Get("Content-Type"); ct != "" && ct != contentType {
+	// RFC 8484 §6: a DoH server MUST set Content-Type to
+	// application/dns-message. Treat both a missing and a wrong header
+	// as a hard error — a server that omits Content-Type is either
+	// misbehaving or proxying through middleware that strips it, and
+	// trusting whatever bytes arrived as a DNS message in either case
+	// would launder the protocol violation downstream.
+	ct := resp.Header.Get("Content-Type")
+	if ct == "" {
+		return nil, fmt.Errorf("doh: response missing Content-Type header (RFC 8484 §6 requires %q)", contentType)
+	}
+	if ct != contentType {
 		return nil, fmt.Errorf("doh: unexpected content type %q", ct)
 	}
 

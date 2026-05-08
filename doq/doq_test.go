@@ -148,7 +148,7 @@ func TestDoQContextCancel(t *testing.T) {
 	a := udpConn.LocalAddr().(*net.UDPAddr)
 	addr := netip.AddrPortFrom(netip.MustParseAddr("127.0.0.1"), uint16(a.Port))
 
-	ex, err := doq.New(addr)
+	ex, err := doq.New(addr, doq.WithServerName("127.0.0.1"))
 	require.NoError(t, err)
 
 	q, _ := wire.NewBuilder().
