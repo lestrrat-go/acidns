@@ -1,3 +1,5 @@
+//go:build !acidns_no_doq
+
 package examples_test
 
 import (

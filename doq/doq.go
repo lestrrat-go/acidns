@@ -1,3 +1,5 @@
+//go:build !acidns_no_doq
+
 // Package doq implements DNS over Dedicated QUIC connections (RFC 9250).
 //
 // Each Exchange opens a fresh QUIC connection, opens one bidirectional
@@ -5,6 +7,12 @@
 // framing as TCP), reads a length-prefixed response, then closes the
 // stream and connection. Connection reuse and stream multiplexing are out
 // of scope for this primitive transport.
+//
+// DoQ pulls quic-go (and its TLS / ECN / connection-migration code paths)
+// into the binary. Builds that do not need DoQ can pass the
+// `acidns_no_doq` build tag to compile a stub package that returns
+// ErrDoQDisabled from New; this keeps the quic-go dependency out of the
+// final binary.
 package doq
 
 import (
