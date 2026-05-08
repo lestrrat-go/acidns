@@ -1,6 +1,8 @@
 package authoritative
 
 import (
+	"context"
+
 	"github.com/lestrrat-go/acidns"
 	"github.com/lestrrat-go/acidns/wire"
 )
@@ -13,7 +15,7 @@ type NotifyHandler func(zone wire.Question, src acidns.ResponseWriter)
 
 // serveNotify acknowledges a NOTIFY for a zone the server hosts. NOTIFY
 // queries from peers about zones we don't hold receive REFUSED.
-func (a *authoritative) serveNotify(w acidns.ResponseWriter, q wire.Message) {
+func (a *authoritative) serveNotify(ctx context.Context, w acidns.ResponseWriter, q wire.Message) {
 	b := wire.NewBuilder().
 		ID(q.ID()).
 		Response(true).
@@ -31,9 +33,17 @@ func (a *authoritative) serveNotify(w acidns.ResponseWriter, q wire.Message) {
 	a.mu.RLock()
 	_, owns := a.zones[nameKey(zoneQ.Name())]
 	handler := a.notifyHandler
+	policy := a.notifyPolicy
 	a.mu.RUnlock()
 	if !owns {
 		_ = w.WriteMsg(mustBuild(setRCODE(b, q, wire.RCODENotAuth), q))
+		return
+	}
+	// Default-deny: a NOTIFY without an installed policy is refused
+	// because the source-address check is the operator's call (typical
+	// policies match against the configured primaries).
+	if policy == nil || !policy(ctx, w, q) {
+		_ = w.WriteMsg(mustBuild(setRCODE(b, q, wire.RCODERefused), q))
 		return
 	}
 

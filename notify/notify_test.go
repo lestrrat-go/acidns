@@ -29,6 +29,7 @@ func startSecondary(t *testing.T, h authoritative.NotifyHandler) netip.AddrPort 
 	require.NoError(t, err)
 	a, err := authoritative.New(
 		authoritative.WithZone(z),
+		authoritative.WithNotifyPolicy(func(_ context.Context, _ acidns.ResponseWriter, _ wire.Message) bool { return true }),
 		authoritative.WithNotifyHandler(h),
 	)
 	require.NoError(t, err)

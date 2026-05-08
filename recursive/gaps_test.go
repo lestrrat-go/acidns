@@ -420,6 +420,7 @@ func TestServeDNSWithAuthorityAndAdditional(t *testing.T) {
 
 	q, err := wire.NewBuilder().
 		ID(7).
+		RecursionDesired(true).
 		Question(wire.NewQuestion(wire.MustParseName("nope.example."), rrtype.A)).
 		Build()
 	require.NoError(t, err)
@@ -464,6 +465,7 @@ func TestServeDNSBogusServfailWithEDE(t *testing.T) {
 
 	q, err := wire.NewBuilder().
 		ID(8).
+		RecursionDesired(true).
 		Question(wire.NewQuestion(wire.MustParseName("www.example."), rrtype.A)).
 		Build()
 	require.NoError(t, err)

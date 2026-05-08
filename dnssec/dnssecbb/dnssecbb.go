@@ -57,6 +57,14 @@ const (
 // (8 bytes) for any leading-zero formatting variations.
 const MaxRSAModulusBytes = 520
 
+// MinRSAModulusBytes is the lower bound on RSA moduli accepted by the
+// validator. RFC 8624 §3.1 effectively retires sub-1024-bit RSA — the
+// modulus is too small to resist contemporary factoring. Treating any
+// shorter key as Bogus prevents a misconfigured or malicious zone from
+// shipping a key whose signatures verify but offer no real security.
+// 1024 bits = 128 bytes.
+const MinRSAModulusBytes = 128
+
 // MaxRSAExponentBytes caps the RSA public exponent length. Real-world
 // exponents are 3 or 65537 (3 bytes at most). RFC 8624 doesn't pin a
 // ceiling, but anything beyond 8 bytes is implausible.
@@ -98,6 +106,9 @@ func ParseRSAPublic(b []byte) (*rsa.PublicKey, error) {
 	}
 	if len(modBytes) > MaxRSAModulusBytes {
 		return nil, fmt.Errorf("dnssecbb: rsa modulus length %d exceeds cap %d (RFC 8624)", len(modBytes), MaxRSAModulusBytes)
+	}
+	if len(modBytes) < MinRSAModulusBytes {
+		return nil, fmt.Errorf("dnssecbb: rsa modulus length %d below floor %d (RFC 8624 §3.1)", len(modBytes), MinRSAModulusBytes)
 	}
 	e := new(big.Int).SetBytes(b[off : off+explen])
 	if !e.IsInt64() {

@@ -34,9 +34,24 @@ func newAuth(t *testing.T) authoritative.Authoritative {
 	t.Helper()
 	z, err := zonefile.Parse(strings.NewReader(sampleZone))
 	require.NoError(t, err)
-	a, err := authoritative.New(authoritative.WithZone(z))
+	a, err := authoritative.New(
+		authoritative.WithZone(z),
+		authoritative.WithAXFRPolicy(allowAllAXFR),
+		authoritative.WithNotifyPolicy(allowAllNotify),
+	)
 	require.NoError(t, err)
 	return a
+}
+
+// allowAllAXFR is the test allow-all AXFR policy. Production callers
+// should match w.RemoteAddr() against an allow-list and/or verify TSIG.
+func allowAllAXFR(_ context.Context, _ acidns.ResponseWriter, _ wire.Message) bool {
+	return true
+}
+
+// allowAllNotify is the test allow-all NOTIFY policy.
+func allowAllNotify(_ context.Context, _ acidns.ResponseWriter, _ wire.Message) bool {
+	return true
 }
 
 // inProcWriter is a minimal ResponseWriter that captures the response.

@@ -389,6 +389,15 @@ func (l *tcpLoop) serveConn(ctx context.Context, conn net.Conn) {
 				writeTimeout: l.cfg.writeTimeout,
 				writeMu:      &writeMu,
 			}
+			switch verdict, reply := preflightRequest(q); verdict {
+			case preflightDrop:
+				return
+			case preflightReply:
+				if reply != nil {
+					_ = w.WriteMsg(reply)
+				}
+				return
+			}
 			l.handler.ServeDNS(contextWithRawRequest(connCtx, body), w, q)
 		}(bufp, n)
 	}

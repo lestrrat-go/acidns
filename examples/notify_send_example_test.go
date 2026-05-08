@@ -27,8 +27,12 @@ $TTL 60
 @   IN  NS   ns1.example.com.
 ns1 IN  A    192.0.2.10
 `))
+	// NOTIFY is refused by default; install a policy that admits the
+	// request (production callers should match w.RemoteAddr() against
+	// the configured primaries).
 	h, err := authoritative.New(
 		authoritative.WithZone(z),
+		authoritative.WithNotifyPolicy(func(_ context.Context, _ acidns.ResponseWriter, _ wire.Message) bool { return true }),
 		authoritative.WithNotifyHandler(func(_ wire.Question, _ acidns.ResponseWriter) {
 			fired.Add(1)
 		}),

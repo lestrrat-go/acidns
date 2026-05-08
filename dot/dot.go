@@ -67,7 +67,7 @@ func New(addr netip.AddrPort, opts ...Option) (acidns.Exchanger, error) {
 	if c.tlsConfig != nil {
 		tcfg = c.tlsConfig.Clone()
 	} else {
-		tcfg = &tls.Config{MinVersion: tls.VersionTLS12}
+		tcfg = &tls.Config{MinVersion: tls.VersionTLS13}
 	}
 	if c.serverName != "" {
 		tcfg.ServerName = c.serverName
@@ -109,7 +109,7 @@ func (e *exchanger) Exchange(ctx context.Context, q wire.Message) (wire.Message,
 	if e.padding {
 		q = wire.PadEncrypted(q)
 	}
-	d := tls.Dialer{Config: e.tlsConfig, NetDialer: &net.Dialer{}}
+	d := tls.Dialer{Config: e.tlsConfig, NetDialer: &net.Dialer{Timeout: e.timeout}}
 	conn, err := d.DialContext(ctx, "tcp", e.addr.String())
 	if err != nil {
 		return nil, fmt.Errorf("dot: dial %s: %w", e.addr, err)
@@ -124,7 +124,7 @@ func (e *exchanger) Stream(ctx context.Context, q wire.Message) (acidns.MessageS
 	if e.padding {
 		q = wire.PadEncrypted(q)
 	}
-	d := tls.Dialer{Config: e.tlsConfig, NetDialer: &net.Dialer{}}
+	d := tls.Dialer{Config: e.tlsConfig, NetDialer: &net.Dialer{Timeout: e.timeout}}
 	conn, err := d.DialContext(ctx, "tcp", e.addr.String())
 	if err != nil {
 		return nil, fmt.Errorf("dot: dial %s: %w", e.addr, err)

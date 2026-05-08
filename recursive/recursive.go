@@ -91,6 +91,7 @@ type recursive struct {
 	queryTimeout  time.Duration
 	maxNegTTL     time.Duration
 	resolveBudget time.Duration
+	allowNoRD     bool
 
 	inflightMu sync.Mutex
 	inflight   map[string]*inflightCall
@@ -142,6 +143,7 @@ func New(opts ...Option) Recursive {
 		queryTimeout:  c.queryTimeout,
 		maxNegTTL:     c.maxNegTTL,
 		resolveBudget: c.resolveBudget,
+		allowNoRD:     c.allowNoRD,
 		inflight:      make(map[string]*inflightCall),
 	}
 }
@@ -194,6 +196,18 @@ func (r *recursive) ServeDNS(ctx context.Context, w acidns.ResponseWriter, q wir
 	}
 	question := q.Questions()[0]
 	b = b.Question(question)
+
+	// A recursive resolver that answers queries without the RD bit is
+	// an amplification primitive: any peer can elicit cached answers
+	// without proving they wanted recursion, the classic open-resolver
+	// reflection vector. Refuse such queries by default; operators that
+	// intentionally publish their cache to non-recursive peers can opt
+	// in via WithAllowNoRD after gating the listener with ACL / rate
+	// limit middleware.
+	if !q.Flags().RecursionDesired() && !r.allowNoRD {
+		_ = w.WriteMsg(must(b.RCODE(wire.RCODERefused).Build()))
+		return
+	}
 
 	entry, err := r.Resolve(ctx, question.Name(), question.Type())
 	if err != nil {

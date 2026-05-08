@@ -42,6 +42,8 @@ type authoritative struct {
 	mu            sync.RWMutex
 	zones         map[string]*zoneIndex
 	notifyHandler NotifyHandler
+	notifyPolicy  NotifyPolicy
+	axfrPolicy    AXFRPolicy
 	updatePolicy  UpdatePolicy
 }
 
@@ -61,6 +63,8 @@ func New(opts ...Option) (Authoritative, error) {
 		o.applyAuth(c)
 	}
 	a.notifyHandler = c.notifyHandler
+	a.notifyPolicy = c.notifyPolicy
+	a.axfrPolicy = c.axfrPolicy
 	a.updatePolicy = c.updatePolicy
 	for _, z := range c.zones {
 		if err := a.AddZone(z); err != nil {
@@ -124,18 +128,18 @@ func (a *authoritative) ServeDNS(ctx context.Context, w acidns.ResponseWriter, q
 		return
 	}
 	if q.Flags().Opcode() == wire.OpcodeNotify {
-		a.serveNotify(w, q)
+		a.serveNotify(ctx, w, q)
 		return
 	}
 	if len(q.Questions()) == 1 {
 		switch q.Questions()[0].Type() {
 		case rrtype.AXFR:
-			a.serveAXFR(w, q)
+			a.serveAXFR(ctx, w, q)
 			return
 		case rrtype.IXFR:
 			// RFC 1995 §3: a server lacking a journal MAY answer IXFR
 			// with an AXFR-format response.
-			a.serveAXFR(w, q)
+			a.serveAXFR(ctx, w, q)
 			return
 		}
 	}
@@ -155,7 +159,7 @@ const axfrChunkBudget = 16 * 1024
 // the final message ends with the apex SOA. Each message is a complete,
 // self-framed DNS response with AA=1; per RFC 5936 §2.2 a receiver
 // reassembles the zone by concatenating answer sections in arrival order.
-func (a *authoritative) serveAXFR(w acidns.ResponseWriter, q wire.Message) {
+func (a *authoritative) serveAXFR(ctx context.Context, w acidns.ResponseWriter, q wire.Message) {
 	question := q.Questions()[0]
 	header := func() *wire.Builder {
 		return wire.NewBuilder().
@@ -179,6 +183,14 @@ func (a *authoritative) serveAXFR(w acidns.ResponseWriter, q wire.Message) {
 	if !zone.origin.Equal(question.Name()) {
 		// AXFR target must equal a zone's apex.
 		_ = w.WriteMsg(mustBuild(setRCODE(header(), q, wire.RCODENotAuth), q))
+		return
+	}
+
+	// Default-deny when no policy is installed: zone contents leave
+	// the server only when the operator has explicitly authorised it.
+	policy := a.axfrPolicy
+	if policy == nil || !policy(ctx, w, q) {
+		_ = w.WriteMsg(mustBuild(setRCODE(header(), q, wire.RCODERefused), q))
 		return
 	}
 

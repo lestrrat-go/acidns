@@ -62,9 +62,19 @@ const maxResponseBytes = 64 * 1024
 // http.DefaultClient is unsuitable: it has no timeout and is shared
 // process-wide, so a misbehaving endpoint can hang queries indefinitely
 // and contend with unrelated HTTP code in the same binary.
+//
+// CheckRedirect returns http.ErrUseLastResponse so the client surfaces
+// the 3xx as the HTTP response rather than auto-following it. A hostile
+// or misconfigured DoH endpoint that 302s to http:// would otherwise
+// bypass the scheme guard at New, since the redirect is followed by
+// the underlying http.Client and not re-validated. RFC 8484 has no
+// notion of redirected DoH; a 3xx is itself a protocol violation.
 func defaultClient() *http.Client {
 	return &http.Client{
 		Timeout: 30 * time.Second,
+		CheckRedirect: func(*http.Request, []*http.Request) error {
+			return http.ErrUseLastResponse
+		},
 		Transport: &http.Transport{
 			Proxy: http.ProxyFromEnvironment,
 			DialContext: (&net.Dialer{

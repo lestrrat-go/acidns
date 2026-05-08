@@ -43,7 +43,10 @@ func TestTransferRoundTrip(t *testing.T) {
 
 	z, err := zonefile.Parse(strings.NewReader(transferZone))
 	require.NoError(t, err)
-	h, err := authoritative.New(authoritative.WithZone(z))
+	h, err := authoritative.New(
+		authoritative.WithZone(z),
+		authoritative.WithAXFRPolicy(func(_ context.Context, _ acidns.ResponseWriter, _ wire.Message) bool { return true }),
+	)
 	require.NoError(t, err)
 
 	srv, err := acidns.NewTCPServer(netip.MustParseAddrPort("127.0.0.1:0"), h)

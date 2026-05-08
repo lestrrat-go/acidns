@@ -24,6 +24,7 @@ type config struct {
 	queryTimeout  time.Duration
 	maxNegTTL     time.Duration
 	resolveBudget time.Duration
+	allowNoRD     bool
 }
 
 // WithRoots overrides the default root server list.
@@ -91,4 +92,21 @@ func WithResolveBudget(d time.Duration) Option {
 // Defaults to 1 hour.
 func WithMaxNegativeTTL(d time.Duration) Option {
 	return optionFunc(func(c *config) { c.maxNegTTL = d })
+}
+
+// WithAllowNoRD removes the safe default of refusing queries whose
+// header has the Recursion Desired (RD) bit clear. Recursive
+// resolvers that answer RD=0 queries are amplification primitives:
+// any source can elicit large answers from cached zones without
+// proving they want recursion, which is the classic open-resolver
+// reflection vector. By default the resolver returns REFUSED to
+// such queries.
+//
+// Set this only when the resolver is deployed as a cache-only
+// "stub responder" intentionally serving the cache to non-recursive
+// peers (e.g. an internal DNS appliance), and only after gating the
+// listener with an ACL or rate limit middleware so the open-resolver
+// risk is contained at the transport layer.
+func WithAllowNoRD() Option {
+	return optionFunc(func(c *config) { c.allowNoRD = true })
 }

@@ -18,6 +18,8 @@ func (f optionFunc) applyAuth(c *config) { f(c) }
 type config struct {
 	zones         []zonefile.Zone
 	notifyHandler NotifyHandler
+	notifyPolicy  NotifyPolicy
+	axfrPolicy    AXFRPolicy
 	updatePolicy  UpdatePolicy
 }
 
@@ -34,6 +36,38 @@ type config struct {
 // re-marshalling q is not byte-stable and won't verify against a TSIG
 // MAC produced by the originator.
 type UpdatePolicy func(ctx context.Context, w acidns.ResponseWriter, q wire.Message) bool
+
+// AXFRPolicy decides whether an inbound RFC 5936 AXFR (or RFC 1995
+// IXFR which falls back to AXFR) may proceed. It is invoked after the
+// per-zone authority check passes — i.e. only for zones this server
+// owns — but before any records are transmitted. Return true to admit
+// the transfer, false to respond with REFUSED.
+//
+// A nil policy means the server refuses all transfer requests; this
+// is the default because zone transfers expose every record to the
+// requester, including records that operators with split-horizon
+// deployments do NOT want leaked off-net. Callers that want to permit
+// transfers MUST install a policy explicitly. A typical implementation
+// matches w.RemoteAddr() against an allow-list of secondaries, or
+// runs [tsig.VerifyMAC] for authenticated transfers; the raw request
+// bytes (signed by TSIG) are reachable via [acidns.RawRequest](ctx).
+type AXFRPolicy func(ctx context.Context, w acidns.ResponseWriter, q wire.Message) bool
+
+// NotifyPolicy decides whether an inbound RFC 1996 NOTIFY is honoured.
+// It is invoked after the per-zone ownership check passes — i.e. only
+// for zones this server owns — and before the ACK is queued or any
+// installed [NotifyHandler] fires. Return true to ACK and (if a
+// handler is installed) trigger the post-accept callback, false to
+// respond with REFUSED and skip the handler.
+//
+// A nil policy means the server refuses every NOTIFY. NOTIFY is
+// usually delivered from a known primary on a well-known socket, so
+// admitting it from anywhere is a forge primitive that lets any peer
+// trigger the handler (typically scheduling an IXFR/AXFR that opens
+// a TCP connection to a primary the secondary already trusts). A
+// typical policy matches w.RemoteAddr() against the configured
+// primaries.
+type NotifyPolicy func(ctx context.Context, w acidns.ResponseWriter, q wire.Message) bool
 
 // WithZone adds z to the server's zones.
 func WithZone(z zonefile.Zone) Option {
@@ -57,4 +91,19 @@ func WithNotifyHandler(h NotifyHandler) Option {
 // a single auth scheme.
 func WithUpdatePolicy(p UpdatePolicy) Option {
 	return optionFunc(func(c *config) { c.updatePolicy = p })
+}
+
+// WithAXFRPolicy installs the gate that admits inbound AXFR (and
+// fallback IXFR) requests. Without this option (the default) every
+// transfer is refused with REFUSED — see [AXFRPolicy] for the
+// rationale.
+func WithAXFRPolicy(p AXFRPolicy) Option {
+	return optionFunc(func(c *config) { c.axfrPolicy = p })
+}
+
+// WithNotifyPolicy installs the gate that admits inbound NOTIFY
+// requests. Without this option (the default) every NOTIFY is
+// refused with REFUSED — see [NotifyPolicy] for the rationale.
+func WithNotifyPolicy(p NotifyPolicy) Option {
+	return optionFunc(func(c *config) { c.notifyPolicy = p })
 }

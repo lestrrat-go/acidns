@@ -26,7 +26,13 @@ $TTL 60
 ns1 IN  A    192.0.2.10
 www IN  A    192.0.2.42
 `))
-	h, err := authoritative.New(authoritative.WithZone(z))
+	// Zone transfers are refused by default; install a policy that admits
+	// the request (production callers should match w.RemoteAddr() against
+	// an allow-list of secondaries or verify a TSIG MAC).
+	h, err := authoritative.New(
+		authoritative.WithZone(z),
+		authoritative.WithAXFRPolicy(func(_ context.Context, _ acidns.ResponseWriter, _ wire.Message) bool { return true }),
+	)
 	if err != nil {
 		fmt.Println("auth:", err)
 		return

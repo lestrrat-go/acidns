@@ -100,7 +100,7 @@ func NewKeepAliveExchanger(addr netip.AddrPort, opts ...KeepAliveOption) (acidns
 	if c.tlsConfig != nil {
 		tcfg = c.tlsConfig.Clone()
 	} else {
-		tcfg = &tls.Config{MinVersion: tls.VersionTLS12}
+		tcfg = &tls.Config{MinVersion: tls.VersionTLS13}
 	}
 	if c.serverName != "" {
 		tcfg.ServerName = c.serverName
@@ -143,7 +143,7 @@ func (e *kaExchanger) Exchange(ctx context.Context, q wire.Message) (wire.Messag
 	}
 
 	if e.conn == nil {
-		d := tls.Dialer{Config: e.tlsConfig, NetDialer: &net.Dialer{}}
+		d := tls.Dialer{Config: e.tlsConfig, NetDialer: &net.Dialer{Timeout: e.cfg.timeout}}
 		c, err := d.DialContext(ctx, "tcp", e.addr.String())
 		if err != nil {
 			return nil, fmt.Errorf("dot-keepalive: dial %s: %w", e.addr, err)

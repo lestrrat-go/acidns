@@ -95,6 +95,7 @@ func TestServeDNSServFailOnUnreachable(t *testing.T) {
 
 	q, err := wire.NewBuilder().
 		ID(2).
+		RecursionDesired(true).
 		Question(wire.NewQuestion(wire.MustParseName("nope.invalid"), rrtype.A)).
 		Build()
 	require.NoError(t, err)

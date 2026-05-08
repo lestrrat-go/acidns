@@ -32,7 +32,10 @@ func WithUDPReadBuffer(n int) UDPListenerOption {
 
 // WithUDPMaxResponse sets the absolute upper bound on response size before
 // truncation, regardless of any EDNS payload size advertised by the client.
-// Defaults to 4096.
+// Defaults to 1232 per DNS Flag Day 2020 — staying at or below the typical
+// IPv6 minimum MTU minus headers avoids IP fragmentation, which is the
+// vector for the well-documented amplification and frag-attack classes.
+// Raise this only if you understand the trade.
 func WithUDPMaxResponse(n int) UDPListenerOption {
 	return udpListenerOptionFunc(func(c *udpListenerConfig) { c.maxResponseLen = n })
 }
@@ -67,7 +70,7 @@ func NewUDPServer(addr netip.AddrPort, h Handler, opts ...UDPListenerOption) (*U
 	if h == nil {
 		return nil, fmt.Errorf("dnsserver: handler is nil")
 	}
-	cfg := udpListenerConfig{bufferSize: 4096, maxResponseLen: 4096, maxInflight: 4096}
+	cfg := udpListenerConfig{bufferSize: 4096, maxResponseLen: 1232, maxInflight: 4096}
 	for _, o := range opts {
 		o.applyUDPServer(&cfg)
 	}
@@ -212,6 +215,17 @@ func (l *udpLoop) handlePacket(ctx context.Context, body []byte, src netip.AddrP
 		local:  l.addr,
 		maxLen: maxResp,
 	}
+
+	switch verdict, reply := preflightRequest(q); verdict {
+	case preflightDrop:
+		return
+	case preflightReply:
+		if reply != nil {
+			_ = w.WriteMsg(reply)
+		}
+		return
+	}
+
 	l.handler.ServeDNS(ctx, w, q)
 }
 
