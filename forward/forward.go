@@ -268,10 +268,7 @@ func negativeTTLFromSOA(authority []wire.Record, maxNeg time.Duration) (time.Dur
 		if !ok {
 			continue
 		}
-		ttl := min(r.TTL(), soa.Minimum())
-		if ttl > maxNeg {
-			ttl = maxNeg
-		}
+		ttl := min(min(r.TTL(), soa.Minimum()), maxNeg)
 		if ttl <= 0 {
 			return 0, false
 		}

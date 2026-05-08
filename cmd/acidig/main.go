@@ -281,9 +281,9 @@ func formatRData(rd rdata.RData) string {
 
 func formatSvcbBody(priority uint16, target string, params []rdata.SVCBParam) string {
 	var out strings.Builder
-	out.WriteString(fmt.Sprintf("%d %s", priority, target))
+	fmt.Fprintf(&out, "%d %s", priority, target)
 	for _, p := range params {
-		out.WriteString(fmt.Sprintf(" key%d=%x", p.Key(), p.Value()))
+		fmt.Fprintf(&out, " key%d=%x", p.Key(), p.Value())
 	}
 	return out.String()
 }

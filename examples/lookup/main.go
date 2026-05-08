@@ -131,9 +131,9 @@ type svcbLike interface {
 
 func formatSVCB[T svcbLike](s T) string {
 	var out strings.Builder
-	out.WriteString(fmt.Sprintf("%d %s", s.Priority(), s.Target()))
+	fmt.Fprintf(&out, "%d %s", s.Priority(), s.Target())
 	for _, p := range s.Params() {
-		out.WriteString(fmt.Sprintf(" key%d=%x", p.Key(), p.Value()))
+		fmt.Fprintf(&out, " key%d=%x", p.Key(), p.Value())
 	}
 	return out.String()
 }

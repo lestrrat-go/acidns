@@ -408,7 +408,7 @@ type retryExchanger struct {
 
 func (r *retryExchanger) Exchange(ctx context.Context, q wire.Message) (wire.Message, error) {
 	var lastErr error
-	for i := 0; i < r.attempts; i++ {
+	for range r.attempts {
 		attemptCtx := ctx
 		var cancel context.CancelFunc
 		if r.perAttempt > 0 {

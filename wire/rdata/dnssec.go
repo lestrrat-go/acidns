@@ -369,7 +369,7 @@ func decodeTypeBitmap(u *wirebb.Unpacker, n int) ([]rrtype.Type, error) {
 		if err != nil {
 			return nil, err
 		}
-		for i := 0; i < int(ln); i++ {
+		for i := range int(ln) {
 			b := bm[i]
 			for bit := range 8 {
 				if b&(1<<(7-bit)) != 0 {
