@@ -69,11 +69,12 @@ func NewServer(addr netip.AddrPort, h acidns.Handler, opts ...ServerOption) (*Se
 		return nil, fmt.Errorf("dot: handler is nil")
 	}
 	cfg := serverConfig{
-		idleTimeout:    10 * time.Second,
-		writeTimeout:   5 * time.Second,
-		maxConnections: 1024,
-		maxMessageSize: 16 * 1024,
-		maxInflightPer: 32,
+		handshakeTimeout: 10 * time.Second,
+		idleTimeout:      10 * time.Second,
+		writeTimeout:     5 * time.Second,
+		maxConnections:   1024,
+		maxMessageSize:   16 * 1024,
+		maxInflightPer:   32,
 	}
 	for _, o := range opts {
 		o.applyDoTServer(&cfg)
@@ -283,11 +284,13 @@ func remoteAddrFromConn(c net.Conn) netip.AddrPort {
 func (l *serverLoop) serveConn(ctx context.Context, raw net.Conn) {
 	defer func() { _ = raw.Close() }()
 
-	// TLS handshake under the connection-establishment deadline
-	// (idleTimeout) so a peer that opens TCP and then never sends
-	// the ClientHello cannot pin the slot indefinitely.
-	if l.cfg.idleTimeout > 0 {
-		_ = raw.SetDeadline(time.Now().Add(l.cfg.idleTimeout))
+	// TLS handshake bounded by handshakeTimeout (separate from
+	// idleTimeout so an operator can favour long-lived idle
+	// connections without simultaneously widening the
+	// peer-stalls-on-ClientHello window). A non-positive value
+	// disables the deadline.
+	if l.cfg.handshakeTimeout > 0 {
+		_ = raw.SetDeadline(time.Now().Add(l.cfg.handshakeTimeout))
 	}
 	tlsConn := tls.Server(raw, l.cfg.tlsConfig)
 	if err := tlsConn.HandshakeContext(ctx); err != nil {

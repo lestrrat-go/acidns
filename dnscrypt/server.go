@@ -114,13 +114,12 @@ func (s *Server) Run(ctx context.Context) (*ServerController, error) {
 	bound := netip.AddrPortFrom(la.AddrPort().Addr(), uint16(la.Port))
 
 	loop := &serverLoop{
-		pc:         pc,
-		addr:       bound,
-		handler:    s.handler,
-		cert:       s.cert,
-		resolverSK: s.resolverSK,
-		cfg:        s.cfg,
+		pc:      pc,
+		addr:    bound,
+		handler: s.handler,
+		cfg:     s.cfg,
 	}
+	loop.material.Store(&keyMaterial{cert: s.cert, resolverSK: s.resolverSK})
 	if s.cfg.maxInflight > 0 {
 		loop.sem = make(chan struct{}, s.cfg.maxInflight)
 	}
@@ -129,7 +128,11 @@ func (s *Server) Run(ctx context.Context) (*ServerController, error) {
 		return &b
 	}
 
-	ctrl := &ServerController{addr: bound, done: make(chan struct{})}
+	ctrl := &ServerController{
+		addr: bound,
+		done: make(chan struct{}),
+		loop: loop,
+	}
 	go func() {
 		defer close(ctrl.done)
 		err := loop.run(ctx)
@@ -140,6 +143,16 @@ func (s *Server) Run(ctx context.Context) (*ServerController, error) {
 	return ctrl, nil
 }
 
+// keyMaterial pairs the active cert with its matching resolver
+// private key. Stored under [serverLoop.material] as a single atomic
+// pointer so a hot rotation swaps both halves at once — using two
+// independent atomics would expose a window where the cert and key
+// disagree.
+type keyMaterial struct {
+	cert       *Cert
+	resolverSK [32]byte
+}
+
 // ServerController is the runtime handle returned by [Server.Run].
 // The name is prefixed Server because the dnscrypt package's other
 // long-lived runtime type is the client [Cert]; ambiguity is worse
@@ -148,6 +161,34 @@ type ServerController struct {
 	addr netip.AddrPort
 	done chan struct{}
 	err  atomic.Pointer[error]
+	loop *serverLoop
+}
+
+// Rotate swaps the active certificate and resolver short-term key
+// on the running server. Useful for the standard DNSCrypt operator
+// pattern of rotating short-term keys (and the cert that advertises
+// the new public key) on a regular cadence — typically hourly —
+// without re-binding the UDP socket.
+//
+// The swap is atomic: in-flight handlers using the old material
+// finish under it; new packets arriving after Rotate returns are
+// decrypted under the new material. Returns an error if the new
+// cert is missing or outside its validity window; the previous
+// material remains active in that case.
+func (c *ServerController) Rotate(cert *Cert, resolverSK [32]byte) error {
+	if cert == nil {
+		return fmt.Errorf("dnscrypt: Rotate: cert is nil")
+	}
+	if cert.esVersion != ESVersion2 {
+		return fmt.Errorf("%w: ES%d", ErrUnsupportedESVersion, cert.esVersion)
+	}
+	now := time.Now()
+	if now.Before(cert.validFrom) || now.After(cert.validUntil) {
+		return fmt.Errorf("%w: now=%s window=[%s, %s]",
+			ErrCertExpired, now, cert.validFrom, cert.validUntil)
+	}
+	c.loop.material.Store(&keyMaterial{cert: cert, resolverSK: resolverSK})
+	return nil
 }
 
 // Addr returns the bound UDP address.
@@ -177,15 +218,14 @@ func (c *ServerController) setErr(err error) {
 }
 
 type serverLoop struct {
-	pc         net.PacketConn
-	addr       netip.AddrPort
-	handler    acidns.Handler
-	cert       *Cert
-	resolverSK [32]byte
-	cfg        serverConfig
-	sem        chan struct{}
-	bufPool    sync.Pool
-	wg         sync.WaitGroup
+	pc       net.PacketConn
+	addr     netip.AddrPort
+	handler  acidns.Handler
+	cfg      serverConfig
+	material atomic.Pointer[keyMaterial]
+	sem      chan struct{}
+	bufPool  sync.Pool
+	wg       sync.WaitGroup
 }
 
 func (l *serverLoop) run(ctx context.Context) error {
@@ -250,7 +290,14 @@ func (l *serverLoop) handlePacket(ctx context.Context, body []byte, src netip.Ad
 	if len(body) < 8+32+12+chacha20poly1305.Overhead {
 		return
 	}
-	if !bytes.Equal(body[0:8], l.cert.clientMagic[:]) {
+	// Snapshot the active key material once per packet. After Rotate
+	// the next packet picks up the new material; in-flight handlers
+	// continue under whatever they read here.
+	mat := l.material.Load()
+	if mat == nil {
+		return
+	}
+	if !bytes.Equal(body[0:8], mat.cert.clientMagic[:]) {
 		return
 	}
 	var clientPK [32]byte
@@ -259,7 +306,7 @@ func (l *serverLoop) handlePacket(ctx context.Context, body []byte, src netip.Ad
 	copy(clientNonce[:], body[40:52])
 	ct := body[52:]
 
-	shared, err := sharedKey(clientPK, l.resolverSK)
+	shared, err := sharedKey(clientPK, mat.resolverSK)
 	if err != nil {
 		return
 	}

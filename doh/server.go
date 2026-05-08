@@ -22,6 +22,30 @@ package doh
 // parameter; the handler accepts only the canonical no-padding
 // form. The response always carries Content-Type:
 // application/dns-message.
+//
+// # Panic policy divergence
+//
+// The rest of the acidns server family lets handler panics propagate
+// to the listener goroutine and ultimately the process — see
+// [acidns.Handler]. DoH is the exception: the handler runs under
+// [net/http.Server], whose accept loop installs an unconditional
+// recover() that turns a panicking handler into a 500 response and
+// a stderr log entry. Removing that recover would require
+// reimplementing http.Server, which is out of scope.
+//
+// What this means for operators:
+//
+//   - A panic in the [acidns.Handler] will NOT crash the process via
+//     this transport. Other transports will.
+//   - For uniform crash semantics, wrap your inner Handler with a
+//     middleware that re-raises after logging — but be aware that
+//     re-panicking is also caught by net/http, so the only way to
+//     reach the process is os.Exit / panic+os.Exit from a separate
+//     goroutine.
+//
+// In practice this divergence is benign: a handler that can panic
+// is buggy in any case, and HTTP-style 500 + log is usually what an
+// operator actually wants for HTTP-shaped traffic.
 
 import (
 	"context"

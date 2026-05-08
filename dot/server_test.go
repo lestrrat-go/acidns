@@ -157,6 +157,40 @@ func TestServerAdvertisesDoTALPN(t *testing.T) {
 	require.Equal(t, "dot", conn.ConnectionState().NegotiatedProtocol)
 }
 
+// TestHandshakeTimeoutDeadlines a peer that opens a TCP connection
+// and stalls before sending the ClientHello. With a tight handshake
+// timeout the server closes the conn within the bound, freeing the
+// inflight slot — independent of the (longer) idle timeout.
+func TestHandshakeTimeoutDeadlines(t *testing.T) {
+	t.Parallel()
+	cert, _ := dotTestCerts(t)
+	srv, err := dot.NewServer(
+		netip.MustParseAddrPort("127.0.0.1:0"), &echoHandler{},
+		dot.WithServerTLSConfig(&tls.Config{Certificates: []tls.Certificate{cert}}),
+		dot.WithServerHandshakeTimeout(100*time.Millisecond),
+		// Idle is longer to make sure the handshake bound is what fires.
+		dot.WithServerIdleTimeout(10*time.Second),
+	)
+	require.NoError(t, err)
+	ctx, cancel := context.WithCancel(t.Context())
+	t.Cleanup(cancel)
+	ctrl, err := srv.Run(ctx)
+	require.NoError(t, err)
+
+	// Open a raw TCP connection and never send the ClientHello.
+	conn, err := net.Dial("tcp", ctrl.Addr().String())
+	require.NoError(t, err)
+	defer func() { _ = conn.Close() }()
+
+	// Read should EOF/error within a short multiple of the handshake
+	// deadline; if the idle timeout were used instead the read would
+	// not return for ~10 seconds.
+	_ = conn.SetReadDeadline(time.Now().Add(2 * time.Second))
+	buf := make([]byte, 64)
+	_, err = conn.Read(buf)
+	require.Error(t, err) // EOF or RST after server's handshake timeout
+}
+
 // TestServerLifecycle verifies ctx cancellation cleanly stops the
 // server and Done fires.
 func TestServerLifecycle(t *testing.T) {

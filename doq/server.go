@@ -62,10 +62,11 @@ func NewServer(addr netip.AddrPort, h acidns.Handler, opts ...ServerOption) (*Se
 		return nil, fmt.Errorf("doq: handler is nil")
 	}
 	cfg := serverConfig{
-		idleTimeout:    30 * time.Second,
-		writeTimeout:   5 * time.Second,
-		maxMessageSize: 16 * 1024,
-		maxStreamsPer:  256,
+		idleTimeout:       30 * time.Second,
+		streamReadTimeout: 10 * time.Second,
+		writeTimeout:      5 * time.Second,
+		maxMessageSize:    16 * 1024,
+		maxStreamsPer:     256,
 	}
 	for _, o := range opts {
 		o.applyDoQServer(&cfg)
@@ -99,7 +100,7 @@ func (s *Server) Run(ctx context.Context) (*Controller, error) {
 	bound := netip.AddrPortFrom(ua.AddrPort().Addr(), uint16(ua.Port))
 
 	ln, err := quic.Listen(pc, s.cfg.tlsConfig, &quic.Config{
-		MaxIdleTimeout:    s.cfg.idleTimeout,
+		MaxIdleTimeout:     s.cfg.idleTimeout,
 		MaxIncomingStreams: int64(s.cfg.maxStreamsPer),
 	})
 	if err != nil {
@@ -225,8 +226,8 @@ func remoteAddrFromConn(c *quic.Conn) netip.AddrPort {
 func (l *serverLoop) serveStream(ctx context.Context, stream *quic.Stream, remote netip.AddrPort) {
 	defer func() { _ = stream.Close() }()
 
-	if l.cfg.idleTimeout > 0 {
-		_ = stream.SetReadDeadline(time.Now().Add(l.cfg.idleTimeout))
+	if l.cfg.streamReadTimeout > 0 {
+		_ = stream.SetReadDeadline(time.Now().Add(l.cfg.streamReadTimeout))
 	}
 
 	var hdr [2]byte

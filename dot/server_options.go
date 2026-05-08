@@ -18,6 +18,7 @@ func (f serverOptionFunc) applyDoTServer(c *serverConfig) { f(c) }
 
 type serverConfig struct {
 	tlsConfig         *tls.Config
+	handshakeTimeout  time.Duration
 	idleTimeout       time.Duration
 	writeTimeout      time.Duration
 	maxConnections    int
@@ -40,6 +41,15 @@ type serverConfig struct {
 // This option is required — [NewServer] returns an error otherwise.
 func WithServerTLSConfig(tc *tls.Config) ServerOption {
 	return serverOptionFunc(func(c *serverConfig) { c.tlsConfig = tc })
+}
+
+// WithServerHandshakeTimeout caps how long the TLS handshake may
+// take. Distinct from [WithServerIdleTimeout] so an operator can
+// favour long-lived idle connections (e.g. 60s) without
+// simultaneously widening the peer-stalls-on-ClientHello window.
+// Defaults to 10s; non-positive disables.
+func WithServerHandshakeTimeout(d time.Duration) ServerOption {
+	return serverOptionFunc(func(c *serverConfig) { c.handshakeTimeout = d })
 }
 
 // WithServerIdleTimeout sets how long an idle connection is kept

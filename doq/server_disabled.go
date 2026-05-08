@@ -25,6 +25,9 @@ func WithServerTLSConfig(*tls.Config) ServerOption { return stubServerOption{} }
 // WithServerIdleTimeout is a no-op stub.
 func WithServerIdleTimeout(time.Duration) ServerOption { return stubServerOption{} }
 
+// WithServerStreamReadTimeout is a no-op stub.
+func WithServerStreamReadTimeout(time.Duration) ServerOption { return stubServerOption{} }
+
 // WithServerWriteTimeout is a no-op stub.
 func WithServerWriteTimeout(time.Duration) ServerOption { return stubServerOption{} }
 

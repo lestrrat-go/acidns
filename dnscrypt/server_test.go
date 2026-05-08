@@ -211,6 +211,111 @@ func TestRunRejectsExpiredCert(t *testing.T) {
 	require.ErrorIs(t, err, dnscrypt.ErrCertExpired)
 }
 
+// TestServerRotate verifies that ServerController.Rotate atomically
+// swaps the active material: queries against the OLD ClientMagic
+// stop being decryptable, queries against the NEW ClientMagic now
+// succeed, all without rebinding the socket.
+func TestServerRotate(t *testing.T) {
+	t.Parallel()
+	first := mkFixture(t)
+
+	h := &echoHandler{}
+	srv, err := dnscrypt.NewServer(
+		netip.MustParseAddrPort("127.0.0.1:0"), h,
+		first.cert, first.resolverSK,
+	)
+	require.NoError(t, err)
+	ctx, cancel := context.WithCancel(t.Context())
+	t.Cleanup(cancel)
+	ctrl, err := srv.Run(ctx)
+	require.NoError(t, err)
+
+	// Round-trip under the original cert.
+	ex1, err := dnscrypt.New(ctrl.Addr(), first.cert)
+	require.NoError(t, err)
+	q, _ := wire.NewBuilder().
+		ID(1).
+		RecursionDesired(true).
+		Question(wire.NewQuestion(wire.MustParseName("pre.test."), rrtype.A)).
+		Build()
+	qctx, qcancel := context.WithTimeout(ctx, 5*time.Second)
+	_, err = ex1.Exchange(qctx, q)
+	qcancel()
+	require.NoError(t, err)
+	require.Equal(t, int32(1), h.hits.Load())
+
+	// Rotate to a fresh cert + key.
+	second := mkFixture(t)
+	require.NoError(t, ctrl.Rotate(second.cert, second.resolverSK))
+
+	// New client under the new cert succeeds.
+	ex2, err := dnscrypt.New(ctrl.Addr(), second.cert)
+	require.NoError(t, err)
+	q2, _ := wire.NewBuilder().
+		ID(2).
+		RecursionDesired(true).
+		Question(wire.NewQuestion(wire.MustParseName("post.test."), rrtype.A)).
+		Build()
+	qctx, qcancel = context.WithTimeout(ctx, 5*time.Second)
+	_, err = ex2.Exchange(qctx, q2)
+	qcancel()
+	require.NoError(t, err)
+	require.Equal(t, int32(2), h.hits.Load())
+
+	// Old client (uses old ClientMagic) is now silently dropped.
+	q3, _ := wire.NewBuilder().
+		ID(3).
+		RecursionDesired(true).
+		Question(wire.NewQuestion(wire.MustParseName("stale.test."), rrtype.A)).
+		Build()
+	qctx, qcancel = context.WithTimeout(ctx, 500*time.Millisecond)
+	_, err = ex1.Exchange(qctx, q3)
+	qcancel()
+	require.Error(t, err)
+	require.Equal(t, int32(2), h.hits.Load(),
+		"stale client must not reach the handler after Rotate")
+}
+
+func TestServerRotateRejectsExpired(t *testing.T) {
+	t.Parallel()
+	fx := mkFixture(t)
+	srv, err := dnscrypt.NewServer(
+		netip.MustParseAddrPort("127.0.0.1:0"), &echoHandler{},
+		fx.cert, fx.resolverSK,
+	)
+	require.NoError(t, err)
+	ctx, cancel := context.WithCancel(t.Context())
+	t.Cleanup(cancel)
+	ctrl, err := srv.Run(ctx)
+	require.NoError(t, err)
+
+	expired := dnscrypt.NewCert(
+		dnscrypt.ESVersion2, 0,
+		fx.cert.ResolverPK(), fx.cert.ClientMagic(), 1,
+		time.Now().Add(-2*time.Hour), time.Now().Add(-time.Hour),
+	)
+	err = ctrl.Rotate(expired, fx.resolverSK)
+	require.ErrorIs(t, err, dnscrypt.ErrCertExpired)
+}
+
+func TestServerRotateRejectsNil(t *testing.T) {
+	t.Parallel()
+	fx := mkFixture(t)
+	srv, err := dnscrypt.NewServer(
+		netip.MustParseAddrPort("127.0.0.1:0"), &echoHandler{},
+		fx.cert, fx.resolverSK,
+	)
+	require.NoError(t, err)
+	ctx, cancel := context.WithCancel(t.Context())
+	t.Cleanup(cancel)
+	ctrl, err := srv.Run(ctx)
+	require.NoError(t, err)
+
+	err = ctrl.Rotate(nil, [32]byte{})
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "cert is nil")
+}
+
 func TestServerLifecycle(t *testing.T) {
 	t.Parallel()
 	fx := mkFixture(t)

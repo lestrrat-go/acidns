@@ -17,11 +17,12 @@ type serverOptionFunc func(*serverConfig)
 func (f serverOptionFunc) applyDoQServer(c *serverConfig) { f(c) }
 
 type serverConfig struct {
-	tlsConfig      *tls.Config
-	idleTimeout    time.Duration
-	writeTimeout   time.Duration
-	maxMessageSize int
-	maxStreamsPer  int
+	tlsConfig         *tls.Config
+	idleTimeout       time.Duration
+	streamReadTimeout time.Duration
+	writeTimeout      time.Duration
+	maxMessageSize    int
+	maxStreamsPer     int
 }
 
 // WithServerTLSConfig installs the TLS configuration used during the
@@ -32,11 +33,24 @@ func WithServerTLSConfig(tc *tls.Config) ServerOption {
 	return serverOptionFunc(func(c *serverConfig) { c.tlsConfig = tc })
 }
 
-// WithServerIdleTimeout caps how long a QUIC connection or stream
-// can be idle before the underlying library closes it. Defaults to
-// 30 seconds. A non-positive value falls back to quic-go's default.
+// WithServerIdleTimeout caps how long a QUIC connection can be idle
+// before the underlying library closes it. Maps to quic-go's
+// MaxIdleTimeout. Defaults to 30 seconds. A non-positive value
+// falls back to quic-go's default. This is the connection-level
+// knob — for the per-stream read deadline that bounds how long the
+// server waits for a query body, see [WithServerStreamReadTimeout].
 func WithServerIdleTimeout(d time.Duration) ServerOption {
 	return serverOptionFunc(func(c *serverConfig) { c.idleTimeout = d })
+}
+
+// WithServerStreamReadTimeout caps how long the server waits for a
+// query body to arrive on a freshly-accepted stream. Distinct from
+// [WithServerIdleTimeout] (which is the QUIC connection-level idle
+// limit). Defaults to 10 seconds; non-positive disables. A short
+// value here protects against a slow-write peer pinning per-stream
+// state without yet sending any wire data.
+func WithServerStreamReadTimeout(d time.Duration) ServerOption {
+	return serverOptionFunc(func(c *serverConfig) { c.streamReadTimeout = d })
 }
 
 // WithServerWriteTimeout caps how long a single response write may
