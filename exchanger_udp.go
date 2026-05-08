@@ -115,6 +115,34 @@ func (e *udpExchanger) Exchange(ctx context.Context, q wire.Message) (wire.Messa
 		if resp.ID() != q.ID() {
 			continue
 		}
+		if !questionMatches(q, resp) {
+			// RFC 5452 §9.2: spoofed responses with a guessed ID still
+			// have to match the question section. Drop and keep waiting
+			// for a legit response.
+			continue
+		}
 		return resp, nil
 	}
+}
+
+// questionMatches reports whether resp echoes the request's question
+// section: same count (typically 1), same name (case-insensitive), same
+// type and class. Used by Exchangers to drop off-path / spoofed
+// responses that match only on transaction ID.
+func questionMatches(q, resp wire.Message) bool {
+	qq := q.Questions()
+	rq := resp.Questions()
+	if len(qq) != len(rq) {
+		return false
+	}
+	for i, want := range qq {
+		got := rq[i]
+		if want.Type() != got.Type() || want.Class() != got.Class() {
+			return false
+		}
+		if !want.Name().Equal(got.Name()) {
+			return false
+		}
+	}
+	return true
 }

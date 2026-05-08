@@ -337,23 +337,25 @@ func (r *recursive) resolveDepth(ctx context.Context, name wire.Name, t rrtype.T
 }
 
 // queryAny tries servers in order, recording RTT/failure for each. Returns
-// the response and the server that produced it.
+// the response and the server that produced it. A fresh transaction ID is
+// generated for every transmission so a late datagram from a slow server
+// can't be confused with the next server's reply (RFC 5452 §5).
 func (r *recursive) queryAny(ctx context.Context, servers []netip.AddrPort, name wire.Name, t rrtype.Type) (wire.Message, netip.AddrPort, error) {
-	id, err := randomID()
-	if err != nil {
-		return nil, netip.AddrPort{}, err
-	}
-	q, err := wire.NewBuilder().
-		ID(id).
-		Question(wire.NewQuestion(name, t)).
-		EDNS(wire.NewEDNSBuilder().UDPSize(1232).Build()).
-		Build()
-	if err != nil {
-		return nil, netip.AddrPort{}, err
-	}
-
 	var lastErr error
 	for _, s := range servers {
+		id, err := randomID()
+		if err != nil {
+			return nil, netip.AddrPort{}, err
+		}
+		q, err := wire.NewBuilder().
+			ID(id).
+			Question(wire.NewQuestion(name, t)).
+			EDNS(wire.NewEDNSBuilder().UDPSize(1232).Build()).
+			Build()
+		if err != nil {
+			return nil, netip.AddrPort{}, err
+		}
+
 		exchCtx := ctx
 		var cancel context.CancelFunc
 		if r.queryTimeout > 0 {
@@ -381,14 +383,26 @@ func (r *recursive) queryAny(ctx context.Context, servers []netip.AddrPort, name
 	return nil, netip.AddrPort{}, lastErr
 }
 
-// serversFromReferral picks the addresses to query next. It prefers in-message
-// glue (additional section) but falls back to recursively resolving the NS
-// targets for out-of-bailiwick delegations.
+// serversFromReferral picks the addresses to query next. It prefers
+// in-bailiwick glue from the additional section and falls back to
+// recursively resolving the NS targets for out-of-bailiwick delegations.
+//
+// Glue is only trusted when both the NS target and the glue's owner are
+// at-or-below the delegating zone (the owner of the NS RRset). RFC 5452
+// §5.4.1 — accepting out-of-bailiwick glue lets a malicious nameserver
+// poison arbitrary names by stuffing the additional section with A
+// records for unrelated owners.
 func (r *recursive) serversFromReferral(ctx context.Context, resp wire.Message, depth int) []netip.AddrPort {
+	zone := referralZone(resp)
 	var glued []netip.AddrPort
 	var ungluedNS []wire.Name
 	for _, auth := range resp.Authorities() {
 		if auth.Type() != rrtype.NS {
+			continue
+		}
+		// All NS records in a referral must share the same owner (the
+		// delegating zone). A different owner is anomalous; skip it.
+		if zone.IsValid() && !auth.Name().Equal(zone) {
 			continue
 		}
 		ns, ok := wire.RDataAs[rdata.NS](auth)
@@ -396,11 +410,13 @@ func (r *recursive) serversFromReferral(ctx context.Context, resp wire.Message, 
 			continue
 		}
 		target := ns.NSDName()
-		if addrs := glueFor(target, resp.Additionals()); len(addrs) > 0 {
-			glued = append(glued, addrs...)
-		} else {
-			ungluedNS = append(ungluedNS, target)
+		if zone.IsValid() && inBailiwick(zone, target) {
+			if addrs := glueFor(target, resp.Additionals(), zone); len(addrs) > 0 {
+				glued = append(glued, addrs...)
+				continue
+			}
 		}
+		ungluedNS = append(ungluedNS, target)
 	}
 	if len(glued) > 0 {
 		return glued
@@ -424,10 +440,45 @@ func (r *recursive) serversFromReferral(ctx context.Context, resp wire.Message, 
 	return out
 }
 
-func glueFor(target wire.Name, additional []wire.Record) []netip.AddrPort {
+// referralZone returns the owner name of the NS RRset in resp's
+// authority section — i.e., the zone that owns the delegation. If no NS
+// is present (the referral is malformed), an invalid Name is returned
+// and the caller falls back to out-of-bailiwick recursion.
+func referralZone(resp wire.Message) wire.Name {
+	for _, auth := range resp.Authorities() {
+		if auth.Type() == rrtype.NS {
+			return auth.Name()
+		}
+	}
+	return wire.Name{}
+}
+
+// inBailiwick reports whether descendant is at-or-below ancestor.
+func inBailiwick(ancestor, descendant wire.Name) bool {
+	cur := descendant
+	for cur.IsValid() {
+		if cur.Equal(ancestor) {
+			return true
+		}
+		p, ok := cur.Parent()
+		if !ok || cur.Equal(p) {
+			return false
+		}
+		cur = p
+	}
+	return false
+}
+
+// glueFor extracts in-bailiwick A/AAAA glue records for target from the
+// additional section. zone is the delegating zone — glue records owned
+// by a name outside the zone are not trustworthy and are skipped.
+func glueFor(target wire.Name, additional []wire.Record, zone wire.Name) []netip.AddrPort {
 	var out []netip.AddrPort
 	for _, add := range additional {
 		if !add.Name().Equal(target) {
+			continue
+		}
+		if zone.IsValid() && !inBailiwick(zone, add.Name()) {
 			continue
 		}
 		switch add.Type() {
