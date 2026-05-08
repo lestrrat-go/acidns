@@ -56,6 +56,28 @@ func TestCacheGetExpired(t *testing.T) {
 	require.False(t, ok)
 }
 
+// TestMemoryCacheBoundedByMaxSize confirms that filling the cache
+// past its configured cap triggers eviction so the entry count stays
+// within bounds.
+func TestMemoryCacheBoundedByMaxSize(t *testing.T) {
+	t.Parallel()
+	const limit = 8
+	c := recursive.NewMemoryCache(recursive.WithMemoryCacheSize(limit))
+
+	// Insert 4× the limit with strictly-increasing expiry so eviction
+	// drops the soonest-to-expire entry. Each entry is an unrelated
+	// name so no slot collisions reduce the count.
+	for i := range 4 * limit {
+		name := wire.MustParseName(string(rune('a'+i)) + ".example.")
+		c.Put(name, rrtype.A, recursive.Entry{
+			ExpiresAt: time.Now().Add(time.Duration(i+1) * time.Minute),
+		})
+	}
+	require.LessOrEqual(t, c.Len(), limit,
+		"MemoryCache must respect WithMemoryCacheSize; got %d entries, limit %d",
+		c.Len(), limit)
+}
+
 // TestRankServersUntestedFirst covers the rtt=0 ordering branches.
 func TestRankServersUntestedFirst(t *testing.T) {
 	t.Parallel()
