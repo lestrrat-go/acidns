@@ -10,9 +10,11 @@ import (
 )
 
 // serveUpdate implements RFC 2136 dynamic update for an authoritative
-// zone. The server is permissive: any caller able to send to the listener
-// is granted update authority. Production deployments should layer a
-// TSIG-aware ACL middleware in front of this handler.
+// zone. UPDATE is gated by the [UpdatePolicy] installed via
+// [WithUpdatePolicy]; with no policy installed (the default), every
+// UPDATE is refused with REFUSED. Production deployments are expected
+// to install a policy that performs TSIG (RFC 3007) or SIG(0)
+// verification before admitting an update.
 func (a *authoritative) serveUpdate(w acidns.ResponseWriter, q wire.Message) {
 	b := wire.NewBuilder().
 		ID(q.ID()).
@@ -22,6 +24,10 @@ func (a *authoritative) serveUpdate(w acidns.ResponseWriter, q wire.Message) {
 		b = b.Question(qq)
 	}
 
+	// Structural validity is checked first — a malformed UPDATE wire
+	// gets FormErr regardless of policy, since rejecting it doesn't
+	// reveal anything that the malformed-by-construction caller doesn't
+	// already know.
 	if len(q.Questions()) != 1 {
 		_ = w.WriteMsg(mustBuild(echoEDNS(b, q).RCODE(wire.RCODEFormErr), q))
 		return
@@ -29,6 +35,13 @@ func (a *authoritative) serveUpdate(w acidns.ResponseWriter, q wire.Message) {
 	zoneQ := q.Questions()[0]
 	if zoneQ.Type() != rrtype.SOA {
 		_ = w.WriteMsg(mustBuild(echoEDNS(b, q).RCODE(wire.RCODEFormErr), q))
+		return
+	}
+
+	// Authorisation gate. With no policy installed, every UPDATE is
+	// refused — we won't accept unauthenticated mutation by default.
+	if a.updatePolicy == nil || !a.updatePolicy(w, q) {
+		_ = w.WriteMsg(mustBuild(echoEDNS(b, q).RCODE(wire.RCODERefused), q))
 		return
 	}
 

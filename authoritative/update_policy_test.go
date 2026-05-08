@@ -1,0 +1,93 @@
+package authoritative_test
+
+import (
+	"context"
+	"net/netip"
+	"strings"
+	"testing"
+	"time"
+
+	"github.com/lestrrat-go/acidns"
+	"github.com/lestrrat-go/acidns/authoritative"
+	"github.com/lestrrat-go/acidns/update"
+	"github.com/lestrrat-go/acidns/wire"
+	"github.com/lestrrat-go/acidns/wire/rdata"
+	"github.com/lestrrat-go/acidns/wire/rrtype"
+	"github.com/lestrrat-go/acidns/zonefile"
+	"github.com/stretchr/testify/require"
+)
+
+func TestUpdateRefusedByDefault(t *testing.T) {
+	t.Parallel()
+
+	z, err := zonefile.Parse(strings.NewReader(updateZone))
+	require.NoError(t, err)
+	a, err := authoritative.New(authoritative.WithZone(z)) // no policy installed
+	require.NoError(t, err)
+
+	srv, err := acidns.ListenUDP(netip.MustParseAddrPort("127.0.0.1:0"), a)
+	require.NoError(t, err)
+	ctx, cancel := context.WithCancel(t.Context())
+	t.Cleanup(cancel)
+	go func() { _ = srv.Serve(ctx) }()
+
+	ex, err := acidns.NewUDPExchanger(srv.Addr())
+	require.NoError(t, err)
+	msg, err := update.NewBuilder(wire.MustParseName("example.com")).
+		AddRRset(wire.NewRecord(wire.MustParseName("blog.example.com"),
+			60*time.Second, rdata.NewA(netip.MustParseAddr("198.51.100.1")))).
+		Build()
+	require.NoError(t, err)
+
+	resp, err := ex.Exchange(ctx, msg)
+	require.NoError(t, err)
+	require.Equal(t, wire.RCODERefused, resp.Flags().RCODE(),
+		"unauthenticated UPDATE must be REFUSED when no policy is configured")
+
+	// And the zone state must be unchanged.
+	q, err := wire.NewBuilder().
+		ID(0xfeed).
+		Question(wire.NewQuestion(wire.MustParseName("blog.example.com"), rrtype.A)).
+		Build()
+	require.NoError(t, err)
+	resp, err = ex.Exchange(ctx, q)
+	require.NoError(t, err)
+	require.Equal(t, wire.RCODENXDomain, resp.Flags().RCODE(),
+		"the unauthenticated UPDATE must NOT have inserted the record")
+}
+
+func TestUpdatePolicyAllowsExplicitOptIn(t *testing.T) {
+	t.Parallel()
+
+	z, err := zonefile.Parse(strings.NewReader(updateZone))
+	require.NoError(t, err)
+
+	called := false
+	a, err := authoritative.New(
+		authoritative.WithZone(z),
+		authoritative.WithUpdatePolicy(func(_ acidns.ResponseWriter, _ wire.Message) bool {
+			called = true
+			return true
+		}),
+	)
+	require.NoError(t, err)
+
+	srv, err := acidns.ListenUDP(netip.MustParseAddrPort("127.0.0.1:0"), a)
+	require.NoError(t, err)
+	ctx, cancel := context.WithCancel(t.Context())
+	t.Cleanup(cancel)
+	go func() { _ = srv.Serve(ctx) }()
+
+	ex, err := acidns.NewUDPExchanger(srv.Addr())
+	require.NoError(t, err)
+	msg, err := update.NewBuilder(wire.MustParseName("example.com")).
+		AddRRset(wire.NewRecord(wire.MustParseName("blog.example.com"),
+			60*time.Second, rdata.NewA(netip.MustParseAddr("198.51.100.5")))).
+		Build()
+	require.NoError(t, err)
+	resp, err := ex.Exchange(ctx, msg)
+	require.NoError(t, err)
+	require.Equal(t, wire.RCODENoError, resp.Flags().RCODE(),
+		"policy returning true must admit the UPDATE")
+	require.True(t, called, "policy must be invoked")
+}

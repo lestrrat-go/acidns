@@ -42,6 +42,7 @@ type authoritative struct {
 	mu            sync.RWMutex
 	zones         map[string]*zoneIndex
 	notifyHandler NotifyHandler
+	updatePolicy  UpdatePolicy
 }
 
 // zoneIndex is the per-zone lookup-friendly form of a Zone.
@@ -60,6 +61,7 @@ func New(opts ...Option) (Authoritative, error) {
 		o.applyAuth(c)
 	}
 	a.notifyHandler = c.notifyHandler
+	a.updatePolicy = c.updatePolicy
 	for _, z := range c.zones {
 		if err := a.AddZone(z); err != nil {
 			return nil, err

@@ -29,7 +29,10 @@ func startUpdatable(t *testing.T) (authoritative.Authoritative, netip.AddrPort) 
 	t.Helper()
 	z, err := zonefile.Parse(strings.NewReader(updateZone))
 	require.NoError(t, err)
-	a, err := authoritative.New(authoritative.WithZone(z))
+	a, err := authoritative.New(
+		authoritative.WithZone(z),
+		authoritative.WithUpdatePolicy(func(_ acidns.ResponseWriter, _ wire.Message) bool { return true }),
+	)
 	require.NoError(t, err)
 	srv, err := acidns.ListenUDP(netip.MustParseAddrPort("127.0.0.1:0"), a)
 	require.NoError(t, err)
