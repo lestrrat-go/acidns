@@ -4,6 +4,8 @@ import (
 	"context"
 	"net/netip"
 	"strings"
+	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -128,6 +130,74 @@ func TestUpdatePrereqRRsetAbsentSucceeds(t *testing.T) {
 	resp, err := ex.Exchange(t.Context(), msg)
 	require.NoError(t, err)
 	require.Equal(t, wire.RCODENoError, resp.Flags().RCODE())
+}
+
+// TestUpdateConcurrentWithQuery exercises the UPDATE-vs-query race that
+// existed when serveUpdate mutated zoneIndex maps in place while answer
+// (called outside a.mu) read them. Without copy-on-write the Go runtime
+// faults with "concurrent map read and write"; with the fix in place
+// the test is purely a smoke-test that updates and queries interleave.
+func TestUpdateConcurrentWithQuery(t *testing.T) {
+	t.Parallel()
+	_, addr := startUpdatable(t)
+
+	ctx, cancel := context.WithTimeout(t.Context(), 2*time.Second)
+	defer cancel()
+
+	const writers = 4
+	const readers = 8
+
+	var updateOps atomic.Int64
+	var queryOps atomic.Int64
+	var wg sync.WaitGroup
+
+	for i := range writers {
+		wg.Add(1)
+		go func(id int) {
+			defer wg.Done()
+			ex, err := acidns.NewUDPExchanger(addr)
+			if err != nil {
+				return
+			}
+			ip := netip.AddrFrom4([4]byte{198, 51, 100, byte(10 + id)})
+			rec := wire.NewRecord(wire.MustParseName("blog.example.com"), 60*time.Second, rdata.NewA(ip))
+			for ctx.Err() == nil {
+				msg, err := update.NewBuilder(wire.MustParseName("example.com")).AddRRset(rec).Build()
+				if err != nil {
+					return
+				}
+				if _, err := ex.Exchange(ctx, msg); err != nil {
+					return
+				}
+				updateOps.Add(1)
+			}
+		}(i)
+	}
+
+	for range readers {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			ex, err := acidns.NewUDPExchanger(addr)
+			if err != nil {
+				return
+			}
+			q, _ := wire.NewBuilder().
+				ID(1).
+				Question(wire.NewQuestion(wire.MustParseName("blog.example.com"), rrtype.A)).
+				Build()
+			for ctx.Err() == nil {
+				if _, err := ex.Exchange(ctx, q); err != nil {
+					return
+				}
+				queryOps.Add(1)
+			}
+		}()
+	}
+
+	wg.Wait()
+	require.NotZero(t, updateOps.Load(), "no updates ran")
+	require.NotZero(t, queryOps.Load(), "no queries ran")
 }
 
 func TestUpdateOutOfZoneRefused(t *testing.T) {

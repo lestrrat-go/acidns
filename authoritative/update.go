@@ -47,26 +47,57 @@ func (a *authoritative) serveUpdate(ctx context.Context, w acidns.ResponseWriter
 	}
 
 	a.mu.Lock()
-	defer a.mu.Unlock()
 	zone, ok := a.zones[nameKey(zoneQ.Name())]
 	if !ok {
+		a.mu.Unlock()
 		_ = w.WriteMsg(mustBuild(setRCODE(b, q, wire.RCODENotAuth), q))
 		return
 	}
 
-	// Prerequisites — RFC 2136 §3.2.
+	// Prerequisites — RFC 2136 §3.2. Run against the existing snapshot;
+	// a prereq failure must not leave a partially-mutated zone behind.
 	for _, p := range q.Answers() {
 		if rcode := zone.checkPrereq(p); rcode != wire.RCODENoError {
+			a.mu.Unlock()
 			_ = w.WriteMsg(mustBuild(setRCODE(b, q, rcode), q))
 			return
 		}
 	}
 
-	// Update — RFC 2136 §3.4.
+	// Update — RFC 2136 §3.4. Copy-on-write: mutate a clone and swap the
+	// pointer atomically under the write lock. Readers that snapshotted
+	// the previous *zoneIndex via findZone continue against an immutable
+	// view, so a query in flight cannot race with the in-place map writes
+	// applyUpdate would otherwise perform.
+	newZone := zone.clone()
 	for _, u := range q.Authorities() {
-		zone.applyUpdate(u)
+		newZone.applyUpdate(u)
 	}
+	a.zones[nameKey(zoneQ.Name())] = newZone
+	a.mu.Unlock()
 	_ = w.WriteMsg(mustBuild(echoEDNS(b, q), q))
+}
+
+// clone returns a deep copy of z suitable for in-place mutation. Once a
+// *zoneIndex has been published via a.zones, its maps are treated as
+// immutable; any modification produces a fresh clone that replaces the
+// published pointer atomically under a.mu.
+func (z *zoneIndex) clone() *zoneIndex {
+	out := &zoneIndex{
+		origin:     z.origin,
+		soaRec:     z.soaRec,
+		byName:     make(map[string][]wire.Record, len(z.byName)),
+		namesExist: make(map[string]struct{}, len(z.namesExist)),
+	}
+	for k, recs := range z.byName {
+		cp := make([]wire.Record, len(recs))
+		copy(cp, recs)
+		out.byName[k] = cp
+	}
+	for k := range z.namesExist {
+		out.namesExist[k] = struct{}{}
+	}
+	return out
 }
 
 func (z *zoneIndex) checkPrereq(p wire.Record) wire.RCODE {
