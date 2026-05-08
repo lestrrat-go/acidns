@@ -23,9 +23,15 @@ func RawRequest(ctx context.Context) ([]byte, bool) {
 	return b, ok
 }
 
-// contextWithRawRequest returns ctx with raw attached. Used by the
-// Server framework's UDP and TCP listeners; not exported because the
-// only legitimate caller is inside the framework itself.
+// contextWithRawRequest returns ctx with a copy of raw attached. The
+// copy is required because UDP listeners read into a sync.Pool-backed
+// buffer that's recycled as soon as the handler returns; a Handler
+// (or middleware) that stashes the slice into a goroutine or queue
+// would otherwise see the next inbound request's bytes overwriting
+// its captured "request". TCP follows the same convention so the
+// public RawRequest contract is uniform across transports.
 func contextWithRawRequest(ctx context.Context, raw []byte) context.Context {
-	return context.WithValue(ctx, rawRequestKey{}, raw)
+	cp := make([]byte, len(raw))
+	copy(cp, raw)
+	return context.WithValue(ctx, rawRequestKey{}, cp)
 }

@@ -108,6 +108,10 @@ func NewKeepAliveExchanger(addr netip.AddrPort, opts ...KeepAliveOption) (acidns
 	if tcfg.ServerName == "" {
 		return nil, fmt.Errorf("dot-keepalive: WithKeepAliveServerName (or *tls.Config.ServerName) required when addr is an IP literal")
 	}
+	// RFC 7858 §3.2 ALPN identifier.
+	if !containsALPN(tcfg.NextProtos, "dot") {
+		tcfg.NextProtos = append(tcfg.NextProtos, "dot")
+	}
 
 	return &kaExchanger{addr: addr, cfg: c, tlsConfig: tcfg}, nil
 }

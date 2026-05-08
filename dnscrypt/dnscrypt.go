@@ -318,10 +318,20 @@ func (e *exchanger) Exchange(ctx context.Context, q wire.Message) (wire.Message,
 	if _, err := conn.Write(enc); err != nil {
 		return nil, fmt.Errorf("dnscrypt: write: %w", err)
 	}
-	buf := make([]byte, 4096)
+	// Sized to accommodate an EDNS-bumped DNS message (up to 65535 wire
+	// bytes per the 16-bit RDLENGTH ceiling) plus the DNSCrypt v2 header
+	// and AEAD framing. A smaller buffer would silently truncate large
+	// DNSSEC responses, leading Decrypt to fail in non-obvious ways.
+	buf := make([]byte, 65535)
 	n, err := conn.Read(buf)
 	if err != nil {
 		return nil, fmt.Errorf("dnscrypt: read: %w", err)
+	}
+	if n == len(buf) {
+		// Read filled the buffer exactly: a UDP datagram larger than
+		// our cap was silently truncated by the kernel. Refuse rather
+		// than feed truncated ciphertext to Decrypt.
+		return nil, fmt.Errorf("dnscrypt: response exceeded %d byte buffer", len(buf))
 	}
 	plain, err := Decrypt(e.cert, clientSK, nonce, buf[:n])
 	if err != nil {

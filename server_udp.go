@@ -55,6 +55,13 @@ type udpListener struct {
 	bufPool   sync.Pool
 	wg        sync.WaitGroup
 	closeOnce sync.Once
+
+	// handlerCtx is the parent context for every dispatched handler.
+	// Both Shutdown and Serve-context cancellation cancel it so
+	// in-flight handlers observe shutdown rather than running until
+	// their own work happens to finish.
+	handlerCtx    context.Context
+	handlerCancel context.CancelFunc
 }
 
 // ListenUDP binds a UDP socket on addr and returns a Server that dispatches
@@ -78,11 +85,14 @@ func ListenUDP(addr netip.AddrPort, h Handler, opts ...UDPListenerOption) (Serve
 		_ = pc.Close()
 		return nil, fmt.Errorf("dnsserver: udp listen %s: unexpected addr type %T", addr, pc.LocalAddr())
 	}
+	hctx, hcancel := context.WithCancel(context.Background())
 	l := &udpListener{
-		pc:      pc,
-		addr:    netip.AddrPortFrom(la.AddrPort().Addr(), uint16(la.Port)),
-		handler: h,
-		cfg:     cfg,
+		pc:            pc,
+		addr:          netip.AddrPortFrom(la.AddrPort().Addr(), uint16(la.Port)),
+		handler:       h,
+		cfg:           cfg,
+		handlerCtx:    hctx,
+		handlerCancel: hcancel,
 	}
 	if cfg.maxInflight > 0 {
 		l.sem = make(chan struct{}, cfg.maxInflight)
@@ -97,11 +107,15 @@ func ListenUDP(addr netip.AddrPort, h Handler, opts ...UDPListenerOption) (Serve
 func (s *udpListener) Addr() netip.AddrPort { return s.addr }
 
 // Shutdown closes the listening socket so Serve returns ErrServerClosed,
+// cancels the handler context so in-flight handlers observe shutdown,
 // then waits for in-flight handler goroutines to finish. If ctx expires
 // before that happens, the context error is returned and the dangling
 // handlers continue running until they exit on their own.
 func (s *udpListener) Shutdown(ctx context.Context) error {
-	s.closeOnce.Do(func() { _ = s.pc.Close() })
+	s.closeOnce.Do(func() {
+		s.handlerCancel()
+		_ = s.pc.Close()
+	})
 	done := make(chan struct{})
 	go func() { s.wg.Wait(); close(done) }()
 	select {
@@ -118,6 +132,9 @@ func (s *udpListener) Serve(ctx context.Context) error {
 	go func() {
 		select {
 		case <-ctx.Done():
+			s.handlerCancel()
+			_ = s.pc.Close()
+		case <-s.handlerCtx.Done():
 			_ = s.pc.Close()
 		case <-stop:
 		}
@@ -161,7 +178,7 @@ func (s *udpListener) Serve(ctx context.Context) error {
 				}
 				s.wg.Done()
 			}()
-			s.handlePacket(ctx, (*bufp)[:n], src)
+			s.handlePacket(s.handlerCtx, (*bufp)[:n], src)
 		}(bufp, n, ua.AddrPort())
 	}
 }

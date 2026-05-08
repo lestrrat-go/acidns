@@ -40,14 +40,47 @@ import (
 	"encoding/base64"
 	"fmt"
 	"io"
+	"net"
 	"net/http"
 	"net/url"
+	"time"
 
 	"github.com/lestrrat-go/acidns"
 	"github.com/lestrrat-go/acidns/wire"
 )
 
 const contentType = "application/dns-message"
+
+// maxResponseBytes caps the DoH response body. RFC 8484 carries one
+// DNS message, whose wire form is bounded by the 16-bit length field
+// plus a small slack for HTTP framing variations. A hostile (or
+// compromised) endpoint could otherwise stream gigabytes through
+// io.ReadAll before wire.Unmarshal rejects the result.
+const maxResponseBytes = 64 * 1024
+
+// defaultClient is used when the caller doesn't supply WithHTTPClient.
+// http.DefaultClient is unsuitable: it has no timeout and is shared
+// process-wide, so a misbehaving endpoint can hang queries indefinitely
+// and contend with unrelated HTTP code in the same binary.
+func defaultClient() *http.Client {
+	return &http.Client{
+		Timeout: 30 * time.Second,
+		Transport: &http.Transport{
+			Proxy: http.ProxyFromEnvironment,
+			DialContext: (&net.Dialer{
+				Timeout:   10 * time.Second,
+				KeepAlive: 30 * time.Second,
+			}).DialContext,
+			ForceAttemptHTTP2:     true,
+			MaxIdleConns:          16,
+			MaxIdleConnsPerHost:   4,
+			IdleConnTimeout:       60 * time.Second,
+			TLSHandshakeTimeout:   10 * time.Second,
+			ResponseHeaderTimeout: 15 * time.Second,
+			ExpectContinueTimeout: 1 * time.Second,
+		},
+	}
+}
 
 // Method selects the HTTP method used for queries.
 type Method string
@@ -72,7 +105,7 @@ func New(endpoint string, opts ...Option) (acidns.Exchanger, error) {
 	if err != nil {
 		return nil, fmt.Errorf("doh: invalid endpoint: %w", err)
 	}
-	c := config{client: http.DefaultClient, method: MethodPOST, userAgent: "acidns-doh/0.1", padding: true}
+	c := config{method: MethodPOST, userAgent: "acidns-doh/0.1", padding: true}
 	for _, o := range opts {
 		o.applyDoH(&c)
 	}
@@ -87,7 +120,7 @@ func New(endpoint string, opts ...Option) (acidns.Exchanger, error) {
 		return nil, fmt.Errorf("doh: endpoint scheme must be https (or http with WithInsecure)")
 	}
 	if c.client == nil {
-		c.client = http.DefaultClient
+		c.client = defaultClient()
 	}
 	return &exchanger{endpoint: endpoint, client: c.client, method: c.method, userAgent: c.userAgent, padding: c.padding}, nil
 }
@@ -134,9 +167,12 @@ func (e *exchanger) Exchange(ctx context.Context, q wire.Message) (wire.Message,
 		return nil, fmt.Errorf("doh: unexpected content type %q", ct)
 	}
 
-	body, err := io.ReadAll(resp.Body)
+	body, err := io.ReadAll(io.LimitReader(resp.Body, maxResponseBytes+1))
 	if err != nil {
 		return nil, fmt.Errorf("doh: read body: %w", err)
+	}
+	if len(body) > maxResponseBytes {
+		return nil, fmt.Errorf("doh: response body exceeds %d byte cap", maxResponseBytes)
 	}
 	m, err := wire.Unmarshal(body)
 	if err != nil {

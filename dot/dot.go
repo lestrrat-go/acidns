@@ -71,6 +71,14 @@ func New(addr netip.AddrPort, opts ...Option) (acidns.Exchanger, error) {
 	if c.serverName != "" {
 		tcfg.ServerName = c.serverName
 	}
+	// RFC 7858 §3.2 — DoT clients SHOULD use ALPN with the "dot"
+	// identifier so multiplexed servers can disambiguate DoT from
+	// other TLS-on-853 protocols. Append rather than overwrite so a
+	// caller-supplied tls.Config keeping its own preferences still
+	// participates in negotiation.
+	if !containsALPN(tcfg.NextProtos, "dot") {
+		tcfg.NextProtos = append(tcfg.NextProtos, "dot")
+	}
 	// An IP-literal address with no ServerName falls back to the IP as
 	// SNI / cert verification name, which silently authenticates against
 	// any cert that happens to include the IP — typically not what the
@@ -89,6 +97,15 @@ func New(addr netip.AddrPort, opts ...Option) (acidns.Exchanger, error) {
 // is here for symmetry with future hostname-aware constructors.
 func isHostnameAddr(addr netip.AddrPort) bool {
 	_ = addr
+	return false
+}
+
+func containsALPN(list []string, p string) bool {
+	for _, e := range list {
+		if e == p {
+			return true
+		}
+	}
 	return false
 }
 
