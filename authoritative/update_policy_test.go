@@ -27,13 +27,15 @@ func TestUpdateRefusedByDefault(t *testing.T) {
 	a, err := authoritative.New(authoritative.WithZone(z)) // no policy installed
 	require.NoError(t, err)
 
-	srv, err := acidns.ListenUDP(netip.MustParseAddrPort("127.0.0.1:0"), a)
+	srv, err := acidns.NewUDPServer(netip.MustParseAddrPort("127.0.0.1:0"), a)
 	require.NoError(t, err)
 	ctx, cancel := context.WithCancel(t.Context())
 	t.Cleanup(cancel)
-	go func() { _ = srv.Serve(ctx) }()
+	ctrl, err := srv.Run(ctx)
 
-	ex, err := acidns.NewUDPExchanger(srv.Addr())
+	require.NoError(t, err)
+
+	ex, err := acidns.NewUDPExchanger(ctrl.Addr())
 	require.NoError(t, err)
 	msg, err := update.NewBuilder(wire.MustParseName("example.com")).
 		AddRRset(wire.NewRecord(wire.MustParseName("blog.example.com"),
@@ -86,13 +88,15 @@ func TestUpdatePolicyReceivesRawRequest(t *testing.T) {
 	)
 	require.NoError(t, err)
 
-	srv, err := acidns.ListenUDP(netip.MustParseAddrPort("127.0.0.1:0"), a)
+	srv, err := acidns.NewUDPServer(netip.MustParseAddrPort("127.0.0.1:0"), a)
 	require.NoError(t, err)
 	ctx, cancel := context.WithCancel(t.Context())
 	t.Cleanup(cancel)
-	go func() { _ = srv.Serve(ctx) }()
+	ctrl, err := srv.Run(ctx)
 
-	ex, err := acidns.NewUDPExchanger(srv.Addr())
+	require.NoError(t, err)
+
+	ex, err := acidns.NewUDPExchanger(ctrl.Addr())
 	require.NoError(t, err)
 	msg, err := update.NewBuilder(wire.MustParseName("example.com")).
 		AddRRset(wire.NewRecord(wire.MustParseName("blog.example.com"),
@@ -129,13 +133,15 @@ func TestUpdatePolicyAllowsExplicitOptIn(t *testing.T) {
 	)
 	require.NoError(t, err)
 
-	srv, err := acidns.ListenUDP(netip.MustParseAddrPort("127.0.0.1:0"), a)
+	srv, err := acidns.NewUDPServer(netip.MustParseAddrPort("127.0.0.1:0"), a)
 	require.NoError(t, err)
 	ctx, cancel := context.WithCancel(t.Context())
 	t.Cleanup(cancel)
-	go func() { _ = srv.Serve(ctx) }()
+	ctrl, err := srv.Run(ctx)
 
-	ex, err := acidns.NewUDPExchanger(srv.Addr())
+	require.NoError(t, err)
+
+	ex, err := acidns.NewUDPExchanger(ctrl.Addr())
 	require.NoError(t, err)
 	msg, err := update.NewBuilder(wire.MustParseName("example.com")).
 		AddRRset(wire.NewRecord(wire.MustParseName("blog.example.com"),

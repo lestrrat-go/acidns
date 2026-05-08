@@ -40,16 +40,20 @@ func startAuthServer(t *testing.T) (netip.AddrPort, netip.AddrPort) {
 	h, err := authoritative.New(authoritative.WithZone(z))
 	require.NoError(t, err)
 
-	udpSrv, err := acidns.ListenUDP(netip.MustParseAddrPort("127.0.0.1:0"), h)
+	udpSrv, err := acidns.NewUDPServer(netip.MustParseAddrPort("127.0.0.1:0"), h)
 	require.NoError(t, err)
-	tcpSrv, err := acidns.ListenTCP(netip.MustParseAddrPort("127.0.0.1:0"), h)
+	tcpSrv, err := acidns.NewTCPServer(netip.MustParseAddrPort("127.0.0.1:0"), h)
 	require.NoError(t, err)
 
 	ctx, cancel := context.WithCancel(t.Context())
 	t.Cleanup(cancel)
-	go func() { _ = udpSrv.Serve(ctx) }()
-	go func() { _ = tcpSrv.Serve(ctx) }()
-	return udpSrv.Addr(), tcpSrv.Addr()
+	udpCtrl, err := udpSrv.Run(ctx)
+
+	require.NoError(t, err)
+	tcpCtrl, err := tcpSrv.Run(ctx)
+
+	require.NoError(t, err)
+	return udpCtrl.Addr(), tcpCtrl.Addr()
 }
 
 func TestE2EAuthoritativeOverUDPAndTCP(t *testing.T) {

@@ -49,9 +49,24 @@ const (
 	DigestSHA384 uint8 = 4
 )
 
+// MaxRSAModulusBytes caps the size of an RSA modulus accepted from a
+// hostile zone. RFC 8624 §3.1 lists 4096-bit RSA as the upper end of
+// recommended; without a ceiling, a zone publishing a multi-megabyte
+// modulus can force the validator into an arbitrarily expensive
+// modular exponentiation. 4096 bits = 512 bytes; we add a small slack
+// (8 bytes) for any leading-zero formatting variations.
+const MaxRSAModulusBytes = 520
+
+// MaxRSAExponentBytes caps the RSA public exponent length. Real-world
+// exponents are 3 or 65537 (3 bytes at most). RFC 8624 doesn't pin a
+// ceiling, but anything beyond 8 bytes is implausible.
+const MaxRSAExponentBytes = 8
+
 // ParseRSAPublic decodes the RFC 3110 public-key encoding (1-byte
 // exponent length, or a leading 0 + 2-byte exponent length, then exponent
-// bytes, then modulus bytes) into a [*rsa.PublicKey].
+// bytes, then modulus bytes) into a [*rsa.PublicKey]. The modulus and
+// exponent lengths are bounded by [MaxRSAModulusBytes] and
+// [MaxRSAExponentBytes] respectively.
 func ParseRSAPublic(b []byte) (*rsa.PublicKey, error) {
 	if len(b) < 1 {
 		return nil, fmt.Errorf("dnssecbb: rsa pubkey too short")
@@ -68,14 +83,27 @@ func ParseRSAPublic(b []byte) (*rsa.PublicKey, error) {
 		explen = int(b[0])
 		off = 1
 	}
+	if explen <= 0 {
+		return nil, fmt.Errorf("dnssecbb: rsa exponent length zero")
+	}
+	if explen > MaxRSAExponentBytes {
+		return nil, fmt.Errorf("dnssecbb: rsa exponent length %d exceeds cap %d", explen, MaxRSAExponentBytes)
+	}
 	if len(b) < off+explen {
 		return nil, fmt.Errorf("dnssecbb: rsa pubkey truncated exponent")
+	}
+	modBytes := b[off+explen:]
+	if len(modBytes) == 0 {
+		return nil, fmt.Errorf("dnssecbb: rsa modulus empty")
+	}
+	if len(modBytes) > MaxRSAModulusBytes {
+		return nil, fmt.Errorf("dnssecbb: rsa modulus length %d exceeds cap %d (RFC 8624)", len(modBytes), MaxRSAModulusBytes)
 	}
 	e := new(big.Int).SetBytes(b[off : off+explen])
 	if !e.IsInt64() {
 		return nil, fmt.Errorf("dnssecbb: rsa exponent too large")
 	}
-	mod := new(big.Int).SetBytes(b[off+explen:])
+	mod := new(big.Int).SetBytes(modBytes)
 	return &rsa.PublicKey{N: mod, E: int(e.Int64())}, nil
 }
 

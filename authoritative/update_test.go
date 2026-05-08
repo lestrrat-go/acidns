@@ -36,12 +36,14 @@ func startUpdatable(t *testing.T) (authoritative.Authoritative, netip.AddrPort) 
 		authoritative.WithUpdatePolicy(func(_ context.Context, _ acidns.ResponseWriter, _ wire.Message) bool { return true }),
 	)
 	require.NoError(t, err)
-	srv, err := acidns.ListenUDP(netip.MustParseAddrPort("127.0.0.1:0"), a)
+	srv, err := acidns.NewUDPServer(netip.MustParseAddrPort("127.0.0.1:0"), a)
 	require.NoError(t, err)
 	ctx, cancel := context.WithCancel(t.Context())
 	t.Cleanup(cancel)
-	go func() { _ = srv.Serve(ctx) }()
-	return a, srv.Addr()
+	ctrl, err := srv.Run(ctx)
+
+	require.NoError(t, err)
+	return a, ctrl.Addr()
 }
 
 func TestUpdateAddRRset(t *testing.T) {

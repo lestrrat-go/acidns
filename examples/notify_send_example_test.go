@@ -37,17 +37,21 @@ ns1 IN  A    192.0.2.10
 		fmt.Println("auth:", err)
 		return
 	}
-	srv, err := acidns.ListenUDP(netip.MustParseAddrPort("127.0.0.1:0"), h)
+	srv, err := acidns.NewUDPServer(netip.MustParseAddrPort("127.0.0.1:0"), h)
 	if err != nil {
 		fmt.Println("listen:", err)
 		return
 	}
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	go func() { _ = srv.Serve(ctx) }()
+	ctrl, err := srv.Run(ctx)
+	if err != nil {
+		fmt.Println("run:", err)
+		return
+	}
 
 	// Send a NOTIFY using the dnsclient/notify helper.
-	ex, err := acidns.NewUDPExchanger(srv.Addr())
+	ex, err := acidns.NewUDPExchanger(ctrl.Addr())
 	if err != nil {
 		fmt.Println("dial:", err)
 		return

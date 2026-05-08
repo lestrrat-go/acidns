@@ -16,7 +16,7 @@ import (
 )
 
 func Example_dnsserver_authoritative() {
-	// authoritative.New + acidns.ListenUDP boot a serving authoritative
+	// authoritative.New + acidns.NewUDPServer boot a serving authoritative
 	// nameserver in-process. Useful for tests and toy deployments.
 	z, _ := zonefile.Parse(strings.NewReader(`$ORIGIN example.com.
 $TTL 60
@@ -30,17 +30,21 @@ www IN  A    192.0.2.42
 		fmt.Println("authoritative:", err)
 		return
 	}
-	srv, err := acidns.ListenUDP(netip.MustParseAddrPort("127.0.0.1:0"), h)
+	srv, err := acidns.NewUDPServer(netip.MustParseAddrPort("127.0.0.1:0"), h)
 	if err != nil {
 		fmt.Println("listen:", err)
 		return
 	}
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	go func() { _ = srv.Serve(ctx) }()
+	ctrl, err := srv.Run(ctx)
+	if err != nil {
+		fmt.Println("run:", err)
+		return
+	}
 
 	// Now ask it.
-	r, err := acidns.NewResolver(acidns.WithServers(srv.Addr()))
+	r, err := acidns.NewResolver(acidns.WithServers(ctrl.Addr()))
 	if err != nil {
 		fmt.Println("client:", err)
 		return

@@ -47,13 +47,15 @@ func TestAXFROverTCP(t *testing.T) {
 	h, err := authoritative.New(authoritative.WithZone(z))
 	require.NoError(t, err)
 
-	srv, err := acidns.ListenTCP(netip.MustParseAddrPort("127.0.0.1:0"), h)
+	srv, err := acidns.NewTCPServer(netip.MustParseAddrPort("127.0.0.1:0"), h)
 	require.NoError(t, err)
 	ctx, cancel := context.WithCancel(t.Context())
 	t.Cleanup(cancel)
-	go func() { _ = srv.Serve(ctx) }()
+	ctrl, err := srv.Run(ctx)
 
-	ex, err := acidns.NewTCPExchanger(srv.Addr())
+	require.NoError(t, err)
+
+	ex, err := acidns.NewTCPExchanger(ctrl.Addr())
 	require.NoError(t, err)
 
 	q, _ := wire.NewBuilder().

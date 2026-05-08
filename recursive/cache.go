@@ -1,6 +1,7 @@
 package recursive
 
 import (
+	"hash/maphash"
 	"sync"
 	"time"
 
@@ -29,21 +30,39 @@ type Entry struct {
 }
 
 // DefaultMemoryCacheSize is the default upper bound on the number of
-// entries [MemoryCache] retains; new inserts past the bound trigger
-// eviction of expired entries first, then of the entry closest to its
-// expiry. The value is conservative enough that a busy stub resolver
-// won't churn but small enough that the cache cannot grow without
-// bound under hostile traffic.
+// entries [MemoryCache] retains across all internal shards; new
+// inserts past the bound trigger eviction of expired entries first,
+// then of the entry closest to its expiry. The value is conservative
+// enough that a busy stub resolver won't churn but small enough that
+// the cache cannot grow without bound under hostile traffic.
 const DefaultMemoryCacheSize = 10000
+
+// DefaultMaxRecordsPerEntry caps how many records a single Entry may
+// retain across its Answer/Authority/Additional slices. A hostile
+// zone that returns thousands of records per response could otherwise
+// inflate cache memory beyond the entry-count bound; the per-entry
+// cap closes that gap.
+const DefaultMaxRecordsPerEntry = 256
+
+// numCacheShards stripes the entries map. Each shard has its own
+// RWMutex, so cache reads/writes don't contend across unrelated keys.
+// Power of two for mask-based modulo.
+const numCacheShards = 64
 
 // MemoryCache is the default in-memory Cache. Its size is bounded by
 // [MemoryCacheOption] (default [DefaultMemoryCacheSize]); past that
 // limit, [Put] evicts expired entries first and then the entry whose
-// expiry is soonest.
+// expiry is soonest, on a per-shard basis.
 type MemoryCache struct {
+	maxSize           int // per-shard cap (config / numCacheShards)
+	maxRecordsPerEntr int
+	seed              maphash.Seed
+	shards            [numCacheShards]*memoryCacheShard
+}
+
+type memoryCacheShard struct {
 	mu      sync.RWMutex
 	entries map[string]Entry
-	maxSize int
 }
 
 // MemoryCacheOption configures a [MemoryCache] at construction.
@@ -54,84 +73,162 @@ type memoryCacheOptionFunc func(*memoryCacheConfig)
 func (f memoryCacheOptionFunc) applyMemoryCache(c *memoryCacheConfig) { f(c) }
 
 type memoryCacheConfig struct {
-	maxSize int
+	maxSize           int
+	maxRecordsPerEntr int
 }
 
-// WithMemoryCacheSize sets the upper bound on entry count. A
-// non-positive value disables the cap (legacy behaviour).
+// WithMemoryCacheSize sets the upper bound on total entries across all
+// shards. The cap is applied per-shard as ceil(n/64). A non-positive
+// value disables the cap.
 func WithMemoryCacheSize(n int) MemoryCacheOption {
 	return memoryCacheOptionFunc(func(c *memoryCacheConfig) { c.maxSize = n })
 }
 
+// WithMemoryCacheMaxRecordsPerEntry caps how many records a single
+// cached Entry may contain (sum of Answer + Authority + Additional).
+// A non-positive value disables the cap; the default is
+// [DefaultMaxRecordsPerEntry].
+func WithMemoryCacheMaxRecordsPerEntry(n int) MemoryCacheOption {
+	return memoryCacheOptionFunc(func(c *memoryCacheConfig) { c.maxRecordsPerEntr = n })
+}
+
 // NewMemoryCache returns an empty MemoryCache. With no options the
-// cache is bounded at [DefaultMemoryCacheSize].
+// cache is bounded at [DefaultMemoryCacheSize] entries and
+// [DefaultMaxRecordsPerEntry] records per entry.
 func NewMemoryCache(opts ...MemoryCacheOption) *MemoryCache {
-	c := memoryCacheConfig{maxSize: DefaultMemoryCacheSize}
+	c := memoryCacheConfig{
+		maxSize:           DefaultMemoryCacheSize,
+		maxRecordsPerEntr: DefaultMaxRecordsPerEntry,
+	}
 	for _, o := range opts {
 		o.applyMemoryCache(&c)
 	}
-	return &MemoryCache{entries: make(map[string]Entry), maxSize: c.maxSize}
+	mc := &MemoryCache{
+		maxRecordsPerEntr: c.maxRecordsPerEntr,
+		seed:              maphash.MakeSeed(),
+	}
+	if c.maxSize > 0 {
+		mc.maxSize = (c.maxSize + numCacheShards - 1) / numCacheShards
+	}
+	for i := range mc.shards {
+		mc.shards[i] = &memoryCacheShard{entries: make(map[string]Entry)}
+	}
+	return mc
+}
+
+func (c *MemoryCache) shardFor(k string) *memoryCacheShard {
+	h := maphash.String(c.seed, k)
+	return c.shards[h&(numCacheShards-1)]
 }
 
 func (c *MemoryCache) Get(name wire.Name, t rrtype.Type) (Entry, bool) {
 	k := key(name, t)
-	c.mu.RLock()
-	e, ok := c.entries[k]
-	c.mu.RUnlock()
+	sh := c.shardFor(k)
+	sh.mu.RLock()
+	e, ok := sh.entries[k]
+	sh.mu.RUnlock()
 	if !ok {
 		return Entry{}, false
 	}
 	if time.Now().After(e.ExpiresAt) {
-		c.mu.Lock()
-		delete(c.entries, k)
-		c.mu.Unlock()
+		sh.mu.Lock()
+		delete(sh.entries, k)
+		sh.mu.Unlock()
 		return Entry{}, false
 	}
 	return e, true
 }
 
 func (c *MemoryCache) Put(name wire.Name, t rrtype.Type, e Entry) {
-	k := key(name, t)
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	if _, replacing := c.entries[k]; !replacing && c.maxSize > 0 && len(c.entries) >= c.maxSize {
-		c.evictLocked(time.Now())
+	if c.maxRecordsPerEntr > 0 {
+		e = capEntryRecords(e, c.maxRecordsPerEntr)
 	}
-	c.entries[k] = e
+	k := key(name, t)
+	sh := c.shardFor(k)
+	sh.mu.Lock()
+	defer sh.mu.Unlock()
+	if _, replacing := sh.entries[k]; !replacing && c.maxSize > 0 && len(sh.entries) >= c.maxSize {
+		c.evictLocked(sh, time.Now())
+	}
+	sh.entries[k] = e
 }
 
-// evictLocked frees space in the entry map. Two passes: drop expired
-// entries first; if still at the cap, drop the entry whose expiry is
-// soonest (an approximate-LRU keyed by remaining TTL). Caller holds
-// c.mu in write mode.
-func (c *MemoryCache) evictLocked(now time.Time) {
-	for k, e := range c.entries {
+// capEntryRecords trims an Entry's record slices so the sum across
+// Answer/Authority/Additional does not exceed cap. Trimming favours
+// dropping Additional first (least operationally important), then
+// Authority, then Answer — keeping the answer path intact for as long
+// as possible.
+func capEntryRecords(e Entry, cap int) Entry {
+	total := len(e.Answer) + len(e.Authority) + len(e.Additional)
+	if total <= cap {
+		return e
+	}
+	trim := total - cap
+	if n := len(e.Additional); n > 0 {
+		drop := n
+		if drop > trim {
+			drop = trim
+		}
+		e.Additional = e.Additional[:n-drop]
+		trim -= drop
+	}
+	if trim > 0 && len(e.Authority) > 0 {
+		n := len(e.Authority)
+		drop := n
+		if drop > trim {
+			drop = trim
+		}
+		e.Authority = e.Authority[:n-drop]
+		trim -= drop
+	}
+	if trim > 0 && len(e.Answer) > 0 {
+		n := len(e.Answer)
+		drop := n
+		if drop > trim {
+			drop = trim
+		}
+		e.Answer = e.Answer[:n-drop]
+	}
+	return e
+}
+
+// evictLocked frees space in a shard. Two passes: drop expired
+// entries first; if still at the per-shard cap, drop the entry whose
+// expiry is soonest (an approximate-LRU keyed by remaining TTL).
+// Caller holds sh.mu in write mode.
+func (c *MemoryCache) evictLocked(sh *memoryCacheShard, now time.Time) {
+	for k, e := range sh.entries {
 		if !e.ExpiresAt.After(now) {
-			delete(c.entries, k)
+			delete(sh.entries, k)
 		}
 	}
-	if len(c.entries) < c.maxSize {
+	if len(sh.entries) < c.maxSize {
 		return
 	}
 	var soonestKey string
 	var soonestTime time.Time
 	first := true
-	for k, e := range c.entries {
+	for k, e := range sh.entries {
 		if first || e.ExpiresAt.Before(soonestTime) {
 			soonestKey = k
 			soonestTime = e.ExpiresAt
 			first = false
 		}
 	}
-	delete(c.entries, soonestKey)
+	delete(sh.entries, soonestKey)
 }
 
-// Len reports the number of entries currently held. Intended for tests
-// and observability hooks; not part of the [Cache] interface.
+// Len reports the total number of entries currently held across all
+// shards. Intended for tests and observability hooks; not part of the
+// [Cache] interface.
 func (c *MemoryCache) Len() int {
-	c.mu.RLock()
-	defer c.mu.RUnlock()
-	return len(c.entries)
+	total := 0
+	for _, sh := range c.shards {
+		sh.mu.RLock()
+		total += len(sh.entries)
+		sh.mu.RUnlock()
+	}
+	return total
 }
 
 func key(n wire.Name, t rrtype.Type) string {

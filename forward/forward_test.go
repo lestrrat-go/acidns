@@ -287,17 +287,20 @@ func TestUDPTCPFallbackEndToEnd(t *testing.T) {
 	upstreamHandler := acidns.HandlerFunc(func(_ context.Context, w acidns.ResponseWriter, q wire.Message) {
 		_ = w.WriteMsg(answer(q, 30*time.Second, netip.MustParseAddr("198.51.100.7")))
 	})
-	udpSrv, err := acidns.ListenUDP(netip.MustParseAddrPort("127.0.0.1:0"), upstreamHandler)
-	require.NoError(t, err)
-	tcpSrv, err := acidns.ListenTCP(udpSrv.Addr(), upstreamHandler)
+	udpSrv, err := acidns.NewUDPServer(netip.MustParseAddrPort("127.0.0.1:0"), upstreamHandler)
 	require.NoError(t, err)
 
 	ctx, cancel := context.WithCancel(t.Context())
 	t.Cleanup(cancel)
-	go func() { _ = udpSrv.Serve(ctx) }()
-	go func() { _ = tcpSrv.Serve(ctx) }()
+	udpCtrl, err := udpSrv.Run(ctx)
+	require.NoError(t, err)
 
-	h, err := forward.New(forward.WithUDPUpstream(udpSrv.Addr()))
+	tcpSrv, err := acidns.NewTCPServer(udpCtrl.Addr(), upstreamHandler)
+	require.NoError(t, err)
+	_, err = tcpSrv.Run(ctx)
+	require.NoError(t, err)
+
+	h, err := forward.New(forward.WithUDPUpstream(udpCtrl.Addr()))
 	require.NoError(t, err)
 
 	w := &captureWriter{}
@@ -305,7 +308,7 @@ func TestUDPTCPFallbackEndToEnd(t *testing.T) {
 	require.NotNil(t, w.got)
 	require.Equal(t, wire.RCODENoError, w.got.Flags().RCODE())
 	require.Len(t, w.got.Answers(), 1)
-	require.Contains(t, h.UpstreamName(), udpSrv.Addr().String())
+	require.Contains(t, h.UpstreamName(), udpCtrl.Addr().String())
 }
 
 func TestNoUpstreamRejected(t *testing.T) {
@@ -777,17 +780,20 @@ func TestUDPTCPFallbackOnTruncated(t *testing.T) {
 	tcpHandler := acidns.HandlerFunc(func(_ context.Context, w acidns.ResponseWriter, q wire.Message) {
 		_ = w.WriteMsg(answer(q, 30*time.Second, netip.MustParseAddr("198.51.100.42")))
 	})
-	udpSrv, err := acidns.ListenUDP(netip.MustParseAddrPort("127.0.0.1:0"), udpHandler)
-	require.NoError(t, err)
-	tcpSrv, err := acidns.ListenTCP(udpSrv.Addr(), tcpHandler)
+	udpSrv, err := acidns.NewUDPServer(netip.MustParseAddrPort("127.0.0.1:0"), udpHandler)
 	require.NoError(t, err)
 
 	ctx, cancel := context.WithCancel(t.Context())
 	t.Cleanup(cancel)
-	go func() { _ = udpSrv.Serve(ctx) }()
-	go func() { _ = tcpSrv.Serve(ctx) }()
+	udpCtrl, err := udpSrv.Run(ctx)
+	require.NoError(t, err)
 
-	h, err := forward.New(forward.WithUDPUpstream(udpSrv.Addr()))
+	tcpSrv, err := acidns.NewTCPServer(udpCtrl.Addr(), tcpHandler)
+	require.NoError(t, err)
+	_, err = tcpSrv.Run(ctx)
+	require.NoError(t, err)
+
+	h, err := forward.New(forward.WithUDPUpstream(udpCtrl.Addr()))
 	require.NoError(t, err)
 
 	w := &captureWriter{}

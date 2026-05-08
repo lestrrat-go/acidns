@@ -29,21 +29,25 @@ www IN  A    192.0.2.42
 	// Allow only loopback. Anyone else is refused.
 	guarded := acidns.NewACL(auth, acidns.WithACLAllow(netip.MustParsePrefix("127.0.0.0/8")))
 
-	srv, err := acidns.ListenUDP(netip.MustParseAddrPort("127.0.0.1:0"), guarded)
+	srv, err := acidns.NewUDPServer(netip.MustParseAddrPort("127.0.0.1:0"), guarded)
 	if err != nil {
 		fmt.Println("listen:", err)
 		return
 	}
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	go func() { _ = srv.Serve(ctx) }()
+	ctrl, err := srv.Run(ctx)
+	if err != nil {
+		fmt.Println("run:", err)
+		return
+	}
 
 	// Loopback request — allowed.
 	q, _ := wire.NewBuilder().
 		ID(1).
 		Question(wire.NewQuestion(wire.MustParseName("www.example.com"), rrtype.A)).
 		Build()
-	ex, _ := acidns.NewUDPExchanger(srv.Addr())
+	ex, _ := acidns.NewUDPExchanger(ctrl.Addr())
 	qctx, qcancel := context.WithTimeout(ctx, 2*time.Second)
 	defer qcancel()
 	resp, err := ex.Exchange(qctx, q)

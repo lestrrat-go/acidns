@@ -199,7 +199,10 @@ func TestNSEC3ProveDenialIterationsTooHigh(t *testing.T) {
 		rdata.NewNSEC3(1, 0, MaxNSEC3Iterations+1, nil, make([]byte, 20), nil))
 	res := nsec3ProveDenial(wire.MustParseName("foo.example."), rrtype.A,
 		wire.MustParseName("example."), []wire.Record{r})
-	require.Equal(t, nsec3DenialNone, res.kind)
+	// RFC 9276 §3.2: a high iteration count is reported as an
+	// Insecure-via-iterations signal so the walker can downgrade
+	// rather than declare Bogus.
+	require.Equal(t, nsec3DenialIterationsExceeded, res.kind)
 }
 
 func TestFindNSEC3ClosestEncloserNoMatch(t *testing.T) {

@@ -89,11 +89,11 @@ func run(argv []string) error {
 		return err
 	}
 
-	udpSrv, err := acidns.ListenUDP(addr, handler)
+	udpSrv, err := acidns.NewUDPServer(addr, handler)
 	if err != nil {
 		return err
 	}
-	tcpSrv, err := acidns.ListenTCP(addr, handler)
+	tcpSrv, err := acidns.NewTCPServer(addr, handler)
 	if err != nil {
 		return err
 	}
@@ -101,17 +101,26 @@ func run(argv []string) error {
 	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer cancel()
 
-	_, _ = fmt.Fprintf(os.Stdout, "acidns-server: %s mode listening on %s (UDP %s, TCP %s)\n",
-		o.mode, addr, udpSrv.Addr(), tcpSrv.Addr())
+	udpCtrl, err := udpSrv.Run(ctx)
+	if err != nil {
+		return err
+	}
+	tcpCtrl, err := tcpSrv.Run(ctx)
+	if err != nil {
+		return err
+	}
 
-	errCh := make(chan error, 2)
-	go func() { errCh <- udpSrv.Serve(ctx) }()
-	go func() { errCh <- tcpSrv.Serve(ctx) }()
+	_, _ = fmt.Fprintf(os.Stdout, "acidns-server: %s mode listening on %s (UDP %s, TCP %s)\n",
+		o.mode, addr, udpCtrl.Addr(), tcpCtrl.Addr())
 
 	<-ctx.Done()
-	cancel()
-	for range 2 {
-		<-errCh
+	<-udpCtrl.Done()
+	<-tcpCtrl.Done()
+	if err := udpCtrl.Err(); err != nil {
+		return fmt.Errorf("udp server: %w", err)
+	}
+	if err := tcpCtrl.Err(); err != nil {
+		return fmt.Errorf("tcp server: %w", err)
 	}
 	return nil
 }

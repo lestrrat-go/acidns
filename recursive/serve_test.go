@@ -30,13 +30,15 @@ www IN  A    192.0.2.42
 		recursive.WithCache(cache),
 		recursive.WithMaxIterations(50),
 	)
-	srv, err := acidns.ListenUDP(netip.MustParseAddrPort("127.0.0.1:0"), r)
+	srv, err := acidns.NewUDPServer(netip.MustParseAddrPort("127.0.0.1:0"), r)
 	require.NoError(t, err)
 	ctx, cancel := context.WithCancel(t.Context())
 	t.Cleanup(cancel)
-	go func() { _ = srv.Serve(ctx) }()
+	ctrl, err := srv.Run(ctx)
 
-	ex, err := acidns.NewUDPExchanger(srv.Addr())
+	require.NoError(t, err)
+
+	ex, err := acidns.NewUDPExchanger(ctrl.Addr())
 	require.NoError(t, err)
 	q, err := wire.NewBuilder().
 		ID(0xbeef).
@@ -57,15 +59,17 @@ www IN  A    192.0.2.42
 func TestServeDNSFormErrOnEmptyQuestion(t *testing.T) {
 	t.Parallel()
 	r := recursive.New(recursive.WithRoots(netip.MustParseAddrPort("127.0.0.1:65535")))
-	srv, err := acidns.ListenUDP(netip.MustParseAddrPort("127.0.0.1:0"), r)
+	srv, err := acidns.NewUDPServer(netip.MustParseAddrPort("127.0.0.1:0"), r)
 	require.NoError(t, err)
 	ctx, cancel := context.WithCancel(t.Context())
 	t.Cleanup(cancel)
-	go func() { _ = srv.Serve(ctx) }()
+	ctrl, err := srv.Run(ctx)
+
+	require.NoError(t, err)
 
 	q, err := wire.NewBuilder().ID(1).Build() // no question
 	require.NoError(t, err)
-	ex, err := acidns.NewUDPExchanger(srv.Addr())
+	ex, err := acidns.NewUDPExchanger(ctrl.Addr())
 	require.NoError(t, err)
 	qctx, qcancel := context.WithTimeout(ctx, 2*time.Second)
 	defer qcancel()
@@ -81,18 +85,20 @@ func TestServeDNSServFailOnUnreachable(t *testing.T) {
 		recursive.WithRoots(netip.MustParseAddrPort("127.0.0.1:1")),
 		recursive.WithMaxIterations(1),
 	)
-	srv, err := acidns.ListenUDP(netip.MustParseAddrPort("127.0.0.1:0"), r)
+	srv, err := acidns.NewUDPServer(netip.MustParseAddrPort("127.0.0.1:0"), r)
 	require.NoError(t, err)
 	ctx, cancel := context.WithCancel(t.Context())
 	t.Cleanup(cancel)
-	go func() { _ = srv.Serve(ctx) }()
+	ctrl, err := srv.Run(ctx)
+
+	require.NoError(t, err)
 
 	q, err := wire.NewBuilder().
 		ID(2).
 		Question(wire.NewQuestion(wire.MustParseName("nope.invalid"), rrtype.A)).
 		Build()
 	require.NoError(t, err)
-	ex, err := acidns.NewUDPExchanger(srv.Addr())
+	ex, err := acidns.NewUDPExchanger(ctrl.Addr())
 	require.NoError(t, err)
 	qctx, qcancel := context.WithTimeout(ctx, 2*time.Second)
 	defer qcancel()

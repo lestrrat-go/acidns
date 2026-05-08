@@ -41,13 +41,15 @@ func TestUDPResponseWriterAddrAccessors(t *testing.T) {
 		_ = w.WriteMsg(resp)
 	})
 
-	srv, err := acidns.ListenUDP(netip.MustParseAddrPort("127.0.0.1:0"), h)
+	srv, err := acidns.NewUDPServer(netip.MustParseAddrPort("127.0.0.1:0"), h)
 	require.NoError(t, err)
 	ctx, cancel := context.WithCancel(t.Context())
 	t.Cleanup(cancel)
-	go func() { _ = srv.Serve(ctx) }()
+	ctrl, err := srv.Run(ctx)
 
-	ex, err := acidns.NewUDPExchanger(srv.Addr())
+	require.NoError(t, err)
+
+	ex, err := acidns.NewUDPExchanger(ctrl.Addr())
 	require.NoError(t, err)
 	q, _ := wire.NewBuilder().
 		ID(0xab12).
@@ -83,13 +85,15 @@ func TestUDPWriteMsgTwiceFails(t *testing.T) {
 		errCh <- w.WriteMsg(resp)
 	})
 
-	srv, err := acidns.ListenUDP(netip.MustParseAddrPort("127.0.0.1:0"), h)
+	srv, err := acidns.NewUDPServer(netip.MustParseAddrPort("127.0.0.1:0"), h)
 	require.NoError(t, err)
 	ctx, cancel := context.WithCancel(t.Context())
 	t.Cleanup(cancel)
-	go func() { _ = srv.Serve(ctx) }()
+	ctrl, err := srv.Run(ctx)
 
-	ex, err := acidns.NewUDPExchanger(srv.Addr())
+	require.NoError(t, err)
+
+	ex, err := acidns.NewUDPExchanger(ctrl.Addr())
 	require.NoError(t, err)
 	q, _ := wire.NewBuilder().
 		ID(0xab13).
@@ -132,13 +136,15 @@ func TestTCPResponseWriterAddrAccessors(t *testing.T) {
 		_ = w.WriteMsg(resp)
 	})
 
-	srv, err := acidns.ListenTCP(netip.MustParseAddrPort("127.0.0.1:0"), h)
+	srv, err := acidns.NewTCPServer(netip.MustParseAddrPort("127.0.0.1:0"), h)
 	require.NoError(t, err)
 	ctx, cancel := context.WithCancel(t.Context())
 	t.Cleanup(cancel)
-	go func() { _ = srv.Serve(ctx) }()
+	ctrl, err := srv.Run(ctx)
 
-	ex, err := acidns.NewTCPExchanger(srv.Addr())
+	require.NoError(t, err)
+
+	ex, err := acidns.NewTCPExchanger(ctrl.Addr())
 	require.NoError(t, err)
 	q, _ := wire.NewBuilder().
 		ID(0xcd34).
@@ -188,15 +194,17 @@ func TestTCPWriteMsgTooLarge(t *testing.T) {
 		errCh <- w.WriteMsg(resp)
 	})
 
-	srv, err := acidns.ListenTCP(netip.MustParseAddrPort("127.0.0.1:0"), h)
+	srv, err := acidns.NewTCPServer(netip.MustParseAddrPort("127.0.0.1:0"), h)
 	require.NoError(t, err)
 	ctx, cancel := context.WithCancel(t.Context())
 	t.Cleanup(cancel)
-	go func() { _ = srv.Serve(ctx) }()
+	ctrl, err := srv.Run(ctx)
+
+	require.NoError(t, err)
 
 	// Open a raw TCP connection so we don't block in the client when the
 	// server fails to send a response.
-	conn, err := net.Dial("tcp", srv.Addr().String())
+	conn, err := net.Dial("tcp", ctrl.Addr().String())
 	require.NoError(t, err)
 	defer func() { _ = conn.Close() }()
 

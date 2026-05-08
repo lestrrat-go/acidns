@@ -91,12 +91,13 @@ func TestParseRSAPublic(t *testing.T) {
 
 	t.Run("exponent too large", func(t *testing.T) {
 		t.Parallel()
-		// Exponent length 9 (>8 bytes -> doesn't fit in int64).
+		// Exponent length 9 — beyond the 8-byte cap (RFC 8624 plausibility
+		// bound; real exponents are at most 3 bytes).
 		buf := []byte{0x09}
 		buf = append(buf, []byte{0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff}...)
 		buf = append(buf, []byte{0x01, 0x02, 0x03}...) // modulus
 		_, err := dnssecbb.ParseRSAPublic(buf)
-		require.ErrorContains(t, err, "rsa exponent too large")
+		require.ErrorContains(t, err, "exceeds cap")
 	})
 }
 

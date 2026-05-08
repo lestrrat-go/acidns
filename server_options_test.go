@@ -21,16 +21,18 @@ func (echoHandler) ServeDNS(_ context.Context, w acidns.ResponseWriter, q wire.M
 
 func TestUDPListenWithOptions(t *testing.T) {
 	t.Parallel()
-	srv, err := acidns.ListenUDP(netip.MustParseAddrPort("127.0.0.1:0"), echoHandler{},
+	srv, err := acidns.NewUDPServer(netip.MustParseAddrPort("127.0.0.1:0"), echoHandler{},
 		acidns.WithUDPReadBuffer(4096),
 		acidns.WithUDPMaxResponse(1232),
 	)
 	require.NoError(t, err)
 	ctx, cancel := context.WithCancel(t.Context())
 	t.Cleanup(cancel)
-	go func() { _ = srv.Serve(ctx) }()
+	ctrl, err := srv.Run(ctx)
 
-	ex, err := acidns.NewUDPExchanger(srv.Addr())
+	require.NoError(t, err)
+
+	ex, err := acidns.NewUDPExchanger(ctrl.Addr())
 	require.NoError(t, err)
 	q, _ := wire.NewBuilder().
 		ID(1).
@@ -45,15 +47,17 @@ func TestUDPListenWithOptions(t *testing.T) {
 
 func TestTCPListenWithOptions(t *testing.T) {
 	t.Parallel()
-	srv, err := acidns.ListenTCP(netip.MustParseAddrPort("127.0.0.1:0"), echoHandler{},
+	srv, err := acidns.NewTCPServer(netip.MustParseAddrPort("127.0.0.1:0"), echoHandler{},
 		acidns.WithTCPIdleTimeout(2*time.Second),
 	)
 	require.NoError(t, err)
 	ctx, cancel := context.WithCancel(t.Context())
 	t.Cleanup(cancel)
-	go func() { _ = srv.Serve(ctx) }()
+	ctrl, err := srv.Run(ctx)
 
-	ex, err := acidns.NewTCPExchanger(srv.Addr())
+	require.NoError(t, err)
+
+	ex, err := acidns.NewTCPExchanger(ctrl.Addr())
 	require.NoError(t, err)
 	q, _ := wire.NewBuilder().
 		ID(2).

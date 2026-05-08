@@ -54,13 +54,15 @@ func TestCNAMEChainFollowed(t *testing.T) {
 			"alias.example.": netip.MustParseAddr("192.0.2.99"),
 		},
 	}
-	srv, err := acidns.ListenUDP(netip.MustParseAddrPort("127.0.0.1:0"), h)
+	srv, err := acidns.NewUDPServer(netip.MustParseAddrPort("127.0.0.1:0"), h)
 	require.NoError(t, err)
 	ctx, cancel := context.WithCancel(t.Context())
 	t.Cleanup(cancel)
-	go func() { _ = srv.Serve(ctx) }()
+	ctrl, err := srv.Run(ctx)
 
-	r := recursive.New(recursive.WithRoots(srv.Addr()))
+	require.NoError(t, err)
+
+	r := recursive.New(recursive.WithRoots(ctrl.Addr()))
 	rctx, rcancel := context.WithTimeout(t.Context(), 5*time.Second)
 	defer rcancel()
 	entry, err := r.Resolve(rctx, wire.MustParseName("www.example."), rrtype.A)
@@ -87,13 +89,15 @@ func TestCNAMELoopDetected(t *testing.T) {
 			"b.example.": wire.MustParseName("a.example."),
 		},
 	}
-	srv, err := acidns.ListenUDP(netip.MustParseAddrPort("127.0.0.1:0"), h)
+	srv, err := acidns.NewUDPServer(netip.MustParseAddrPort("127.0.0.1:0"), h)
 	require.NoError(t, err)
 	ctx, cancel := context.WithCancel(t.Context())
 	t.Cleanup(cancel)
-	go func() { _ = srv.Serve(ctx) }()
+	ctrl, err := srv.Run(ctx)
 
-	r := recursive.New(recursive.WithRoots(srv.Addr()), recursive.WithMaxCNAMEDepth(4))
+	require.NoError(t, err)
+
+	r := recursive.New(recursive.WithRoots(ctrl.Addr()), recursive.WithMaxCNAMEDepth(4))
 	rctx, rcancel := context.WithTimeout(t.Context(), 5*time.Second)
 	defer rcancel()
 	_, err = r.Resolve(rctx, wire.MustParseName("a.example."), rrtype.A)
@@ -254,14 +258,16 @@ func TestQueryTimeoutSurvivesContextRespect(t *testing.T) {
 			Build()
 		_ = w.WriteMsg(resp)
 	})
-	srv, err := acidns.ListenUDP(netip.MustParseAddrPort("127.0.0.1:0"), slow)
+	srv, err := acidns.NewUDPServer(netip.MustParseAddrPort("127.0.0.1:0"), slow)
 	require.NoError(t, err)
 	ctx, cancel := context.WithCancel(t.Context())
 	t.Cleanup(cancel)
-	go func() { _ = srv.Serve(ctx) }()
+	ctrl, err := srv.Run(ctx)
+
+	require.NoError(t, err)
 
 	r := recursive.New(
-		recursive.WithRoots(srv.Addr()),
+		recursive.WithRoots(ctrl.Addr()),
 		recursive.WithQueryTimeout(20*time.Millisecond),
 		recursive.WithMaxIterations(2),
 	)

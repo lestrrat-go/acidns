@@ -34,11 +34,13 @@ func TestTransferAXFRFallback(t *testing.T) {
 	h, err := authoritative.New(authoritative.WithZone(z))
 	require.NoError(t, err)
 
-	srv, err := acidns.ListenTCP(netip.MustParseAddrPort("127.0.0.1:0"), h)
+	srv, err := acidns.NewTCPServer(netip.MustParseAddrPort("127.0.0.1:0"), h)
 	require.NoError(t, err)
 	ctx, cancel := context.WithCancel(t.Context())
 	t.Cleanup(cancel)
-	go func() { _ = srv.Serve(ctx) }()
+	ctrl, err := srv.Run(ctx)
+
+	require.NoError(t, err)
 
 	// Ask for the zone with a stale serial — server falls back to AXFR.
 	clientSOA := rdata.NewSOA(
@@ -49,7 +51,7 @@ func TestTransferAXFRFallback(t *testing.T) {
 	xferCtx, xcancel := context.WithTimeout(t.Context(), 5*time.Second)
 	defer xcancel()
 
-	ex, err := acidns.NewTCPExchanger(srv.Addr())
+	ex, err := acidns.NewTCPExchanger(ctrl.Addr())
 	require.NoError(t, err)
 	sx, ok := ex.(acidns.StreamExchanger)
 	require.True(t, ok, "tcp exchanger must implement StreamExchanger")

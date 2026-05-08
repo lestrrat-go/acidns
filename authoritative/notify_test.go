@@ -38,13 +38,15 @@ func TestServeNotifyAcksAndCallsHandler(t *testing.T) {
 	)
 	require.NoError(t, err)
 
-	srv, err := acidns.ListenUDP(netip.MustParseAddrPort("127.0.0.1:0"), h)
+	srv, err := acidns.NewUDPServer(netip.MustParseAddrPort("127.0.0.1:0"), h)
 	require.NoError(t, err)
 	ctx, cancel := context.WithCancel(t.Context())
 	t.Cleanup(cancel)
-	go func() { _ = srv.Serve(ctx) }()
+	ctrl, err := srv.Run(ctx)
 
-	ex, err := acidns.NewUDPExchanger(srv.Addr())
+	require.NoError(t, err)
+
+	ex, err := acidns.NewUDPExchanger(ctrl.Addr())
 	require.NoError(t, err)
 	resp, err := notify.Send(t.Context(), ex, wire.MustParseName("example.com"))
 	require.NoError(t, err)
@@ -58,13 +60,15 @@ func TestServeNotifyRefusesUnknownZone(t *testing.T) {
 	require.NoError(t, err)
 	h, err := authoritative.New(authoritative.WithZone(z))
 	require.NoError(t, err)
-	srv, err := acidns.ListenUDP(netip.MustParseAddrPort("127.0.0.1:0"), h)
+	srv, err := acidns.NewUDPServer(netip.MustParseAddrPort("127.0.0.1:0"), h)
 	require.NoError(t, err)
 	ctx, cancel := context.WithCancel(t.Context())
 	t.Cleanup(cancel)
-	go func() { _ = srv.Serve(ctx) }()
+	ctrl, err := srv.Run(ctx)
 
-	ex, err := acidns.NewUDPExchanger(srv.Addr())
+	require.NoError(t, err)
+
+	ex, err := acidns.NewUDPExchanger(ctrl.Addr())
 	require.NoError(t, err)
 	resp, err := notify.Send(t.Context(), ex, wire.MustParseName("example.org"))
 	require.NoError(t, err)

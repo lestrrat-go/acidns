@@ -46,15 +46,17 @@ func TestTransferRoundTrip(t *testing.T) {
 	h, err := authoritative.New(authoritative.WithZone(z))
 	require.NoError(t, err)
 
-	srv, err := acidns.ListenTCP(netip.MustParseAddrPort("127.0.0.1:0"), h)
+	srv, err := acidns.NewTCPServer(netip.MustParseAddrPort("127.0.0.1:0"), h)
 	require.NoError(t, err)
 	ctx, cancel := context.WithCancel(t.Context())
 	t.Cleanup(cancel)
-	go func() { _ = srv.Serve(ctx) }()
+	ctrl, err := srv.Run(ctx)
+
+	require.NoError(t, err)
 
 	xferCtx, xcancel := context.WithTimeout(t.Context(), 5*time.Second)
 	defer xcancel()
-	xfer, err := axfr.Start(xferCtx, newStreamEx(t, srv.Addr()), wire.MustParseName("example.com"))
+	xfer, err := axfr.Start(xferCtx, newStreamEx(t, ctrl.Addr()), wire.MustParseName("example.com"))
 	require.NoError(t, err)
 	defer func() { _ = xfer.Close() }()
 
@@ -90,13 +92,15 @@ func TestTransferRefusedOutOfZone(t *testing.T) {
 	z, err := zonefile.Parse(strings.NewReader(transferZone))
 	require.NoError(t, err)
 	h, _ := authoritative.New(authoritative.WithZone(z))
-	srv, err := acidns.ListenTCP(netip.MustParseAddrPort("127.0.0.1:0"), h)
+	srv, err := acidns.NewTCPServer(netip.MustParseAddrPort("127.0.0.1:0"), h)
 	require.NoError(t, err)
 	ctx, cancel := context.WithCancel(t.Context())
 	t.Cleanup(cancel)
-	go func() { _ = srv.Serve(ctx) }()
+	ctrl, err := srv.Run(ctx)
 
-	xfer, err := axfr.Start(t.Context(), newStreamEx(t, srv.Addr()), wire.MustParseName("example.org"))
+	require.NoError(t, err)
+
+	xfer, err := axfr.Start(t.Context(), newStreamEx(t, ctrl.Addr()), wire.MustParseName("example.org"))
 	if err == nil {
 		// Some servers send a single SERVFAIL/REFUSED message — the recReader
 		// surfaces that as an error on the first Next call.

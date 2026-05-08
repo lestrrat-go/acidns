@@ -3,6 +3,7 @@ package recursive_test
 import (
 	"context"
 	"errors"
+	"fmt"
 	"net/netip"
 	"sync"
 	"sync/atomic"
@@ -58,24 +59,26 @@ func TestCacheGetExpired(t *testing.T) {
 
 // TestMemoryCacheBoundedByMaxSize confirms that filling the cache
 // past its configured cap triggers eviction so the entry count stays
-// within bounds.
+// within the per-shard bound. WithMemoryCacheSize is sharded across
+// 64 shards (ceil(n/64) per shard), so the actual ceiling is the
+// per-shard cap times the shard count.
 func TestMemoryCacheBoundedByMaxSize(t *testing.T) {
 	t.Parallel()
-	const limit = 8
+	const limit = 640
+	const numShards = 64
+	const perShardCap = (limit + numShards - 1) / numShards
+	const ceiling = perShardCap * numShards
 	c := recursive.NewMemoryCache(recursive.WithMemoryCacheSize(limit))
 
-	// Insert 4× the limit with strictly-increasing expiry so eviction
-	// drops the soonest-to-expire entry. Each entry is an unrelated
-	// name so no slot collisions reduce the count.
 	for i := range 4 * limit {
-		name := wire.MustParseName(string(rune('a'+i)) + ".example.")
+		name := wire.MustParseName(fmt.Sprintf("n%d.example.", i))
 		c.Put(name, rrtype.A, recursive.Entry{
 			ExpiresAt: time.Now().Add(time.Duration(i+1) * time.Minute),
 		})
 	}
-	require.LessOrEqual(t, c.Len(), limit,
-		"MemoryCache must respect WithMemoryCacheSize; got %d entries, limit %d",
-		c.Len(), limit)
+	require.LessOrEqual(t, c.Len(), ceiling,
+		"MemoryCache must respect per-shard cap; got %d entries, ceiling %d",
+		c.Len(), ceiling)
 }
 
 // TestRankServersUntestedFirst covers the rtt=0 ordering branches.
@@ -407,18 +410,20 @@ func TestServeDNSWithAuthorityAndAdditional(t *testing.T) {
 		recursive.WithRoots(netip.MustParseAddrPort("127.0.0.1:1")),
 		recursive.WithDialer(dialer),
 	)
-	srv, err := acidns.ListenUDP(netip.MustParseAddrPort("127.0.0.1:0"), r)
+	srv, err := acidns.NewUDPServer(netip.MustParseAddrPort("127.0.0.1:0"), r)
 	require.NoError(t, err)
 	ctx, cancel := context.WithCancel(t.Context())
 	t.Cleanup(cancel)
-	go func() { _ = srv.Serve(ctx) }()
+	ctrl, err := srv.Run(ctx)
+
+	require.NoError(t, err)
 
 	q, err := wire.NewBuilder().
 		ID(7).
 		Question(wire.NewQuestion(wire.MustParseName("nope.example."), rrtype.A)).
 		Build()
 	require.NoError(t, err)
-	ex, err := acidns.NewUDPExchanger(srv.Addr())
+	ex, err := acidns.NewUDPExchanger(ctrl.Addr())
 	require.NoError(t, err)
 	qctx, qcancel := context.WithTimeout(ctx, 2*time.Second)
 	defer qcancel()
@@ -449,18 +454,20 @@ func TestServeDNSBogusServfailWithEDE(t *testing.T) {
 		recursive.WithDialer(dialer),
 		recursive.WithValidator(validatorStub{status: recursive.StatusBogus}),
 	)
-	srv, err := acidns.ListenUDP(netip.MustParseAddrPort("127.0.0.1:0"), r)
+	srv, err := acidns.NewUDPServer(netip.MustParseAddrPort("127.0.0.1:0"), r)
 	require.NoError(t, err)
 	ctx, cancel := context.WithCancel(t.Context())
 	t.Cleanup(cancel)
-	go func() { _ = srv.Serve(ctx) }()
+	ctrl, err := srv.Run(ctx)
+
+	require.NoError(t, err)
 
 	q, err := wire.NewBuilder().
 		ID(8).
 		Question(wire.NewQuestion(wire.MustParseName("www.example."), rrtype.A)).
 		Build()
 	require.NoError(t, err)
-	ex, err := acidns.NewUDPExchanger(srv.Addr())
+	ex, err := acidns.NewUDPExchanger(ctrl.Addr())
 	require.NoError(t, err)
 	qctx, qcancel := context.WithTimeout(ctx, 2*time.Second)
 	defer qcancel()
@@ -526,18 +533,20 @@ func TestTCPFallbackOnTruncated(t *testing.T) {
 		_ = w.WriteMsg(resp)
 	})
 
-	udpSrv, err := acidns.ListenUDP(netip.MustParseAddrPort("127.0.0.1:0"), udpHandler)
-	require.NoError(t, err)
-	udpAddr := udpSrv.Addr()
-	// Bind TCP to the same UDP port (typical for DNS auth servers). Try the
-	// already-known port; if another process steals it between calls we're
-	// fine because the test will fail loudly.
-	tcpSrv, err := acidns.ListenTCP(udpAddr, tcpHandler)
+	udpSrv, err := acidns.NewUDPServer(netip.MustParseAddrPort("127.0.0.1:0"), udpHandler)
 	require.NoError(t, err)
 	ctx, cancel := context.WithCancel(t.Context())
 	t.Cleanup(cancel)
-	go func() { _ = udpSrv.Serve(ctx) }()
-	go func() { _ = tcpSrv.Serve(ctx) }()
+	udpCtrl, err := udpSrv.Run(ctx)
+	require.NoError(t, err)
+	udpAddr := udpCtrl.Addr()
+	// Bind TCP to the same UDP port (typical for DNS auth servers). Try the
+	// already-known port; if another process steals it between calls we're
+	// fine because the test will fail loudly.
+	tcpSrv, err := acidns.NewTCPServer(udpAddr, tcpHandler)
+	require.NoError(t, err)
+	_, err = tcpSrv.Run(ctx)
+	require.NoError(t, err)
 
 	d := recursive.DefaultDialer()
 	q, err := wire.NewBuilder().
@@ -572,11 +581,13 @@ func TestTCPFallbackTCPDialFails(t *testing.T) {
 			Build()
 		_ = w.WriteMsg(resp)
 	})
-	udpSrv, err := acidns.ListenUDP(netip.MustParseAddrPort("127.0.0.1:0"), udpHandler)
+	udpSrv, err := acidns.NewUDPServer(netip.MustParseAddrPort("127.0.0.1:0"), udpHandler)
 	require.NoError(t, err)
 	ctx, cancel := context.WithCancel(t.Context())
 	t.Cleanup(cancel)
-	go func() { _ = udpSrv.Serve(ctx) }()
+	udpCtrl, err := udpSrv.Run(ctx)
+
+	require.NoError(t, err)
 
 	d := recursive.DefaultDialer()
 	q, err := wire.NewBuilder().
@@ -586,7 +597,7 @@ func TestTCPFallbackTCPDialFails(t *testing.T) {
 	require.NoError(t, err)
 	rctx, rcancel := context.WithTimeout(t.Context(), 2*time.Second)
 	defer rcancel()
-	_, err = d.Exchange(rctx, udpSrv.Addr(), q)
+	_, err = d.Exchange(rctx, udpCtrl.Addr(), q)
 	require.ErrorIs(t, err, recursive.ErrTruncatedAfterTCPFail)
 }
 

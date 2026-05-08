@@ -26,12 +26,14 @@ func startAuth(t *testing.T, zoneText string) netip.AddrPort {
 	require.NoError(t, err)
 	h, err := authoritative.New(authoritative.WithZone(z))
 	require.NoError(t, err)
-	srv, err := acidns.ListenUDP(netip.MustParseAddrPort("127.0.0.1:0"), h)
+	srv, err := acidns.NewUDPServer(netip.MustParseAddrPort("127.0.0.1:0"), h)
 	require.NoError(t, err)
 	ctx, cancel := context.WithCancel(t.Context())
 	t.Cleanup(cancel)
-	go func() { _ = srv.Serve(ctx) }()
-	return srv.Addr()
+	ctrl, err := srv.Run(ctx)
+
+	require.NoError(t, err)
+	return ctrl.Addr()
 }
 
 func TestResolveOneDelegationWithGlue(t *testing.T) {
@@ -93,11 +95,13 @@ www IN  A    192.0.2.55
 			Build()
 		_ = w.WriteMsg(resp)
 	})
-	rootSrv, err := acidns.ListenUDP(netip.MustParseAddrPort("127.0.0.1:0"), rootHandler)
+	rootSrv, err := acidns.NewUDPServer(netip.MustParseAddrPort("127.0.0.1:0"), rootHandler)
 	require.NoError(t, err)
 	rctx, rcancel := context.WithCancel(t.Context())
 	t.Cleanup(rcancel)
-	go func() { _ = rootSrv.Serve(rctx) }()
+	rootCtrl, err := rootSrv.Run(rctx)
+
+	require.NoError(t, err)
 
 	// Custom Dialer: when the resolver tries to contact 127.0.0.1:53 (the
 	// glue address with the default port), redirect to the child server's
@@ -109,7 +113,7 @@ www IN  A    192.0.2.55
 	}
 
 	r := recursive.New(
-		recursive.WithRoots(rootSrv.Addr()),
+		recursive.WithRoots(rootCtrl.Addr()),
 		recursive.WithDialer(dialer),
 	)
 	ctx, cancel := context.WithTimeout(t.Context(), 5*time.Second)

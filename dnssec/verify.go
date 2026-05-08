@@ -1,6 +1,7 @@
 package dnssec
 
 import (
+	"crypto/subtle"
 	"fmt"
 
 	"github.com/lestrrat-go/acidns/dnssec/dnssecbb"
@@ -65,20 +66,8 @@ func VerifyDS(owner wire.Name, ds rdata.DS, key rdata.DNSKEY) error {
 	if err != nil {
 		return fmt.Errorf("%w: DS digest type %d", ErrUnsupportedAlgorithm, ds.DigestType())
 	}
-	if !bytesEqual(sum, ds.Digest()) {
+	if subtle.ConstantTimeCompare(sum, ds.Digest()) != 1 {
 		return ErrSignatureMismatch
 	}
 	return nil
-}
-
-func bytesEqual(a, b []byte) bool {
-	if len(a) != len(b) {
-		return false
-	}
-	for i := range a {
-		if a[i] != b[i] {
-			return false
-		}
-	}
-	return true
 }

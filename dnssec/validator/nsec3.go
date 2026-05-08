@@ -172,6 +172,13 @@ const (
 	nsec3DenialNXDomain
 	nsec3DenialInsecureDelegation
 	nsec3DenialOptOut
+	// nsec3DenialIterationsExceeded indicates the records advertised a
+	// hash-iteration count above MaxNSEC3Iterations. Per RFC 9276 §3.2 the
+	// validator should treat such a response as Insecure (skip DNSSEC
+	// validation) rather than Bogus, since the only honest interpretation
+	// is that the zone configured a parameter we refuse to spend cycles
+	// on, not that the proof is forged.
+	nsec3DenialIterationsExceeded
 )
 
 // nsec3DenialResult bundles the proof outcome and supporting record
@@ -203,8 +210,10 @@ func nsec3ProveDenial(qname wire.Name, qtype rrtype.Type, zone wire.Name, record
 		return nsec3DenialResult{kind: nsec3DenialNone}
 	}
 	if params.iterations > MaxNSEC3Iterations {
-		// Refuse to spend cycles on hostile zones.
-		return nsec3DenialResult{kind: nsec3DenialNone}
+		// Refuse to spend cycles on hostile zones; surface as Insecure
+		// per RFC 9276 §3.2 so callers downgrade DNSSEC validation
+		// rather than declaring Bogus on a parameter we won't engage.
+		return nsec3DenialResult{kind: nsec3DenialIterationsExceeded}
 	}
 
 	// 1. DS-NoData / insecure-delegation handling (qtype == DS).

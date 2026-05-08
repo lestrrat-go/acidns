@@ -7,6 +7,7 @@ import (
 	"net"
 	"net/netip"
 	"sync"
+	"sync/atomic"
 
 	"github.com/lestrrat-go/acidns/wire"
 )
@@ -46,28 +47,18 @@ func WithUDPMaxInflight(n int) UDPListenerOption {
 	return udpListenerOptionFunc(func(c *udpListenerConfig) { c.maxInflight = n })
 }
 
-type udpListener struct {
-	pc        net.PacketConn
-	addr      netip.AddrPort
-	handler   Handler
-	cfg       udpListenerConfig
-	sem       chan struct{}
-	bufPool   sync.Pool
-	wg        sync.WaitGroup
-	closeOnce sync.Once
-
-	// handlerCtx is the parent context for every dispatched handler.
-	// Both Shutdown and Serve-context cancellation cancel it so
-	// in-flight handlers observe shutdown rather than running until
-	// their own work happens to finish.
-	handlerCtx    context.Context
-	handlerCancel context.CancelFunc
+// UDPServer is a configured but not-yet-bound UDP DNS server. Call
+// [UDPServer.Run] to bind a socket and start the dispatch loop.
+type UDPServer struct {
+	addr    netip.AddrPort
+	handler Handler
+	cfg     udpListenerConfig
+	started atomic.Bool
 }
 
-// ListenUDP binds a UDP socket on addr and returns a Server that dispatches
-// each received packet to h. addr.Port may be 0 to ask the kernel for an
-// ephemeral port; the actual address is reported by Server.Addr.
-func ListenUDP(addr netip.AddrPort, h Handler, opts ...UDPListenerOption) (Server, error) {
+// NewUDPServer validates the configuration. It does NOT bind a socket;
+// pass the result to Run when you're ready to start serving.
+func NewUDPServer(addr netip.AddrPort, h Handler, opts ...UDPListenerOption) (*UDPServer, error) {
 	if h == nil {
 		return nil, fmt.Errorf("dnsserver: handler is nil")
 	}
@@ -75,82 +66,98 @@ func ListenUDP(addr netip.AddrPort, h Handler, opts ...UDPListenerOption) (Serve
 	for _, o := range opts {
 		o.applyUDPServer(&cfg)
 	}
+	return &UDPServer{addr: addr, handler: h, cfg: cfg}, nil
+}
 
-	pc, err := net.ListenPacket("udp", addr.String()) //nolint:noctx // listen lifetime is bound to Serve, not the caller's ctx
+// Run binds the UDP socket and spawns the dispatch goroutine. It
+// returns a Controller exposing the bound address (which may differ
+// from the requested address when port=0) and a Done channel that
+// closes once the goroutine has exited cleanly. Cancel ctx to stop
+// the server; the goroutine drains in-flight handlers before
+// closing.
+//
+// Run may only be called once per server. A second call returns an
+// error.
+func (s *UDPServer) Run(ctx context.Context) (*Controller, error) {
+	if !s.started.CompareAndSwap(false, true) {
+		return nil, fmt.Errorf("dnsserver: UDPServer.Run called more than once")
+	}
+
+	pc, err := net.ListenPacket("udp", s.addr.String()) //nolint:noctx // socket lifetime is bound to Run's ctx, not the bind call
 	if err != nil {
-		return nil, fmt.Errorf("dnsserver: udp listen %s: %w", addr, err)
+		s.started.Store(false)
+		return nil, fmt.Errorf("dnsserver: udp listen %s: %w", s.addr, err)
 	}
 	la, ok := pc.LocalAddr().(*net.UDPAddr)
 	if !ok {
 		_ = pc.Close()
-		return nil, fmt.Errorf("dnsserver: udp listen %s: unexpected addr type %T", addr, pc.LocalAddr())
+		return nil, fmt.Errorf("dnsserver: udp listen %s: unexpected addr type %T", s.addr, pc.LocalAddr())
 	}
-	hctx, hcancel := context.WithCancel(context.Background())
-	l := &udpListener{
-		pc:            pc,
-		addr:          netip.AddrPortFrom(la.AddrPort().Addr(), uint16(la.Port)),
-		handler:       h,
-		cfg:           cfg,
-		handlerCtx:    hctx,
-		handlerCancel: hcancel,
+	bound := netip.AddrPortFrom(la.AddrPort().Addr(), uint16(la.Port))
+
+	ctrl := newController(bound)
+	loop := &udpLoop{
+		pc:      pc,
+		addr:    bound,
+		handler: s.handler,
+		cfg:     s.cfg,
 	}
-	if cfg.maxInflight > 0 {
-		l.sem = make(chan struct{}, cfg.maxInflight)
+	if s.cfg.maxInflight > 0 {
+		loop.sem = make(chan struct{}, s.cfg.maxInflight)
 	}
-	l.bufPool.New = func() any {
-		b := make([]byte, cfg.bufferSize)
+	loop.bufPool.New = func() any {
+		b := make([]byte, s.cfg.bufferSize)
 		return &b
 	}
-	return l, nil
+
+	go func() {
+		defer close(ctrl.done)
+		err := loop.run(ctx)
+		if err != nil && !errors.Is(err, ErrServerClosed) {
+			ctrl.setErr(err)
+		}
+	}()
+
+	return ctrl, nil
 }
 
-func (s *udpListener) Addr() netip.AddrPort { return s.addr }
-
-// Shutdown closes the listening socket so Serve returns ErrServerClosed,
-// cancels the handler context so in-flight handlers observe shutdown,
-// then waits for in-flight handler goroutines to finish. If ctx expires
-// before that happens, the context error is returned and the dangling
-// handlers continue running until they exit on their own.
-func (s *udpListener) Shutdown(ctx context.Context) error {
-	s.closeOnce.Do(func() {
-		s.handlerCancel()
-		_ = s.pc.Close()
-	})
-	done := make(chan struct{})
-	go func() { s.wg.Wait(); close(done) }()
-	select {
-	case <-done:
-		return nil
-	case <-ctx.Done():
-		return ctx.Err()
-	}
+// udpLoop owns the runtime state of a serving UDP listener. All
+// fields are written from the dispatch goroutine; nothing external
+// holds a pointer to udpLoop, so no synchronisation is required
+// beyond what handler dispatch already arranges.
+type udpLoop struct {
+	pc      net.PacketConn
+	addr    netip.AddrPort
+	handler Handler
+	cfg     udpListenerConfig
+	sem     chan struct{}
+	bufPool sync.Pool
+	wg      sync.WaitGroup
 }
 
-func (s *udpListener) Serve(ctx context.Context) error {
+func (l *udpLoop) run(ctx context.Context) error {
+	// Cancel the read loop on ctx done by closing the socket; the
+	// kernel surfaces a net.ErrClosed which the read path treats as
+	// the shutdown signal.
 	stop := make(chan struct{})
 	defer close(stop)
 	go func() {
 		select {
 		case <-ctx.Done():
-			s.handlerCancel()
-			_ = s.pc.Close()
-		case <-s.handlerCtx.Done():
-			_ = s.pc.Close()
+			_ = l.pc.Close()
 		case <-stop:
 		}
 	}()
 
+	defer l.wg.Wait() // drain in-flight handlers before signalling Done
+
 	for {
-		bufp, _ := s.bufPool.Get().(*[]byte) // pool's New always returns *[]byte
+		bufp, _ := l.bufPool.Get().(*[]byte) // pool's New always returns *[]byte
 		buf := *bufp
-		n, src, err := s.pc.ReadFrom(buf)
+		n, src, err := l.pc.ReadFrom(buf)
 		if err != nil {
-			s.bufPool.Put(bufp)
-			s.wg.Wait()
-			if ctx.Err() != nil {
-				return ErrServerClosed
-			}
-			if errors.Is(err, net.ErrClosed) {
+			l.bufPool.Put(bufp)
+			if ctx.Err() != nil || errors.Is(err, net.ErrClosed) {
 				return ErrServerClosed
 			}
 			return fmt.Errorf("dnsserver: udp read: %w", err)
@@ -158,32 +165,32 @@ func (s *udpListener) Serve(ctx context.Context) error {
 
 		ua, ok := src.(*net.UDPAddr)
 		if !ok {
-			s.bufPool.Put(bufp)
+			l.bufPool.Put(bufp)
 			continue
 		}
-		if s.sem != nil {
+		if l.sem != nil {
 			select {
-			case s.sem <- struct{}{}:
+			case l.sem <- struct{}{}:
 			default:
-				s.bufPool.Put(bufp) // at concurrency cap — drop & recycle
+				l.bufPool.Put(bufp) // at concurrency cap — drop & recycle
 				continue
 			}
 		}
-		s.wg.Add(1)
+		l.wg.Add(1)
 		go func(bufp *[]byte, n int, src netip.AddrPort) {
 			defer func() {
-				s.bufPool.Put(bufp)
-				if s.sem != nil {
-					<-s.sem
+				l.bufPool.Put(bufp)
+				if l.sem != nil {
+					<-l.sem
 				}
-				s.wg.Done()
+				l.wg.Done()
 			}()
-			s.handlePacket(s.handlerCtx, (*bufp)[:n], src)
+			l.handlePacket(ctx, (*bufp)[:n], src)
 		}(bufp, n, ua.AddrPort())
 	}
 }
 
-func (s *udpListener) handlePacket(ctx context.Context, body []byte, src netip.AddrPort) {
+func (l *udpLoop) handlePacket(ctx context.Context, body []byte, src netip.AddrPort) {
 	q, err := wire.Unmarshal(body)
 	if err != nil {
 		return // malformed → drop silently
@@ -195,18 +202,18 @@ func (s *udpListener) handlePacket(ctx context.Context, body []byte, src netip.A
 			maxResp = size
 		}
 	}
-	if maxResp > s.cfg.maxResponseLen {
-		maxResp = s.cfg.maxResponseLen
+	if maxResp > l.cfg.maxResponseLen {
+		maxResp = l.cfg.maxResponseLen
 	}
 
 	ctx = contextWithRawRequest(ctx, body)
 	w := &udpResponseWriter{
-		pc:     s.pc,
+		pc:     l.pc,
 		dst:    src,
-		local:  s.addr,
+		local:  l.addr,
 		maxLen: maxResp,
 	}
-	s.handler.ServeDNS(ctx, w, q)
+	l.handler.ServeDNS(ctx, w, q)
 }
 
 type udpResponseWriter struct {

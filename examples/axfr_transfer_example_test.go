@@ -31,17 +31,21 @@ www IN  A    192.0.2.42
 		fmt.Println("auth:", err)
 		return
 	}
-	srv, err := acidns.ListenTCP(netip.MustParseAddrPort("127.0.0.1:0"), h)
+	srv, err := acidns.NewTCPServer(netip.MustParseAddrPort("127.0.0.1:0"), h)
 	if err != nil {
 		fmt.Println("listen:", err)
 		return
 	}
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	go func() { _ = srv.Serve(ctx) }()
+	ctrl, err := srv.Run(ctx)
+	if err != nil {
+		fmt.Println("run:", err)
+		return
+	}
 
 	// Client side: open a TCP stream-exchanger and pull records.
-	tx, err := acidns.NewTCPExchanger(srv.Addr())
+	tx, err := acidns.NewTCPExchanger(ctrl.Addr())
 	if err != nil {
 		fmt.Println("dial:", err)
 		return

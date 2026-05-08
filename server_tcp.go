@@ -9,6 +9,7 @@ import (
 	"net"
 	"net/netip"
 	"sync"
+	"sync/atomic"
 	"syscall"
 	"time"
 
@@ -92,26 +93,18 @@ func WithTCPMaxInflightPerConn(n int) TCPListenerOption {
 	return tcpListenerOptionFunc(func(c *tcpListenerConfig) { c.maxInflightPer = n })
 }
 
-type tcpListener struct {
-	ln        net.Listener
-	addr      netip.AddrPort
-	handler   Handler
-	cfg       tcpListenerConfig
-	sem       chan struct{}
-	wg        sync.WaitGroup
-	closeOnce sync.Once
-	bodyPool  sync.Pool
-
-	handlerCtx    context.Context
-	handlerCancel context.CancelFunc
+// TCPServer is a configured but not-yet-bound TCP DNS server. Call
+// [TCPServer.Run] to bind and start the accept loop.
+type TCPServer struct {
+	addr    netip.AddrPort
+	handler Handler
+	cfg     tcpListenerConfig
+	started atomic.Bool
 }
 
-// ListenTCP binds a TCP socket on addr and returns a Server. Each
-// connection is dispatched to a goroutine that loops reading
-// length-prefixed queries (RFC 1035 §4.2.2) and writing length-prefixed
-// responses (RFC 7766). Handlers run concurrently per-connection so
-// responses may be returned in any order (pipelining).
-func ListenTCP(addr netip.AddrPort, h Handler, opts ...TCPListenerOption) (Server, error) {
+// NewTCPServer validates the configuration. It does NOT bind a socket;
+// pass the result to Run when you're ready to start serving.
+func NewTCPServer(addr netip.AddrPort, h Handler, opts ...TCPListenerOption) (*TCPServer, error) {
 	if h == nil {
 		return nil, fmt.Errorf("dnsserver: handler is nil")
 	}
@@ -125,100 +118,107 @@ func ListenTCP(addr netip.AddrPort, h Handler, opts ...TCPListenerOption) (Serve
 	for _, o := range opts {
 		o.applyTCPServer(&cfg)
 	}
-	ln, err := net.Listen("tcp", addr.String()) //nolint:noctx // listen lifetime is bound to Serve, not the caller's ctx
+	return &TCPServer{addr: addr, handler: h, cfg: cfg}, nil
+}
+
+// Run binds the TCP socket and spawns the accept-and-dispatch
+// goroutine. It returns a Controller exposing the bound address (which
+// may differ from the requested address when port=0) and a Done
+// channel that closes once the loop has exited cleanly. Cancel ctx to
+// stop the server; the goroutine drains in-flight per-connection
+// goroutines before closing.
+//
+// Run may only be called once per server. A second call returns an
+// error.
+func (s *TCPServer) Run(ctx context.Context) (*Controller, error) {
+	if !s.started.CompareAndSwap(false, true) {
+		return nil, fmt.Errorf("dnsserver: TCPServer.Run called more than once")
+	}
+
+	ln, err := net.Listen("tcp", s.addr.String()) //nolint:noctx // socket lifetime is bound to Run's ctx, not the bind call
 	if err != nil {
-		return nil, fmt.Errorf("dnsserver: tcp listen %s: %w", addr, err)
+		s.started.Store(false)
+		return nil, fmt.Errorf("dnsserver: tcp listen %s: %w", s.addr, err)
 	}
 	la, ok := ln.Addr().(*net.TCPAddr)
 	if !ok {
 		_ = ln.Close()
-		return nil, fmt.Errorf("dnsserver: tcp listen %s: unexpected addr type %T", addr, ln.Addr())
+		return nil, fmt.Errorf("dnsserver: tcp listen %s: unexpected addr type %T", s.addr, ln.Addr())
 	}
-	hctx, hcancel := context.WithCancel(context.Background())
-	bufSize := cfg.maxMessageSize
+	bound := netip.AddrPortFrom(la.AddrPort().Addr(), uint16(la.Port))
+
+	bufSize := s.cfg.maxMessageSize
 	if bufSize <= 0 {
 		bufSize = 65535
 	}
-	l := &tcpListener{
-		ln:            ln,
-		addr:          netip.AddrPortFrom(la.AddrPort().Addr(), uint16(la.Port)),
-		handler:       h,
-		cfg:           cfg,
-		handlerCtx:    hctx,
-		handlerCancel: hcancel,
+	loop := &tcpLoop{
+		ln:      ln,
+		addr:    bound,
+		handler: s.handler,
+		cfg:     s.cfg,
 	}
-	l.bodyPool.New = func() any {
+	if s.cfg.maxConnections > 0 {
+		loop.sem = make(chan struct{}, s.cfg.maxConnections)
+	}
+	loop.bodyPool.New = func() any {
 		b := make([]byte, bufSize)
 		return &b
 	}
-	if cfg.maxConnections > 0 {
-		l.sem = make(chan struct{}, cfg.maxConnections)
-	}
-	return l, nil
+
+	ctrl := newController(bound)
+	go func() {
+		defer close(ctrl.done)
+		err := loop.run(ctx)
+		if err != nil && !errors.Is(err, ErrServerClosed) {
+			ctrl.setErr(err)
+		}
+	}()
+	return ctrl, nil
 }
 
-func (s *tcpListener) Addr() netip.AddrPort { return s.addr }
-
-// Shutdown closes the listener and cancels the handler context so per-
-// connection goroutines see deadlines fire on idle-but-open sockets,
-// then waits for in-flight per-connection goroutines to finish. If ctx
-// expires before that happens, the context error is returned.
-func (s *tcpListener) Shutdown(ctx context.Context) error {
-	s.closeOnce.Do(func() {
-		s.handlerCancel()
-		_ = s.ln.Close()
-	})
-	done := make(chan struct{})
-	go func() { s.wg.Wait(); close(done) }()
-	select {
-	case <-done:
-		return nil
-	case <-ctx.Done():
-		return ctx.Err()
-	}
+// tcpLoop owns the runtime state of a serving TCP listener.
+type tcpLoop struct {
+	ln       net.Listener
+	addr     netip.AddrPort
+	handler  Handler
+	cfg      tcpListenerConfig
+	sem      chan struct{}
+	wg       sync.WaitGroup
+	bodyPool sync.Pool
 }
 
-func (s *tcpListener) Serve(ctx context.Context) error {
+func (l *tcpLoop) run(ctx context.Context) error {
 	stop := make(chan struct{})
 	defer close(stop)
 	go func() {
 		select {
 		case <-ctx.Done():
-			s.handlerCancel()
-			_ = s.ln.Close()
-		case <-s.handlerCtx.Done():
-			_ = s.ln.Close()
+			_ = l.ln.Close()
 		case <-stop:
 		}
 	}()
 
-	// Backoff bounds for transient Accept errors (e.g. EMFILE/ENFILE
-	// from process or kernel FD exhaustion). The pattern mirrors the
-	// canonical net/http.Server.Serve loop: never terminate Serve on
-	// recoverable errors, sleep with capped exponential backoff and
-	// retry; the kernel listen backlog absorbs queued SYNs while we
-	// wait.
+	defer l.wg.Wait()
+
 	const acceptBackoffStart = 5 * time.Millisecond
 	const acceptBackoffCap = time.Second
 	tempBackoff := time.Duration(0)
 
 	for {
-		if s.sem != nil {
+		if l.sem != nil {
 			select {
-			case s.sem <- struct{}{}:
+			case l.sem <- struct{}{}:
 			case <-ctx.Done():
-				_ = s.ln.Close()
-				s.wg.Wait()
+				_ = l.ln.Close()
 				return ErrServerClosed
 			}
 		}
-		conn, err := s.ln.Accept()
+		conn, err := l.ln.Accept()
 		if err != nil {
-			if s.sem != nil {
-				<-s.sem
+			if l.sem != nil {
+				<-l.sem
 			}
 			if ctx.Err() != nil || errors.Is(err, net.ErrClosed) {
-				s.wg.Wait()
 				return ErrServerClosed
 			}
 			if isAcceptTransient(err) {
@@ -235,33 +235,30 @@ func (s *tcpListener) Serve(ctx context.Context) error {
 				case <-timer.C:
 				case <-ctx.Done():
 					timer.Stop()
-					_ = s.ln.Close()
-					s.wg.Wait()
+					_ = l.ln.Close()
 					return ErrServerClosed
 				}
 				continue
 			}
-			s.wg.Wait()
 			return fmt.Errorf("dnsserver: tcp accept: %w", err)
 		}
 		tempBackoff = 0
-		s.wg.Add(1)
+		l.wg.Add(1)
 		go func(c net.Conn) {
 			defer func() {
-				if s.sem != nil {
-					<-s.sem
+				if l.sem != nil {
+					<-l.sem
 				}
-				s.wg.Done()
+				l.wg.Done()
 			}()
-			s.serveConn(c)
+			l.serveConn(ctx, c)
 		}(conn)
 	}
 }
 
 // isAcceptTransient reports whether err is a transient Accept failure
 // that should not terminate the Serve loop. Uses errors.Is on the
-// kernel-resource exhaustion modes; falls back to net.OpError's
-// underlying syscall.Errno comparison so we don't rely on locale-
+// kernel-resource exhaustion modes so we don't rely on locale-
 // dependent error string substrings.
 func isAcceptTransient(err error) bool {
 	if err == nil {
@@ -294,28 +291,24 @@ func remoteAddrFromConn(c net.Conn) netip.AddrPort {
 	return ap
 }
 
-func (s *tcpListener) serveConn(conn net.Conn) {
+func (l *tcpLoop) serveConn(ctx context.Context, conn net.Conn) {
 	defer func() { _ = conn.Close() }()
 
-	// Per-connection context derived from the listener-wide handlerCtx.
-	// Cancelling connCtx propagates to in-flight handlers.
-	connCtx, connCancel := context.WithCancel(s.handlerCtx)
+	connCtx, connCancel := context.WithCancel(ctx)
 	defer connCancel()
 	stop := make(chan struct{})
 	defer close(stop)
 	go func() {
 		select {
-		case <-s.handlerCtx.Done():
+		case <-ctx.Done():
 			_ = conn.SetDeadline(time.Now())
 		case <-stop:
 		}
 	}()
 
-	// Optional connection-lifetime cap: backstop for misbehaving peers
-	// and a way to recycle TLS session state.
 	var lifetimeDeadline time.Time
-	if s.cfg.maxConnLifetime > 0 {
-		lifetimeDeadline = time.Now().Add(s.cfg.maxConnLifetime)
+	if l.cfg.maxConnLifetime > 0 {
+		lifetimeDeadline = time.Now().Add(l.cfg.maxConnLifetime)
 	}
 
 	remote := remoteAddrFromConn(conn)
@@ -325,11 +318,9 @@ func (s *tcpListener) serveConn(conn net.Conn) {
 	// prefixes and bodies.
 	var writeMu sync.Mutex
 
-	// Per-connection handler concurrency cap. Bounds goroutine count
-	// when a peer pushes queries faster than handlers complete.
 	var perConnSem chan struct{}
-	if s.cfg.maxInflightPer > 0 {
-		perConnSem = make(chan struct{}, s.cfg.maxInflightPer)
+	if l.cfg.maxInflightPer > 0 {
+		perConnSem = make(chan struct{}, l.cfg.maxInflightPer)
 	}
 	var connWg sync.WaitGroup
 	defer connWg.Wait()
@@ -339,13 +330,13 @@ func (s *tcpListener) serveConn(conn net.Conn) {
 		if !lifetimeDeadline.IsZero() && time.Now().After(lifetimeDeadline) {
 			return
 		}
-		if s.cfg.maxQueriesPerConn > 0 && queries >= s.cfg.maxQueriesPerConn {
+		if l.cfg.maxQueriesPerConn > 0 && queries >= l.cfg.maxQueriesPerConn {
 			return
 		}
 
 		readDeadline := time.Time{}
-		if s.cfg.idleTimeout > 0 {
-			readDeadline = time.Now().Add(s.cfg.idleTimeout)
+		if l.cfg.idleTimeout > 0 {
+			readDeadline = time.Now().Add(l.cfg.idleTimeout)
 		}
 		if !lifetimeDeadline.IsZero() && (readDeadline.IsZero() || lifetimeDeadline.Before(readDeadline)) {
 			readDeadline = lifetimeDeadline
@@ -359,36 +350,30 @@ func (s *tcpListener) serveConn(conn net.Conn) {
 			return // EOF or idle timeout — close the connection
 		}
 		n := int(binary.BigEndian.Uint16(hdr[:]))
-		if s.cfg.maxMessageSize > 0 && n > s.cfg.maxMessageSize {
-			// Hostile or misconfigured peer — close the connection
-			// rather than allocate up to 64 KiB. The 16-bit length
-			// prefix is fixed by the wire format; the only defense
-			// is to refuse oversized claims at the read boundary.
+		if l.cfg.maxMessageSize > 0 && n > l.cfg.maxMessageSize {
 			return
 		}
 
-		bufp, _ := s.bodyPool.Get().(*[]byte)
+		bufp, _ := l.bodyPool.Get().(*[]byte)
 		body := (*bufp)[:n]
 		if _, err := io.ReadFull(conn, body); err != nil {
-			s.bodyPool.Put(bufp)
+			l.bodyPool.Put(bufp)
 			return
 		}
 		queries++
 
-		// Acquire per-conn slot. If we'd block, wait — pipelining is a
-		// best-effort acceleration and the read-loop blocking is fine.
 		if perConnSem != nil {
 			select {
 			case perConnSem <- struct{}{}:
 			case <-connCtx.Done():
-				s.bodyPool.Put(bufp)
+				l.bodyPool.Put(bufp)
 				return
 			}
 		}
 		connWg.Add(1)
 		go func(bufp *[]byte, n int) {
 			defer func() {
-				s.bodyPool.Put(bufp)
+				l.bodyPool.Put(bufp)
 				if perConnSem != nil {
 					<-perConnSem
 				}
@@ -397,16 +382,16 @@ func (s *tcpListener) serveConn(conn net.Conn) {
 			body := (*bufp)[:n]
 			q, err := wire.Unmarshal(body)
 			if err != nil {
-				return // malformed — drop, do not close conn from worker
+				return
 			}
 			w := &tcpResponseWriter{
 				conn:         conn,
 				remote:       remote,
-				local:        s.addr,
-				writeTimeout: s.cfg.writeTimeout,
+				local:        l.addr,
+				writeTimeout: l.cfg.writeTimeout,
 				writeMu:      &writeMu,
 			}
-			s.handler.ServeDNS(contextWithRawRequest(connCtx, body), w, q)
+			l.handler.ServeDNS(contextWithRawRequest(connCtx, body), w, q)
 		}(bufp, n)
 	}
 }
@@ -431,9 +416,6 @@ func (w *tcpResponseWriter) WriteMsg(m wire.Message) error {
 	if len(buf) > 0xffff {
 		return fmt.Errorf("dnsserver: tcp response exceeds 65535 bytes")
 	}
-	// Slow-read protection: a peer that opens the TCP receive window to
-	// zero can otherwise pin this goroutine forever. RFC 7766 has no
-	// guidance here; net/http uses 5–30 s for analogous cases.
 	w.writeMu.Lock()
 	defer w.writeMu.Unlock()
 	if w.writeTimeout > 0 {

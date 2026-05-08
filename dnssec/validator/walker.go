@@ -36,6 +36,12 @@ var ErrUnsignedAnswer = errors.New("validator: answer is unsigned in a signed zo
 // terminated because the parent zone proved qname does not exist.
 var errNXDomainAtCandidate = errors.New("validator: nxdomain at candidate")
 
+// errInsecureNSEC3Iterations is an internal sentinel indicating the
+// authority section's NSEC3 records advertise an iteration count the
+// validator refuses to process. Per RFC 9276 §3.2 callers map this to
+// an Insecure (not Bogus) answer.
+var errInsecureNSEC3Iterations = errors.New("validator: NSEC3 iterations exceed limit (RFC 9276 §3.2)")
+
 // Walker walks the DNSSEC chain of trust from a configured Anchor down to
 // a queried (name, type), validating every link. Implementations are safe
 // for concurrent use by multiple goroutines; the underlying Source is
@@ -514,6 +520,9 @@ func (w *walker) classifyDSViaNSEC3(candidate, parentZone wire.Name, parentKeys 
 	switch res.kind {
 	case nsec3DenialInsecureDelegation, nsec3DenialOptOut:
 		return dsOutcomeInsecure, true, nil
+	case nsec3DenialIterationsExceeded:
+		// RFC 9276 §3.2: high iteration counts downgrade to Insecure.
+		return dsOutcomeInsecure, true, nil
 	case nsec3DenialNoData:
 		return dsOutcomeNonCut, true, nil
 	}
@@ -554,6 +563,8 @@ func (w *walker) validateNSEC3NXDomain(qname, parentZone wire.Name, parentKeys [
 		return nil
 	case nsec3DenialOptOut:
 		return nil
+	case nsec3DenialIterationsExceeded:
+		return errInsecureNSEC3Iterations
 	}
 	return fmt.Errorf("NSEC3 did not prove NXDOMAIN for %s", qname)
 }
@@ -763,10 +774,19 @@ func (w *walker) validateNoDataNSEC3(qname wire.Name, qtype rrtype.Type, parentK
 		return nil, false
 	}
 	res := nsec3ProveDenial(qname, qtype, zone, nsec3RRs)
-	if res.kind == nsec3DenialNoData {
+	switch res.kind {
+	case nsec3DenialNoData:
 		return &answer{
 			result:  Secure,
 			records: nil,
+			rcode:   wire.RCODENoError,
+			chain:   chain,
+		}, true
+	case nsec3DenialIterationsExceeded:
+		// RFC 9276 §3.2: high iteration count downgrades to Insecure.
+		return &answer{
+			result:  Insecure,
+			records: msg.Answers(),
 			rcode:   wire.RCODENoError,
 			chain:   chain,
 		}, true
@@ -792,6 +812,15 @@ func (w *walker) validateNegative(qname wire.Name, qtype rrtype.Type, parentKeys
 		return w.bogus(qname, qtype, chain, fmt.Errorf("validator: NXDOMAIN signer %s not in chain (deepest secure zone %s)", respSigner, zone))
 	}
 	if err := w.validateNXDomain(qname, zone, parentKeys, msg); err != nil {
+		if errors.Is(err, errInsecureNSEC3Iterations) {
+			return &answer{
+				result:  Insecure,
+				records: nil,
+				rcode:   wire.RCODENXDomain,
+				chain:   chain,
+				reason:  err,
+			}, nil
+		}
 		return w.bogus(qname, qtype, chain, fmt.Errorf("validator: NXDOMAIN proof: %w", err))
 	}
 	return &answer{

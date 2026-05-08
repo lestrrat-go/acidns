@@ -16,14 +16,15 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func startTCP(t *testing.T, h acidns.Handler, opts ...acidns.TCPListenerOption) acidns.Server {
+func startTCP(t *testing.T, h acidns.Handler, opts ...acidns.TCPListenerOption) *acidns.Controller {
 	t.Helper()
-	srv, err := acidns.ListenTCP(netip.MustParseAddrPort("127.0.0.1:0"), h, opts...)
+	srv, err := acidns.NewTCPServer(netip.MustParseAddrPort("127.0.0.1:0"), h, opts...)
 	require.NoError(t, err)
 	ctx, cancel := context.WithCancel(t.Context())
-	go func() { _ = srv.Serve(ctx) }()
 	t.Cleanup(cancel)
-	return srv
+	ctrl, err := srv.Run(ctx)
+	require.NoError(t, err)
+	return ctrl
 }
 
 func TestTCPServerEcho(t *testing.T) {
@@ -40,9 +41,9 @@ func TestTCPServerEcho(t *testing.T) {
 			Build()
 		_ = w.WriteMsg(resp)
 	})
-	srv := startTCP(t, h)
+	ctrl := startTCP(t, h)
 
-	ex, err := acidns.NewTCPExchanger(srv.Addr())
+	ex, err := acidns.NewTCPExchanger(ctrl.Addr())
 	require.NoError(t, err)
 	resp, err := ex.Exchange(t.Context(), mkQuery(t, "example.com", rrtype.A))
 	require.NoError(t, err)
@@ -52,20 +53,20 @@ func TestTCPServerEcho(t *testing.T) {
 
 func TestTCPServerShutdown(t *testing.T) {
 	t.Parallel()
-	srv, err := acidns.ListenTCP(netip.MustParseAddrPort("127.0.0.1:0"),
+	srv, err := acidns.NewTCPServer(netip.MustParseAddrPort("127.0.0.1:0"),
 		acidns.HandlerFunc(func(_ context.Context, _ acidns.ResponseWriter, _ wire.Message) {}))
 	require.NoError(t, err)
 
 	ctx, cancel := context.WithCancel(t.Context())
-	done := make(chan error, 1)
-	go func() { done <- srv.Serve(ctx) }()
+	ctrl, err := srv.Run(ctx)
+	require.NoError(t, err)
 
 	cancel()
 	select {
-	case err := <-done:
-		require.ErrorIs(t, err, acidns.ErrServerClosed)
+	case <-ctrl.Done():
+		require.NoError(t, ctrl.Err())
 	case <-time.After(2 * time.Second):
-		t.Fatal("Serve did not return")
+		t.Fatal("server did not exit")
 	}
 }
 
@@ -77,9 +78,9 @@ func TestTCPServerShutdown(t *testing.T) {
 func TestTCPServerOversizedBodyClosesConnection(t *testing.T) {
 	t.Parallel()
 	h := acidns.HandlerFunc(func(_ context.Context, _ acidns.ResponseWriter, _ wire.Message) {})
-	srv := startTCP(t, h, acidns.WithTCPMaxMessageSize(512))
+	ctrl := startTCP(t, h, acidns.WithTCPMaxMessageSize(512))
 
-	c, err := net.Dial("tcp", srv.Addr().String())
+	c, err := net.Dial("tcp", ctrl.Addr().String())
 	require.NoError(t, err)
 	defer c.Close()
 
@@ -115,12 +116,13 @@ func TestTCPServerCancelsHandlerOnShutdown(t *testing.T) {
 		}
 	})
 
-	srv, err := acidns.ListenTCP(netip.MustParseAddrPort("127.0.0.1:0"), h)
+	srv, err := acidns.NewTCPServer(netip.MustParseAddrPort("127.0.0.1:0"), h)
 	require.NoError(t, err)
 	ctx, cancel := context.WithCancel(t.Context())
-	go func() { _ = srv.Serve(ctx) }()
+	ctrl, err := srv.Run(ctx)
+	require.NoError(t, err)
 
-	c, err := net.Dial("tcp", srv.Addr().String())
+	c, err := net.Dial("tcp", ctrl.Addr().String())
 	require.NoError(t, err)
 	defer c.Close()
 
@@ -171,9 +173,9 @@ func TestTCPServerNoTruncation(t *testing.T) {
 		resp, _ := b.Build()
 		_ = w.WriteMsg(resp)
 	})
-	srv := startTCP(t, h)
+	ctrl := startTCP(t, h)
 
-	ex, err := acidns.NewTCPExchanger(srv.Addr())
+	ex, err := acidns.NewTCPExchanger(ctrl.Addr())
 	require.NoError(t, err)
 
 	q, _ := wire.NewBuilder().

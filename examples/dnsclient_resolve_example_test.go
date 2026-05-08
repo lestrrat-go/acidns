@@ -28,12 +28,15 @@ func startLocalNS(ctx context.Context, zoneText string) (netip.AddrPort, error) 
 	if err != nil {
 		return netip.AddrPort{}, err
 	}
-	srv, err := acidns.ListenUDP(netip.MustParseAddrPort("127.0.0.1:0"), h)
+	srv, err := acidns.NewUDPServer(netip.MustParseAddrPort("127.0.0.1:0"), h)
 	if err != nil {
 		return netip.AddrPort{}, err
 	}
-	go func() { _ = srv.Serve(ctx) }()
-	return srv.Addr(), nil
+	ctrl, err := srv.Run(ctx)
+	if err != nil {
+		return netip.AddrPort{}, err
+	}
+	return ctrl.Addr(), nil
 }
 
 func Example_dnsclient_resolve() {

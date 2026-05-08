@@ -32,12 +32,14 @@ func startSecondary(t *testing.T, h authoritative.NotifyHandler) netip.AddrPort 
 		authoritative.WithNotifyHandler(h),
 	)
 	require.NoError(t, err)
-	srv, err := acidns.ListenUDP(netip.MustParseAddrPort("127.0.0.1:0"), a)
+	srv, err := acidns.NewUDPServer(netip.MustParseAddrPort("127.0.0.1:0"), a)
 	require.NoError(t, err)
 	ctx, cancel := context.WithCancel(t.Context())
 	t.Cleanup(cancel)
-	go func() { _ = srv.Serve(ctx) }()
-	return srv.Addr()
+	ctrl, err := srv.Run(ctx)
+
+	require.NoError(t, err)
+	return ctrl.Addr()
 }
 
 func TestSendNotifyAcks(t *testing.T) {

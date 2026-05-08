@@ -13,14 +13,15 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func startUDP(t *testing.T, h acidns.Handler) (acidns.Server, context.CancelFunc) {
+func startUDP(t *testing.T, h acidns.Handler) (*acidns.Controller, context.CancelFunc) {
 	t.Helper()
-	srv, err := acidns.ListenUDP(netip.MustParseAddrPort("127.0.0.1:0"), h)
+	srv, err := acidns.NewUDPServer(netip.MustParseAddrPort("127.0.0.1:0"), h)
 	require.NoError(t, err)
 	ctx, cancel := context.WithCancel(t.Context())
-	go func() { _ = srv.Serve(ctx) }()
 	t.Cleanup(cancel)
-	return srv, cancel
+	ctrl, err := srv.Run(ctx)
+	require.NoError(t, err)
+	return ctrl, cancel
 }
 
 func mkQuery(t *testing.T, name string, rt rrtype.Type) wire.Message {
@@ -49,9 +50,9 @@ func TestUDPServerEcho(t *testing.T) {
 			Build()
 		_ = w.WriteMsg(resp)
 	})
-	srv, _ := startUDP(t, h)
+	ctrl, _ := startUDP(t, h)
 
-	ex, err := acidns.NewUDPExchanger(srv.Addr())
+	ex, err := acidns.NewUDPExchanger(ctrl.Addr())
 	require.NoError(t, err)
 	resp, err := ex.Exchange(t.Context(), mkQuery(t, "example.com", rrtype.A))
 	require.NoError(t, err)
@@ -63,19 +64,19 @@ func TestUDPServerShutdownOnContextCancel(t *testing.T) {
 	t.Parallel()
 
 	h := acidns.HandlerFunc(func(_ context.Context, _ acidns.ResponseWriter, _ wire.Message) {})
-	srv, err := acidns.ListenUDP(netip.MustParseAddrPort("127.0.0.1:0"), h)
+	srv, err := acidns.NewUDPServer(netip.MustParseAddrPort("127.0.0.1:0"), h)
 	require.NoError(t, err)
 
 	ctx, cancel := context.WithCancel(t.Context())
-	done := make(chan error, 1)
-	go func() { done <- srv.Serve(ctx) }()
+	ctrl, err := srv.Run(ctx)
+	require.NoError(t, err)
 
 	cancel()
 	select {
-	case err := <-done:
-		require.ErrorIs(t, err, acidns.ErrServerClosed)
+	case <-ctrl.Done():
+		require.NoError(t, ctrl.Err())
 	case <-time.After(2 * time.Second):
-		t.Fatal("Serve did not return after ctx cancel")
+		t.Fatal("server did not exit after ctx cancel")
 	}
 }
 
@@ -100,9 +101,9 @@ func TestUDPServerTruncation(t *testing.T) {
 		resp, _ := b.Build()
 		_ = w.WriteMsg(resp)
 	})
-	srv, _ := startUDP(t, h)
+	ctrl, _ := startUDP(t, h)
 
-	ex, err := acidns.NewUDPExchanger(srv.Addr())
+	ex, err := acidns.NewUDPExchanger(ctrl.Addr())
 	require.NoError(t, err)
 
 	// Send a query WITHOUT EDNS so the server caps at 512 bytes.
@@ -143,9 +144,9 @@ func TestUDPServerEDNSPayloadSize(t *testing.T) {
 		resp, _ := b.Build()
 		_ = w.WriteMsg(resp)
 	})
-	srv, _ := startUDP(t, h)
+	ctrl, _ := startUDP(t, h)
 
-	ex, err := acidns.NewUDPExchanger(srv.Addr())
+	ex, err := acidns.NewUDPExchanger(ctrl.Addr())
 	require.NoError(t, err)
 
 	// Query with EDNS advertising 4096 bytes — server should not truncate.

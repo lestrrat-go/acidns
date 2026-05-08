@@ -2,7 +2,6 @@ package acidns_test
 
 import (
 	"context"
-	"errors"
 	"net/netip"
 	"testing"
 	"time"
@@ -11,53 +10,57 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestUDPServer_Shutdown_Idempotent(t *testing.T) {
+// TestUDPServer_CleanShutdownOnCtxCancel verifies that cancelling the
+// context passed to Run drains the work goroutine cleanly: Done()
+// closes, Err() reports nil. The new lifecycle has no Shutdown method
+// — ctx cancellation is the single path.
+func TestUDPServer_CleanShutdownOnCtxCancel(t *testing.T) {
 	t.Parallel()
-	srv, err := acidns.ListenUDP(netip.MustParseAddrPort("127.0.0.1:0"), echoHandler{})
+	srv, err := acidns.NewUDPServer(netip.MustParseAddrPort("127.0.0.1:0"), echoHandler{})
 	require.NoError(t, err)
 
-	serveErr := make(chan error, 1)
-	go func() { serveErr <- srv.Serve(t.Context()) }()
+	ctx, cancel := context.WithCancel(t.Context())
+	ctrl, err := srv.Run(ctx)
+	require.NoError(t, err)
 
-	require.NoError(t, srv.Shutdown(t.Context()))
-	require.NoError(t, srv.Shutdown(t.Context())) // second call is a no-op
-
+	cancel()
 	select {
-	case err := <-serveErr:
-		require.True(t, errors.Is(err, acidns.ErrServerClosed), "expected ErrServerClosed, got %v", err)
+	case <-ctrl.Done():
+		require.NoError(t, ctrl.Err(), "clean shutdown via ctx cancel must report nil err")
 	case <-time.After(2 * time.Second):
-		t.Fatal("Serve did not return after Shutdown")
+		t.Fatal("UDP server did not exit after ctx cancel")
 	}
 }
 
-func TestTCPServer_Shutdown_Idempotent(t *testing.T) {
+// TestTCPServer_CleanShutdownOnCtxCancel mirrors the UDP variant for TCP.
+func TestTCPServer_CleanShutdownOnCtxCancel(t *testing.T) {
 	t.Parallel()
-	srv, err := acidns.ListenTCP(netip.MustParseAddrPort("127.0.0.1:0"), echoHandler{})
+	srv, err := acidns.NewTCPServer(netip.MustParseAddrPort("127.0.0.1:0"), echoHandler{})
 	require.NoError(t, err)
 
-	serveErr := make(chan error, 1)
-	go func() { serveErr <- srv.Serve(t.Context()) }()
+	ctx, cancel := context.WithCancel(t.Context())
+	ctrl, err := srv.Run(ctx)
+	require.NoError(t, err)
 
-	require.NoError(t, srv.Shutdown(t.Context()))
-	require.NoError(t, srv.Shutdown(t.Context()))
-
+	cancel()
 	select {
-	case err := <-serveErr:
-		require.True(t, errors.Is(err, acidns.ErrServerClosed), "expected ErrServerClosed, got %v", err)
+	case <-ctrl.Done():
+		require.NoError(t, ctrl.Err())
 	case <-time.After(2 * time.Second):
-		t.Fatal("Serve did not return after Shutdown")
+		t.Fatal("TCP server did not exit after ctx cancel")
 	}
 }
 
-func TestUDPServer_Shutdown_RespectsCtx(t *testing.T) {
+// TestUDPServer_RunTwiceFails verifies that calling Run a second time on
+// the same server returns an error — the started flag is one-way.
+func TestUDPServer_RunTwiceFails(t *testing.T) {
 	t.Parallel()
-	// We don't have a way to block a handler indefinitely without a real
-	// query, so this just exercises the happy ctx path.
-	srv, err := acidns.ListenUDP(netip.MustParseAddrPort("127.0.0.1:0"), echoHandler{})
+	srv, err := acidns.NewUDPServer(netip.MustParseAddrPort("127.0.0.1:0"), echoHandler{})
 	require.NoError(t, err)
-	go func() { _ = srv.Serve(t.Context()) }()
-
-	ctx, cancel := context.WithTimeout(t.Context(), time.Second)
-	defer cancel()
-	require.NoError(t, srv.Shutdown(ctx))
+	ctx, cancel := context.WithCancel(t.Context())
+	t.Cleanup(cancel)
+	_, err = srv.Run(ctx)
+	require.NoError(t, err)
+	_, err = srv.Run(ctx)
+	require.Error(t, err)
 }
