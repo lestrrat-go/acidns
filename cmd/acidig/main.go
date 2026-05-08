@@ -58,11 +58,11 @@ func run(argv []string) error {
 		fs.PrintDefaults()
 	}
 
-	args, posArgs := splitAtServerArg(argv, &o.server)
+	args := splitAtServerArg(argv, &o.server)
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
-	rest := append(posArgs, fs.Args()...)
+	rest := fs.Args()
 	if len(rest) == 0 {
 		fs.Usage()
 		return fmt.Errorf("no name to query")
@@ -104,9 +104,8 @@ func run(argv []string) error {
 }
 
 // splitAtServerArg extracts a leading @server token from argv, populating
-// the supplied server pointer if found, and returns the remaining flags
-// plus any positional tokens.
-func splitAtServerArg(argv []string, server *string) (flags, positional []string) {
+// the supplied server pointer if found, and returns the remaining flags.
+func splitAtServerArg(argv []string, server *string) []string {
 	out := make([]string, 0, len(argv))
 	for _, a := range argv {
 		if strings.HasPrefix(a, "@") {
@@ -115,7 +114,7 @@ func splitAtServerArg(argv []string, server *string) (flags, positional []string
 		}
 		out = append(out, a)
 	}
-	return out, nil
+	return out
 }
 
 func buildResolver(o opts) (acidns.Resolver, error) {

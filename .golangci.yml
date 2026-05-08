@@ -69,6 +69,8 @@ linters:
           - errchkjson
           - forcetypeassert
           - noctx
+          - prealloc
+          - unparam
         path: /*_test.go
       - linters:
           - forbidigo

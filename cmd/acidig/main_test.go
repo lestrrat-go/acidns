@@ -15,7 +15,7 @@ import (
 func TestSplitAtServerArg(t *testing.T) {
 	t.Parallel()
 	var server string
-	flags, _ := splitAtServerArg([]string{"@8.8.8.8", "-tcp", "example.com", "A"}, &server)
+	flags := splitAtServerArg([]string{"@8.8.8.8", "-tcp", "example.com", "A"}, &server)
 	require.Equal(t, "8.8.8.8", server)
 	require.Equal(t, []string{"-tcp", "example.com", "A"}, flags)
 }
@@ -23,7 +23,7 @@ func TestSplitAtServerArg(t *testing.T) {
 func TestSplitAtServerArgNoServer(t *testing.T) {
 	t.Parallel()
 	var server string
-	flags, _ := splitAtServerArg([]string{"-short", "example.com"}, &server)
+	flags := splitAtServerArg([]string{"-short", "example.com"}, &server)
 	require.Empty(t, server)
 	require.Equal(t, []string{"-short", "example.com"}, flags)
 }

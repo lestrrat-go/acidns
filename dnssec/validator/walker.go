@@ -209,7 +209,7 @@ func (w *walker) Resolve(ctx context.Context, qname wire.Name, qtype rrtype.Type
 		if len(sigs) == 0 {
 			return w.bogus(qname, qtype, chain, ErrUnsignedAnswer)
 		}
-		_, _, err := w.verifyRRsetWithKeys(matching, sigs, parentKeys)
+		err := w.verifyRRsetWithKeys(matching, sigs, parentKeys)
 		if err != nil {
 			return w.bogus(qname, qtype, chain, fmt.Errorf("validator: answer rrsig: %w", err))
 		}
@@ -365,11 +365,9 @@ func (w *walker) fetchAndVerifyDNSKEY(ctx context.Context, zone wire.Name, dss [
 	if len(sigs) == 0 {
 		return nil, fmt.Errorf("validator: no RRSIG over DNSKEY at %s", zone)
 	}
-	usedSig, _, err := w.verifyRRsetWithKeys(dnskeyRRs, sigs, trustedKSKs)
-	if err != nil {
+	if err := w.verifyRRsetWithKeys(dnskeyRRs, sigs, trustedKSKs); err != nil {
 		return nil, fmt.Errorf("DNSKEY rrset rrsig: %w", err)
 	}
-	_ = usedSig
 
 	// RFC 6840 §5.11: every algorithm in the parent's DS list must have a
 	// signing pair. Walk RRSIGs and mark covered algorithms.
@@ -428,7 +426,7 @@ func (w *walker) classifyDSResponse(candidate, parentZone wire.Name, parentKeys 
 		if len(sigs) == 0 {
 			return dsOutcomeUnknown, nil, fmt.Errorf("validator: no RRSIG over DS at %s", candidate)
 		}
-		if _, _, err := w.verifyRRsetWithKeys(dsRRs, sigs, parentKeys); err != nil {
+		if err := w.verifyRRsetWithKeys(dsRRs, sigs, parentKeys); err != nil {
 			return dsOutcomeUnknown, nil, fmt.Errorf("DS rrsig: %w", err)
 		}
 		return dsOutcomeCut, dsRDatas, nil
@@ -458,7 +456,7 @@ func (w *walker) classifyDSViaNSEC(candidate wire.Name, parentKeys []rdata.DNSKE
 	if len(sigs) == 0 {
 		return dsOutcomeUnknown, true, fmt.Errorf("validator: NSEC at %s lacks RRSIG", candidate)
 	}
-	if _, _, err := w.verifyRRsetWithKeys(nsecRRs, sigs, parentKeys); err != nil {
+	if err := w.verifyRRsetWithKeys(nsecRRs, sigs, parentKeys); err != nil {
 		return dsOutcomeUnknown, true, fmt.Errorf("NSEC rrsig: %w", err)
 	}
 	for _, r := range nsecRRs {
@@ -541,7 +539,7 @@ func (w *walker) verifyNSEC3Set(nsec3RRs, authority []wire.Record, parentKeys []
 		if len(sigs) == 0 {
 			return fmt.Errorf("NSEC3 at %s lacks RRSIG", owner)
 		}
-		if _, _, err := w.verifyRRsetWithKeys(set, sigs, parentKeys); err != nil {
+		if err := w.verifyRRsetWithKeys(set, sigs, parentKeys); err != nil {
 			return fmt.Errorf("NSEC3 rrsig at %s: %w", owner, err)
 		}
 	}
@@ -570,7 +568,7 @@ func (w *walker) validateNSECNXDomain(qname wire.Name, parentKeys []rdata.DNSKEY
 		if len(sigs) == 0 {
 			continue
 		}
-		if _, _, err := w.verifyRRsetWithKeys(set, sigs, parentKeys); err != nil {
+		if err := w.verifyRRsetWithKeys(set, sigs, parentKeys); err != nil {
 			return fmt.Errorf("NSEC rrsig: %w", err)
 		}
 	}
@@ -612,7 +610,7 @@ func (w *walker) validateNoDataNSEC(qname wire.Name, qtype rrtype.Type, parentKe
 	if len(sigs) == 0 {
 		return nil, false
 	}
-	if _, _, err := w.verifyRRsetWithKeys(nsecRRs, sigs, parentKeys); err != nil {
+	if err := w.verifyRRsetWithKeys(nsecRRs, sigs, parentKeys); err != nil {
 		return nil, false
 	}
 	for _, r := range nsecRRs {
@@ -674,10 +672,9 @@ func (w *walker) validateNegative(qname wire.Name, qtype rrtype.Type, parentKeys
 }
 
 // verifyRRsetWithKeys verifies set against any of sigs using any of keys.
-// Returns the RRSIG that satisfied verification and the matching DNSKEY.
-func (w *walker) verifyRRsetWithKeys(set []wire.Record, sigs []rdata.RRSIG, keys []rdata.DNSKEY) (rdata.RRSIG, rdata.DNSKEY, error) {
+func (w *walker) verifyRRsetWithKeys(set []wire.Record, sigs []rdata.RRSIG, keys []rdata.DNSKEY) error {
 	if len(set) == 0 {
-		return rdata.RRSIG{}, rdata.DNSKEY{}, fmt.Errorf("validator: empty rrset")
+		return fmt.Errorf("validator: empty rrset")
 	}
 	if len(sigs) > w.maxRRSIGsTry {
 		sigs = sigs[:w.maxRRSIGsTry]
@@ -695,7 +692,7 @@ func (w *walker) verifyRRsetWithKeys(set []wire.Record, sigs []rdata.RRSIG, keys
 			}
 			err := dnssec.Verify(set, sig, key)
 			if err == nil {
-				return sig, key, nil
+				return nil
 			}
 			lastErr = err
 		}
@@ -703,7 +700,7 @@ func (w *walker) verifyRRsetWithKeys(set []wire.Record, sigs []rdata.RRSIG, keys
 	if lastErr == nil {
 		lastErr = fmt.Errorf("no RRSIG matched any key")
 	}
-	return rdata.RRSIG{}, rdata.DNSKEY{}, lastErr
+	return lastErr
 }
 
 // indeterminate builds an Answer with Result=Indeterminate.

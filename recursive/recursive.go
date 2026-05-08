@@ -418,10 +418,7 @@ func (r *recursive) resolveDepth(ctx context.Context, name wire.Name, t rrtype.T
 		}
 
 		// Otherwise treat it as a referral.
-		next, err := r.serversFromReferral(ctx, resp, depth)
-		if err != nil {
-			return Entry{}, err
-		}
+		next := r.serversFromReferral(ctx, resp, depth)
 		if len(next) == 0 {
 			return Entry{}, fmt.Errorf("recursive: empty referral for %s", name)
 		}
@@ -478,7 +475,7 @@ func (r *recursive) queryAny(ctx context.Context, servers []netip.AddrPort, name
 // serversFromReferral picks the addresses to query next. It prefers in-message
 // glue (additional section) but falls back to recursively resolving the NS
 // targets for out-of-bailiwick delegations.
-func (r *recursive) serversFromReferral(ctx context.Context, resp wire.Message, depth int) ([]netip.AddrPort, error) {
+func (r *recursive) serversFromReferral(ctx context.Context, resp wire.Message, depth int) []netip.AddrPort {
 	var glued []netip.AddrPort
 	var ungluedNS []wire.Name
 	for _, auth := range resp.Authorities() {
@@ -497,7 +494,7 @@ func (r *recursive) serversFromReferral(ctx context.Context, resp wire.Message, 
 		}
 	}
 	if len(glued) > 0 {
-		return glued, nil
+		return glued
 	}
 	var out []netip.AddrPort
 	for _, ns := range ungluedNS {
@@ -515,7 +512,7 @@ func (r *recursive) serversFromReferral(ctx context.Context, resp wire.Message, 
 			}
 		}
 	}
-	return out, nil
+	return out
 }
 
 func glueFor(target wire.Name, additional []wire.Record) []netip.AddrPort {

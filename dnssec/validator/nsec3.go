@@ -68,13 +68,12 @@ func nsec3OwnerHash(owner wire.Name) ([]byte, error) {
 	return nil, fmt.Errorf("validator: NSEC3 owner has no label")
 }
 
-// nsec3Match returns the NSEC3 record (and its containing wire.Record)
-// whose owner-hash matches H(name) under params. matched indicates whether
-// such a record was found.
-func nsec3Match(name wire.Name, params nsec3Params, records []wire.Record) (wire.Record, rdata.NSEC3, bool) {
+// nsec3Match returns the NSEC3 record whose owner-hash matches H(name) under
+// params. The bool indicates whether such a record was found.
+func nsec3Match(name wire.Name, params nsec3Params, records []wire.Record) (rdata.NSEC3, bool) {
 	want := nsec3Hash(name, params.salt, params.iterations)
 	if want == nil {
-		return nil, rdata.NSEC3{}, false
+		return rdata.NSEC3{}, false
 	}
 	for _, r := range records {
 		if r.Type() != rrtype.NSEC3 {
@@ -89,19 +88,19 @@ func nsec3Match(name wire.Name, params nsec3Params, records []wire.Record) (wire
 			if !ok {
 				continue
 			}
-			return r, n3, true
+			return n3, true
 		}
 	}
-	return nil, rdata.NSEC3{}, false
+	return rdata.NSEC3{}, false
 }
 
 // nsec3Cover returns the NSEC3 record whose (owner-hash, next-hash)
 // interval covers H(name). RFC 5155 §6.2 — interval is (owner-hash,
 // next-hash], with wraparound at the apex.
-func nsec3Cover(name wire.Name, params nsec3Params, records []wire.Record) (wire.Record, rdata.NSEC3, bool) {
+func nsec3Cover(name wire.Name, params nsec3Params, records []wire.Record) (rdata.NSEC3, bool) {
 	target := nsec3Hash(name, params.salt, params.iterations)
 	if target == nil {
-		return nil, rdata.NSEC3{}, false
+		return rdata.NSEC3{}, false
 	}
 	for _, r := range records {
 		if r.Type() != rrtype.NSEC3 {
@@ -117,10 +116,10 @@ func nsec3Cover(name wire.Name, params nsec3Params, records []wire.Record) (wire
 		}
 		next := n3.NextHashedOwner()
 		if validatorbb.HashIntervalContains(ownerHash, next, target) {
-			return r, n3, true
+			return n3, true
 		}
 	}
-	return nil, rdata.NSEC3{}, false
+	return rdata.NSEC3{}, false
 }
 
 // nsec3Params bundles the (alg, iterations, salt) tuple shared by all NSEC3
@@ -210,8 +209,7 @@ func nsec3ProveDenial(qname wire.Name, qtype rrtype.Type, zone wire.Name, record
 
 	// 1. DS-NoData / insecure-delegation handling (qtype == DS).
 	if qtype == rrtype.DS {
-		if r, n3, found := nsec3Match(qname, params, records); found {
-			_ = r
+		if n3, found := nsec3Match(qname, params, records); found {
 			hasNS := bitmapHas(n3.Types(), rrtype.NS)
 			hasDS := bitmapHas(n3.Types(), rrtype.DS)
 			hasSOA := bitmapHas(n3.Types(), rrtype.SOA)
@@ -223,7 +221,7 @@ func nsec3ProveDenial(qname wire.Name, qtype rrtype.Type, zone wire.Name, record
 			}
 		}
 		// Opt-out covering: insecure delegation possible.
-		if _, n3, found := nsec3Cover(qname, params, records); found {
+		if n3, found := nsec3Cover(qname, params, records); found {
 			if n3.Flags()&NSEC3FlagOptOut != 0 {
 				return nsec3DenialResult{kind: nsec3DenialOptOut}
 			}
@@ -231,7 +229,7 @@ func nsec3ProveDenial(qname wire.Name, qtype rrtype.Type, zone wire.Name, record
 	}
 
 	// 2. NoData at qname (matching NSEC3 says qtype absent).
-	if _, n3, found := nsec3Match(qname, params, records); found {
+	if n3, found := nsec3Match(qname, params, records); found {
 		if !bitmapHas(n3.Types(), qtype) {
 			return nsec3DenialResult{kind: nsec3DenialNoData}
 		}
@@ -244,17 +242,17 @@ func nsec3ProveDenial(qname wire.Name, qtype rrtype.Type, zone wire.Name, record
 	}
 	// Need NSEC3 covering "next closer name".
 	nextCloser := validatorbb.NextCloserName(qname, encloser)
-	if _, _, found := nsec3Cover(nextCloser, params, records); !found {
+	if _, found := nsec3Cover(nextCloser, params, records); !found {
 		return nsec3DenialResult{kind: nsec3DenialNone}
 	}
 	// Need NSEC3 covering *.<encloser> OR a matching wildcard NSEC3 with
 	// !qtype in bitmap (§8.7).
 	wildcard, err := validatorbb.WildcardOf(encloser)
 	if err == nil {
-		if _, _, found := nsec3Cover(wildcard, params, records); found {
+		if _, found := nsec3Cover(wildcard, params, records); found {
 			return nsec3DenialResult{kind: nsec3DenialNXDomain, closestEncloser: encloser}
 		}
-		if _, n3, found := nsec3Match(wildcard, params, records); found {
+		if n3, found := nsec3Match(wildcard, params, records); found {
 			if !bitmapHas(n3.Types(), qtype) {
 				return nsec3DenialResult{kind: nsec3DenialNoData, closestEncloser: encloser}
 			}
@@ -273,13 +271,13 @@ func findNSEC3ClosestEncloser(qname, zone wire.Name, params nsec3Params, records
 		if !ok {
 			return wire.Name{}, false
 		}
-		if _, _, found := nsec3Match(parent, params, records); found {
+		if _, found := nsec3Match(parent, params, records); found {
 			return parent, true
 		}
 		if parent.Equal(zone) {
 			// Zone apex always has an NSEC3; if not matched it's a
 			// configuration error.
-			if _, _, found := nsec3Match(zone, params, records); found {
+			if _, found := nsec3Match(zone, params, records); found {
 				return zone, true
 			}
 			return wire.Name{}, false

@@ -39,18 +39,18 @@ func TestNSEC3MatchAndCoverNotFound(t *testing.T) {
 	t.Parallel()
 	params := nsec3Params{alg: 1, iterations: 0, salt: nil}
 	// Empty records → nothing matches/covers.
-	_, _, ok := nsec3Match(wire.MustParseName("foo.example."), params, nil)
+	_, ok := nsec3Match(wire.MustParseName("foo.example."), params, nil)
 	require.False(t, ok)
-	_, _, ok = nsec3Cover(wire.MustParseName("foo.example."), params, nil)
+	_, ok = nsec3Cover(wire.MustParseName("foo.example."), params, nil)
 	require.False(t, ok)
 }
 
 func TestNSEC3MatchHashTooManyIterations(t *testing.T) {
 	t.Parallel()
 	params := nsec3Params{alg: 1, iterations: MaxNSEC3Iterations + 1, salt: nil}
-	_, _, ok := nsec3Match(wire.MustParseName("foo.example."), params, nil)
+	_, ok := nsec3Match(wire.MustParseName("foo.example."), params, nil)
 	require.False(t, ok)
-	_, _, ok = nsec3Cover(wire.MustParseName("foo.example."), params, nil)
+	_, ok = nsec3Cover(wire.MustParseName("foo.example."), params, nil)
 	require.False(t, ok)
 }
 
@@ -69,9 +69,9 @@ func TestNSEC3MatchSkipsNonNSEC3(t *testing.T) {
 	a := wire.NewRecord(wire.MustParseName("x.example."), time.Hour,
 		rdata.NewNS(wire.MustParseName("ns.example.")))
 	params := nsec3Params{alg: 1, iterations: 0, salt: nil}
-	_, _, ok := nsec3Match(wire.MustParseName("foo.example."), params, []wire.Record{a})
+	_, ok := nsec3Match(wire.MustParseName("foo.example."), params, []wire.Record{a})
 	require.False(t, ok)
-	_, _, ok = nsec3Cover(wire.MustParseName("foo.example."), params, []wire.Record{a})
+	_, ok = nsec3Cover(wire.MustParseName("foo.example."), params, []wire.Record{a})
 	require.False(t, ok)
 }
 
@@ -81,7 +81,7 @@ func TestNSEC3MatchSucceeds(t *testing.T) {
 	target := wire.MustParseName("present.example.")
 	hash := nsec3Hash(target, params.salt, params.iterations)
 	rec := makeNSEC3Record(t, hash, hash, []rrtype.Type{rrtype.A}, 0)
-	_, n3, ok := nsec3Match(target, params, []wire.Record{rec})
+	n3, ok := nsec3Match(target, params, []wire.Record{rec})
 	require.True(t, ok)
 	require.NotNil(t, n3)
 }
@@ -112,7 +112,7 @@ func TestNSEC3CoverSucceeds(t *testing.T) {
 		hi[i] = 0
 	}
 	rec := makeNSEC3Record(t, lo, hi, nil, 0)
-	_, _, ok := nsec3Cover(target, params, []wire.Record{rec})
+	_, ok := nsec3Cover(target, params, []wire.Record{rec})
 	require.True(t, ok)
 }
 

@@ -16,6 +16,8 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+const minimalZone = "$ORIGIN example.com.\n$TTL 60\n@ IN A 192.0.2.1\n"
+
 // TestParseLexerEdgeCases drives the lexer through the corner cases —
 // trailing comment with no newline at EOF, backslash escapes inside a
 // bare word, newline inside a quoted string, and unbalanced ')'.
@@ -309,7 +311,7 @@ mail IN MX 10 mail.example.com.
 // TestSOAAccessorEmpty exercises the no-SOA branch of Zone.SOA().
 func TestSOAAccessorEmpty(t *testing.T) {
 	t.Parallel()
-	src := "$ORIGIN example.com.\n$TTL 60\n@ IN A 192.0.2.1\n"
+	src := minimalZone
 	z, err := zonefile.Parse(strings.NewReader(src))
 	require.NoError(t, err)
 	_, _, ok := z.SOA()
@@ -336,7 +338,7 @@ $TTL 60
 // zone has no SOA.
 func TestWriteNoSOA(t *testing.T) {
 	t.Parallel()
-	src := "$ORIGIN example.com.\n$TTL 60\n@ IN A 192.0.2.1\n"
+	src := minimalZone
 	z, err := zonefile.Parse(strings.NewReader(src))
 	require.NoError(t, err)
 
@@ -373,7 +375,7 @@ func (errWriter) Write(_ []byte) (int, error) { return 0, io.ErrShortWrite }
 // io.Writer error through Flush.
 func TestWriteFlushError(t *testing.T) {
 	t.Parallel()
-	src := "$ORIGIN example.com.\n$TTL 60\n@ IN A 192.0.2.1\n"
+	src := minimalZone
 	z, err := zonefile.Parse(strings.NewReader(src))
 	require.NoError(t, err)
 	require.ErrorIs(t, zonefile.Write(errWriter{}, z), io.ErrShortWrite)
@@ -387,7 +389,7 @@ func TestWriteCAA(t *testing.T) {
 	owner := wire.MustParseName("example.com")
 	rec := wire.NewRecordClass(owner, rrtype.ClassIN, 60*time.Second, caa)
 
-	src := "$ORIGIN example.com.\n$TTL 60\n@ IN A 192.0.2.1\n"
+	src := minimalZone
 	z, err := zonefile.Parse(strings.NewReader(src))
 	require.NoError(t, err)
 	// Build a synthetic zone via parse + tack on a CAA record to drive
@@ -405,7 +407,7 @@ func TestWriteUnknownRData(t *testing.T) {
 	owner := wire.MustParseName("example.com")
 	rec := wire.NewRecordClass(owner, rrtype.ClassIN, 60*time.Second, u)
 
-	src := "$ORIGIN example.com.\n$TTL 60\n@ IN A 192.0.2.1\n"
+	src := minimalZone
 	z, err := zonefile.Parse(strings.NewReader(src))
 	require.NoError(t, err)
 	zsyn := &syntheticZone{origin: z.Origin(), records: append(z.Records(), rec)}
