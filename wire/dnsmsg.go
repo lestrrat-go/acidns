@@ -100,7 +100,12 @@ func Unmarshal(buf []byte) (Message, error) {
 
 	m := &message{id: id, flags: Flags(flags)}
 
-	m.questions = make([]Question, 0, qdcount)
+	// Clamp the make capacities by what's actually parseable from the
+	// remaining buffer. Without this, an attacker can send a 12-byte header
+	// with all four count fields at 0xFFFF and force us to allocate four
+	// huge slices before the first per-RR truncation error.
+	remaining := u.Remaining()
+	m.questions = make([]Question, 0, clampCount(int(qdcount), remaining, minQuestionSize))
 	for i := range int(qdcount) {
 		q, err := unpackQuestion(u)
 		if err != nil {
@@ -122,8 +127,29 @@ func Unmarshal(buf []byte) (Message, error) {
 	return m, nil
 }
 
+// minQuestionSize is the minimum on-the-wire size of a question:
+// 1-byte root name + uint16 type + uint16 class.
+const minQuestionSize = 5
+
+// minRecordSize is the minimum on-the-wire size of a resource record:
+// 1-byte root name + type + class + ttl + rdlen.
+const minRecordSize = 11
+
+// clampCount caps n at the number of structures of size minSize that could
+// possibly fit in remaining bytes, preventing make capacity amplification
+// from an attacker-controlled count field.
+func clampCount(n, remaining, minSize int) int {
+	if minSize <= 0 || remaining <= 0 {
+		return 0
+	}
+	if upper := remaining / minSize; n > upper {
+		return upper
+	}
+	return n
+}
+
 func unpackRRs(u *wirebb.Unpacker, dst *[]Record, n int, section Section) error {
-	out := make([]Record, 0, n)
+	out := make([]Record, 0, clampCount(n, u.Remaining(), minRecordSize))
 	for i := range n {
 		r, err := unpackRecord(u)
 		if err != nil {
@@ -140,7 +166,7 @@ func unpackRRs(u *wirebb.Unpacker, dst *[]Record, n int, section Section) error 
 // unpackAdditionals splits the additional section into regular records and
 // the OPT pseudo-RR (if any).
 func unpackAdditionals(u *wirebb.Unpacker, m *message, n int) error {
-	out := make([]Record, 0, n)
+	out := make([]Record, 0, clampCount(n, u.Remaining(), minRecordSize))
 	for i := range n {
 		// Peek at the type without committing the unpacker.
 		save := u.Off()

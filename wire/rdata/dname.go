@@ -19,7 +19,7 @@ func NewDNAME(target wirebb.Name) DNAME { return DNAME{target: target} }
 
 func unpackDNAME(u *wirebb.Unpacker) (DNAME, error) {
 	var zero DNAME
-	n, err := u.Name()
+	n, err := u.UncompressedName()
 	if err != nil {
 		return zero, err
 	}

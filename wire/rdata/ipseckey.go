@@ -130,7 +130,7 @@ func unpackIPSECKEY(u *wirebb.Unpacker, rdlen int) (IPSECKEY, error) {
 		}
 		k.gwAddr = netip.AddrFrom16([16]byte(b))
 	case IPSECKEYGatewayName:
-		n, err := u.Name()
+		n, err := u.UncompressedName()
 		if err != nil {
 			return zero, err
 		}

@@ -248,6 +248,51 @@ func FromLabels(labels ...string) (Name, error) {
 	return Name{wire: string(wire)}, nil
 }
 
+// DecodeWireUncompressed decodes a wire-format name from msg starting at off,
+// rejecting any compression-pointer label. The returned offset is one past
+// the terminating root label.
+func DecodeWireUncompressed(msg []byte, off int) (Name, int, error) {
+	if off < 0 || off >= len(msg) {
+		return Name{}, 0, fmt.Errorf("%w: offset %d out of range", ErrInvalidName, off)
+	}
+	out := make([]byte, 0, 64)
+	cur := off
+	total := 0
+	for {
+		if cur >= len(msg) {
+			return Name{}, 0, fmt.Errorf("%w: truncated", ErrInvalidName)
+		}
+		b := msg[cur]
+		switch b & 0xc0 {
+		case 0x00:
+			l := int(b)
+			if l == 0 {
+				out = append(out, 0)
+				if total+1 > maxNameLen {
+					return Name{}, 0, fmt.Errorf("%w: name exceeds %d bytes", ErrInvalidName, maxNameLen)
+				}
+				return Name{wire: string(out)}, cur + 1, nil
+			}
+			if cur+1+l > len(msg) {
+				return Name{}, 0, fmt.Errorf("%w: truncated label", ErrInvalidName)
+			}
+			total += 1 + l
+			if total > maxNameLen {
+				return Name{}, 0, fmt.Errorf("%w: name exceeds %d bytes", ErrInvalidName, maxNameLen)
+			}
+			out = append(out, byte(l))
+			for i := cur + 1; i < cur+1+l; i++ {
+				out = append(out, foldByte(msg[i]))
+			}
+			cur += 1 + l
+		case 0xc0:
+			return Name{}, 0, fmt.Errorf("%w: compression pointer not allowed here", ErrInvalidName)
+		default:
+			return Name{}, 0, fmt.Errorf("%w: reserved label type 0x%02x", ErrInvalidName, b&0xc0)
+		}
+	}
+}
+
 // DecodeWire decodes a wire-format name from msg starting at off, following
 // compression pointers. It returns the decoded Name and the offset of the
 // first byte after the on-the-wire name encoding (which, in the presence of

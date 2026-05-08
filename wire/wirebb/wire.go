@@ -160,3 +160,19 @@ func (u *Unpacker) Name() (Name, error) {
 	u.off = next
 	return n, nil
 }
+
+// UncompressedName decodes a domain name like [Unpacker.Name], but rejects
+// compression pointers anywhere in the name. RFC 3597 §4 and several
+// per-RR-type specs (RFC 6672 DNAME, RFC 9460 SVCB target, RFC 4025 IPSECKEY
+// gateway-name, etc.) require names embedded in their rdata to be
+// uncompressed; accepting compressed names there would let receivers
+// re-emit different wire bytes than the originator, breaking RRSIG
+// canonicalisation roundtrips.
+func (u *Unpacker) UncompressedName() (Name, error) {
+	n, next, err := DecodeWireUncompressed(u.msg, u.off)
+	if err != nil {
+		return Name{}, err
+	}
+	u.off = next
+	return n, nil
+}

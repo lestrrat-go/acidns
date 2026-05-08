@@ -249,7 +249,7 @@ func unpackSvcbBody(u *wirebb.Unpacker, rdlen int) (svcbBody, error) {
 	if err != nil {
 		return zero, err
 	}
-	target, err := u.Name()
+	target, err := u.UncompressedName()
 	if err != nil {
 		return zero, err
 	}

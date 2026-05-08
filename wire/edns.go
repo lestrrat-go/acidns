@@ -247,6 +247,13 @@ func unpackOPT(u *wirebb.Unpacker) (EDNS, error) {
 		if err != nil {
 			return nil, err
 		}
+		// Refuse option lengths that would walk past the OPT rdata window —
+		// otherwise we'd silently consume bytes belonging to the next
+		// additional record and reframe the rest of the message.
+		if u.Off()+int(l) > end {
+			return nil, fmt.Errorf("%w: OPT option length %d at off %d would exceed rdata window end %d",
+				ErrInvalidMessage, l, u.Off(), end)
+		}
 		data, err := u.Bytes(int(l))
 		if err != nil {
 			return nil, err
@@ -254,6 +261,10 @@ func unpackOPT(u *wirebb.Unpacker) (EDNS, error) {
 		cp := make([]byte, len(data))
 		copy(cp, data)
 		e.opts = append(e.opts, ednsOption{code: code, data: cp})
+	}
+	if u.Off() != end {
+		return nil, fmt.Errorf("%w: OPT consumed %d bytes, rdlen was %d",
+			ErrInvalidMessage, int(rdlen)-(end-u.Off()), rdlen)
 	}
 	return e, nil
 }
