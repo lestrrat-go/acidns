@@ -299,11 +299,15 @@ func mustBuild(b *wire.Builder, q wire.Message) wire.Message {
 	fb := wire.NewBuilder().
 		ID(q.ID()).
 		Response(true).
-		RecursionDesired(q.Flags().RecursionDesired()).
-		RCODE(wire.RCODEServFail)
+		RecursionDesired(q.Flags().RecursionDesired())
 	if qs := q.Questions(); len(qs) > 0 {
 		fb = fb.Question(qs[0])
 	}
+	// Echo OPT so EDNS-aware clients still see EDNS support on the
+	// fallback path; otherwise an OPT-bearing query that hits this
+	// branch looks like the server lost EDNS support and the client
+	// downgrades on subsequent queries.
+	fb = setRCODE(fb, q, wire.RCODEServFail)
 	if out, err := fb.Build(); err == nil {
 		return out
 	}
