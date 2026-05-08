@@ -1,0 +1,106 @@
+name: CI
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+      - name: Cache dependencies
+        uses: actions/cache@668228422ae6a00e4ad889ee87cd7109ec5666a7 # v5.0.4
+        with:
+          path: |
+            ~/go/pkg/mod
+            ~/.cache/go-build
+          key: ${{ runner.os }}-go-${{ hashFiles('**/go.sum') }}
+          restore-keys: |
+            ${{ runner.os }}-go-
+
+      - name: Install Go
+        uses: actions/setup-go@4b73464bb391d4059bd26b0524d20df3927bd417 # v6.3.0
+        with:
+          go-version-file: go.mod
+          cache: false
+
+      - name: Download dependencies
+        run: go mod download
+
+      - name: Tidy dependencies
+        run: |
+          go mod tidy
+          git diff --exit-code go.mod go.sum
+
+      - name: Run tests with race detector and coverage
+        run: |
+          go test -race -timeout 10m -coverprofile=coverage.out ./...
+
+      - name: Build commands
+        run: |
+          go build ./cmd/...
+
+      - name: Coverage report
+        if: always()
+        run: |
+          if [ -f coverage.out ]; then
+            {
+              echo "## Coverage"
+              echo
+              echo '| Package | Coverage | Covered/Total |'
+              echo '|---------|---------:|--------------:|'
+              awk '
+                NR == 1 { next }
+                {
+                  key = $1
+                  if (!(key in stmts)) {
+                    stmts[key] = $2
+                    n = index($1, ".go:")
+                    pkg = substr($1, 1, n + 1)
+                    sub(/\/[^\/]+$/, "", pkg)
+                    sub(/^github\.com\/lestrrat-go\/acidns\/?/, "", pkg)
+                    if (pkg == "") pkg = "(root)"
+                    pkgof[key] = pkg
+                  }
+                  if ($3 > 0) hit[key] = 1
+                }
+                END {
+                  for (k in stmts) {
+                    p = pkgof[k]
+                    total[p] += stmts[k]
+                    gt += stmts[k]
+                    if (k in hit) {
+                      covered[p] += stmts[k]
+                      gc += stmts[k]
+                    }
+                  }
+                  n = 0
+                  for (p in total) keys[++n] = p
+                  for (i = 1; i <= n; i++)
+                    for (j = i + 1; j <= n; j++)
+                      if (keys[j] < keys[i]) { t = keys[i]; keys[i] = keys[j]; keys[j] = t }
+                  for (i = 1; i <= n; i++) {
+                    p = keys[i]
+                    printf "| %s | %.1f%% | %d/%d |\n", p, 100 * covered[p] / total[p], covered[p], total[p]
+                  }
+                  if (gt > 0) printf "| **TOTAL** | **%.1f%%** | **%d/%d** |\n", 100 * gc / gt, gc, gt
+                }
+              ' coverage.out
+            } >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+      - name: Check for uncommitted changes
+        run: |
+          if [ -n "$(git status --porcelain)" ]; then
+            echo "Uncommitted changes detected:"
+            git status --porcelain
+            exit 1
+          fi
