@@ -52,6 +52,7 @@ type udpListener struct {
 	handler   Handler
 	cfg       udpListenerConfig
 	sem       chan struct{}
+	bufPool   sync.Pool
 	wg        sync.WaitGroup
 	closeOnce sync.Once
 }
@@ -86,6 +87,10 @@ func ListenUDP(addr netip.AddrPort, h Handler, opts ...UDPListenerOption) (Serve
 	if cfg.maxInflight > 0 {
 		l.sem = make(chan struct{}, cfg.maxInflight)
 	}
+	l.bufPool.New = func() any {
+		b := make([]byte, cfg.bufferSize)
+		return &b
+	}
 	return l, nil
 }
 
@@ -119,9 +124,11 @@ func (s *udpListener) Serve(ctx context.Context) error {
 	}()
 
 	for {
-		buf := make([]byte, s.cfg.bufferSize)
+		bufp, _ := s.bufPool.Get().(*[]byte) // pool's New always returns *[]byte
+		buf := *bufp
 		n, src, err := s.pc.ReadFrom(buf)
 		if err != nil {
+			s.bufPool.Put(bufp)
 			s.wg.Wait()
 			if ctx.Err() != nil {
 				return ErrServerClosed
@@ -134,25 +141,28 @@ func (s *udpListener) Serve(ctx context.Context) error {
 
 		ua, ok := src.(*net.UDPAddr)
 		if !ok {
+			s.bufPool.Put(bufp)
 			continue
 		}
 		if s.sem != nil {
 			select {
 			case s.sem <- struct{}{}:
 			default:
-				continue // at concurrency cap — drop
+				s.bufPool.Put(bufp) // at concurrency cap — drop & recycle
+				continue
 			}
 		}
 		s.wg.Add(1)
-		go func(body []byte, src netip.AddrPort) {
+		go func(bufp *[]byte, n int, src netip.AddrPort) {
 			defer func() {
+				s.bufPool.Put(bufp)
 				if s.sem != nil {
 					<-s.sem
 				}
 				s.wg.Done()
 			}()
-			s.handlePacket(ctx, body, src)
-		}(buf[:n], ua.AddrPort())
+			s.handlePacket(ctx, (*bufp)[:n], src)
+		}(bufp, n, ua.AddrPort())
 	}
 }
 
