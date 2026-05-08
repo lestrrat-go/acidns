@@ -21,6 +21,7 @@ func (f udpListenerOptionFunc) applyUDPServer(c *udpListenerConfig) { f(c) }
 type udpListenerConfig struct {
 	bufferSize     int
 	maxResponseLen int
+	maxInflight    int
 }
 
 // WithUDPReadBuffer sets the size of the read buffer per packet.
@@ -36,11 +37,21 @@ func WithUDPMaxResponse(n int) UDPListenerOption {
 	return udpListenerOptionFunc(func(c *udpListenerConfig) { c.maxResponseLen = n })
 }
 
+// WithUDPMaxInflight caps the number of concurrently-running handler
+// goroutines. Packets that arrive while the cap is reached are dropped
+// silently — the kernel UDP buffer absorbs short bursts and a busy-but-
+// healthy server returns to steady state without unbounded goroutine
+// growth. A non-positive value disables the cap. Defaults to 4096.
+func WithUDPMaxInflight(n int) UDPListenerOption {
+	return udpListenerOptionFunc(func(c *udpListenerConfig) { c.maxInflight = n })
+}
+
 type udpListener struct {
 	pc        net.PacketConn
 	addr      netip.AddrPort
 	handler   Handler
 	cfg       udpListenerConfig
+	sem       chan struct{}
 	wg        sync.WaitGroup
 	closeOnce sync.Once
 }
@@ -52,7 +63,7 @@ func ListenUDP(addr netip.AddrPort, h Handler, opts ...UDPListenerOption) (Serve
 	if h == nil {
 		return nil, fmt.Errorf("dnsserver: handler is nil")
 	}
-	cfg := udpListenerConfig{bufferSize: 4096, maxResponseLen: 4096}
+	cfg := udpListenerConfig{bufferSize: 4096, maxResponseLen: 4096, maxInflight: 4096}
 	for _, o := range opts {
 		o.applyUDPServer(&cfg)
 	}
@@ -66,12 +77,16 @@ func ListenUDP(addr netip.AddrPort, h Handler, opts ...UDPListenerOption) (Serve
 		_ = pc.Close()
 		return nil, fmt.Errorf("dnsserver: udp listen %s: unexpected addr type %T", addr, pc.LocalAddr())
 	}
-	return &udpListener{
+	l := &udpListener{
 		pc:      pc,
 		addr:    netip.AddrPortFrom(la.AddrPort().Addr(), uint16(la.Port)),
 		handler: h,
 		cfg:     cfg,
-	}, nil
+	}
+	if cfg.maxInflight > 0 {
+		l.sem = make(chan struct{}, cfg.maxInflight)
+	}
+	return l, nil
 }
 
 func (s *udpListener) Addr() netip.AddrPort { return s.addr }
@@ -121,9 +136,21 @@ func (s *udpListener) Serve(ctx context.Context) error {
 		if !ok {
 			continue
 		}
+		if s.sem != nil {
+			select {
+			case s.sem <- struct{}{}:
+			default:
+				continue // at concurrency cap — drop
+			}
+		}
 		s.wg.Add(1)
 		go func(body []byte, src netip.AddrPort) {
-			defer s.wg.Done()
+			defer func() {
+				if s.sem != nil {
+					<-s.sem
+				}
+				s.wg.Done()
+			}()
 			s.handlePacket(ctx, body, src)
 		}(buf[:n], ua.AddrPort())
 	}

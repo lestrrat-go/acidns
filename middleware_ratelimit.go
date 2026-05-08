@@ -24,10 +24,11 @@ type rateLimitOptionFunc func(*rateLimitConfig)
 func (f rateLimitOptionFunc) applyRateLimit(c *rateLimitConfig) { f(c) }
 
 type rateLimitConfig struct {
-	qps    float64
-	burst  int
-	drop   bool
-	prefix int // CIDR mask applied before keying (e.g. 24 → group v4 by /24)
+	qps     float64
+	burst   int
+	drop    bool
+	prefix  int // CIDR mask applied before keying (e.g. 24 → group v4 by /24)
+	maxKeys int
 }
 
 // WithRateLimitQPS sets the average queries-per-second rate per source. Defaults to
@@ -54,6 +55,16 @@ func WithRateLimitGroupPrefix(maskBits int) RateLimitOption {
 	return rateLimitOptionFunc(func(c *rateLimitConfig) { c.prefix = maskBits })
 }
 
+// WithRateLimitMaxKeys caps how many distinct source buckets are kept in
+// memory. Without this cap, a flood of spoofed source addresses fills the
+// internal map until the process OOMs — defeating the very protection the
+// limiter is supposed to provide. When the cap is reached, idle (refilled)
+// buckets are evicted first, then the oldest-updated bucket. A non-positive
+// value disables the cap. Defaults to 100000.
+func WithRateLimitMaxKeys(n int) RateLimitOption {
+	return rateLimitOptionFunc(func(c *rateLimitConfig) { c.maxKeys = n })
+}
+
 type bucket struct {
 	tokens  float64
 	updated time.Time
@@ -65,6 +76,7 @@ type limiter struct {
 	burst   float64
 	drop    bool
 	prefix  int
+	maxKeys int
 	mu      sync.Mutex
 	buckets map[string]*bucket
 }
@@ -72,7 +84,7 @@ type limiter struct {
 // NewRateLimit returns a Handler that applies the configured rate limit before
 // delegating to inner.
 func NewRateLimit(inner Handler, opts ...RateLimitOption) Handler {
-	c := rateLimitConfig{qps: 10, burst: 20}
+	c := rateLimitConfig{qps: 10, burst: 20, maxKeys: 100000}
 	for _, o := range opts {
 		o.applyRateLimit(&c)
 	}
@@ -82,6 +94,7 @@ func NewRateLimit(inner Handler, opts ...RateLimitOption) Handler {
 		burst:   float64(c.burst),
 		drop:    c.drop,
 		prefix:  c.prefix,
+		maxKeys: c.maxKeys,
 		buckets: make(map[string]*bucket),
 	}
 }
@@ -105,6 +118,9 @@ func (l *limiter) allow(src netip.Addr) bool {
 	defer l.mu.Unlock()
 	b, ok := l.buckets[key]
 	if !ok {
+		if l.maxKeys > 0 && len(l.buckets) >= l.maxKeys {
+			l.evictLocked(now)
+		}
 		b = &bucket{tokens: l.burst, updated: now}
 		l.buckets[key] = b
 	}
@@ -119,6 +135,42 @@ func (l *limiter) allow(src netip.Addr) bool {
 	}
 	b.tokens--
 	return true
+}
+
+// evictLocked makes room in the bucket map. Two passes:
+//
+//  1. Drop any bucket that has been idle long enough to be fully refilled
+//     to the burst capacity — those buckets are equivalent to a fresh
+//     allocation and contain no useful state.
+//  2. If the map is still at the cap, drop the single oldest-updated entry
+//     so a new key can be inserted.
+//
+// Caller holds l.mu.
+func (l *limiter) evictLocked(now time.Time) {
+	if l.qps > 0 {
+		// Time required to refill an empty bucket to full burst.
+		idleFor := time.Duration(l.burst/l.qps*float64(time.Second)) + time.Second
+		threshold := now.Add(-idleFor)
+		for k, b := range l.buckets {
+			if b.updated.Before(threshold) {
+				delete(l.buckets, k)
+			}
+		}
+	}
+	if l.maxKeys <= 0 || len(l.buckets) < l.maxKeys {
+		return
+	}
+	var oldestKey string
+	var oldestTime time.Time
+	first := true
+	for k, b := range l.buckets {
+		if first || b.updated.Before(oldestTime) {
+			oldestKey = k
+			oldestTime = b.updated
+			first = false
+		}
+	}
+	delete(l.buckets, oldestKey)
 }
 
 func (l *limiter) key(src netip.Addr) string {

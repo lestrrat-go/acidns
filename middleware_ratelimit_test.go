@@ -120,6 +120,29 @@ func TestRateLimitGroupPrefix(t *testing.T) {
 		"second source in same /24 should share the exhausted bucket")
 }
 
+func TestRateLimitMaxKeysCap(t *testing.T) {
+	t.Parallel()
+
+	const limit = 8
+	h := acidns.NewRateLimit(rateLimitMkInner(),
+		acidns.WithRateLimitQPS(0.0001),
+		acidns.WithRateLimitBurst(1),
+		acidns.WithRateLimitMaxKeys(limit),
+	)
+
+	// Fire from many distinct sources; the limiter must never grow above limit.
+	for i := range 4 * limit {
+		src := netip.AddrPortFrom(
+			netip.AddrFrom4([4]byte{198, 51, 100, byte(i + 1)}), 1)
+		w := &rlFakeWriter{src: src}
+		h.ServeDNS(context.Background(), w, rateLimitMkQuery(t))
+	}
+
+	n := acidns.RateLimitDebugLen(h)
+	require.LessOrEqual(t, n, limit,
+		"map must be bounded by WithRateLimitMaxKeys; got %d, limit %d", n, limit)
+}
+
 func TestRateLimitRefillOverTime(t *testing.T) {
 	t.Parallel()
 	h := acidns.NewRateLimit(rateLimitMkInner(),

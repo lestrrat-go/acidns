@@ -22,7 +22,8 @@ type tcpListenerOptionFunc func(*tcpListenerConfig)
 func (f tcpListenerOptionFunc) applyTCPServer(c *tcpListenerConfig) { f(c) }
 
 type tcpListenerConfig struct {
-	idleTimeout time.Duration
+	idleTimeout    time.Duration
+	maxConnections int
 }
 
 // WithTCPIdleTimeout sets how long an idle connection is kept open between
@@ -32,11 +33,20 @@ func WithTCPIdleTimeout(d time.Duration) TCPListenerOption {
 	return tcpListenerOptionFunc(func(c *tcpListenerConfig) { c.idleTimeout = d })
 }
 
+// WithTCPMaxConnections caps the number of concurrent TCP connections.
+// Once the cap is reached the accept loop blocks until a slot frees,
+// providing natural backpressure via the kernel's TCP listen backlog.
+// A non-positive value disables the cap. Defaults to 1024.
+func WithTCPMaxConnections(n int) TCPListenerOption {
+	return tcpListenerOptionFunc(func(c *tcpListenerConfig) { c.maxConnections = n })
+}
+
 type tcpListener struct {
 	ln        net.Listener
 	addr      netip.AddrPort
 	handler   Handler
 	cfg       tcpListenerConfig
+	sem       chan struct{}
 	wg        sync.WaitGroup
 	closeOnce sync.Once
 }
@@ -49,7 +59,7 @@ func ListenTCP(addr netip.AddrPort, h Handler, opts ...TCPListenerOption) (Serve
 	if h == nil {
 		return nil, fmt.Errorf("dnsserver: handler is nil")
 	}
-	cfg := tcpListenerConfig{idleTimeout: 10 * time.Second}
+	cfg := tcpListenerConfig{idleTimeout: 10 * time.Second, maxConnections: 1024}
 	for _, o := range opts {
 		o.applyTCPServer(&cfg)
 	}
@@ -62,12 +72,16 @@ func ListenTCP(addr netip.AddrPort, h Handler, opts ...TCPListenerOption) (Serve
 		_ = ln.Close()
 		return nil, fmt.Errorf("dnsserver: tcp listen %s: unexpected addr type %T", addr, ln.Addr())
 	}
-	return &tcpListener{
+	l := &tcpListener{
 		ln:      ln,
 		addr:    netip.AddrPortFrom(la.AddrPort().Addr(), uint16(la.Port)),
 		handler: h,
 		cfg:     cfg,
-	}, nil
+	}
+	if cfg.maxConnections > 0 {
+		l.sem = make(chan struct{}, cfg.maxConnections)
+	}
+	return l, nil
 }
 
 func (s *tcpListener) Addr() netip.AddrPort { return s.addr }
@@ -100,8 +114,20 @@ func (s *tcpListener) Serve(ctx context.Context) error {
 	}()
 
 	for {
+		if s.sem != nil {
+			select {
+			case s.sem <- struct{}{}:
+			case <-ctx.Done():
+				_ = s.ln.Close()
+				s.wg.Wait()
+				return ErrServerClosed
+			}
+		}
 		conn, err := s.ln.Accept()
 		if err != nil {
+			if s.sem != nil {
+				<-s.sem
+			}
 			s.wg.Wait()
 			if ctx.Err() != nil || errors.Is(err, net.ErrClosed) {
 				return ErrServerClosed
@@ -110,7 +136,12 @@ func (s *tcpListener) Serve(ctx context.Context) error {
 		}
 		s.wg.Add(1)
 		go func(c net.Conn) {
-			defer s.wg.Done()
+			defer func() {
+				if s.sem != nil {
+					<-s.sem
+				}
+				s.wg.Done()
+			}()
 			s.serveConn(ctx, c)
 		}(conn)
 	}
