@@ -61,4 +61,3 @@ func TestUDPServer_Shutdown_RespectsCtx(t *testing.T) {
 	defer cancel()
 	require.NoError(t, srv.Shutdown(ctx))
 }
-

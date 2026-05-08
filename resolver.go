@@ -13,6 +13,7 @@ import (
 	"encoding/binary"
 	"errors"
 	"fmt"
+	"log/slog"
 	"net/netip"
 	"time"
 
@@ -91,6 +92,7 @@ type resolverConfig struct {
 	ndots             int
 	ndotsSet          bool
 	disableSpecialUse bool
+	logger            *slog.Logger
 	systemErr         error
 }
 
@@ -180,6 +182,16 @@ func WithNdots(n int) ResolverOption {
 	return resolverOptionFunc(func(c *resolverConfig) { c.ndots = n; c.ndotsSet = true })
 }
 
+// WithLogger attaches a slog.Logger that the Resolver uses to emit
+// structured tracepoints around each Resolve call: "resolver.resolve" at
+// debug level on success (with name, type, elapsed, rcode) and at error
+// level when the upstream returns an error or non-NoError RCODE.
+//
+// The default is a no-op handler — passing nil restores the default.
+func WithLogger(l *slog.Logger) ResolverOption {
+	return resolverOptionFunc(func(c *resolverConfig) { c.logger = l })
+}
+
 type resolver struct {
 	exchanger         Exchanger
 	ednsUDP           uint16
@@ -188,6 +200,7 @@ type resolver struct {
 	searchList        []wire.Name
 	ndots             int
 	disableSpecialUse bool
+	logger            *slog.Logger
 }
 
 // NewResolver returns a Resolver. Exactly one of WithExchanger or WithServers
@@ -219,6 +232,10 @@ func NewResolver(opts ...ResolverOption) (Resolver, error) {
 	if c.ndotsSet {
 		ndots = c.ndots
 	}
+	logger := c.logger
+	if logger == nil {
+		logger = slog.New(slog.DiscardHandler)
+	}
 	return &resolver{
 		exchanger:         ex,
 		ednsUDP:           c.ednsUDP,
@@ -227,6 +244,7 @@ func NewResolver(opts ...ResolverOption) (Resolver, error) {
 		searchList:        append([]wire.Name(nil), c.searchList...),
 		ndots:             ndots,
 		disableSpecialUse: c.disableSpecialUse,
+		logger:            logger,
 	}, nil
 }
 
@@ -247,6 +265,13 @@ func SystemResolver(opts ...ResolverOption) (Resolver, error) {
 }
 
 func (r *resolver) Resolve(ctx context.Context, name wire.Name, t rrtype.Type) (*Answer, error) {
+	start := time.Now()
+	ans, err := r.resolve(ctx, name, t)
+	r.logResolve(ctx, name, t, ans, err, time.Since(start))
+	return ans, err
+}
+
+func (r *resolver) resolve(ctx context.Context, name wire.Name, t rrtype.Type) (*Answer, error) {
 	if !r.disableSpecialUse {
 		if ans, ok := r.specialUseAnswer(name, t); ok {
 			return wrapRCode(ans)
@@ -282,6 +307,32 @@ func (r *resolver) Resolve(ctx context.Context, name wire.Name, t rrtype.Type) (
 
 	matched := matchAnswers(resp.Answers(), name, t)
 	return wrapRCode(&Answer{q: question, records: matched, raw: resp})
+}
+
+// logResolve emits one structured event per Resolve call. Successful
+// NoError answers go to debug; errors and non-NoError RCODEs go to error
+// level.
+func (r *resolver) logResolve(ctx context.Context, name wire.Name, t rrtype.Type, ans *Answer, err error, elapsed time.Duration) {
+	attrs := []slog.Attr{
+		slog.String("name", name.String()),
+		slog.String("type", t.String()),
+		slog.Duration("elapsed", elapsed),
+	}
+	if err != nil {
+		var rce *RCodeError
+		if errors.As(err, &rce) {
+			attrs = append(attrs, slog.String("rcode", rce.Code.String()))
+			r.logger.LogAttrs(ctx, slog.LevelWarn, "resolver.resolve", attrs...)
+			return
+		}
+		attrs = append(attrs, slog.String("error", err.Error()))
+		r.logger.LogAttrs(ctx, slog.LevelError, "resolver.resolve", attrs...)
+		return
+	}
+	if ans != nil {
+		attrs = append(attrs, slog.Int("records", len(ans.Records())))
+	}
+	r.logger.LogAttrs(ctx, slog.LevelDebug, "resolver.resolve", attrs...)
 }
 
 // wrapRCode converts an Answer with a non-NoError RCODE into an RCodeError

@@ -17,6 +17,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log/slog"
 	"time"
 
 	"github.com/lestrrat-go/acidns"
@@ -55,6 +56,9 @@ func New(opts ...Option) (*Handler, error) {
 	if c.now == nil {
 		c.now = time.Now
 	}
+	if c.logger == nil {
+		c.logger = slog.New(slog.DiscardHandler)
+	}
 	return &Handler{cfg: c, cache: newCache(c.cacheSize)}, nil
 }
 
@@ -84,12 +88,19 @@ func (h *Handler) Close() error {
 // ServeDNS answers q by serving from cache when fresh, otherwise by
 // forwarding to the configured upstream and caching the result.
 func (h *Handler) ServeDNS(ctx context.Context, w acidns.ResponseWriter, q wire.Message) {
+	start := time.Now()
 	if q.Flags().Opcode() != wire.OpcodeQuery {
 		_ = w.WriteMsg(buildErrorResponse(q, wire.RCODENotImp))
+		h.cfg.logger.LogAttrs(ctx, slog.LevelDebug, "forward.serve",
+			slog.String("decision", "notimp"),
+			slog.Duration("elapsed", time.Since(start)))
 		return
 	}
 	if len(q.Questions()) != 1 {
 		_ = w.WriteMsg(buildErrorResponse(q, wire.RCODEFormErr))
+		h.cfg.logger.LogAttrs(ctx, slog.LevelDebug, "forward.serve",
+			slog.String("decision", "formerr"),
+			slog.Duration("elapsed", time.Since(start)))
 		return
 	}
 
@@ -98,6 +109,12 @@ func (h *Handler) ServeDNS(ctx context.Context, w acidns.ResponseWriter, q wire.
 
 	if e, ok := h.cache.get(qq.Name(), qq.Type(), qq.Class(), now); ok {
 		_ = w.WriteMsg(buildFromCache(q, e, now))
+		h.cfg.logger.LogAttrs(ctx, slog.LevelDebug, "forward.serve",
+			slog.String("decision", "cache_hit"),
+			slog.String("name", qq.Name().String()),
+			slog.String("type", qq.Type().String()),
+			slog.String("rcode", e.rcode.String()),
+			slog.Duration("elapsed", time.Since(start)))
 		return
 	}
 
@@ -111,6 +128,13 @@ func (h *Handler) ServeDNS(ctx context.Context, w acidns.ResponseWriter, q wire.
 	resp, err := h.cfg.upstream.Exchange(exchangeCtx, fwd)
 	if err != nil {
 		_ = w.WriteMsg(buildErrorResponse(q, wire.RCODEServFail))
+		h.cfg.logger.LogAttrs(ctx, slog.LevelError, "forward.serve",
+			slog.String("decision", "upstream_error"),
+			slog.String("name", qq.Name().String()),
+			slog.String("type", qq.Type().String()),
+			slog.String("upstream", h.cfg.upstreamName),
+			slog.String("error", err.Error()),
+			slog.Duration("elapsed", time.Since(start)))
 		return
 	}
 
@@ -119,6 +143,13 @@ func (h *Handler) ServeDNS(ctx context.Context, w acidns.ResponseWriter, q wire.
 	}
 
 	_ = w.WriteMsg(rebuildForClient(q, resp))
+	h.cfg.logger.LogAttrs(ctx, slog.LevelDebug, "forward.serve",
+		slog.String("decision", "forwarded"),
+		slog.String("name", qq.Name().String()),
+		slog.String("type", qq.Type().String()),
+		slog.String("upstream", h.cfg.upstreamName),
+		slog.String("rcode", resp.Flags().RCODE().String()),
+		slog.Duration("elapsed", time.Since(start)))
 }
 
 // buildForwardQuery returns a fresh query carrying the same question and

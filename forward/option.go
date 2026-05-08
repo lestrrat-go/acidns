@@ -2,6 +2,7 @@ package forward
 
 import (
 	"crypto/tls"
+	"log/slog"
 	"net/netip"
 	"time"
 
@@ -27,6 +28,7 @@ type config struct {
 	maxNegTTL    time.Duration
 	queryTimeout time.Duration
 	now          func() time.Time
+	logger       *slog.Logger
 }
 
 // WithUpstream sets the Exchanger used to forward queries. The caller
@@ -124,4 +126,15 @@ func WithQueryTimeout(d time.Duration) Option {
 // TTL expiry without sleeping in real time.
 func WithNowFunc(now func() time.Time) Option {
 	return optionFunc(func(c *config) { c.now = now })
+}
+
+// WithLogger attaches a slog.Logger that the forwarder uses to emit one
+// structured event per inbound query: "forward.serve" carrying the qname,
+// qtype, decision (cache_hit / forwarded), upstream RCODE, and elapsed
+// duration. Upstream errors are logged at error level with the wrapped
+// cause; everything else is debug.
+//
+// The default is a no-op handler — passing nil restores the default.
+func WithLogger(l *slog.Logger) Option {
+	return optionFunc(func(c *config) { c.logger = l })
 }
