@@ -1,9 +1,8 @@
-// (See package wirebb's main doc.go for the package-level overview.)
-//
+package wirebb
+
 // A Name is an immutable, fully-qualified domain name held as its canonical
 // lowercase wire encoding. The zero Name is invalid; the root name "." is
 // distinct and obtained via Root(), Parse("."), or FromLabels().
-package wirebb
 
 import (
 	"errors"

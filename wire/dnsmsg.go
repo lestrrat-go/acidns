@@ -1,4 +1,4 @@
-// Package dnsmsg defines the DNS wire-format message — header, question and
+// Package wire defines the DNS wire-format message — header, question and
 // resource record sections — together with a Builder for constructing
 // outgoing messages and Marshal/Unmarshal for converting between Message
 // values and on-the-wire bytes.

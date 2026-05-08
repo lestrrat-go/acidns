@@ -1,4 +1,4 @@
-// Package dnszone parses RFC 1035 §5 master files into a strongly-typed
+// Package zonefile parses RFC 1035 §5 master files into a strongly-typed
 // Zone composed of wire.Records. It supports the common subset used by
 // production zone files: $ORIGIN, $TTL, parenthesised line continuation,
 // `;` end-of-line comments, quoted strings, the `@` and blank owner-name

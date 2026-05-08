@@ -14,7 +14,7 @@ import (
 	"github.com/lestrrat-go/acidns/wire"
 )
 
-// TCPOption configures a TCP server.
+// TCPListenerOption configures a TCP server.
 type TCPListenerOption interface{ applyTCPServer(*tcpListenerConfig) }
 
 type tcpListenerOptionFunc func(*tcpListenerConfig)

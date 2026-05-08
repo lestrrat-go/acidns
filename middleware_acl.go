@@ -1,4 +1,6 @@
-// Package acl is a Handler middleware that filters queries by source
+package acidns
+
+// ACL middleware: a Handler middleware that filters queries by source
 // address, returning REFUSED to clients outside the configured ACL.
 //
 // Apply on top of any Handler:
@@ -6,7 +8,6 @@
 //	srv, _ := acidns.ListenUDP(addr, acidns.NewACL(inner,
 //	    acl.WithACLAllow(netip.MustParsePrefix("10.0.0.0/8")),
 //	))
-package acidns
 
 import (
 	"context"
@@ -45,7 +46,7 @@ type acl struct {
 	deny  []netip.Prefix
 }
 
-// New returns a Handler that applies the configured ACL before delegating
+// NewACL returns a Handler that applies the configured ACL before delegating
 // to inner.
 func NewACL(inner Handler, opts ...ACLOption) Handler {
 	c := &aclConfig{}

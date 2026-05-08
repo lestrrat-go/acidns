@@ -1,4 +1,4 @@
-// Package dnsupdate constructs RFC 2136 dynamic update messages. The
+// Package update constructs RFC 2136 dynamic update messages. The
 // wire-level encoding reuses the standard sections — ZONE in the place of
 // QUESTION, PREREQUISITE in place of ANSWER, UPDATE in place of AUTHORITY —
 // with the opcode set to UPDATE (5).

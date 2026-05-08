@@ -1,10 +1,11 @@
-// Package ratelimit is a Handler middleware that throttles queries per
+package acidns
+
+// Rate-limit middleware: a Handler middleware that throttles queries per
 // source address using a token-bucket algorithm.
 //
 // Queries that exceed their bucket are by default refused with RCODE
 // REFUSED; an option permits silent dropping instead, which more closely
 // matches the behaviour of operational resolvers under stress.
-package acidns
 
 import (
 	"context"
@@ -68,7 +69,7 @@ type limiter struct {
 	buckets map[string]*bucket
 }
 
-// New returns a Handler that applies the configured rate limit before
+// NewRateLimit returns a Handler that applies the configured rate limit before
 // delegating to inner.
 func NewRateLimit(inner Handler, opts ...RateLimitOption) Handler {
 	c := rateLimitConfig{qps: 10, burst: 20}

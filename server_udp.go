@@ -11,7 +11,7 @@ import (
 	"github.com/lestrrat-go/acidns/wire"
 )
 
-// UDPOption configures a UDP server.
+// UDPListenerOption configures a UDP server.
 type UDPListenerOption interface{ applyUDPServer(*udpListenerConfig) }
 
 type udpListenerOptionFunc func(*udpListenerConfig)

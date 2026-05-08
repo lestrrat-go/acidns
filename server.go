@@ -1,12 +1,13 @@
-// Package dnsserver provides a Handler-based DNS server framework modelled
-// on the net/http style. Handlers receive a parsed Message and a
-// ResponseWriter; concrete servers (UDP, TCP) bind sockets and dispatch.
+package acidns
+
+// Server framework: a Handler-based DNS server modelled on the net/http style.
+// Handlers receive a parsed Message and a ResponseWriter; concrete servers
+// (UDP, TCP) bind sockets and dispatch.
 //
 // The framework itself does no policy: it does not implement zones,
 // recursion, caching, or rate limiting. Those live in sub-packages
-// (dnsserver/authoritative, dnsserver/recursive, dnsserver/cache, ...) that
-// implement Handler and may be composed via standard middleware patterns.
-package acidns
+// (authoritative, recursive, forward, ...) that implement Handler and may be
+// composed via standard middleware patterns.
 
 import (
 	"context"

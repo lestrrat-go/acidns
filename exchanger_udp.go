@@ -1,10 +1,11 @@
-// Package udp implements a Datagram-style DNS Exchanger over UDP.
+package acidns
+
+// UDP exchanger: a Datagram-style DNS Exchanger over UDP.
 //
 // It performs a single send and reads datagrams until one whose ID matches
 // the request is received, the context fires, or an unrecoverable I/O error
 // occurs. It does NOT retry on truncation; callers wanting TCP fall-back are
 // expected to compose two transports at the resolver layer.
-package acidns
 
 import (
 	"context"
@@ -47,7 +48,7 @@ type udpExchanger struct {
 	bufsize int
 }
 
-// New returns an Exchanger that talks UDP to addr.
+// NewUDPExchanger returns an Exchanger that talks UDP to addr.
 func NewUDPExchanger(addr netip.AddrPort, opts ...UDPExchangerOption) (Exchanger, error) {
 	if !addr.IsValid() {
 		return nil, fmt.Errorf("udp: invalid server address")

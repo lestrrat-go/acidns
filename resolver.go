@@ -1,4 +1,4 @@
-// Package dnsclient is the user-facing entry point for performing DNS
+// Package acidns is the user-facing entry point for performing DNS
 // queries against a configured resolver.
 //
 // Two layers are exposed: the low-level Exchanger (one query, one
@@ -192,8 +192,8 @@ type resolver struct {
 	disableSpecialUse bool
 }
 
-// New returns a Resolver. Exactly one of WithExchanger or WithServers must
-// be supplied.
+// NewResolver returns a Resolver. Exactly one of WithExchanger or WithServers
+// must be supplied.
 func NewResolver(opts ...ResolverOption) (Resolver, error) {
 	c := resolverConfig{ednsUDP: 1232}
 	for _, o := range opts {

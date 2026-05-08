@@ -1,11 +1,12 @@
-// Package tcp implements a DNS Exchanger over TCP using the standard 2-byte
+package acidns
+
+// TCP exchanger: a DNS Exchanger over TCP using the standard 2-byte
 // length-prefixed framing of RFC 1035 §4.2.2.
 //
 // Each Exchange opens a fresh connection. Connection pooling is intentionally
 // out of scope for the toolkit's primitive transports — higher layers may
 // wrap this Exchanger to add reuse, persistent connections (RFC 7766), or
 // pipelining.
-package acidns
 
 import (
 	"context"
@@ -40,7 +41,7 @@ type tcpExchanger struct {
 	timeout time.Duration
 }
 
-// New returns an Exchanger that talks TCP to addr.
+// NewTCPExchanger returns an Exchanger that talks TCP to addr.
 func NewTCPExchanger(addr netip.AddrPort, opts ...TCPExchangerOption) (Exchanger, error) {
 	if !addr.IsValid() {
 		return nil, fmt.Errorf("tcp: invalid server address")
