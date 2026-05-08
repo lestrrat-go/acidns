@@ -59,6 +59,11 @@ var ErrBadTime = errors.New("tsig: time outside fudge window")
 // ErrBadSignature is returned when the HMAC fails to verify.
 var ErrBadSignature = errors.New("tsig: bad signature")
 
+// ErrBadTruncation is returned when a received MAC is shorter than RFC
+// 8945 §5.2.2.1 permits — i.e. less than 10 octets or less than half the
+// algorithm's full output length, whichever is greater.
+var ErrBadTruncation = errors.New("tsig: MAC shorter than allowed")
+
 const (
 	tsigType  uint16 = 250
 	tsigClass uint16 = 255 // ANY
@@ -81,66 +86,198 @@ func SignMessage(m wire.Message, key Key, now time.Time, fudge time.Duration) ([
 
 // Sign appends a TSIG RR to the additional section of msg and returns
 // the new msg bytes.
+//
+// Sign is for queries and other un-paired messages. To sign a response
+// to a TSIG-signed query, use [SignResponse] (which binds the response
+// signature to the request MAC per RFC 8945 §5.3.1). For envelopes
+// after the first in a multi-message AXFR, use [SignAXFRChunk] which
+// chains MACs per §5.3.2.
 func Sign(msg []byte, key Key, now time.Time, fudge time.Duration) ([]byte, error) {
+	out, _, err := signWithPrefix(msg, key, nil, false, now, fudge)
+	return out, err
+}
+
+// SignResponse appends a TSIG RR to msg, binding the signature to the
+// MAC of the request that triggered this response (RFC 8945 §5.3.1).
+// requestMAC is the MAC bytes returned from [Verify] of the request.
+//
+// This is what an authoritative or recursive server should use when
+// answering a TSIG-signed query: it prevents the response from being
+// replayed against a different request.
+func SignResponse(msg []byte, key Key, requestMAC []byte, now time.Time, fudge time.Duration) ([]byte, error) {
+	if len(requestMAC) == 0 {
+		return nil, fmt.Errorf("tsig: SignResponse requires requestMAC")
+	}
+	out, _, err := signWithPrefix(msg, key, requestMAC, false, now, fudge)
+	return out, err
+}
+
+// SignAXFRChunk signs an envelope after the first in a multi-message
+// AXFR/IXFR response (RFC 8945 §5.3.2). priorMAC is the MAC produced
+// by the previous signed envelope (returned via the second result of
+// SignAXFRChunk, or via [Verify] of the request for the first
+// envelope; the first envelope itself is signed with [SignResponse]).
+//
+// Per §5.3.2 the signing input is constructed with priorMAC as a
+// length-prefixed prefix and uses only the "TSIG timers" portion
+// (time_signed + fudge) of the variables. The new MAC returned must be
+// passed as priorMAC to the next call.
+func SignAXFRChunk(msg []byte, key Key, priorMAC []byte, now time.Time, fudge time.Duration) ([]byte, []byte, error) {
+	if len(priorMAC) == 0 {
+		return nil, nil, fmt.Errorf("tsig: SignAXFRChunk requires priorMAC")
+	}
+	return signWithPrefix(msg, key, priorMAC, true, now, fudge)
+}
+
+// signWithPrefix is the common signer. priorMAC, when non-nil, is
+// length-prefixed and prepended to the HMAC input (RFC 8945 §5.3.1 and
+// §5.3.2). When timersOnly is true, only time_signed+fudge are used as
+// the variables (§5.3.2), otherwise the full TSIG vars are used.
+func signWithPrefix(msg []byte, key Key, priorMAC []byte, timersOnly bool, now time.Time, fudge time.Duration) ([]byte, []byte, error) {
 	if len(msg) < 12 {
-		return nil, fmt.Errorf("tsig: msg too short")
+		return nil, nil, fmt.Errorf("tsig: msg too short")
 	}
 	algName := wire.MustParseName(string(key.Algorithm))
 
 	timeSigned := uint64(now.Unix())
 	fudgeSecs := uint16(fudge.Seconds())
 
-	tsigVars := buildTSIGVars(key.Name, algName, timeSigned, fudgeSecs, 0, nil)
-	mac, err := computeHMAC(key, append(append([]byte(nil), msg...), tsigVars...))
+	input := buildSigningInput(msg, key.Name, algName, priorMAC, timeSigned, fudgeSecs, 0, nil, timersOnly)
+	mac, err := computeHMAC(key, input)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 
 	origID := binary.BigEndian.Uint16(msg[0:2])
-
 	rdata := buildTSIGRData(algName, timeSigned, fudgeSecs, mac, origID, 0, nil)
 	out := append([]byte(nil), msg...)
 	out = appendTSIGRR(out, key.Name, rdata)
 
-	// Increment ARCOUNT.
 	arcount := binary.BigEndian.Uint16(out[10:12])
 	binary.BigEndian.PutUint16(out[10:12], arcount+1)
-	return out, nil
+	return out, mac, nil
+}
+
+// buildSigningInput assembles the byte stream over which the HMAC is
+// computed. See RFC 8945 §4.3 (request), §5.3.1 (response prefixes
+// requestMAC), §5.3.2 (chained AXFR uses prior MAC + timers-only).
+func buildSigningInput(msg []byte, keyName, algName wire.Name, priorMAC []byte,
+	timeSigned uint64, fudge, errCode uint16, other []byte, timersOnly bool,
+) []byte {
+	var input []byte
+	if priorMAC != nil {
+		input = binary.BigEndian.AppendUint16(input, uint16(len(priorMAC)))
+		input = append(input, priorMAC...)
+	}
+	input = append(input, msg...)
+	if timersOnly {
+		input = appendUint48(input, timeSigned)
+		input = binary.BigEndian.AppendUint16(input, fudge)
+		return input
+	}
+	return append(input, buildTSIGVars(keyName, algName, timeSigned, fudge, errCode, other)...)
 }
 
 // Verify confirms the trailing TSIG RR over msg using key. Returns the
 // message body without the TSIG RR (with ARCOUNT decremented and the
 // original message ID restored if it was rewritten) and the time at which
 // the signature was generated.
+//
+// Verify is for un-paired messages — typically a server verifying a
+// signed query. The MAC bytes (the TSIG signature) can be retrieved
+// via [VerifyMAC] if the caller intends to bind a response to this
+// request via [SignResponse].
 func Verify(msg []byte, key Key, now time.Time, fudge time.Duration) ([]byte, time.Time, error) {
+	body, _, signed, err := verifyWithPrefix(msg, key, nil, false, now, fudge)
+	return body, signed, err
+}
+
+// VerifyMAC is like [Verify] but also returns the MAC bytes from the
+// request's TSIG, so the caller can sign its response with
+// [SignResponse] (RFC 8945 §5.3.1).
+func VerifyMAC(msg []byte, key Key, now time.Time, fudge time.Duration) ([]byte, []byte, time.Time, error) {
+	return verifyWithPrefix(msg, key, nil, false, now, fudge)
+}
+
+// VerifyResponse confirms a response signature that binds itself to the
+// request MAC (RFC 8945 §5.3.1). requestMAC is the value returned from
+// [VerifyMAC] of the original request on the server side, or remembered
+// by the client after it called [Sign]. Returns the body, the response
+// MAC (use as priorMAC of the first [VerifyAXFRChunk] call when reading
+// a chained AXFR), and the signing time.
+func VerifyResponse(msg []byte, key Key, requestMAC []byte, now time.Time, fudge time.Duration) ([]byte, []byte, time.Time, error) {
+	if len(requestMAC) == 0 {
+		return nil, nil, time.Time{}, fmt.Errorf("tsig: VerifyResponse requires requestMAC")
+	}
+	return verifyWithPrefix(msg, key, requestMAC, false, now, fudge)
+}
+
+// VerifyAXFRChunk verifies a non-first envelope in a chained AXFR
+// (RFC 8945 §5.3.2). Returns the body (TSIG stripped if present), the
+// MAC of this envelope (use as priorMAC for the next chunk), and the
+// time of signing. If the envelope is unsigned (intermediate envelopes
+// MAY be unsigned per §5.3.2), the returned MAC is nil and ErrTSIGMissing
+// is returned along with the unmodified body.
+func VerifyAXFRChunk(msg []byte, key Key, priorMAC []byte, now time.Time, fudge time.Duration) ([]byte, []byte, time.Time, error) {
+	if len(priorMAC) == 0 {
+		return nil, nil, time.Time{}, fmt.Errorf("tsig: VerifyAXFRChunk requires priorMAC")
+	}
+	return verifyWithPrefix(msg, key, priorMAC, true, now, fudge)
+}
+
+// verifyWithPrefix is the common verifier. See [signWithPrefix] for
+// how priorMAC and timersOnly drive the HMAC input shape.
+func verifyWithPrefix(msg []byte, key Key, priorMAC []byte, timersOnly bool, now time.Time, fudge time.Duration) ([]byte, []byte, time.Time, error) {
 	body, tsig, err := stripTSIG(msg)
 	if err != nil {
-		return nil, time.Time{}, err
+		return nil, nil, time.Time{}, err
 	}
 	if !tsig.keyName.Equal(key.Name) {
-		return nil, time.Time{}, fmt.Errorf("tsig: key name mismatch")
+		return nil, nil, time.Time{}, fmt.Errorf("tsig: key name mismatch")
 	}
 	if !tsig.algorithm.Equal(wire.MustParseName(string(key.Algorithm))) {
-		return nil, time.Time{}, fmt.Errorf("tsig: algorithm mismatch")
+		return nil, nil, time.Time{}, fmt.Errorf("tsig: algorithm mismatch")
+	}
+	if floor := minMACSize(key.Algorithm); len(tsig.mac) < floor {
+		return nil, nil, time.Time{}, fmt.Errorf("%w: got %d bytes, need at least %d for %s",
+			ErrBadTruncation, len(tsig.mac), floor, key.Algorithm)
 	}
 	signed := time.Unix(int64(tsig.timeSigned), 0).UTC()
 	if delta := now.Sub(signed); delta > fudge || delta < -fudge {
-		return nil, signed, fmt.Errorf("%w: delta %s outside fudge %s", ErrBadTime, delta, fudge)
+		return nil, nil, signed, fmt.Errorf("%w: delta %s outside fudge %s", ErrBadTime, delta, fudge)
 	}
 
-	// Restore the original ID before recomputing the MAC.
 	bodyForMAC := append([]byte(nil), body...)
 	binary.BigEndian.PutUint16(bodyForMAC[0:2], tsig.origID)
 
-	tsigVars := buildTSIGVars(tsig.keyName, tsig.algorithm, tsig.timeSigned, tsig.fudge, tsig.errCode, tsig.other)
-	mac, err := computeHMAC(key, append(bodyForMAC, tsigVars...))
+	input := buildSigningInput(bodyForMAC, tsig.keyName, tsig.algorithm, priorMAC,
+		tsig.timeSigned, tsig.fudge, tsig.errCode, tsig.other, timersOnly)
+	mac, err := computeHMAC(key, input)
 	if err != nil {
-		return nil, signed, err
+		return nil, nil, signed, err
 	}
 	if !hmac.Equal(mac, tsig.mac) {
-		return nil, signed, ErrBadSignature
+		return nil, nil, signed, ErrBadSignature
 	}
-	return bodyForMAC, signed, nil
+	return bodyForMAC, tsig.mac, signed, nil
+}
+
+// minMACSize returns the per-algorithm minimum MAC length per RFC 8945
+// §5.2.2.1: "The truncated MAC SHALL NOT be less than 10 octets and at
+// least half of the length of the full MAC."
+func minMACSize(alg Algorithm) int {
+	switch alg {
+	case HMACSHA1:
+		return 10 // sha1=20, half=10
+	case HMACSHA256:
+		return 16
+	case HMACSHA384:
+		return 24
+	case HMACSHA512:
+		return 32
+	default:
+		return 10
+	}
 }
 
 // computeHMAC returns the HMAC of payload under key.
