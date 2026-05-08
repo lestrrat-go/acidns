@@ -14,6 +14,27 @@ import (
 // RRset with no matching RRSIG.
 var ErrNoCoveringRRSIG = errors.New("validator: no covering RRSIG")
 
+// ErrBogus is the umbrella sentinel for any [Bogus] outcome — every
+// concrete bogus-reason error wraps it so callers can do a single
+// errors.Is check to branch on "the validator decided this was bogus."
+var ErrBogus = errors.New("validator: bogus")
+
+// ErrNTAOverride is returned when an NTA in the configured store
+// short-circuited validation to [Indeterminate]. Callers that want to
+// surface this via Extended DNS Errors (RFC 8914) can check for this
+// sentinel via errors.Is.
+var ErrNTAOverride = errors.New("validator: covered by negative trust anchor")
+
+// ErrNSECDenialNXDOMAIN is returned by NSEC/NSEC3 denial-of-existence
+// proof helpers when the chain proves the queried name does not
+// exist (NXDOMAIN). The wrapped error supplies the concrete reason
+// (closest-encloser found, NSEC record covering the gap, etc.).
+var ErrNSECDenialNXDOMAIN = errors.New("validator: NSEC proves NXDOMAIN")
+
+// ErrNSECDenialNoData is returned when the chain proves the queried
+// name exists but has no records of the queried type (NoData).
+var ErrNSECDenialNoData = errors.New("validator: NSEC proves NoData")
+
 // Result classifies a validation outcome (RFC 4035 §4.3).
 type Result int
 
@@ -60,34 +81,70 @@ const (
 	BogusReturnAnswer
 )
 
-// Options configures a Validator.
-type Options struct {
-	NTAs        *NTAStore
-	BogusPolicy BogusPolicy
-	Now         func() time.Time
+// ValidatorOption configures a [Validator] at construction. Distinct
+// from [WalkerOption] because the same package hosts both types and
+// the option-set names already collide on the walker side; a single
+// shared interface would either require the walker options to
+// implement an unused applyValidator, or vice versa. The names below
+// mirror the walker option-set with a Validator prefix.
+type ValidatorOption interface{ applyValidator(*validatorConfig) }
+
+type validatorOptionFunc func(*validatorConfig)
+
+func (f validatorOptionFunc) applyValidator(c *validatorConfig) { f(c) }
+
+type validatorConfig struct {
+	ntas        *NTAStore
+	bogusPolicy BogusPolicy
+	now         func() time.Time
+}
+
+// WithValidatorNTAStore installs a Negative Trust Anchor store on
+// the validator. Names covered by the store short-circuit validation
+// to Indeterminate per RFC 7646. A nil store is equivalent to
+// passing no option — a fresh empty store is allocated by [New].
+func WithValidatorNTAStore(s *NTAStore) ValidatorOption {
+	return validatorOptionFunc(func(c *validatorConfig) { c.ntas = s })
+}
+
+// WithValidatorBogusPolicy controls how the validator handles
+// signature failures. Defaults to [BogusReturnSERVFAIL].
+func WithValidatorBogusPolicy(p BogusPolicy) ValidatorOption {
+	return validatorOptionFunc(func(c *validatorConfig) { c.bogusPolicy = p })
+}
+
+// WithValidatorClock injects a clock used for RRSIG
+// inception/expiration checks. Defaults to time.Now. Test-only —
+// production code should leave this unset.
+func WithValidatorClock(now func() time.Time) ValidatorOption {
+	return validatorOptionFunc(func(c *validatorConfig) { c.now = now })
 }
 
 // Validator wraps the dnssec verification primitives with NTA support and
 // a bogus-answer policy.
 type Validator struct {
-	opts Options
+	cfg validatorConfig
 }
 
-// New returns a Validator. A nil NTAStore is replaced with a fresh empty
-// one; Now defaults to time.Now.
-func New(opts Options) *Validator {
-	if opts.NTAs == nil {
-		opts.NTAs = NewNTAStore()
+// New returns a Validator. With no options the validator carries an
+// empty NTA store, [BogusReturnSERVFAIL], and time.Now as its clock.
+func New(opts ...ValidatorOption) *Validator {
+	c := validatorConfig{}
+	for _, o := range opts {
+		o.applyValidator(&c)
 	}
-	if opts.Now == nil {
-		opts.Now = time.Now
+	if c.ntas == nil {
+		c.ntas = NewNTAStore()
 	}
-	return &Validator{opts: opts}
+	if c.now == nil {
+		c.now = time.Now
+	}
+	return &Validator{cfg: c}
 }
 
 // NTAs exposes the validator's NTA store so callers can mutate it at
 // runtime (e.g. add `.de` during an outage without restarting).
-func (v *Validator) NTAs() *NTAStore { return v.opts.NTAs }
+func (v *Validator) NTAs() *NTAStore { return v.cfg.ntas }
 
 // ValidateRRset verifies set against the supplied DNSKEYs using one of the
 // supplied RRSIGs. The owner name of set is consulted against the NTA
@@ -102,13 +159,13 @@ func (v *Validator) ValidateRRset(set []wire.Record, rrsigs []rdata.RRSIG, keys 
 		return Indeterminate, rdata.RRSIG{}, fmt.Errorf("validator: empty RRset")
 	}
 	owner := set[0].Name()
-	if v.opts.NTAs.Covers(owner) {
+	if v.cfg.ntas.Covers(owner) {
 		return Indeterminate, rdata.RRSIG{}, nil
 	}
 	if len(rrsigs) == 0 {
 		return Bogus, rdata.RRSIG{}, ErrNoCoveringRRSIG
 	}
-	now := v.opts.Now()
+	now := v.cfg.now()
 	var lastErr error
 	for _, sig := range rrsigs {
 		if !rrsigValidNow(sig, now) {
@@ -127,7 +184,7 @@ func (v *Validator) ValidateRRset(set []wire.Record, rrsigs []rdata.RRSIG, keys 
 		}
 		lastErr = err
 	}
-	if v.opts.BogusPolicy == BogusReturnAnswer {
+	if v.cfg.bogusPolicy == BogusReturnAnswer {
 		return Bogus, rdata.RRSIG{}, lastErr
 	}
 	return Bogus, rdata.RRSIG{}, fmt.Errorf("validator: %w", lastErr)
@@ -138,7 +195,7 @@ func (v *Validator) ValidateRRset(set []wire.Record, rrsigs []rdata.RRSIG, keys 
 // chain-of-trust walk. The owner name is the DELEGATION POINT (i.e. the
 // child zone's apex) — it is also what the NTA store is consulted with.
 func (v *Validator) VerifyDelegation(owner wire.Name, dsRecords []rdata.DS, keys []rdata.DNSKEY) (Result, error) {
-	if v.opts.NTAs.Covers(owner) {
+	if v.cfg.ntas.Covers(owner) {
 		return Indeterminate, nil
 	}
 	if len(dsRecords) == 0 {

@@ -22,7 +22,7 @@ func (echoHandler) ServeDNS(_ context.Context, w acidns.ResponseWriter, q wire.M
 func TestUDPListenWithOptions(t *testing.T) {
 	t.Parallel()
 	srv, err := acidns.NewUDPServer(netip.MustParseAddrPort("127.0.0.1:0"), echoHandler{},
-		acidns.WithUDPReadBuffer(4096),
+		acidns.WithUDPListenerBufferSize(4096),
 		acidns.WithUDPMaxResponse(1232),
 	)
 	require.NoError(t, err)

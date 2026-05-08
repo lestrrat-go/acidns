@@ -34,6 +34,41 @@ import (
 	"github.com/lestrrat-go/acidns/wire/rrtype"
 )
 
+// ErrEmptyResponse is returned when the server's first response
+// contains no records.
+var ErrEmptyResponse = errors.New("ixfr: empty response")
+
+// ErrMissingLeadingSOA is returned when the first record of the
+// transfer is not the apex SOA.
+var ErrMissingLeadingSOA = errors.New("ixfr: stream must begin with SOA")
+
+// ErrInvalidSOAPair is returned when an incremental sub-diff opens
+// with an SOA pair whose ordering violates RFC 1982 serial
+// arithmetic (the "old" SOA carries a serial newer than its "new"
+// counterpart).
+var ErrInvalidSOAPair = errors.New("ixfr: invalid SOA pair (rec2 serial newer than rec1)")
+
+// ErrTransferState is returned when the iterator is consulted in an
+// unexpected position — for example, calling Next after Close.
+var ErrTransferState = errors.New("ixfr: invalid transfer state")
+
+// ErrUnexpectedRecord is returned when a record arrives after the
+// closing SOA of an incremental transfer (the stream should terminate
+// at the closing SOA per RFC 1995 §4).
+var ErrUnexpectedRecord = errors.New("ixfr: unexpected record after closing SOA")
+
+// ErrMissingClosingSOA is returned when the transfer ends without
+// the trailing apex SOA.
+var ErrMissingClosingSOA = errors.New("ixfr: stream ended without closing SOA")
+
+// ErrMissingSubDiffSOA is returned when a sub-diff fails to open or
+// close with the SOA boundary record RFC 1995 §4 mandates.
+var ErrMissingSubDiffSOA = errors.New("ixfr: expected SOA at sub-diff boundary")
+
+// ErrRCODE wraps a non-NOERROR server response. errors.Is(err, ErrRCODE)
+// matches the generic case; unwrap for the specific RCODE text.
+var ErrRCODE = errors.New("ixfr: server returned error rcode")
+
 // Kind describes the shape of an IXFR response, queryable on the Transfer
 // once Start has read the first message.
 type Kind int
@@ -159,14 +194,14 @@ func (t *transfer) Close() error      { return t.stream.Close() }
 func (t *transfer) init(ctx context.Context, clientSerial uint32) error {
 	rec1, err := t.reader.Read(ctx)
 	if err == io.EOF {
-		return errors.New("ixfr: empty response")
+		return ErrEmptyResponse
 	}
 	if err != nil {
 		return err
 	}
 	soa1, ok := wire.RDataAs[rdata.SOA](rec1)
 	if !ok {
-		return errors.New("ixfr: stream must begin with SOA")
+		return ErrMissingLeadingSOA
 	}
 	t.newSOA = soa1
 
@@ -203,7 +238,7 @@ func (t *transfer) init(ctx context.Context, clientSerial uint32) error {
 		t.reader.Push(rec2)
 		return nil
 	}
-	return errors.New("ixfr: invalid SOA pair (rec2 serial newer than rec1)")
+	return ErrInvalidSOAPair
 }
 
 // Next pulls the next event from the stream. Returns io.EOF when the
@@ -217,7 +252,7 @@ func (t *transfer) Next(ctx context.Context) (Event, error) {
 	case KindIncremental:
 		return t.nextIncremental(ctx)
 	}
-	return nil, errors.New("ixfr: invalid transfer state")
+	return nil, ErrTransferState
 }
 
 func (t *transfer) nextAXFR(ctx context.Context) (Event, error) {
@@ -249,7 +284,7 @@ func (t *transfer) nextIncremental(ctx context.Context) (Event, error) {
 	}
 	soaOldRD, ok := wire.RDataAs[rdata.SOA](soaOld)
 	if !ok {
-		return nil, errors.New("ixfr: expected SOA at sub-diff start")
+		return nil, fmt.Errorf("%w: start", ErrMissingSubDiffSOA)
 	}
 	soaOldSerial := soaOldRD.Serial()
 
@@ -259,7 +294,7 @@ func (t *transfer) nextIncremental(ctx context.Context) (Event, error) {
 			if err != nil {
 				return nil, fmt.Errorf("ixfr: read past closing SOA: %w", err)
 			}
-			return nil, errors.New("ixfr: unexpected record after closing SOA")
+			return nil, ErrUnexpectedRecord
 		}
 		t.incDone = true
 		return nil, io.EOF
@@ -280,7 +315,7 @@ func (t *transfer) nextIncremental(ctx context.Context) (Event, error) {
 	}
 	soaNewRD, ok := wire.RDataAs[rdata.SOA](soaNew)
 	if !ok {
-		return nil, errors.New("ixfr: expected SOA at sub-diff end")
+		return nil, fmt.Errorf("%w: end", ErrMissingSubDiffSOA)
 	}
 	soaNewSerial := soaNewRD.Serial()
 
@@ -288,7 +323,7 @@ func (t *transfer) nextIncremental(ctx context.Context) (Event, error) {
 	for {
 		rec, err := t.reader.Read(ctx)
 		if err == io.EOF {
-			return nil, errors.New("ixfr: stream ended without closing SOA")
+			return nil, ErrMissingClosingSOA
 		}
 		if err != nil {
 			return nil, fmt.Errorf("ixfr: read added: %w", err)
@@ -338,7 +373,7 @@ func (rr *recReader) Read(ctx context.Context) (wire.Record, error) {
 			return nil, err
 		}
 		if rcode := msg.Flags().RCODE(); rcode != wire.RCODENoError {
-			return nil, fmt.Errorf("ixfr: %s", rcode)
+			return nil, fmt.Errorf("%w: %s", ErrRCODE, rcode)
 		}
 		rr.curMsg = msg
 		rr.curIdx = 0

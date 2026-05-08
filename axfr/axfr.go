@@ -42,6 +42,20 @@ type recordEvent struct{ rec wire.Record }
 func (recordEvent) isAXFREvent()          {}
 func (e recordEvent) Record() wire.Record { return e.rec }
 
+// ErrEmptyResponse is returned when the server's first response
+// contains no records.
+var ErrEmptyResponse = errors.New("axfr: empty response")
+
+// ErrMissingLeadingSOA is returned when the first record of the
+// transfer is not the apex SOA — RFC 5936 §2.2 requires it.
+var ErrMissingLeadingSOA = errors.New("axfr: stream must begin with SOA")
+
+// ErrRCODE is returned when the server answered with a non-NOERROR
+// RCODE. The wrapped error carries the specific RCODE value
+// rendered as text; use errors.Is(err, ErrRCODE) to branch on the
+// generic case and unwrap to inspect the value.
+var ErrRCODE = errors.New("axfr: server returned error rcode")
+
 // Start sends an AXFR query for zone over ex and returns a Transfer
 // iterator positioned just past the leading SOA.
 func Start(ctx context.Context, ex acidns.StreamExchanger, zone wire.Name, opts ...Option) (Transfer, error) {
@@ -89,14 +103,14 @@ func (t *transfer) Close() error      { return t.stream.Close() }
 func (t *transfer) init(ctx context.Context) error {
 	rec, err := t.reader.Read(ctx)
 	if err == io.EOF {
-		return errors.New("axfr: empty response")
+		return ErrEmptyResponse
 	}
 	if err != nil {
 		return err
 	}
 	soa, ok := wire.RDataAs[rdata.SOA](rec)
 	if !ok {
-		return errors.New("axfr: stream must begin with SOA")
+		return ErrMissingLeadingSOA
 	}
 	t.newSOA = soa
 	t.reader.Push(rec)
@@ -155,7 +169,7 @@ func (rr *recReader) Read(ctx context.Context) (wire.Record, error) {
 			return nil, err
 		}
 		if rcode := msg.Flags().RCODE(); rcode != wire.RCODENoError {
-			return nil, fmt.Errorf("axfr: %s", rcode)
+			return nil, fmt.Errorf("%w: %s", ErrRCODE, rcode)
 		}
 		rr.curMsg = msg
 		rr.curIdx = 0

@@ -24,6 +24,7 @@ import (
 	"math/big"
 	"time"
 
+	"github.com/lestrrat-go/acidns/dnssec/dnssecbb"
 	"github.com/lestrrat-go/acidns/wire"
 	"github.com/lestrrat-go/acidns/wire/rdata"
 )
@@ -276,30 +277,20 @@ func verifySignature(alg rdata.DNSSECAlgorithm, pubkeyWire, data, sig []byte) er
 	}
 }
 
+// parseRSAPublic delegates to dnssecbb.ParseRSAPublic so SIG(0) RSA
+// keys inherit the same modulus floor (RFC 8624 §3.1) and ceiling
+// the DNSSEC validator already enforces. A separate parser would let
+// a SIG(0) signer ship a sub-1024-bit key whose signatures verify
+// without any cryptographic strength.
+//
+// Wrapping the error tags it with the sig0 package so callers
+// continue to see "sig0: ..." in their logs.
 func parseRSAPublic(b []byte) (*rsa.PublicKey, error) {
-	if len(b) < 1 {
-		return nil, fmt.Errorf("sig0: rsa pubkey too short")
+	pk, err := dnssecbb.ParseRSAPublic(b)
+	if err != nil {
+		return nil, fmt.Errorf("sig0: %w", err)
 	}
-	var explen, off int
-	if b[0] == 0 {
-		if len(b) < 3 {
-			return nil, fmt.Errorf("sig0: rsa pubkey truncated")
-		}
-		explen = int(b[1])<<8 | int(b[2])
-		off = 3
-	} else {
-		explen = int(b[0])
-		off = 1
-	}
-	if len(b) < off+explen {
-		return nil, fmt.Errorf("sig0: rsa truncated exp")
-	}
-	e := new(big.Int).SetBytes(b[off : off+explen])
-	if !e.IsInt64() {
-		return nil, fmt.Errorf("sig0: rsa exponent too large")
-	}
-	mod := new(big.Int).SetBytes(b[off+explen:])
-	return &rsa.PublicKey{N: mod, E: int(e.Int64())}, nil
+	return pk, nil
 }
 
 func verifyECDSA(curve elliptic.Curve, sz int, h func() hash.Hash, data, pub, sig []byte) error {

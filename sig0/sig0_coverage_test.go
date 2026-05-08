@@ -541,16 +541,16 @@ func TestVerifyRSATruncatedExp(t *testing.T) {
 	signed := mustRSASigned(t, rdata.AlgRSASHA256)
 	// explen = 5 but only 1 exp byte present.
 	_, err := sig0.Verify(signed, rdata.AlgRSASHA256, []byte{5, 1}, wire.MustParseName("s"), time.Now())
-	require.ErrorContains(t, err, "rsa truncated exp")
+	require.ErrorContains(t, err, "truncated exponent")
 }
 
 func TestVerifyRSAExponentTooLarge(t *testing.T) {
 	t.Parallel()
 	signed := mustRSASigned(t, rdata.AlgRSASHA256)
-	// 9-byte exponent overflows int64 ⇒ "rsa exponent too large".
+	// 9-byte exponent exceeds the dnssecbb 8-byte exponent cap.
 	pub := []byte{9, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0x01, 0x02}
 	_, err := sig0.Verify(signed, rdata.AlgRSASHA256, pub, wire.MustParseName("s"), time.Now())
-	require.ErrorContains(t, err, "rsa exponent too large")
+	require.ErrorContains(t, err, "exponent length 9 exceeds cap")
 }
 
 func mustRSASigned(t *testing.T, alg rdata.DNSSECAlgorithm) []byte {

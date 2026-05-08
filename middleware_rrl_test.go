@@ -67,7 +67,7 @@ func rrlQuery(t *testing.T, name string) wire.Message {
 func TestRRLAllowsUntilBudgetExhausted(t *testing.T) {
 	t.Parallel()
 	h := acidns.NewRRL(rrlPositiveAnswer(),
-		acidns.WithRRLResponsesPerSecond(0.0001), // refill effectively never
+		acidns.WithRRLQPS(0.0001), // refill effectively never
 		acidns.WithRRLBurst(3),
 		acidns.WithRRLSlipRate(0), // always drop on overage so we can measure
 	)
@@ -89,7 +89,7 @@ func TestRRLAllowsUntilBudgetExhausted(t *testing.T) {
 func TestRRLSlipsBlockedResponseAsTruncation(t *testing.T) {
 	t.Parallel()
 	h := acidns.NewRRL(rrlPositiveAnswer(),
-		acidns.WithRRLResponsesPerSecond(0.0001),
+		acidns.WithRRLQPS(0.0001),
 		acidns.WithRRLBurst(1),
 		acidns.WithRRLSlipRate(2), // every other blocked → TC
 	)
@@ -118,7 +118,7 @@ func TestRRLSlipsBlockedResponseAsTruncation(t *testing.T) {
 func TestRRLSegregatesByResponseName(t *testing.T) {
 	t.Parallel()
 	h := acidns.NewRRL(rrlPositiveAnswer(),
-		acidns.WithRRLResponsesPerSecond(0.0001),
+		acidns.WithRRLQPS(0.0001),
 		acidns.WithRRLBurst(1),
 		acidns.WithRRLSlipRate(0),
 	)
@@ -149,8 +149,8 @@ func TestRRLSegregatesByClass(t *testing.T) {
 		}
 		pos.ServeDNS(ctx, w, q)
 	}),
-		acidns.WithRRLResponsesPerSecond(0.0001),
-		acidns.WithRRLNXDOMAINsPerSecond(0.0001),
+		acidns.WithRRLQPS(0.0001),
+		acidns.WithRRLNXDOMAINQPS(0.0001),
 		acidns.WithRRLBurst(1),
 		acidns.WithRRLSlipRate(0),
 	)
@@ -172,7 +172,7 @@ func TestRRLSegregatesByClass(t *testing.T) {
 func TestRRLAggregatesByPrefix(t *testing.T) {
 	t.Parallel()
 	h := acidns.NewRRL(rrlPositiveAnswer(),
-		acidns.WithRRLResponsesPerSecond(0.0001),
+		acidns.WithRRLQPS(0.0001),
 		acidns.WithRRLBurst(1),
 		acidns.WithRRLSlipRate(0),
 		acidns.WithRRLIPv4Prefix(24),

@@ -11,6 +11,13 @@ import (
 // that this server holds. The default behaviour is to ACK the NOTIFY
 // without further action; a non-nil handler is run after the ACK is
 // queued (the response is sent regardless of whether the handler errs).
+//
+// The handler is invoked on a fresh goroutine — the typical handler
+// schedules an IXFR/AXFR fetch from a primary, which can block on
+// network I/O. Running it on the request goroutine would pin the
+// transport's per-handler concurrency slot for the duration of the
+// fetch and let a single NOTIFY stall unrelated queries on the same
+// listener.
 type NotifyHandler func(zone wire.Question, src acidns.ResponseWriter)
 
 // serveNotify acknowledges a NOTIFY for a zone the server hosts. NOTIFY
@@ -49,6 +56,6 @@ func (a *authoritative) serveNotify(ctx context.Context, w acidns.ResponseWriter
 
 	_ = w.WriteMsg(mustBuild(echoEDNS(b, q).Authoritative(true), q))
 	if handler != nil {
-		handler(zoneQ, w)
+		go handler(zoneQ, w)
 	}
 }

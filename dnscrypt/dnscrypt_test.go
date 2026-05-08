@@ -33,15 +33,15 @@ func makeCert(t *testing.T) testCert {
 	var resolverPK [32]byte
 	copy(resolverPK[:], resolverPKBytes)
 
-	cert := &dnscrypt.Cert{
-		ESVersion:     dnscrypt.ESVersion2,
-		ProtocolMinor: 0,
-		ResolverPK:    resolverPK,
-		ClientMagic:   [8]byte{'a', 'c', 'i', 'd', 'n', 's', 'c', 't'},
-		Serial:        1,
-		ValidFrom:     time.Now().Add(-time.Hour).UTC().Truncate(time.Second),
-		ValidUntil:    time.Now().Add(24 * time.Hour).UTC().Truncate(time.Second),
-	}
+	cert := dnscrypt.NewCert(
+		dnscrypt.ESVersion2,
+		0,
+		resolverPK,
+		[8]byte{'a', 'c', 'i', 'd', 'n', 's', 'c', 't'},
+		1,
+		time.Now().Add(-time.Hour).UTC().Truncate(time.Second),
+		time.Now().Add(24*time.Hour).UTC().Truncate(time.Second),
+	)
 	dnscrypt.SignCert(cert, providerPriv)
 	return testCert{cert: cert, providerPub: providerPub, resolverPK: resolverPK, resolverSK: resolverSK}
 }
@@ -69,8 +69,15 @@ func TestCertVerifyExpired(t *testing.T) {
 func TestCertVerifyTampered(t *testing.T) {
 	t.Parallel()
 	tc := makeCert(t)
-	tc.cert.Serial = 999 // not part of original signed data
-	err := tc.cert.Verify(tc.providerPub, time.Now())
+	// Encode the legitimately-signed cert, mutate the serial bytes
+	// in the wire blob, then re-parse. The result is a Cert with the
+	// original signature but a perturbed signed-data digest — the
+	// shape of an in-flight tampering attack.
+	wb := dnscrypt.EncodeCert(tc.cert)
+	wb[112] ^= 0xff // first byte of Serial (offset 112..115)
+	tampered, err := dnscrypt.ParseCert(wb)
+	require.NoError(t, err)
+	err = tampered.Verify(tc.providerPub, time.Now())
 	require.ErrorIs(t, err, dnscrypt.ErrCertSignatureInvalid)
 }
 
@@ -110,7 +117,8 @@ func TestEncryptDecryptRoundTrip(t *testing.T) {
 // back as a DNSCrypt response, and returns the wire bytes.
 func simulateResolver(t *testing.T, cert *dnscrypt.Cert, resolverSK [32]byte, query []byte) ([]byte, error) {
 	t.Helper()
-	require.Equal(t, cert.ClientMagic[:], query[:8])
+	cm := cert.ClientMagic()
+	require.Equal(t, cm[:], query[:8])
 
 	var clientPK [32]byte
 	copy(clientPK[:], query[8:40])

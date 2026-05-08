@@ -61,17 +61,68 @@ var (
 	ErrPlainTextTooShort    = errors.New("dnscrypt: response too short")
 )
 
-// Cert is a parsed DNSCrypt certificate (124 bytes on the msg).
+// Cert is a parsed DNSCrypt certificate (124 bytes on the wire). The
+// fields are unexported so a verified cert cannot be mutated after
+// it leaves [ParseCert] — a mutation would silently break the
+// signature relationship a downstream Encrypt/Decrypt depends on.
+// Tests and fake responders that need to construct a cert from
+// components use [NewCert]; signing and serialisation use the
+// package-level [SignCert] and [EncodeCert].
 type Cert struct {
-	ESVersion     ESVersion
-	ProtocolMinor uint16
-	Signature     [64]byte
-	ResolverPK    [32]byte // X25519 short-term public key
-	ClientMagic   [8]byte
-	Serial        uint32
-	ValidFrom     time.Time
-	ValidUntil    time.Time
+	esVersion     ESVersion
+	protocolMinor uint16
+	signature     [64]byte
+	resolverPK    [32]byte // X25519 short-term public key
+	clientMagic   [8]byte
+	serial        uint32
+	validFrom     time.Time
+	validUntil    time.Time
 }
+
+// NewCert returns an unsigned Cert populated from the supplied fields.
+// The caller passes the result to [SignCert] (with the provider's
+// long-term private key) before serialising or using it.
+//
+// Production code does NOT call this — verified certs come from
+// [ParseCert] over a wire blob. NewCert is provided for tests, fake
+// responders, and offline tooling.
+func NewCert(esVersion ESVersion, protocolMinor uint16, resolverPK [32]byte, clientMagic [8]byte, serial uint32, validFrom, validUntil time.Time) *Cert {
+	return &Cert{
+		esVersion:     esVersion,
+		protocolMinor: protocolMinor,
+		resolverPK:    resolverPK,
+		clientMagic:   clientMagic,
+		serial:        serial,
+		validFrom:     validFrom.UTC(),
+		validUntil:    validUntil.UTC(),
+	}
+}
+
+// ESVersion returns the ES version number from the cert.
+func (c *Cert) ESVersion() ESVersion { return c.esVersion }
+
+// ProtocolMinor returns the protocol minor field.
+func (c *Cert) ProtocolMinor() uint16 { return c.protocolMinor }
+
+// Signature returns a copy of the 64-byte Ed25519 signature.
+func (c *Cert) Signature() [64]byte { return c.signature }
+
+// ResolverPK returns a copy of the resolver's short-term X25519
+// public key.
+func (c *Cert) ResolverPK() [32]byte { return c.resolverPK }
+
+// ClientMagic returns a copy of the 8-byte client-magic prefix used
+// to tag every query encrypted under this cert.
+func (c *Cert) ClientMagic() [8]byte { return c.clientMagic }
+
+// Serial returns the cert's serial number.
+func (c *Cert) Serial() uint32 { return c.serial }
+
+// ValidFrom returns the start of the cert's validity window (UTC).
+func (c *Cert) ValidFrom() time.Time { return c.validFrom }
+
+// ValidUntil returns the end of the cert's validity window (UTC).
+func (c *Cert) ValidUntil() time.Time { return c.validUntil }
 
 // ParseCert decodes a 124-byte certificate blob.
 func ParseCert(b []byte) (*Cert, error) {
@@ -82,15 +133,15 @@ func ParseCert(b []byte) (*Cert, error) {
 		return nil, ErrCertMagicMismatch
 	}
 	c := &Cert{
-		ESVersion:     ESVersion(binary.BigEndian.Uint16(b[4:6])),
-		ProtocolMinor: binary.BigEndian.Uint16(b[6:8]),
+		esVersion:     ESVersion(binary.BigEndian.Uint16(b[4:6])),
+		protocolMinor: binary.BigEndian.Uint16(b[6:8]),
 	}
-	copy(c.Signature[:], b[8:72])
-	copy(c.ResolverPK[:], b[72:104])
-	copy(c.ClientMagic[:], b[104:112])
-	c.Serial = binary.BigEndian.Uint32(b[112:116])
-	c.ValidFrom = time.Unix(int64(binary.BigEndian.Uint32(b[116:120])), 0).UTC()
-	c.ValidUntil = time.Unix(int64(binary.BigEndian.Uint32(b[120:124])), 0).UTC()
+	copy(c.signature[:], b[8:72])
+	copy(c.resolverPK[:], b[72:104])
+	copy(c.clientMagic[:], b[104:112])
+	c.serial = binary.BigEndian.Uint32(b[112:116])
+	c.validFrom = time.Unix(int64(binary.BigEndian.Uint32(b[116:120])), 0).UTC()
+	c.validUntil = time.Unix(int64(binary.BigEndian.Uint32(b[120:124])), 0).UTC()
 	return c, nil
 }
 
@@ -99,22 +150,22 @@ func ParseCert(b []byte) (*Cert, error) {
 // covers now. Returns nil on success.
 func (c *Cert) Verify(providerPK ed25519.PublicKey, now time.Time) error {
 	signed := make([]byte, 0, 52)
-	signed = append(signed, c.ResolverPK[:]...)
-	signed = append(signed, c.ClientMagic[:]...)
+	signed = append(signed, c.resolverPK[:]...)
+	signed = append(signed, c.clientMagic[:]...)
 	var nums [12]byte
-	binary.BigEndian.PutUint32(nums[0:], c.Serial)
-	binary.BigEndian.PutUint32(nums[4:], uint32(c.ValidFrom.Unix()))
-	binary.BigEndian.PutUint32(nums[8:], uint32(c.ValidUntil.Unix()))
+	binary.BigEndian.PutUint32(nums[0:], c.serial)
+	binary.BigEndian.PutUint32(nums[4:], uint32(c.validFrom.Unix()))
+	binary.BigEndian.PutUint32(nums[8:], uint32(c.validUntil.Unix()))
 	signed = append(signed, nums[:]...)
 
-	if !ed25519.Verify(providerPK, signed, c.Signature[:]) {
+	if !ed25519.Verify(providerPK, signed, c.signature[:]) {
 		return ErrCertSignatureInvalid
 	}
-	if now.Before(c.ValidFrom) || now.After(c.ValidUntil) {
-		return fmt.Errorf("%w: now=%s window=[%s, %s]", ErrCertExpired, now, c.ValidFrom, c.ValidUntil)
+	if now.Before(c.validFrom) || now.After(c.validUntil) {
+		return fmt.Errorf("%w: now=%s window=[%s, %s]", ErrCertExpired, now, c.validFrom, c.validUntil)
 	}
-	if c.ESVersion != ESVersion2 {
-		return fmt.Errorf("%w: ES%d", ErrUnsupportedESVersion, c.ESVersion)
+	if c.esVersion != ESVersion2 {
+		return fmt.Errorf("%w: ES%d", ErrUnsupportedESVersion, c.esVersion)
 	}
 	return nil
 }
@@ -124,30 +175,30 @@ func (c *Cert) Verify(providerPK ed25519.PublicKey, now time.Time) error {
 func EncodeCert(c *Cert) []byte {
 	out := make([]byte, 124)
 	copy(out[0:4], certMagic[:])
-	binary.BigEndian.PutUint16(out[4:], uint16(c.ESVersion))
-	binary.BigEndian.PutUint16(out[6:], c.ProtocolMinor)
-	copy(out[8:72], c.Signature[:])
-	copy(out[72:104], c.ResolverPK[:])
-	copy(out[104:112], c.ClientMagic[:])
-	binary.BigEndian.PutUint32(out[112:], c.Serial)
-	binary.BigEndian.PutUint32(out[116:], uint32(c.ValidFrom.Unix()))
-	binary.BigEndian.PutUint32(out[120:], uint32(c.ValidUntil.Unix()))
+	binary.BigEndian.PutUint16(out[4:], uint16(c.esVersion))
+	binary.BigEndian.PutUint16(out[6:], c.protocolMinor)
+	copy(out[8:72], c.signature[:])
+	copy(out[72:104], c.resolverPK[:])
+	copy(out[104:112], c.clientMagic[:])
+	binary.BigEndian.PutUint32(out[112:], c.serial)
+	binary.BigEndian.PutUint32(out[116:], uint32(c.validFrom.Unix()))
+	binary.BigEndian.PutUint32(out[120:], uint32(c.validUntil.Unix()))
 	return out
 }
 
-// SignCert produces the cert.Signature given the resolver's long-term
+// SignCert produces the cert's signature given the resolver's long-term
 // private key. Used by tests / fake responders to forge a valid cert.
 func SignCert(c *Cert, providerSK ed25519.PrivateKey) {
 	signed := make([]byte, 0, 52)
-	signed = append(signed, c.ResolverPK[:]...)
-	signed = append(signed, c.ClientMagic[:]...)
+	signed = append(signed, c.resolverPK[:]...)
+	signed = append(signed, c.clientMagic[:]...)
 	var nums [12]byte
-	binary.BigEndian.PutUint32(nums[0:], c.Serial)
-	binary.BigEndian.PutUint32(nums[4:], uint32(c.ValidFrom.Unix()))
-	binary.BigEndian.PutUint32(nums[8:], uint32(c.ValidUntil.Unix()))
+	binary.BigEndian.PutUint32(nums[0:], c.serial)
+	binary.BigEndian.PutUint32(nums[4:], uint32(c.validFrom.Unix()))
+	binary.BigEndian.PutUint32(nums[8:], uint32(c.validUntil.Unix()))
 	signed = append(signed, nums[:]...)
 	sig := ed25519.Sign(providerSK, signed)
-	copy(c.Signature[:], sig)
+	copy(c.signature[:], sig)
 }
 
 // Encrypt produces a DNSCrypt-formatted query packet.
@@ -156,10 +207,10 @@ func SignCert(c *Cert, providerSK ed25519.PrivateKey) {
 // XChaCha20-Poly1305 by appending zeros. The caller is responsible for
 // generating a fresh nonce per query.
 func Encrypt(c *Cert, clientPK [32]byte, clientSK [32]byte, nonce [12]byte, query []byte) ([]byte, error) {
-	if c.ESVersion != ESVersion2 {
-		return nil, fmt.Errorf("%w: ES%d", ErrUnsupportedESVersion, c.ESVersion)
+	if c.esVersion != ESVersion2 {
+		return nil, fmt.Errorf("%w: ES%d", ErrUnsupportedESVersion, c.esVersion)
 	}
-	sharedKey, err := sharedKey(c.ResolverPK, clientSK)
+	sharedKey, err := sharedKey(c.resolverPK, clientSK)
 	if err != nil {
 		return nil, err
 	}
@@ -175,7 +226,7 @@ func Encrypt(c *Cert, clientPK [32]byte, clientSK [32]byte, nonce [12]byte, quer
 	ct := aead.Seal(nil, fullNonce[:], padded, nil)
 
 	out := make([]byte, 0, 8+32+12+len(ct))
-	out = append(out, c.ClientMagic[:]...)
+	out = append(out, c.clientMagic[:]...)
 	out = append(out, clientPK[:]...)
 	out = append(out, nonce[:]...)
 	out = append(out, ct...)
@@ -185,8 +236,8 @@ func Encrypt(c *Cert, clientPK [32]byte, clientSK [32]byte, nonce [12]byte, quer
 // Decrypt validates and decrypts a DNSCrypt response packet against the
 // supplied cert and the client nonce that was used for the query.
 func Decrypt(c *Cert, clientSK [32]byte, clientNonce [12]byte, packet []byte) ([]byte, error) {
-	if c.ESVersion != ESVersion2 {
-		return nil, fmt.Errorf("%w: ES%d", ErrUnsupportedESVersion, c.ESVersion)
+	if c.esVersion != ESVersion2 {
+		return nil, fmt.Errorf("%w: ES%d", ErrUnsupportedESVersion, c.esVersion)
 	}
 	if len(packet) < 8+12+12 {
 		return nil, ErrPlainTextTooShort
@@ -201,7 +252,7 @@ func Decrypt(c *Cert, clientSK [32]byte, clientNonce [12]byte, packet []byte) ([
 	copy(fullNonce[:12], packet[8:20])
 	copy(fullNonce[12:], packet[20:32])
 
-	sharedKey, err := sharedKey(c.ResolverPK, clientSK)
+	sharedKey, err := sharedKey(c.resolverPK, clientSK)
 	if err != nil {
 		return nil, err
 	}
@@ -265,8 +316,8 @@ type exchanger struct {
 // New returns a acidns.Exchanger that sends DNSCrypt-encrypted
 // queries to addr using the verified cert.
 func New(addr netip.AddrPort, cert *Cert, opts ...Option) (acidns.Exchanger, error) {
-	if cert.ESVersion != ESVersion2 {
-		return nil, fmt.Errorf("%w: ES%d", ErrUnsupportedESVersion, cert.ESVersion)
+	if cert.esVersion != ESVersion2 {
+		return nil, fmt.Errorf("%w: ES%d", ErrUnsupportedESVersion, cert.esVersion)
 	}
 	c := config{timeout: 5 * time.Second}
 	for _, o := range opts {
@@ -276,7 +327,19 @@ func New(addr netip.AddrPort, cert *Cert, opts ...Option) (acidns.Exchanger, err
 }
 
 // Exchange encrypts q, sends it via UDP, and decrypts the response.
+//
+// The certificate's validity window is re-checked here against the
+// caller-supplied clock so a long-lived Exchanger does not silently
+// continue using a cert past ValidUntil. A failed re-check surfaces
+// [ErrCertExpired]; the caller is expected to fetch a fresh cert and
+// rebuild the Exchanger.
 func (e *exchanger) Exchange(ctx context.Context, q wire.Message) (wire.Message, error) {
+	now := time.Now()
+	if now.Before(e.cert.validFrom) || now.After(e.cert.validUntil) {
+		return nil, fmt.Errorf("%w: now=%s window=[%s, %s]",
+			ErrCertExpired, now, e.cert.validFrom, e.cert.validUntil)
+	}
+
 	msg, err := wire.Marshal(q)
 	if err != nil {
 		return nil, fmt.Errorf("dnscrypt: marshal: %w", err)

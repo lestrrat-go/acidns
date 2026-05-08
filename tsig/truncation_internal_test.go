@@ -17,11 +17,11 @@ import (
 // drive the spec-permitted truncation path of verifyWithPrefix.
 func signWithTruncatedMAC(t *testing.T, msg []byte, key Key, now time.Time, fudge time.Duration, mLen int) []byte {
 	t.Helper()
-	algName := wire.MustParseName(string(key.Algorithm))
+	algName := wire.MustParseName(string(key.algorithm))
 	timeSigned := uint64(now.Unix())
 	fudgeSecs := uint16(fudge.Seconds())
 
-	input := buildSigningInput(msg, key.Name, algName, nil, timeSigned, fudgeSecs, 0, nil, false)
+	input := buildSigningInput(msg, key.name, algName, nil, timeSigned, fudgeSecs, 0, nil, false)
 	mac, err := computeHMAC(key, input)
 	require.NoError(t, err)
 	require.LessOrEqual(t, mLen, len(mac))
@@ -29,7 +29,7 @@ func signWithTruncatedMAC(t *testing.T, msg []byte, key Key, now time.Time, fudg
 	origID := binary.BigEndian.Uint16(msg[0:2])
 	rdata := buildTSIGRData(algName, timeSigned, fudgeSecs, mac[:mLen], origID, 0, nil)
 	out := append([]byte(nil), msg...)
-	out = appendTSIGRR(out, key.Name, rdata)
+	out = appendTSIGRR(out, key.name, rdata)
 	arcount := binary.BigEndian.Uint16(out[10:12])
 	binary.BigEndian.PutUint16(out[10:12], arcount+1)
 	return out
@@ -39,11 +39,7 @@ func TestVerifyAcceptsTruncatedMAC(t *testing.T) {
 	t.Parallel()
 	secret := make([]byte, 32)
 	_, _ = rand.Read(secret)
-	key := Key{
-		Name:      wire.MustParseName("test.key"),
-		Algorithm: HMACSHA256,
-		Secret:    secret,
-	}
+	key := NewKey(wire.MustParseName("test.key"), HMACSHA256, secret)
 	now := time.Now().Truncate(time.Second)
 
 	q, err := wire.NewBuilder().
@@ -66,11 +62,7 @@ func TestVerifyRejectsBelowFloor(t *testing.T) {
 	t.Parallel()
 	secret := make([]byte, 32)
 	_, _ = rand.Read(secret)
-	key := Key{
-		Name:      wire.MustParseName("test.key"),
-		Algorithm: HMACSHA256,
-		Secret:    secret,
-	}
+	key := NewKey(wire.MustParseName("test.key"), HMACSHA256, secret)
 	now := time.Now().Truncate(time.Second)
 
 	q, err := wire.NewBuilder().

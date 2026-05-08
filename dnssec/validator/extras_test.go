@@ -481,10 +481,7 @@ func TestValidatorRRSIGFutureInception(t *testing.T) {
 	}
 	// Inception in the future.
 	sig := signRRSIG(t, priv, set, key, now.Add(time.Hour), now.Add(2*time.Hour))
-	v := validator.New(validator.Options{
-		Now:         func() time.Time { return now },
-		BogusPolicy: validator.BogusReturnAnswer,
-	})
+	v := validator.New(validator.WithValidatorClock(func() time.Time { return now }), validator.WithValidatorBogusPolicy(validator.BogusReturnAnswer))
 	res, _, err := v.ValidateRRset(set, []rdata.RRSIG{sig}, []rdata.DNSKEY{key})
 	require.Equal(t, validator.Bogus, res)
 	require.ErrorContains(t, err, "inception/expiration outside now")
@@ -495,7 +492,7 @@ func TestValidatorRRSIGFutureInception(t *testing.T) {
 func TestValidatorVerifyDelegationNTAStillCovers(t *testing.T) {
 	t.Parallel()
 	store := validator.NewNTAStore(wire.MustParseName("zone.example."))
-	v := validator.New(validator.Options{NTAs: store})
+	v := validator.New(validator.WithValidatorNTAStore(store))
 	// DS that would otherwise validate is irrelevant — NTA wins.
 	_, key := makeECDSAP256Key(t)
 	owner := wire.MustParseName("zone.example.")

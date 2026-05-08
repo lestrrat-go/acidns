@@ -44,9 +44,9 @@ type cookieConfig struct {
 	now func() time.Time
 }
 
-// WithCookieClock injects a custom clock. Test-only — production code
+// WithClock injects a custom clock. Test-only — production code
 // should leave this unset and rely on time.Now.
-func WithCookieClock(now func() time.Time) CookieOption {
+func WithClock(now func() time.Time) CookieOption {
 	return cookieOptionFunc(func(c *cookieConfig) { c.now = now })
 }
 
@@ -58,6 +58,17 @@ func WithCookieClock(now func() time.Time) CookieOption {
 // cookie option are passed through unchanged. To enforce cookies (e.g.
 // only allow EDNS-Cookie clients to perform expensive lookups),
 // compose this with a separate gate in front.
+//
+// # Spoofed BADCOOKIE amplification
+//
+// A BADCOOKIE reply is itself an EDNS-only response; its amplification
+// factor against a query is roughly 1.0–1.5 and considerably below
+// what a normal answer would offer to a spoofed source. If your
+// deployment is exposed to internet-scale spoofed traffic, stack
+// [NewRateLimit] in front of this middleware so the per-source token
+// bucket bounds the BADCOOKIE emission rate before this layer ever
+// runs. Cookies on a localhost-only or LAN-only listener do not
+// benefit from the rate limit and need no extra layer.
 func NewCookies(inner Handler, srv cookies.Server, opts ...CookieOption) Handler {
 	c := cookieConfig{now: time.Now}
 	for _, o := range opts {

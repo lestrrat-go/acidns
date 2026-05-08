@@ -151,7 +151,7 @@ func TestPositiveCacheTTLDecrements(t *testing.T) {
 		},
 	}
 	clk := newFakeClock()
-	h, err := forward.New(forward.WithUpstream(upstream), forward.WithNowFunc(clk.Now))
+	h, err := forward.New(forward.WithUpstream(upstream), forward.WithClock(clk.Now))
 	require.NoError(t, err)
 
 	q := clientQuery(t, "example.com", rrtype.A)
@@ -175,7 +175,7 @@ func TestPositiveCacheExpires(t *testing.T) {
 		},
 	}
 	clk := newFakeClock()
-	h, err := forward.New(forward.WithUpstream(upstream), forward.WithNowFunc(clk.Now))
+	h, err := forward.New(forward.WithUpstream(upstream), forward.WithClock(clk.Now))
 	require.NoError(t, err)
 
 	q := clientQuery(t, "example.com", rrtype.A)
@@ -240,7 +240,7 @@ func TestNegativeCacheCappedByMaxNegTTL(t *testing.T) {
 	h, err := forward.New(
 		forward.WithUpstream(upstream),
 		forward.WithMaxNegativeTTL(time.Second),
-		forward.WithNowFunc(clk.Now),
+		forward.WithClock(clk.Now),
 	)
 	require.NoError(t, err)
 
@@ -619,7 +619,7 @@ func TestMaxTTLCap(t *testing.T) {
 	h, err := forward.New(
 		forward.WithUpstream(up),
 		forward.WithMaxTTL(time.Second),
-		forward.WithNowFunc(clk.Now),
+		forward.WithClock(clk.Now),
 	)
 	require.NoError(t, err)
 
@@ -717,7 +717,7 @@ func TestCacheReplacesExisting(t *testing.T) {
 		},
 	}
 	clk := newFakeClock()
-	h, err := forward.New(forward.WithUpstream(up), forward.WithNowFunc(clk.Now))
+	h, err := forward.New(forward.WithUpstream(up), forward.WithClock(clk.Now))
 	require.NoError(t, err)
 
 	q := clientQuery(t, "example.com", rrtype.A)
@@ -885,7 +885,7 @@ func TestNegativeTTLFromSOATTLLowerThanMinimum(t *testing.T) {
 	h, err := forward.New(
 		forward.WithUpstream(up),
 		forward.WithMaxNegativeTTL(time.Hour), // ensure no other cap interferes
-		forward.WithNowFunc(clk.Now),
+		forward.WithClock(clk.Now),
 	)
 	require.NoError(t, err)
 

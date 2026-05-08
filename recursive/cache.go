@@ -121,6 +121,11 @@ func (c *MemoryCache) shardFor(k string) *memoryCacheShard {
 	return c.shards[h&(numCacheShards-1)]
 }
 
+// Get returns the cached Entry for (name, t), or the zero value when
+// the entry is missing or expired. The returned Entry's slice fields
+// are freshly allocated copies of the cache's storage — caller code
+// may mutate the returned slices without poisoning other readers.
+// Records themselves are concrete value types and may be shared.
 func (c *MemoryCache) Get(name wire.Name, t rrtype.Type) (Entry, bool) {
 	k := key(name, t)
 	sh := c.shardFor(k)
@@ -136,13 +141,17 @@ func (c *MemoryCache) Get(name wire.Name, t rrtype.Type) (Entry, bool) {
 		sh.mu.Unlock()
 		return Entry{}, false
 	}
-	return e, true
+	return cloneEntry(e), true
 }
 
+// Put stores e in the cache. The slice fields of e are copied so a
+// caller continuing to use its source slices after Put cannot
+// retroactively corrupt the cache's view of the entry.
 func (c *MemoryCache) Put(name wire.Name, t rrtype.Type, e Entry) {
 	if c.maxRecordsPerEntr > 0 {
 		e = capEntryRecords(e, c.maxRecordsPerEntr)
 	}
+	stored := cloneEntry(e)
 	k := key(name, t)
 	sh := c.shardFor(k)
 	sh.mu.Lock()
@@ -150,7 +159,30 @@ func (c *MemoryCache) Put(name wire.Name, t rrtype.Type, e Entry) {
 	if _, replacing := sh.entries[k]; !replacing && c.maxSize > 0 && len(sh.entries) >= c.maxSize {
 		c.evictLocked(sh, time.Now())
 	}
-	sh.entries[k] = e
+	sh.entries[k] = stored
+}
+
+// cloneEntry returns a copy of e with each section slice freshly
+// allocated. Records are value types and need no deep copy.
+func cloneEntry(e Entry) Entry {
+	return Entry{
+		Answer:     cloneRecords(e.Answer),
+		Authority:  cloneRecords(e.Authority),
+		Additional: cloneRecords(e.Additional),
+		RCODE:      e.RCODE,
+		AA:         e.AA,
+		AD:         e.AD,
+		ExpiresAt:  e.ExpiresAt,
+	}
+}
+
+func cloneRecords(s []wire.Record) []wire.Record {
+	if len(s) == 0 {
+		return nil
+	}
+	out := make([]wire.Record, len(s))
+	copy(out, s)
+	return out
 }
 
 // capEntryRecords trims an Entry's record slices so the sum across

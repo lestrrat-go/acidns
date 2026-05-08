@@ -30,7 +30,7 @@ func TestNTAStoreAddRemove(t *testing.T) {
 func TestValidatorNTAShortCircuits(t *testing.T) {
 	t.Parallel()
 	s := validator.NewNTAStore(wire.MustParseName("de"))
-	v := validator.New(validator.Options{NTAs: s})
+	v := validator.New(validator.WithValidatorNTAStore(s))
 
 	// Even though we provide nothing else, the NTA causes Indeterminate.
 	res, err := v.VerifyDelegation(wire.MustParseName("denic.de"), nil, nil)
@@ -40,7 +40,7 @@ func TestValidatorNTAShortCircuits(t *testing.T) {
 
 func TestValidatorEmptyChainIsInsecure(t *testing.T) {
 	t.Parallel()
-	v := validator.New(validator.Options{})
+	v := validator.New()
 	res, err := v.VerifyDelegation(wire.MustParseName("example.com"), nil, nil)
 	require.NoError(t, err)
 	require.Equal(t, validator.Insecure, res)

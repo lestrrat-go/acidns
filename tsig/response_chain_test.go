@@ -11,11 +11,7 @@ import (
 
 func TestSignVerifyResponseRoundTrip(t *testing.T) {
 	t.Parallel()
-	key := tsig.Key{
-		Name:      wire.MustParseName("test.key"),
-		Algorithm: tsig.HMACSHA256,
-		Secret:    mkSecret(t, 32),
-	}
+	key := tsig.NewKey(wire.MustParseName("test.key"), tsig.HMACSHA256, mkSecret(t, 32))
 	now := time.Now().Truncate(time.Second)
 
 	// 1. Client signs the request and remembers its MAC.
@@ -40,11 +36,7 @@ func TestSignVerifyResponseRoundTrip(t *testing.T) {
 
 func TestVerifyResponseRejectsWithWrongRequestMAC(t *testing.T) {
 	t.Parallel()
-	key := tsig.Key{
-		Name:      wire.MustParseName("test.key"),
-		Algorithm: tsig.HMACSHA256,
-		Secret:    mkSecret(t, 32),
-	}
+	key := tsig.NewKey(wire.MustParseName("test.key"), tsig.HMACSHA256, mkSecret(t, 32))
 	now := time.Now().Truncate(time.Second)
 
 	// Server signs a response bound to one request.
@@ -71,11 +63,7 @@ func TestVerifyResponseRejectsWithWrongRequestMAC(t *testing.T) {
 
 func TestSignVerifyAXFRChunkChain(t *testing.T) {
 	t.Parallel()
-	key := tsig.Key{
-		Name:      wire.MustParseName("test.key"),
-		Algorithm: tsig.HMACSHA256,
-		Secret:    mkSecret(t, 32),
-	}
+	key := tsig.NewKey(wire.MustParseName("test.key"), tsig.HMACSHA256, mkSecret(t, 32))
 	now := time.Now().Truncate(time.Second)
 
 	// Establish initial MAC via request → first envelope (signed as response).

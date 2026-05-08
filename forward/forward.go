@@ -111,6 +111,18 @@ func (h *Handler) ServeDNS(ctx context.Context, w acidns.ResponseWriter, q wire.
 			slog.Duration("elapsed", time.Since(start)))
 		return
 	}
+	// A caching forwarder that answers RD=0 is an amplification
+	// primitive — any peer can pull cached records without proving
+	// they wanted recursion. Refuse such queries by default; an
+	// operator that intentionally publishes the cache to non-recursive
+	// peers can opt in via WithAllowNoRD.
+	if !q.Flags().RecursionDesired() && !h.cfg.allowNoRD {
+		_ = w.WriteMsg(buildErrorResponse(q, wire.RCODERefused))
+		h.cfg.logger.LogAttrs(ctx, slog.LevelDebug, "forward.serve",
+			slog.String("decision", "rd_required"),
+			slog.Duration("elapsed", time.Since(start)))
+		return
+	}
 
 	qq := q.Questions()[0]
 	now := h.cfg.now()

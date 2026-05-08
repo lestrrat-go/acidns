@@ -54,12 +54,25 @@ func preflightRequest(q wire.Message) (preflightVerdict, wire.Message) {
 // It deliberately omits the offending question because the caller
 // reaches this path precisely when QDCOUNT is wrong — re-emitting an
 // arbitrary subset would be a guess.
+//
+// When the request carried an OPT pseudo-RR, the response echoes a
+// minimal OPT (UDPSize, version, DO bit) so EDNS-aware peers do not
+// mistake the FORMERR for an EDNS-incapable server and downgrade
+// their future requests (RFC 6891 §6.1.1).
 func formErrReply(q wire.Message) wire.Message {
 	flags := q.Flags().
 		WithResponse(true).
 		WithRecursionAvailable(false).
 		WithRCODE(wire.RCODEFormErr)
-	m, err := wire.NewBuilder().ID(q.ID()).Flags(flags).Build()
+	b := wire.NewBuilder().ID(q.ID()).Flags(flags)
+	if e, ok := q.EDNS(); ok && e != nil {
+		b = b.EDNS(wire.NewEDNSBuilder().
+			UDPSize(e.UDPSize()).
+			Version(e.Version()).
+			DO(e.DO()).
+			Build())
+	}
+	m, err := b.Build()
 	if err != nil {
 		return nil
 	}

@@ -24,7 +24,7 @@ func Example_validator_nta() {
 	// Wire the store into a Validator; ValidateRRset short-circuits to
 	// Indeterminate (and skips signature checks) for any name covered by
 	// the store.
-	v := validator.New(validator.Options{NTAs: store})
+	v := validator.New(validator.WithValidatorNTAStore(store))
 	res, err := v.VerifyDelegation(wire.MustParseName("denic.de"), nil, nil)
 	fmt.Println("result:", res, "err:", err == nil)
 

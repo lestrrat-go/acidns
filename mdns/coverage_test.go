@@ -62,7 +62,7 @@ func TestWithAnnouncerClock(t *testing.T) {
 	}
 	a, err := mdns.NewAnnouncer(
 		mdns.WithAnnouncerTransport(tr),
-		mdns.WithAnnouncerClock(clk),
+		mdns.WithClock(clk),
 		mdns.WithProbeTiming(time.Millisecond, 1),
 		mdns.WithAnnounceTiming(time.Millisecond, 1),
 	)
@@ -83,25 +83,28 @@ func TestAnnounceDefaultTTL(t *testing.T) {
 	)
 	require.NoError(t, err)
 
-	p := samplePublication()
-	p.TTL = 0 // exercise default branch
+	// Builder defaults TTL to 120s when unset; the announcer treats
+	// the resulting publication as fully populated and ships records.
+	p, err := mdns.NewPublicationBuilder().
+		Instance(wire.MustParseName("Living Room TV._http._tcp.local.")).
+		Type(wire.MustParseName("_http._tcp.local.")).
+		Host(wire.MustParseName("tv-living-room.local.")).
+		Port(8080).
+		Addr(netip.MustParseAddr("192.0.2.10")).
+		Build()
+	require.NoError(t, err)
 	require.NoError(t, a.Announce(t.Context(), p))
 }
 
-func TestAnnounceIncompletePublication(t *testing.T) {
+func TestPublicationBuilderRejectsIncomplete(t *testing.T) {
 	t.Parallel()
-	tr := newFakeTransport()
-	a, err := mdns.NewAnnouncer(mdns.WithAnnouncerTransport(tr))
-	require.NoError(t, err)
-
-	// Missing Host.
-	p := mdns.Publication{
-		Instance: wire.MustParseName("Foo._http._tcp.local."),
-		Type:     wire.MustParseName("_http._tcp.local."),
-	}
-	err = a.Announce(t.Context(), p)
+	// Missing Host — Build returns an error and never produces a
+	// Publication, so the announcer never sees one.
+	_, err := mdns.NewPublicationBuilder().
+		Instance(wire.MustParseName("Foo._http._tcp.local.")).
+		Type(wire.MustParseName("_http._tcp.local.")).
+		Build()
 	require.ErrorContains(t, err, "incomplete publication")
-	require.Equal(t, 0, tr.sentCount())
 }
 
 func TestAnnounceProbeSendError(t *testing.T) {
@@ -281,8 +284,14 @@ func TestConflictsWithAAAA(t *testing.T) {
 		Build()
 	tr.inbox <- conflict
 
-	p := samplePublication()
-	p.Addrs = []netip.Addr{netip.MustParseAddr("192.0.2.10")} // IPv4 only
+	p, err := mdns.NewPublicationBuilder().
+		Instance(wire.MustParseName("Living Room TV._http._tcp.local.")).
+		Type(wire.MustParseName("_http._tcp.local.")).
+		Host(wire.MustParseName("tv-living-room.local.")).
+		Port(8080).
+		Addr(netip.MustParseAddr("192.0.2.10")). // IPv4 only
+		Build()
+	require.NoError(t, err)
 	err = a.Announce(t.Context(), p)
 	require.ErrorIs(t, err, mdns.ErrConflict)
 }
@@ -319,8 +328,14 @@ func TestConflictsWithAAAANonconflicting(t *testing.T) {
 		Build()
 	tr.inbox <- matching
 
-	p := samplePublication()
-	p.Addrs = []netip.Addr{netip.MustParseAddr("192.0.2.10"), v6}
+	p, err := mdns.NewPublicationBuilder().
+		Instance(wire.MustParseName("Living Room TV._http._tcp.local.")).
+		Type(wire.MustParseName("_http._tcp.local.")).
+		Host(wire.MustParseName("tv-living-room.local.")).
+		Port(8080).
+		Addrs(netip.MustParseAddr("192.0.2.10"), v6).
+		Build()
+	require.NoError(t, err)
 	require.NoError(t, a.Announce(t.Context(), p))
 }
 
@@ -334,8 +349,14 @@ func TestPublicationRecordsIPv6(t *testing.T) {
 	)
 	require.NoError(t, err)
 
-	p := samplePublication()
-	p.Addrs = []netip.Addr{netip.MustParseAddr("2001:db8::42")}
+	p, err := mdns.NewPublicationBuilder().
+		Instance(wire.MustParseName("Living Room TV._http._tcp.local.")).
+		Type(wire.MustParseName("_http._tcp.local.")).
+		Host(wire.MustParseName("tv-living-room.local.")).
+		Port(8080).
+		Addr(netip.MustParseAddr("2001:db8::42")).
+		Build()
+	require.NoError(t, err)
 	require.NoError(t, a.Announce(t.Context(), p))
 
 	tr.mu.Lock()
@@ -361,8 +382,15 @@ func TestPublicationRecordsNoText(t *testing.T) {
 	)
 	require.NoError(t, err)
 
-	p := samplePublication()
-	p.Text = nil // exercise zero-text branch
+	p, err := mdns.NewPublicationBuilder().
+		Instance(wire.MustParseName("Living Room TV._http._tcp.local.")).
+		Type(wire.MustParseName("_http._tcp.local.")).
+		Host(wire.MustParseName("tv-living-room.local.")).
+		Port(8080).
+		Addr(netip.MustParseAddr("192.0.2.10")).
+		// no Text() calls — exercise zero-text branch
+		Build()
+	require.NoError(t, err)
 	require.NoError(t, a.Announce(t.Context(), p))
 
 	tr.mu.Lock()

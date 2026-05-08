@@ -29,6 +29,7 @@ type config struct {
 	queryTimeout time.Duration
 	now          func() time.Time
 	logger       *slog.Logger
+	allowNoRD    bool
 }
 
 // WithUpstream sets the Exchanger used to forward queries. The caller
@@ -121,10 +122,10 @@ func WithQueryTimeout(d time.Duration) Option {
 	return optionFunc(func(c *config) { c.queryTimeout = d })
 }
 
-// WithNowFunc injects the clock used for cache freshness decisions.
+// WithClock injects the clock used for cache freshness decisions.
 // The default is [time.Now]. Tests pass a controllable clock to verify
 // TTL expiry without sleeping in real time.
-func WithNowFunc(now func() time.Time) Option {
+func WithClock(now func() time.Time) Option {
 	return optionFunc(func(c *config) { c.now = now })
 }
 
@@ -137,4 +138,18 @@ func WithNowFunc(now func() time.Time) Option {
 // The default is a no-op handler — passing nil restores the default.
 func WithLogger(l *slog.Logger) Option {
 	return optionFunc(func(c *config) { c.logger = l })
+}
+
+// WithAllowNoRD removes the safe default of refusing inbound queries
+// whose header has the Recursion Desired (RD) bit clear. A
+// caching forwarder that answers RD=0 from cache is an open
+// amplification source: any peer can elicit cached records without
+// proving they wanted recursion, the same risk the recursive
+// resolver closes by default.
+//
+// Set this only when the forwarder is deployed inside a trust
+// boundary where every peer is intentionally allowed to read the
+// cache, and ideally only after gating the listener with an ACL.
+func WithAllowNoRD() Option {
+	return optionFunc(func(c *config) { c.allowNoRD = true })
 }

@@ -44,23 +44,23 @@ type rrlConfig struct {
 	maxKeys         int
 }
 
-// WithRRLResponsesPerSecond sets the steady-state limit on positive
+// WithRRLQPS sets the steady-state limit on positive
 // answers per (source-prefix, response-name) pair. Defaults to 10.
-func WithRRLResponsesPerSecond(qps float64) RRLOption {
+func WithRRLQPS(qps float64) RRLOption {
 	return rrlOptionFunc(func(c *rrlConfig) { c.respPerSecond = qps })
 }
 
-// WithRRLNXDOMAINsPerSecond sets the limit on negative (NXDOMAIN /
+// WithRRLNXDOMAINQPS sets the limit on negative (NXDOMAIN /
 // NoData) answers per (source-prefix, response-name) pair. Defaults
 // to 5 — operationally lower than positive responses because a flood
 // of negative answers points strongly at random-subdomain attacks.
-func WithRRLNXDOMAINsPerSecond(qps float64) RRLOption {
+func WithRRLNXDOMAINQPS(qps float64) RRLOption {
 	return rrlOptionFunc(func(c *rrlConfig) { c.nxdomainsPerS = qps })
 }
 
-// WithRRLErrorsPerSecond sets the limit on SERVFAIL / REFUSED / other
+// WithRRLErrorQPS sets the limit on SERVFAIL / REFUSED / other
 // error responses per source-prefix. Defaults to 5.
-func WithRRLErrorsPerSecond(qps float64) RRLOption {
+func WithRRLErrorQPS(qps float64) RRLOption {
 	return rrlOptionFunc(func(c *rrlConfig) { c.errorsPerSecond = qps })
 }
 

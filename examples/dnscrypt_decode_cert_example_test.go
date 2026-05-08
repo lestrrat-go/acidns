@@ -28,14 +28,15 @@ func Example_dnscrypt_decode_cert() {
 	var resolverPK [32]byte
 	copy(resolverPK[:], resolverPKBytes)
 
-	cert := &dnscrypt.Cert{
-		ESVersion:   dnscrypt.ESVersion2,
-		ResolverPK:  resolverPK,
-		ClientMagic: [8]byte{'a', 'c', 'i', 'd', 'n', 's', 'c', 't'},
-		Serial:      1,
-		ValidFrom:   time.Unix(1_700_000_000, 0).UTC(),
-		ValidUntil:  time.Unix(1_900_000_000, 0).UTC(),
-	}
+	cert := dnscrypt.NewCert(
+		dnscrypt.ESVersion2,
+		0,
+		resolverPK,
+		[8]byte{'a', 'c', 'i', 'd', 'n', 's', 'c', 't'},
+		1,
+		time.Unix(1_700_000_000, 0).UTC(),
+		time.Unix(1_900_000_000, 0).UTC(),
+	)
 	dnscrypt.SignCert(cert, providerPriv)
 
 	// Round-trip through wire form.
@@ -52,10 +53,11 @@ func Example_dnscrypt_decode_cert() {
 		return
 	}
 
+	cm := parsed.ClientMagic()
 	fmt.Println("wire size:", len(wireForm))
-	fmt.Println("es version:", parsed.ESVersion)
-	fmt.Println("client magic:", string(parsed.ClientMagic[:]))
-	fmt.Println("serial:", parsed.Serial)
+	fmt.Println("es version:", parsed.ESVersion())
+	fmt.Println("client magic:", string(cm[:]))
+	fmt.Println("serial:", parsed.Serial())
 	fmt.Println("verified at fixed now: ok")
 
 	// OUTPUT:

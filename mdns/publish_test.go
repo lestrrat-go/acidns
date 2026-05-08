@@ -49,15 +49,19 @@ func (t *fakeTransport) sentCount() int {
 }
 
 func samplePublication() mdns.Publication {
-	return mdns.Publication{
-		Instance: wire.MustParseName("Living Room TV._http._tcp.local."),
-		Type:     wire.MustParseName("_http._tcp.local."),
-		Host:     wire.MustParseName("tv-living-room.local."),
-		Port:     8080,
-		Addrs:    []netip.Addr{netip.MustParseAddr("192.0.2.10")},
-		Text:     map[string]string{"path": "/"},
-		TTL:      120 * time.Second,
+	p, err := mdns.NewPublicationBuilder().
+		Instance(wire.MustParseName("Living Room TV._http._tcp.local.")).
+		Type(wire.MustParseName("_http._tcp.local.")).
+		Host(wire.MustParseName("tv-living-room.local.")).
+		Port(8080).
+		Addr(netip.MustParseAddr("192.0.2.10")).
+		Text("path", "/").
+		TTL(120 * time.Second).
+		Build()
+	if err != nil {
+		panic(err)
 	}
+	return p
 }
 
 func TestAnnounceProbeThenAnnounce(t *testing.T) {

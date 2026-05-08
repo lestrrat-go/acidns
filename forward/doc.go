@@ -18,7 +18,7 @@
 // are clamped to [WithMinTTL, WithMaxTTL] for positive answers and
 // capped at WithMaxNegativeTTL for NXDOMAIN / NoData; the latter
 // follows RFC 2308 §5 by additionally capping at SOA MINIMUM. Cache
-// freshness checks use the clock injected by WithNowFunc (default
+// freshness checks use the clock injected by WithClock (default
 // time.Now).
 //
 // # Lifecycle

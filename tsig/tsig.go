@@ -63,12 +63,33 @@ const (
 	HMACSHA512 Algorithm = "hmac-sha512."
 )
 
-// Key holds the credentials shared with the peer.
+// Key holds the credentials shared with the peer. The fields are
+// unexported so callers cannot mutate the secret bytes after the Key
+// is built — a mutation would silently invalidate every signature
+// produced or verified afterwards. Construct via [NewKey], which
+// snapshots the secret on input. The zero value is unusable; pass a
+// constructed Key by value freely (it carries only a small slice
+// header and two short slices).
 type Key struct {
-	Name      wire.Name
-	Algorithm Algorithm
-	Secret    []byte
+	name      wire.Name
+	algorithm Algorithm
+	secret    []byte
 }
+
+// NewKey returns a Key with the supplied identity material. The
+// secret slice is copied so a later mutation of the caller's slice
+// does not leak into TSIG signing/verification.
+func NewKey(name wire.Name, alg Algorithm, secret []byte) Key {
+	s := make([]byte, len(secret))
+	copy(s, secret)
+	return Key{name: name, algorithm: alg, secret: s}
+}
+
+// Name returns the key name (the DNS name used as the TSIG owner).
+func (k Key) Name() wire.Name { return k.name }
+
+// Algorithm returns the HMAC algorithm associated with the key.
+func (k Key) Algorithm() Algorithm { return k.algorithm }
 
 // ErrTSIGMissing is returned by Verify when the message has no TSIG RR.
 var ErrTSIGMissing = errors.New("tsig: no TSIG record in message")
@@ -157,12 +178,12 @@ func signWithPrefix(msg []byte, key Key, priorMAC []byte, timersOnly bool, now t
 	if len(msg) < 12 {
 		return nil, nil, fmt.Errorf("tsig: msg too short")
 	}
-	algName := wire.MustParseName(string(key.Algorithm))
+	algName := wire.MustParseName(string(key.algorithm))
 
 	timeSigned := uint64(now.Unix())
 	fudgeSecs := uint16(fudge.Seconds())
 
-	input := buildSigningInput(msg, key.Name, algName, priorMAC, timeSigned, fudgeSecs, 0, nil, timersOnly)
+	input := buildSigningInput(msg, key.name, algName, priorMAC, timeSigned, fudgeSecs, 0, nil, timersOnly)
 	mac, err := computeHMAC(key, input)
 	if err != nil {
 		return nil, nil, err
@@ -171,7 +192,7 @@ func signWithPrefix(msg []byte, key Key, priorMAC []byte, timersOnly bool, now t
 	origID := binary.BigEndian.Uint16(msg[0:2])
 	rdata := buildTSIGRData(algName, timeSigned, fudgeSecs, mac, origID, 0, nil)
 	out := append([]byte(nil), msg...)
-	out = appendTSIGRR(out, key.Name, rdata)
+	out = appendTSIGRR(out, key.name, rdata)
 
 	arcount := binary.BigEndian.Uint16(out[10:12])
 	binary.BigEndian.PutUint16(out[10:12], arcount+1)
@@ -252,15 +273,15 @@ func verifyWithPrefix(msg []byte, key Key, priorMAC []byte, timersOnly bool, now
 	if err != nil {
 		return nil, nil, time.Time{}, err
 	}
-	if !tsig.keyName.Equal(key.Name) {
+	if !tsig.keyName.Equal(key.name) {
 		return nil, nil, time.Time{}, fmt.Errorf("tsig: key name mismatch")
 	}
-	if !tsig.algorithm.Equal(wire.MustParseName(string(key.Algorithm))) {
+	if !tsig.algorithm.Equal(wire.MustParseName(string(key.algorithm))) {
 		return nil, nil, time.Time{}, fmt.Errorf("tsig: algorithm mismatch")
 	}
-	if floor := minMACSize(key.Algorithm); len(tsig.mac) < floor {
+	if floor := minMACSize(key.algorithm); len(tsig.mac) < floor {
 		return nil, nil, time.Time{}, fmt.Errorf("%w: got %d bytes, need at least %d for %s",
-			ErrBadTruncation, len(tsig.mac), floor, key.Algorithm)
+			ErrBadTruncation, len(tsig.mac), floor, key.algorithm)
 	}
 	signed := time.Unix(int64(tsig.timeSigned), 0).UTC()
 	if delta := now.Sub(signed); delta > fudge || delta < -fudge {
@@ -282,7 +303,7 @@ func verifyWithPrefix(msg []byte, key Key, priorMAC []byte, timersOnly bool, now
 	// verifies; the prior length check already rejected anything shorter
 	// than the floor.
 	if len(tsig.mac) > len(mac) {
-		return nil, nil, signed, fmt.Errorf("tsig: received MAC longer than %s output", key.Algorithm)
+		return nil, nil, signed, fmt.Errorf("tsig: received MAC longer than %s output", key.algorithm)
 	}
 	if !hmac.Equal(mac[:len(tsig.mac)], tsig.mac) {
 		return nil, nil, signed, ErrBadSignature
@@ -311,17 +332,17 @@ func minMACSize(alg Algorithm) int {
 // computeHMAC returns the HMAC of payload under key.
 func computeHMAC(key Key, payload []byte) ([]byte, error) {
 	var h hash.Hash
-	switch key.Algorithm {
+	switch key.algorithm {
 	case HMACSHA1:
-		h = hmac.New(sha1.New, key.Secret)
+		h = hmac.New(sha1.New, key.secret)
 	case HMACSHA256:
-		h = hmac.New(sha256.New, key.Secret)
+		h = hmac.New(sha256.New, key.secret)
 	case HMACSHA384:
-		h = hmac.New(sha512.New384, key.Secret)
+		h = hmac.New(sha512.New384, key.secret)
 	case HMACSHA512:
-		h = hmac.New(sha512.New, key.Secret)
+		h = hmac.New(sha512.New, key.secret)
 	default:
-		return nil, fmt.Errorf("tsig: unsupported algorithm %q", key.Algorithm)
+		return nil, fmt.Errorf("tsig: unsupported algorithm %q", key.algorithm)
 	}
 	h.Write(payload)
 	return h.Sum(nil), nil

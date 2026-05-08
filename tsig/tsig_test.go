@@ -40,11 +40,7 @@ func TestSignVerifyRoundTrip(t *testing.T) {
 	} {
 		t.Run(string(alg), func(t *testing.T) {
 			t.Parallel()
-			key := tsig.Key{
-				Name:      wire.MustParseName("test.key"),
-				Algorithm: alg,
-				Secret:    mkSecret(t, 32),
-			}
+			key := tsig.NewKey(wire.MustParseName("test.key"), alg, mkSecret(t, 32))
 			msg := mkMessage(t)
 			now := time.Now().Truncate(time.Second)
 
@@ -67,9 +63,7 @@ func TestSignVerifyRoundTrip(t *testing.T) {
 
 func TestVerifyFailsOnTamper(t *testing.T) {
 	t.Parallel()
-	key := tsig.Key{
-		Name: wire.MustParseName("k"), Algorithm: tsig.HMACSHA256, Secret: mkSecret(t, 16),
-	}
+	key := tsig.NewKey(wire.MustParseName("k"), tsig.HMACSHA256, mkSecret(t, 16))
 	msg := mkMessage(t)
 	now := time.Now().Truncate(time.Second)
 	signed, err := tsig.Sign(msg, key, now, 5*time.Minute)
@@ -84,11 +78,8 @@ func TestVerifyFailsOnTamper(t *testing.T) {
 
 func TestVerifyFailsOnWrongSecret(t *testing.T) {
 	t.Parallel()
-	signKey := tsig.Key{
-		Name: wire.MustParseName("k"), Algorithm: tsig.HMACSHA256, Secret: mkSecret(t, 16),
-	}
-	verKey := signKey
-	verKey.Secret = mkSecret(t, 16)
+	signKey := tsig.NewKey(wire.MustParseName("k"), tsig.HMACSHA256, mkSecret(t, 16))
+	verKey := tsig.NewKey(wire.MustParseName("k"), tsig.HMACSHA256, mkSecret(t, 16))
 
 	msg := mkMessage(t)
 	now := time.Now().Truncate(time.Second)
@@ -101,9 +92,7 @@ func TestVerifyFailsOnWrongSecret(t *testing.T) {
 
 func TestVerifyClockSkewExceedsFudge(t *testing.T) {
 	t.Parallel()
-	key := tsig.Key{
-		Name: wire.MustParseName("k"), Algorithm: tsig.HMACSHA256, Secret: mkSecret(t, 16),
-	}
+	key := tsig.NewKey(wire.MustParseName("k"), tsig.HMACSHA256, mkSecret(t, 16))
 	msg := mkMessage(t)
 	signedAt := time.Now().Truncate(time.Second)
 	signed, err := tsig.Sign(msg, key, signedAt, 60*time.Second)
@@ -118,9 +107,7 @@ func TestVerifyClockSkewExceedsFudge(t *testing.T) {
 func TestVerifyMissingTSIG(t *testing.T) {
 	t.Parallel()
 	msg := mkMessage(t)
-	key := tsig.Key{
-		Name: wire.MustParseName("k"), Algorithm: tsig.HMACSHA256, Secret: mkSecret(t, 16),
-	}
+	key := tsig.NewKey(wire.MustParseName("k"), tsig.HMACSHA256, mkSecret(t, 16))
 	_, _, err := tsig.Verify(msg, key, time.Now(), time.Minute)
 	require.ErrorIs(t, err, tsig.ErrTSIGMissing)
 }

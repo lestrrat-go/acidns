@@ -147,11 +147,85 @@ func (a *authoritative) ServeDNS(ctx context.Context, w acidns.ResponseWriter, q
 	_ = w.WriteMsg(resp)
 }
 
-// axfrChunkBudget is the soft cap on per-message body size used by the
-// AXFR streamer. Conservatively below the 65535 framing limit and below
-// most middleboxes' single-frame thresholds; tuned to keep packets small
-// enough that a slow link delivers progress between idle timeouts.
-const axfrChunkBudget = 16 * 1024
+// AXFRChunkBudget is the soft cap on per-message body size used by
+// the AXFR streamer. Conservatively below the 65535 framing limit
+// and below most middleboxes' single-frame thresholds; tuned to keep
+// packets small enough that a slow link delivers progress between
+// idle timeouts. Exported so third-party authoritative
+// implementations using [StreamAXFR] can reason about the same
+// chunking the built-in handler does.
+const AXFRChunkBudget = 16 * 1024
+
+// axfrChunkBudget retains the lower-case spelling for internal use.
+const axfrChunkBudget = AXFRChunkBudget
+
+// StreamAXFR writes an RFC 5936 AXFR response stream for the given
+// zone to w. It is the framing-and-chunking primitive behind the
+// built-in authoritative server's AXFR path, exported so a custom
+// authoritative implementation can serve transfers with the same
+// behaviour.
+//
+// q is the AXFR request whose ID, RD bit, and question are echoed
+// into every emitted message. soa is the apex SOA — emitted as the
+// first and last answer per RFC 5936 §2.2. body is the rest of the
+// zone in the order the receiver should see it; any SOA records in
+// body are ignored (the apex SOA is added at the boundaries by
+// StreamAXFR itself).
+//
+// w must be a TCP-style ResponseWriter whose WriteMsg may be called
+// multiple times — AXFR is multi-message by design. UDP transports
+// will fail on the second WriteMsg; gate accordingly before calling.
+//
+// StreamAXFR does NOT enforce policy — caller-side authentication
+// (TSIG, ACL) and authority-of-origin checks are the responsibility
+// of the surrounding handler.
+func StreamAXFR(w acidns.ResponseWriter, q wire.Message, soa wire.Record, body []wire.Record) error {
+	if len(q.Questions()) == 0 {
+		return fmt.Errorf("authoritative: StreamAXFR: request has no question")
+	}
+	question := q.Questions()[0]
+	header := func() *wire.Builder {
+		return wire.NewBuilder().
+			ID(q.ID()).
+			Response(true).
+			RecursionDesired(q.Flags().RecursionDesired()).
+			Question(question)
+	}
+
+	b := header().Authoritative(true).Answer(soa)
+	soaSize := estimateRecordSize(soa)
+	used := soaSize
+
+	flush := func() error {
+		if err := w.WriteMsg(mustBuild(b, q)); err != nil {
+			return err
+		}
+		b = header().Authoritative(true)
+		used = 0
+		return nil
+	}
+
+	for _, rec := range body {
+		if rec.Type() == rrtype.SOA {
+			continue
+		}
+		recSize := estimateRecordSize(rec)
+		if used > 0 && used+recSize+soaSize > axfrChunkBudget {
+			if err := flush(); err != nil {
+				return err
+			}
+		}
+		b = b.Answer(rec)
+		used += recSize
+	}
+	if used+soaSize > axfrChunkBudget {
+		if err := flush(); err != nil {
+			return err
+		}
+	}
+	b = b.Answer(soa)
+	return w.WriteMsg(mustBuild(b, q))
+}
 
 // serveAXFR implements RFC 5936 AXFR. The zone is streamed across one or
 // more DNS messages on the same TCP connection: the first message starts
@@ -194,41 +268,7 @@ func (a *authoritative) serveAXFR(ctx context.Context, w acidns.ResponseWriter, 
 		return
 	}
 
-	b := header().Authoritative(true).Answer(zone.soaRec)
-	soaSize := estimateRecordSize(zone.soaRec)
-	used := soaSize
-
-	flush := func() bool {
-		if err := w.WriteMsg(mustBuild(b, q)); err != nil {
-			return false
-		}
-		b = header().Authoritative(true)
-		used = 0
-		return true
-	}
-
-	for _, rec := range zone.allRecordsOrdered() {
-		if rec.Type() == rrtype.SOA {
-			continue // skip the apex SOA (added at the boundaries)
-		}
-		recSize := estimateRecordSize(rec)
-		// Reserve room for the trailing SOA so we never have to spill it
-		// into a tiny third message after a record-budget flush.
-		if used > 0 && used+recSize+soaSize > axfrChunkBudget {
-			if !flush() {
-				return
-			}
-		}
-		b = b.Answer(rec)
-		used += recSize
-	}
-	if used+soaSize > axfrChunkBudget {
-		if !flush() {
-			return
-		}
-	}
-	b = b.Answer(zone.soaRec)
-	_ = w.WriteMsg(mustBuild(b, q))
+	_ = StreamAXFR(w, q, zone.soaRec, zone.allRecordsOrdered())
 }
 
 // estimateRecordSize returns an upper-bound on the wire size of rec

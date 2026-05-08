@@ -65,7 +65,7 @@ func WithAnnounceTiming(wait time.Duration, count int) AnnouncerOption {
 	})
 }
 
-// WithAnnouncerClock injects a clock for tests.
-func WithAnnouncerClock(now func() time.Time) AnnouncerOption {
+// WithClock injects a clock for tests.
+func WithClock(now func() time.Time) AnnouncerOption {
 	return announcerOptionFunc(func(c *announcerConfig) { c.now = now })
 }

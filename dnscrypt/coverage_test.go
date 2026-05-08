@@ -53,14 +53,15 @@ func TestCertVerifyUnsupportedESVersion(t *testing.T) {
 	var resolverPK [32]byte
 	copy(resolverPK[:], resolverPKBytes)
 
-	cert := &dnscrypt.Cert{
-		ESVersion:   dnscrypt.ESVersion1, // unsupported
-		ResolverPK:  resolverPK,
-		ClientMagic: [8]byte{'a', 'b', 'c', 'd', 'e', 'f', 'g', 'h'},
-		Serial:      1,
-		ValidFrom:   time.Now().Add(-time.Hour).UTC().Truncate(time.Second),
-		ValidUntil:  time.Now().Add(24 * time.Hour).UTC().Truncate(time.Second),
-	}
+	cert := dnscrypt.NewCert(
+		dnscrypt.ESVersion1, // unsupported
+		0,
+		resolverPK,
+		[8]byte{'a', 'b', 'c', 'd', 'e', 'f', 'g', 'h'},
+		1,
+		time.Now().Add(-time.Hour).UTC().Truncate(time.Second),
+		time.Now().Add(24*time.Hour).UTC().Truncate(time.Second),
+	)
 	dnscrypt.SignCert(cert, providerPriv)
 
 	err = cert.Verify(providerPub, time.Now())
@@ -70,7 +71,7 @@ func TestCertVerifyUnsupportedESVersion(t *testing.T) {
 // TestEncryptUnsupportedESVersion covers the early-return guard in Encrypt.
 func TestEncryptUnsupportedESVersion(t *testing.T) {
 	t.Parallel()
-	cert := &dnscrypt.Cert{ESVersion: dnscrypt.ESVersion1}
+	cert := dnscrypt.NewCert(dnscrypt.ESVersion1, 0, [32]byte{}, [8]byte{}, 0, time.Time{}, time.Time{})
 	_, err := dnscrypt.Encrypt(cert, [32]byte{}, [32]byte{}, [12]byte{}, []byte("x"))
 	require.ErrorIs(t, err, dnscrypt.ErrUnsupportedESVersion)
 }
@@ -83,9 +84,8 @@ func TestDecryptErrors(t *testing.T) {
 
 	t.Run("unsupported ES version", func(t *testing.T) {
 		t.Parallel()
-		bad := *cert
-		bad.ESVersion = dnscrypt.ESVersion1
-		_, err := dnscrypt.Decrypt(&bad, [32]byte{}, [12]byte{}, make([]byte, 64))
+		bad := dnscrypt.NewCert(dnscrypt.ESVersion1, 0, cert.ResolverPK(), cert.ClientMagic(), cert.Serial(), cert.ValidFrom(), cert.ValidUntil())
+		_, err := dnscrypt.Decrypt(bad, [32]byte{}, [12]byte{}, make([]byte, 64))
 		require.ErrorIs(t, err, dnscrypt.ErrUnsupportedESVersion)
 	})
 
@@ -212,7 +212,7 @@ func encryptHelperRaw(sharedKey []byte, clientNonce, serverNonce [12]byte, plain
 // TestNewUnsupportedESVersion exercises New's guard clause.
 func TestNewUnsupportedESVersion(t *testing.T) {
 	t.Parallel()
-	cert := &dnscrypt.Cert{ESVersion: dnscrypt.ESVersion1}
+	cert := dnscrypt.NewCert(dnscrypt.ESVersion1, 0, [32]byte{}, [8]byte{}, 0, time.Time{}, time.Time{})
 	_, err := dnscrypt.New(netip.AddrPortFrom(netip.MustParseAddr("127.0.0.1"), 53), cert)
 	require.ErrorIs(t, err, dnscrypt.ErrUnsupportedESVersion)
 }

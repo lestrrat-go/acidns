@@ -25,27 +25,126 @@ const CacheFlushBit uint16 = 0x8000
 var ErrConflict = errors.New("mdns: probe detected conflict")
 
 // Publication describes the records an Announcer will publish for a
-// service instance. The minimal set is host A/AAAA + an SRV+TXT under the
-// service type, with PTR pointing the type at the instance.
+// service instance. The minimal set is host A/AAAA + an SRV+TXT under
+// the service type, with PTR pointing the type at the instance.
 //
-// Names are rendered in mDNS form (".local." suffix) by the Announcer if
-// they are unqualified.
+// Construct via [NewPublicationBuilder]; the fields are unexported so
+// a Publication cannot be mutated mid-Announce, where a mutation
+// would break the cache-flush invariants the announcer maintains.
 type Publication struct {
-	// Instance: e.g. "Living Room TV._http._tcp.local."
-	Instance wire.Name
-	// Type: e.g. "_http._tcp.local."
-	Type wire.Name
-	// Host: e.g. "tv-living-room.local."
-	Host wire.Name
-	// Port the service listens on.
-	Port uint16
-	// IPv4/IPv6 addresses of Host.
-	Addrs []netip.Addr
-	// TXT key/value pairs.
-	Text map[string]string
-	// TTL applied to all published records (RFC 6762 recommends 120s for
-	// non-host A/AAAA and 4500s for "all other" records). Defaults to 120s.
-	TTL time.Duration
+	instance wire.Name         // e.g. "Living Room TV._http._tcp.local."
+	typ      wire.Name         // e.g. "_http._tcp.local."
+	host     wire.Name         // e.g. "tv-living-room.local."
+	port     uint16            // service port
+	addrs    []netip.Addr      // IPv4/IPv6 addresses of host
+	text     map[string]string // TXT key/value pairs
+	ttl      time.Duration     // record TTL
+}
+
+// PublicationBuilder accumulates the components of a [Publication]
+// and validates them in [PublicationBuilder.Build].
+type PublicationBuilder struct {
+	p   Publication
+	err error
+}
+
+// NewPublicationBuilder returns a fresh builder. Required: Instance,
+// Type, Host. Optional: Port, Addr (one or more), TXT (one or more
+// pairs), TTL (defaults to 120s per RFC 6762).
+func NewPublicationBuilder() *PublicationBuilder { return &PublicationBuilder{} }
+
+// Instance sets the per-instance name (e.g. "Living Room TV._http._tcp.local.").
+func (b *PublicationBuilder) Instance(n wire.Name) *PublicationBuilder {
+	b.p.instance = n
+	return b
+}
+
+// Type sets the service-type name (e.g. "_http._tcp.local.").
+func (b *PublicationBuilder) Type(n wire.Name) *PublicationBuilder {
+	b.p.typ = n
+	return b
+}
+
+// Host sets the host name (e.g. "tv-living-room.local.").
+func (b *PublicationBuilder) Host(n wire.Name) *PublicationBuilder {
+	b.p.host = n
+	return b
+}
+
+// Port sets the port the service listens on.
+func (b *PublicationBuilder) Port(p uint16) *PublicationBuilder {
+	b.p.port = p
+	return b
+}
+
+// Addr appends an IPv4 or IPv6 address for the host.
+func (b *PublicationBuilder) Addr(a netip.Addr) *PublicationBuilder {
+	b.p.addrs = append(b.p.addrs, a)
+	return b
+}
+
+// Addrs appends multiple addresses in one call.
+func (b *PublicationBuilder) Addrs(a ...netip.Addr) *PublicationBuilder {
+	b.p.addrs = append(b.p.addrs, a...)
+	return b
+}
+
+// Text appends a single TXT key/value pair.
+func (b *PublicationBuilder) Text(key, value string) *PublicationBuilder {
+	if b.p.text == nil {
+		b.p.text = make(map[string]string)
+	}
+	b.p.text[key] = value
+	return b
+}
+
+// TextMap merges every entry of m into the publication's TXT pairs.
+func (b *PublicationBuilder) TextMap(m map[string]string) *PublicationBuilder {
+	if len(m) == 0 {
+		return b
+	}
+	if b.p.text == nil {
+		b.p.text = make(map[string]string, len(m))
+	}
+	for k, v := range m {
+		b.p.text[k] = v
+	}
+	return b
+}
+
+// TTL sets the TTL applied to every published record. Defaults to
+// 120 seconds when unset.
+func (b *PublicationBuilder) TTL(d time.Duration) *PublicationBuilder {
+	b.p.ttl = d
+	return b
+}
+
+// Build validates the accumulated fields and returns the immutable
+// [Publication]. Returns an error when Instance, Type, or Host is
+// missing. Slices and maps are copied so a later mutation of the
+// caller's source does not leak into the published record.
+func (b *PublicationBuilder) Build() (Publication, error) {
+	if b.err != nil {
+		return Publication{}, b.err
+	}
+	if !b.p.instance.IsValid() || !b.p.typ.IsValid() || !b.p.host.IsValid() {
+		return Publication{}, fmt.Errorf("mdns: incomplete publication (Instance/Type/Host required)")
+	}
+	out := b.p
+	if out.ttl == 0 {
+		out.ttl = 120 * time.Second
+	}
+	if len(out.addrs) > 0 {
+		out.addrs = append([]netip.Addr(nil), out.addrs...)
+	}
+	if len(out.text) > 0 {
+		cp := make(map[string]string, len(out.text))
+		for k, v := range out.text {
+			cp[k] = v
+		}
+		out.text = cp
+	}
+	return out, nil
 }
 
 // Transport is the network the Announcer sends and receives on. The
@@ -93,10 +192,10 @@ type announcer struct {
 }
 
 func (a *announcer) Announce(ctx context.Context, p Publication) error {
-	if p.TTL == 0 {
-		p.TTL = 120 * time.Second
+	if p.ttl == 0 {
+		p.ttl = 120 * time.Second
 	}
-	if !p.Instance.IsValid() || !p.Type.IsValid() || !p.Host.IsValid() {
+	if !p.instance.IsValid() || !p.typ.IsValid() || !p.host.IsValid() {
 		return fmt.Errorf("mdns: incomplete publication (Instance/Type/Host required)")
 	}
 
@@ -193,36 +292,36 @@ func conflictsWith(records []wire.Record, p Publication) bool {
 	for _, r := range records {
 		switch r.Type() {
 		case rrtype.SRV:
-			if !r.Name().Equal(p.Instance) {
+			if !r.Name().Equal(p.instance) {
 				continue
 			}
 			s, ok := wire.RDataAs[rdata.SRV](r)
 			if !ok {
 				continue
 			}
-			if !s.Target().Equal(p.Host) || s.Port() != p.Port {
+			if !s.Target().Equal(p.host) || s.Port() != p.port {
 				return true
 			}
 		case rrtype.A:
-			if !r.Name().Equal(p.Host) {
+			if !r.Name().Equal(p.host) {
 				continue
 			}
 			a, ok := wire.RDataAs[rdata.A](r)
 			if !ok {
 				continue
 			}
-			if !addrsContain(p.Addrs, a.Addr()) {
+			if !addrsContain(p.addrs, a.Addr()) {
 				return true
 			}
 		case rrtype.AAAA:
-			if !r.Name().Equal(p.Host) {
+			if !r.Name().Equal(p.host) {
 				continue
 			}
 			aaaa, ok := wire.RDataAs[rdata.AAAA](r)
 			if !ok {
 				continue
 			}
-			if !addrsContain(p.Addrs, aaaa.Addr()) {
+			if !addrsContain(p.addrs, aaaa.Addr()) {
 				return true
 			}
 		}
@@ -240,8 +339,8 @@ func addrsContain(haystack []netip.Addr, needle netip.Addr) bool {
 func buildProbe(p Publication) (wire.Message, error) {
 	b := wire.NewBuilder().
 		ID(0).
-		Question(wire.NewQuestionClass(p.Instance, rrtype.ANY, rrtype.ClassIN)).
-		Question(wire.NewQuestionClass(p.Host, rrtype.ANY, rrtype.ClassIN))
+		Question(wire.NewQuestionClass(p.instance, rrtype.ANY, rrtype.ClassIN)).
+		Question(wire.NewQuestionClass(p.host, rrtype.ANY, rrtype.ClassIN))
 	for _, r := range publicationRecords(p, false /*flushBit*/) {
 		b = b.Authority(r)
 	}
@@ -264,7 +363,7 @@ func buildAnnouncement(p Publication) (wire.Message, error) {
 // buildGoodbye is an announcement variant with TTL=0 (§10.1).
 func buildGoodbye(p Publication) (wire.Message, error) {
 	zero := p
-	zero.TTL = 0
+	zero.ttl = 0
 	return buildAnnouncement(zero)
 }
 
@@ -278,30 +377,30 @@ func publicationRecords(p Publication, flushBit bool) []wire.Record {
 	}
 	var out []wire.Record
 	// SRV at instance.
-	out = append(out, wire.NewRecordClass(p.Instance, cls, p.TTL,
-		rdata.NewSRV(0, 0, p.Port, p.Host)))
+	out = append(out, wire.NewRecordClass(p.instance, cls, p.ttl,
+		rdata.NewSRV(0, 0, p.port, p.host)))
 	// TXT at instance (single TXT with all key=value strings).
-	if len(p.Text) > 0 {
-		strs := make([]string, 0, len(p.Text))
-		for k, v := range p.Text {
+	if len(p.text) > 0 {
+		strs := make([]string, 0, len(p.text))
+		for k, v := range p.text {
 			strs = append(strs, k+"="+v)
 		}
 		txt, err := rdata.NewTXT(strs...)
 		if err == nil {
-			out = append(out, wire.NewRecordClass(p.Instance, cls, p.TTL, txt))
+			out = append(out, wire.NewRecordClass(p.instance, cls, p.ttl, txt))
 		}
 	}
 	// PTR at type → instance (cache-flush bit NOT set on PTR; PTR is a
 	// shared-set record per RFC 6762 §10.2).
-	out = append(out, wire.NewRecord(p.Type, p.TTL,
-		rdata.NewPTR(p.Instance)))
+	out = append(out, wire.NewRecord(p.typ, p.ttl,
+		rdata.NewPTR(p.instance)))
 	// A/AAAA at host.
-	for _, a := range p.Addrs {
+	for _, a := range p.addrs {
 		if a.Is4() {
-			out = append(out, wire.NewRecordClass(p.Host, cls, p.TTL, rdata.NewA(a)))
+			out = append(out, wire.NewRecordClass(p.host, cls, p.ttl, rdata.NewA(a)))
 		}
 		if a.Is6() {
-			out = append(out, wire.NewRecordClass(p.Host, cls, p.TTL, rdata.NewAAAA(a)))
+			out = append(out, wire.NewRecordClass(p.host, cls, p.ttl, rdata.NewAAAA(a)))
 		}
 	}
 	return out
