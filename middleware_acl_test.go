@@ -49,7 +49,11 @@ func aclMkQuery(t *testing.T) wire.Message {
 
 func TestAllowList(t *testing.T) {
 	t.Parallel()
-	h, err := acidns.NewACL(aclMkInner(), acidns.WithACLAllow(netip.MustParsePrefix("127.0.0.0/8")))
+	// Opt out of the default drop-on-deny so we can assert REFUSED.
+	h, err := acidns.NewACL(aclMkInner(),
+		acidns.WithACLAllow(netip.MustParsePrefix("127.0.0.0/8")),
+		acidns.WithACLDropDenied(false),
+	)
 	require.NoError(t, err)
 
 	w1 := &fakeWriter{src: netip.MustParseAddrPort("127.0.0.1:12345")}
@@ -63,7 +67,10 @@ func TestAllowList(t *testing.T) {
 
 func TestDenyList(t *testing.T) {
 	t.Parallel()
-	h, err := acidns.NewACL(aclMkInner(), acidns.WithACLDeny(netip.MustParsePrefix("192.168.0.0/16")))
+	h, err := acidns.NewACL(aclMkInner(),
+		acidns.WithACLDeny(netip.MustParsePrefix("192.168.0.0/16")),
+		acidns.WithACLDropDenied(false),
+	)
 	require.NoError(t, err)
 
 	w1 := &fakeWriter{src: netip.MustParseAddrPort("192.168.1.5:1000")}
@@ -80,6 +87,7 @@ func TestDenyBeatsAllow(t *testing.T) {
 	h, err := acidns.NewACL(aclMkInner(),
 		acidns.WithACLAllow(netip.MustParsePrefix("10.0.0.0/8")),
 		acidns.WithACLDeny(netip.MustParsePrefix("10.1.0.0/16")),
+		acidns.WithACLDropDenied(false),
 	)
 	require.NoError(t, err)
 
@@ -90,6 +98,19 @@ func TestDenyBeatsAllow(t *testing.T) {
 	w2 := &fakeWriter{src: netip.MustParseAddrPort("10.2.0.1:1")}
 	h.ServeDNS(context.Background(), w2, aclMkQuery(t))
 	require.Equal(t, wire.RCODENoError, w2.captured.Flags().RCODE())
+}
+
+// TestDefaultDropsDenied verifies that a denied request is silently
+// dropped — no response written — when no WithACLDropDenied option is
+// supplied. Drop-on-deny is the safe default for public UDP listeners.
+func TestDefaultDropsDenied(t *testing.T) {
+	t.Parallel()
+	h, err := acidns.NewACL(aclMkInner(), acidns.WithACLAllow(netip.MustParsePrefix("127.0.0.0/8")))
+	require.NoError(t, err)
+
+	w := &fakeWriter{src: netip.MustParseAddrPort("8.8.8.8:53")}
+	h.ServeDNS(context.Background(), w, aclMkQuery(t))
+	require.Zero(t, w.captured, "denied request must be silently dropped under default")
 }
 
 func TestNoRulesIsAnError(t *testing.T) {

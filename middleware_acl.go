@@ -57,19 +57,20 @@ func WithACLDeny(prefixes ...netip.Prefix) ACLOption {
 	return aclOptionFunc(func(c *aclConfig) { c.deny = append(c.deny, prefixes...) })
 }
 
-// WithACLDropDenied silently drops denied requests instead of replying
-// with REFUSED. The default REFUSED reply is itself an EDNS-shaped
-// echo of the question, giving an off-path attacker a small (~1.4×)
-// amplification primitive against any spoofed source IP. On a public
-// UDP listener — where the source address is unverifiable until
-// cookies or path validation kicks in — drop-mode keeps the
-// listener's amplification factor below 1×.
+// WithACLDropDenied controls whether denied requests are silently
+// dropped (true) or answered with REFUSED (false). A REFUSED reply is
+// an EDNS-shaped echo of the question and gives an off-path attacker
+// a small (~1.4×) amplification primitive against any spoofed source
+// IP. On a public UDP listener — where the source address is
+// unverifiable until cookies or path validation kicks in — drop-mode
+// keeps the listener's amplification factor below 1×.
 //
-// Default: off (RFC 1035 expects servers to reply with REFUSED so an
-// in-band-discoverable misconfiguration surfaces). Enable on
-// internet-exposed UDP listeners; leave off behind a path-validated
-// gate (TCP, DoT, DoH, DoQ) where REFUSED's signal value outweighs
-// the amplification cost.
+// Default: true (drop). The default targets the riskier deployment
+// (internet-exposed UDP) so that the safe behaviour is the one a
+// caller gets without thinking. Pass WithACLDropDenied(false) behind
+// a path-validated gate (TCP, DoT, DoH, DoQ) where REFUSED's signal
+// value to a legitimate misconfigured client outweighs the
+// amplification cost.
 func WithACLDropDenied(drop bool) ACLOption {
 	return aclOptionFunc(func(c *aclConfig) { c.dropDenied = drop })
 }
@@ -85,7 +86,7 @@ type acl struct {
 // delegating to inner. At least one of [WithACLAllow] or
 // [WithACLDeny] is required; otherwise [ErrACLNoRules] is returned.
 func NewACL(inner Handler, opts ...ACLOption) (Handler, error) {
-	c := &aclConfig{}
+	c := &aclConfig{dropDenied: true}
 	for _, o := range opts {
 		o.applyACL(c)
 	}

@@ -16,7 +16,8 @@ import (
 
 func Example_dnsserver_acl() {
 	// acidns.NewACL wraps any Handler so source-IP allow/deny rules apply before
-	// the inner handler runs. Denied queries get REFUSED.
+	// the inner handler runs. Denied queries are silently dropped by default
+	// (the safe behaviour for public UDP listeners — see WithACLDropDenied).
 	z, _ := zonefile.Parse(strings.NewReader(`$ORIGIN example.com.
 $TTL 60
 @   IN  SOA  ns. hm. ( 1 2 3 4 5 )
