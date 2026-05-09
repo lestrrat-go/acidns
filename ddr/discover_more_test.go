@@ -52,13 +52,13 @@ func TestDiscover_SkipsNonSVCB(t *testing.T) {
 	t.Parallel()
 
 	// Non-SVCB record: an A record snuck into the answer section.
-	aRec := wire.NewRecord(ddr.ResolverDomain, 60*time.Second,
+	aRec := wire.NewRecord(ddr.ResolverDomain(), 60*time.Second,
 		rdata.MustNewA(netip.MustParseAddr("192.0.2.42")))
 
 	// A SVCB rrtype slot whose RData is NOT an rdata.SVCB — exercise the
 	// "type assertion failed" guard inside Discover.
 	mismatched := fakeRecord{
-		name:  ddr.ResolverDomain,
+		name:  ddr.ResolverDomain(),
 		typ:   rrtype.SVCB,
 		class: rrtype.ClassIN,
 		ttl:   60 * time.Second,
@@ -67,14 +67,14 @@ func TestDiscover_SkipsNonSVCB(t *testing.T) {
 
 	// AliasMode SVCB (priority 0) — must be filtered.
 	alias := rdata.MustNewSVCB(0, wire.MustParseName("alias.example.net"))
-	aliasRec := wire.NewRecord(ddr.ResolverDomain, 60*time.Second, alias)
+	aliasRec := wire.NewRecord(ddr.ResolverDomain(), 60*time.Second, alias)
 
 	// One legitimate ServiceMode SVCB so the result list is non-empty.
 	alpnDoT, err := rdata.NewSvcParamALPN("dot")
 	require.NoError(t, err)
 	good := rdata.MustNewSVCB(5, wire.MustParseName("dot.example.net"), alpnDoT,
 		rdata.NewSvcParamPort(853))
-	goodRec := wire.NewRecord(ddr.ResolverDomain, 60*time.Second, good)
+	goodRec := wire.NewRecord(ddr.ResolverDomain(), 60*time.Second, good)
 
 	r := &fakeResolver{answer: newFakeAnswer(nil, []wire.Record{
 		aRec, mismatched, aliasRec, goodRec,
@@ -97,9 +97,9 @@ func TestDiscover_SortsByPriority(t *testing.T) {
 	mid := rdata.MustNewSVCB(5, wire.MustParseName("mid.example.net"), alpnDoT)
 
 	records := []wire.Record{
-		wire.NewRecord(ddr.ResolverDomain, 60*time.Second, hi),
-		wire.NewRecord(ddr.ResolverDomain, 60*time.Second, lo),
-		wire.NewRecord(ddr.ResolverDomain, 60*time.Second, mid),
+		wire.NewRecord(ddr.ResolverDomain(), 60*time.Second, hi),
+		wire.NewRecord(ddr.ResolverDomain(), 60*time.Second, lo),
+		wire.NewRecord(ddr.ResolverDomain(), 60*time.Second, mid),
 	}
 	r := &fakeResolver{answer: newFakeAnswer(nil, records)}
 	endpoints, err := ddr.Discover(t.Context(), r)
@@ -138,11 +138,11 @@ func TestDiscover_InferProtocolVariants(t *testing.T) {
 	mixedSVCB := rdata.MustNewSVCB(5, wire.MustParseName("mixed.example.net"), alpnMixed)
 
 	records := []wire.Record{
-		wire.NewRecord(ddr.ResolverDomain, 60*time.Second, h3SVCB),
-		wire.NewRecord(ddr.ResolverDomain, 60*time.Second, h1SVCB),
-		wire.NewRecord(ddr.ResolverDomain, 60*time.Second, doqSVCB),
-		wire.NewRecord(ddr.ResolverDomain, 60*time.Second, bareSVCB),
-		wire.NewRecord(ddr.ResolverDomain, 60*time.Second, mixedSVCB),
+		wire.NewRecord(ddr.ResolverDomain(), 60*time.Second, h3SVCB),
+		wire.NewRecord(ddr.ResolverDomain(), 60*time.Second, h1SVCB),
+		wire.NewRecord(ddr.ResolverDomain(), 60*time.Second, doqSVCB),
+		wire.NewRecord(ddr.ResolverDomain(), 60*time.Second, bareSVCB),
+		wire.NewRecord(ddr.ResolverDomain(), 60*time.Second, mixedSVCB),
 	}
 	r := &fakeResolver{answer: newFakeAnswer(nil, records)}
 	endpoints, err := ddr.Discover(t.Context(), r)
@@ -172,7 +172,7 @@ func TestDiscover_IPv6Hints(t *testing.T) {
 		rdata.NewSvcParamPort(853),
 		v6hint,
 	)
-	rec := wire.NewRecord(ddr.ResolverDomain, 60*time.Second, s)
+	rec := wire.NewRecord(ddr.ResolverDomain(), 60*time.Second, s)
 	r := &fakeResolver{answer: newFakeAnswer(nil, []wire.Record{rec})}
 	endpoints, err := ddr.Discover(t.Context(), r)
 	require.NoError(t, err)

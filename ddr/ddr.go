@@ -23,9 +23,15 @@ import (
 	"github.com/lestrrat-go/acidns/wire/rrtype"
 )
 
-// ResolverDomain is the special name clients query to discover designated
-// resolvers (RFC 9462 §4).
-var ResolverDomain = wire.MustParseName("_dns.resolver.arpa")
+// resolverDomainName is the special name clients query to discover
+// designated resolvers (RFC 9462 §4). Computed once at package init.
+var resolverDomainName = wire.MustParseName("_dns.resolver.arpa")
+
+// ResolverDomain returns the DDR discovery name as a fresh
+// [wire.Name] value. The previous shape exposed a package-level var
+// that any caller could reassign; the function form is non-mutable
+// by construction.
+func ResolverDomain() wire.Name { return resolverDomainName }
 
 // Protocol identifies the encrypted transport an endpoint advertises.
 type Protocol uint8
@@ -126,7 +132,7 @@ func (b *EndpointBuilder) Build() (Endpoint, error) {
 // by priority (lowest first; priority 0 has special meaning per RFC 9460 and
 // is filtered out — those are AliasMode SVCB entries).
 func Discover(ctx context.Context, r acidns.Resolver) ([]Endpoint, error) {
-	ans, err := r.Resolve(ctx, ResolverDomain, rrtype.SVCB)
+	ans, err := r.Resolve(ctx, resolverDomainName, rrtype.SVCB)
 	if err != nil {
 		return nil, err
 	}

@@ -31,8 +31,16 @@ const (
 	GroupV6 = "ff02::fb"
 )
 
-// LocalDomain is the special-use suffix that mDNS responders own.
-var LocalDomain = wire.MustParseName("local")
+// localDomainName is the special-use suffix that mDNS responders own.
+// Computed once at package init so callers cannot reassign the global
+// and subtly redirect every subsequent lookup.
+var localDomainName = wire.MustParseName("local")
+
+// LocalDomain returns the mDNS-owned ".local" suffix as a fresh
+// [wire.Name] value. The previous shape exposed a package-level var
+// that any caller could reassign; the function form is non-mutable
+// by construction.
+func LocalDomain() wire.Name { return localDomainName }
 
 // ErrNoResponse is returned when Browse or Resolve produces no answers
 // within the configured deadline.

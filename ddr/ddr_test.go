@@ -48,8 +48,8 @@ func TestDiscover(t *testing.T) {
 		rdata.NewSvcParamPort(853),
 	)
 
-	rec1 := wire.NewRecord(ddr.ResolverDomain, 60*time.Second, dohSVCB)
-	rec2 := wire.NewRecord(ddr.ResolverDomain, 60*time.Second, dotSVCB)
+	rec1 := wire.NewRecord(ddr.ResolverDomain(), 60*time.Second, dohSVCB)
+	rec2 := wire.NewRecord(ddr.ResolverDomain(), 60*time.Second, dotSVCB)
 
 	r := &fakeResolver{answer: newFakeAnswer(nil, []wire.Record{rec1, rec2})}
 	endpoints, err := ddr.Discover(context.Background(), r)

@@ -36,7 +36,7 @@ func Example_ddr_discover() {
 		return
 	}
 	r := &fakeResolver{records: []wire.Record{
-		wire.NewRecord(ddr.ResolverDomain, 60*time.Second, svcb),
+		wire.NewRecord(ddr.ResolverDomain(), 60*time.Second, svcb),
 	}}
 
 	endpoints, err := ddr.Discover(context.Background(), r)
