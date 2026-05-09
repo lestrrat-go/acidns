@@ -6,14 +6,18 @@ import (
 	"github.com/lestrrat-go/acidns"
 	"github.com/lestrrat-go/acidns/wire"
 	"github.com/lestrrat-go/acidns/zonefile"
+	"github.com/lestrrat-go/option/v3"
 )
 
 // Option configures an Authoritative at construction.
-type Option interface{ applyAuth(*config) }
+type Option interface {
+	option.Interface
+	authOption()
+}
 
-type optionFunc func(*config)
+type authOption struct{ option.Interface }
 
-func (f optionFunc) applyAuth(c *config) { f(c) }
+func (authOption) authOption() {}
 
 type config struct {
 	zones             []zonefile.Zone
@@ -24,6 +28,14 @@ type config struct {
 	updatePolicy      UpdatePolicy
 	minimalANY        bool
 }
+
+type identZone struct{}
+type identNotifyHandler struct{}
+type identUpdatePolicy struct{}
+type identAXFRPolicy struct{}
+type identNotifyPolicy struct{}
+type identMinimalANY struct{}
+type identMaxNotifyInflight struct{}
 
 // UpdatePolicy decides whether an inbound RFC 2136 UPDATE may proceed.
 // It is invoked after the request has been parsed but before any zone
@@ -73,14 +85,14 @@ type NotifyPolicy func(ctx context.Context, w acidns.ResponseWriter, q wire.Mess
 
 // WithZone adds z to the server's zones.
 func WithZone(z zonefile.Zone) Option {
-	return optionFunc(func(c *config) { c.zones = append(c.zones, z) })
+	return authOption{option.New(identZone{}, z)}
 }
 
 // WithNotifyHandler installs a callback that fires when an inbound
 // NOTIFY arrives. Use this on a secondary to schedule an IXFR/AXFR
 // fetch from the primary that sent the NOTIFY.
 func WithNotifyHandler(h NotifyHandler) Option {
-	return optionFunc(func(c *config) { c.notifyHandler = h })
+	return authOption{option.New(identNotifyHandler{}, h)}
 }
 
 // WithUpdatePolicy installs the gate that admits inbound UPDATE
@@ -92,7 +104,7 @@ func WithNotifyHandler(h NotifyHandler) Option {
 // to enforce; the authoritative server intentionally does not bake in
 // a single auth scheme.
 func WithUpdatePolicy(p UpdatePolicy) Option {
-	return optionFunc(func(c *config) { c.updatePolicy = p })
+	return authOption{option.New(identUpdatePolicy{}, p)}
 }
 
 // WithAXFRPolicy installs the gate that admits inbound AXFR (and
@@ -100,14 +112,14 @@ func WithUpdatePolicy(p UpdatePolicy) Option {
 // transfer is refused with REFUSED — see [AXFRPolicy] for the
 // rationale.
 func WithAXFRPolicy(p AXFRPolicy) Option {
-	return optionFunc(func(c *config) { c.axfrPolicy = p })
+	return authOption{option.New(identAXFRPolicy{}, p)}
 }
 
 // WithNotifyPolicy installs the gate that admits inbound NOTIFY
 // requests. Without this option (the default) every NOTIFY is
 // refused with REFUSED — see [NotifyPolicy] for the rationale.
 func WithNotifyPolicy(p NotifyPolicy) Option {
-	return optionFunc(func(c *config) { c.notifyPolicy = p })
+	return authOption{option.New(identNotifyPolicy{}, p)}
 }
 
 // WithMinimalANY controls the QTYPE=ANY response shape. When true
@@ -126,7 +138,7 @@ func WithNotifyPolicy(p NotifyPolicy) Option {
 // where the diagnostic value of a full zone-walk reply outweighs the
 // amplification risk.
 func WithMinimalANY(v bool) Option {
-	return optionFunc(func(c *config) { c.minimalANY = v })
+	return authOption{option.New(identMinimalANY{}, v)}
 }
 
 // WithMaxNotifyInflight caps how many [NotifyHandler] goroutines may
@@ -135,5 +147,5 @@ func WithMinimalANY(v bool) Option {
 // misbehaving primary) spawns an unbounded goroutine pool. Default
 // 32; pass 0 to disable the cap entirely.
 func WithMaxNotifyInflight(n int) Option {
-	return optionFunc(func(c *config) { c.maxNotifyInflight = n })
+	return authOption{option.New(identMaxNotifyInflight{}, n)}
 }

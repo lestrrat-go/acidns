@@ -8,14 +8,17 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
+	"net/netip"
 	"sync"
 	"sync/atomic"
 	"time"
 
 	"github.com/lestrrat-go/acidns"
+	"github.com/lestrrat-go/acidns/dot"
 	"github.com/lestrrat-go/acidns/wire"
 	"github.com/lestrrat-go/acidns/wire/rdata"
 	"github.com/lestrrat-go/acidns/wire/rrtype"
+	"github.com/lestrrat-go/option/v3"
 )
 
 // ErrNoUpstream is returned by New when no upstream Exchanger has been
@@ -79,7 +82,47 @@ func New(opts ...Option) (*Forwarder, error) {
 		now:          time.Now,
 	}
 	for _, o := range opts {
-		o.applyForward(&c)
+		switch o.Ident() {
+		case identUpstream{}:
+			c.upstream = option.MustGet[acidns.Exchanger](o)
+			c.upstreamName = "(custom)"
+		case identUDPUpstream{}:
+			addr := option.MustGet[netip.AddrPort](o)
+			c.upstream = newUDPTCPFallback(addr)
+			c.upstreamName = addr.String()
+		case identDoTUpstream{}:
+			spec := option.MustGet[dotUpstreamSpec](o)
+			var dotOpts []dot.Option
+			if spec.tc != nil {
+				dotOpts = append(dotOpts, dot.WithTLSConfig(spec.tc))
+			}
+			ex, err := dot.New(spec.addr, dotOpts...)
+			if err != nil {
+				c.upstream = errExchanger{err: err}
+				c.upstreamName = "(invalid dot)"
+			} else {
+				c.upstream = ex
+				c.upstreamName = "tls://" + spec.addr.String()
+			}
+		case identCacheSize{}:
+			c.cacheSize = option.MustGet[int](o)
+		case identMinTTL{}:
+			c.minTTL = option.MustGet[time.Duration](o)
+		case identMaxTTL{}:
+			c.maxTTL = option.MustGet[time.Duration](o)
+		case identMaxNegTTL{}:
+			c.maxNegTTL = option.MustGet[time.Duration](o)
+		case identQueryTimeout{}:
+			c.queryTimeout = option.MustGet[time.Duration](o)
+		case identMaxInflight{}:
+			c.maxInflight = option.MustGet[int](o)
+		case identClock{}:
+			c.now = option.MustGet[func() time.Time](o)
+		case identLogger{}:
+			c.logger = option.MustGet[*slog.Logger](o)
+		case identAllowNoRD{}:
+			c.allowNoRD = option.MustGet[bool](o)
+		}
 	}
 	if c.upstream == nil {
 		return nil, ErrNoUpstream

@@ -7,17 +7,18 @@ import (
 	"time"
 
 	"github.com/lestrrat-go/acidns"
-	"github.com/lestrrat-go/acidns/dot"
+	"github.com/lestrrat-go/option/v3"
 )
 
 // Option configures a forward Forwarder.
 type Option interface {
-	applyForward(*config)
+	option.Interface
+	forwardOption()
 }
 
-type optionFunc func(*config)
+type forwardOption struct{ option.Interface }
 
-func (f optionFunc) applyForward(c *config) { f(c) }
+func (forwardOption) forwardOption() {}
 
 type config struct {
 	upstream     acidns.Exchanger
@@ -33,6 +34,27 @@ type config struct {
 	allowNoRD    bool
 }
 
+type identUpstream struct{}
+type identUDPUpstream struct{}
+type identDoTUpstream struct{}
+type identCacheSize struct{}
+type identMinTTL struct{}
+type identMaxTTL struct{}
+type identMaxNegTTL struct{}
+type identQueryTimeout struct{}
+type identMaxInflight struct{}
+type identClock struct{}
+type identLogger struct{}
+type identAllowNoRD struct{}
+
+// dotUpstreamSpec carries the unprocessed DoT upstream parameters; the
+// consumer constructs the dot.Exchanger so option construction stays a
+// pure data store.
+type dotUpstreamSpec struct {
+	addr netip.AddrPort
+	tc   *tls.Config
+}
+
 // WithUpstream sets the Exchanger used to forward queries. The caller
 // retains ownership of ex; the forwarder does not Close it. Use this
 // when composing custom transports (DoH, DoQ, DNSCrypt, ...).
@@ -40,20 +62,14 @@ type config struct {
 // Either WithUpstream, WithUDPUpstream, or WithDoTUpstream must be
 // supplied; if more than one is provided the last one wins.
 func WithUpstream(ex acidns.Exchanger) Option {
-	return optionFunc(func(c *config) {
-		c.upstream = ex
-		c.upstreamName = "(custom)"
-	})
+	return forwardOption{option.New(identUpstream{}, ex)}
 }
 
 // WithUDPUpstream forwards queries to addr over UDP, falling back to
 // TCP automatically when the UDP response is truncated (TC=1) per
 // RFC 1035 §4.2.1 and the standard stub-resolver convention.
 func WithUDPUpstream(addr netip.AddrPort) Option {
-	return optionFunc(func(c *config) {
-		c.upstream = newUDPTCPFallback(addr)
-		c.upstreamName = addr.String()
-	})
+	return forwardOption{option.New(identUDPUpstream{}, addr)}
 }
 
 // WithDoTUpstream forwards queries to addr over RFC 7858 DoT. Pass a
@@ -63,26 +79,13 @@ func WithUDPUpstream(addr netip.AddrPort) Option {
 // tc.ServerName to the verifying name (e.g. "dns.google"). Pass nil to
 // use the dot package defaults.
 func WithDoTUpstream(addr netip.AddrPort, tc *tls.Config) Option {
-	return optionFunc(func(c *config) {
-		var dotOpts []dot.Option
-		if tc != nil {
-			dotOpts = append(dotOpts, dot.WithTLSConfig(tc))
-		}
-		ex, err := dot.New(addr, dotOpts...)
-		if err != nil {
-			c.upstream = errExchanger{err: err}
-			c.upstreamName = "(invalid dot)"
-			return
-		}
-		c.upstream = ex
-		c.upstreamName = "tls://" + addr.String()
-	})
+	return forwardOption{option.New(identDoTUpstream{}, dotUpstreamSpec{addr: addr, tc: tc})}
 }
 
 // WithCacheSize sets the number of entries retained in the LRU cache.
 // Defaults to 4096. A non-positive value disables caching.
 func WithCacheSize(n int) Option {
-	return optionFunc(func(c *config) { c.cacheSize = n })
+	return forwardOption{option.New(identCacheSize{}, n)}
 }
 
 // WithMinTTL applies a floor to positive cached TTLs. A response whose
@@ -90,27 +93,27 @@ func WithCacheSize(n int) Option {
 // over upstreams that advertise short TTLs to fight caching. Defaults
 // to 0 (no floor).
 func WithMinTTL(d time.Duration) Option {
-	return optionFunc(func(c *config) { c.minTTL = d })
+	return forwardOption{option.New(identMinTTL{}, d)}
 }
 
 // WithMaxTTL caps positive cached TTLs at the given duration. Defaults
 // to 24 hours, matching common stub-resolver behavior.
 func WithMaxTTL(d time.Duration) Option {
-	return optionFunc(func(c *config) { c.maxTTL = d })
+	return forwardOption{option.New(identMaxTTL{}, d)}
 }
 
 // WithMaxNegativeTTL caps negative (NXDOMAIN / NoData) cache lifetimes
 // at the given duration, applied on top of the SOA MINIMUM as required
 // by RFC 2308 §5. Defaults to 5 minutes.
 func WithMaxNegativeTTL(d time.Duration) Option {
-	return optionFunc(func(c *config) { c.maxNegTTL = d })
+	return forwardOption{option.New(identMaxNegTTL{}, d)}
 }
 
 // WithQueryTimeout sets the deadline applied to upstream Exchange calls
 // when the inbound request's context has no deadline. Defaults to 5
 // seconds.
 func WithQueryTimeout(d time.Duration) Option {
-	return optionFunc(func(c *config) { c.queryTimeout = d })
+	return forwardOption{option.New(identQueryTimeout{}, d)}
 }
 
 // WithMaxInflight caps the number of concurrent distinct upstream
@@ -122,14 +125,14 @@ func WithQueryTimeout(d time.Duration) Option {
 // does NOT delay or queue. Defaults to 1024. A non-positive value
 // disables the cap.
 func WithMaxInflight(n int) Option {
-	return optionFunc(func(c *config) { c.maxInflight = n })
+	return forwardOption{option.New(identMaxInflight{}, n)}
 }
 
 // WithClock injects the clock used for cache freshness decisions.
 // The default is [time.Now]. Tests pass a controllable clock to verify
 // TTL expiry without sleeping in real time.
 func WithClock(now func() time.Time) Option {
-	return optionFunc(func(c *config) { c.now = now })
+	return forwardOption{option.New(identClock{}, now)}
 }
 
 // WithLogger attaches a slog.Logger that the forwarder uses to emit one
@@ -140,7 +143,7 @@ func WithClock(now func() time.Time) Option {
 //
 // The default is a no-op handler — passing nil restores the default.
 func WithLogger(l *slog.Logger) Option {
-	return optionFunc(func(c *config) { c.logger = l })
+	return forwardOption{option.New(identLogger{}, l)}
 }
 
 // WithAllowNoRD toggles the safe default of refusing inbound queries
@@ -156,5 +159,5 @@ func WithLogger(l *slog.Logger) Option {
 // listener with an ACL. The bool form lets a layered config opt back
 // in to the safe default after a profile enabled it.
 func WithAllowNoRD(enable bool) Option {
-	return optionFunc(func(c *config) { c.allowNoRD = enable })
+	return forwardOption{option.New(identAllowNoRD{}, enable)}
 }

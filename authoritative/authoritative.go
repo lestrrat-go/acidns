@@ -20,6 +20,7 @@ import (
 	"github.com/lestrrat-go/acidns/wire/rdata"
 	"github.com/lestrrat-go/acidns/wire/rrtype"
 	"github.com/lestrrat-go/acidns/zonefile"
+	"github.com/lestrrat-go/option/v3"
 )
 
 // ErrNoSOA is returned when a Zone is added that has no SOA record.
@@ -58,7 +59,22 @@ func New(opts ...Option) (*Authoritative, error) {
 	a := &Authoritative{zones: make(map[string]*zoneIndex)}
 	c := &config{maxNotifyInflight: 32, minimalANY: true}
 	for _, o := range opts {
-		o.applyAuth(c)
+		switch o.Ident() {
+		case identZone{}:
+			c.zones = append(c.zones, option.MustGet[zonefile.Zone](o))
+		case identNotifyHandler{}:
+			c.notifyHandler = option.MustGet[NotifyHandler](o)
+		case identUpdatePolicy{}:
+			c.updatePolicy = option.MustGet[UpdatePolicy](o)
+		case identAXFRPolicy{}:
+			c.axfrPolicy = option.MustGet[AXFRPolicy](o)
+		case identNotifyPolicy{}:
+			c.notifyPolicy = option.MustGet[NotifyPolicy](o)
+		case identMinimalANY{}:
+			c.minimalANY = option.MustGet[bool](o)
+		case identMaxNotifyInflight{}:
+			c.maxNotifyInflight = option.MustGet[int](o)
+		}
 	}
 	a.notifyHandler = c.notifyHandler
 	a.notifyPolicy = c.notifyPolicy

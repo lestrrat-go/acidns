@@ -19,6 +19,7 @@ import (
 	"github.com/lestrrat-go/acidns/wire"
 	"github.com/lestrrat-go/acidns/wire/rdata"
 	"github.com/lestrrat-go/acidns/wire/rrtype"
+	"github.com/lestrrat-go/option/v3"
 )
 
 // New returns a Handler that answers CHAOS identity queries. The
@@ -27,7 +28,14 @@ import (
 func New(opts ...Option) (acidns.Handler, error) {
 	c := config{}
 	for _, o := range opts {
-		o.applyChaos(&c)
+		switch o.Ident() {
+		case identIdentifier{}:
+			c.id = option.MustGet[string](o)
+		case identVersion{}:
+			c.version = option.MustGet[string](o)
+		case identNext{}:
+			c.next = option.MustGet[acidns.Handler](o)
+		}
 	}
 	return &handler{cfg: c}, nil
 }
