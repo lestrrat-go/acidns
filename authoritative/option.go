@@ -22,6 +22,7 @@ type config struct {
 	maxNotifyInflight int
 	axfrPolicy        AXFRPolicy
 	updatePolicy      UpdatePolicy
+	minimalANY        bool
 }
 
 // UpdatePolicy decides whether an inbound RFC 2136 UPDATE may proceed.
@@ -107,6 +108,25 @@ func WithAXFRPolicy(p AXFRPolicy) Option {
 // refused with REFUSED — see [NotifyPolicy] for the rationale.
 func WithNotifyPolicy(p NotifyPolicy) Option {
 	return optionFunc(func(c *config) { c.notifyPolicy = p })
+}
+
+// WithMinimalANY controls the QTYPE=ANY response shape. When true
+// (the default), QTYPE=ANY queries receive a single synthetic HINFO
+// record with CPU="RFC8482" and OS="" per RFC 8482 §4 — the canonical
+// "minimal ANY" shape. When false, the server walks the zone and
+// returns every record at the QNAME, matching the legacy behaviour.
+//
+// Minimal ANY is the safe default because QTYPE=ANY is a known
+// amplification primitive: a small request elicits a large multi-RRset
+// reply that an off-path attacker can spoof at any source IP. RFC 8482
+// is the IETF response — a canonical short reply that breaks the
+// amplification ratio while still letting RFC-aware clients recognise
+// the answer as a deliberate minimal response (rather than a truncated
+// or dropped one). Pass WithMinimalANY(false) only on closed networks
+// where the diagnostic value of a full zone-walk reply outweighs the
+// amplification risk.
+func WithMinimalANY(v bool) Option {
+	return optionFunc(func(c *config) { c.minimalANY = v })
 }
 
 // WithMaxNotifyInflight caps how many [NotifyHandler] goroutines may

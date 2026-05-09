@@ -13,6 +13,7 @@ import (
 	"errors"
 	"fmt"
 	"sync"
+	"time"
 
 	"github.com/lestrrat-go/acidns"
 	"github.com/lestrrat-go/acidns/wire"
@@ -41,6 +42,7 @@ type Authoritative struct {
 	notifySem     chan struct{} // counting semaphore; nil disables the cap
 	axfrPolicy    AXFRPolicy
 	updatePolicy  UpdatePolicy
+	minimalANY    bool
 }
 
 // zoneIndex is the per-zone lookup-friendly form of a Zone.
@@ -54,7 +56,7 @@ type zoneIndex struct {
 // New returns a new [*Authoritative].
 func New(opts ...Option) (*Authoritative, error) {
 	a := &Authoritative{zones: make(map[string]*zoneIndex)}
-	c := &config{maxNotifyInflight: 32}
+	c := &config{maxNotifyInflight: 32, minimalANY: true}
 	for _, o := range opts {
 		o.applyAuth(c)
 	}
@@ -62,6 +64,7 @@ func New(opts ...Option) (*Authoritative, error) {
 	a.notifyPolicy = c.notifyPolicy
 	a.axfrPolicy = c.axfrPolicy
 	a.updatePolicy = c.updatePolicy
+	a.minimalANY = c.minimalANY
 	if c.maxNotifyInflight > 0 {
 		a.notifySem = make(chan struct{}, c.maxNotifyInflight)
 	}
@@ -295,6 +298,17 @@ func (a *Authoritative) answer(q wire.Message) wire.Message {
 		return mustBuild(setRCODE(b, q, wire.RCODERefused), q)
 	}
 
+	// RFC 8482 §4: respond to QTYPE=ANY with a single synthetic HINFO
+	// "RFC8482" record rather than walking the entire RRset list. The
+	// full-walk path is the classic ANY amplification vector; the
+	// minimal reply keeps the listener under 1× while still letting an
+	// RFC 8482-aware client recognise the intent.
+	if a.minimalANY && question.Type() == rrtype.ANY && question.Class() == rrtype.ClassIN {
+		hinfo := buildRFC8482HINFO(question.Name(), zone)
+		b = b.Authoritative(true).Answer(hinfo)
+		return mustBuild(setRCODE(b, q, wire.RCODENoError), q)
+	}
+
 	res := zone.lookup(question.Name(), question.Type())
 	b = b.Authoritative(res.aa)
 	for _, r := range res.answer {
@@ -307,6 +321,30 @@ func (a *Authoritative) answer(q wire.Message) wire.Message {
 		b = b.Additional(r)
 	}
 	return mustBuild(setRCODE(b, q, res.rcode), q)
+}
+
+// rfc8482HINFOTTLCap caps the TTL of the synthetic HINFO answer. The
+// reply is constant per zone, so a long cache life is safe; the cap
+// just keeps the value reasonable when a zone's SOA MINIMUM is set
+// unusually high. Below SOA MINIMUM we use SOA MINIMUM directly so the
+// HINFO matches the negative-cache lifetime the rest of the zone uses.
+const rfc8482HINFOTTLCap = time.Hour
+
+// buildRFC8482HINFO returns the canonical RFC 8482 §4 HINFO answer for
+// QTYPE=ANY: owner = qname, class = IN, CPU = "RFC8482", OS = "".
+// TTL is min(SOA MINIMUM, rfc8482HINFOTTLCap) when an SOA is reachable,
+// otherwise rfc8482HINFOTTLCap.
+func buildRFC8482HINFO(qname wire.Name, z *zoneIndex) wire.Record {
+	ttl := rfc8482HINFOTTLCap
+	if soa, ok := wire.RDataAs[rdata.SOA](z.soaRec); ok {
+		if m := soa.Minimum(); m > 0 && m < ttl {
+			ttl = m
+		}
+	}
+	// NewHINFO only fails when CPU/OS exceed 255 bytes; the constants
+	// here are short, so the error path is unreachable.
+	rd, _ := rdata.NewHINFO("RFC8482", "")
+	return wire.NewRecord(qname, ttl, rd)
 }
 
 // setRCODE writes the response RCODE to b, attaching an OPT echo when
