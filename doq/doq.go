@@ -36,10 +36,11 @@ import (
 const alpn = "doq"
 
 type exchanger struct {
-	addr      netip.AddrPort
-	timeout   time.Duration
-	tlsConfig *tls.Config
-	padding   bool
+	addr             netip.AddrPort
+	timeout          time.Duration
+	tlsConfig        *tls.Config
+	padding          bool
+	maxResponseBytes int
 }
 
 // New returns an Exchanger that talks DoQ to addr.
@@ -47,7 +48,7 @@ func New(addr netip.AddrPort, opts ...Option) (acidns.Exchanger, error) {
 	if !addr.IsValid() {
 		return nil, fmt.Errorf("doq: invalid server address")
 	}
-	c := config{timeout: 10 * time.Second, padding: true}
+	c := config{timeout: 10 * time.Second, padding: true, maxResponseBytes: DefaultMaxResponseBytes}
 	for _, o := range opts {
 		o.applyDoQ(&c)
 	}
@@ -77,7 +78,11 @@ func New(addr netip.AddrPort, opts ...Option) (acidns.Exchanger, error) {
 		return nil, fmt.Errorf("doq: WithServerName (or *tls.Config.ServerName) required when addr is an IP literal")
 	}
 
-	return &exchanger{addr: addr, timeout: c.timeout, tlsConfig: tcfg, padding: c.padding}, nil
+	mr := c.maxResponseBytes
+	if mr <= 0 {
+		mr = DefaultMaxResponseBytes
+	}
+	return &exchanger{addr: addr, timeout: c.timeout, tlsConfig: tcfg, padding: c.padding, maxResponseBytes: mr}, nil
 }
 
 func containsALPN(list []string, want string) bool {
@@ -133,7 +138,10 @@ func (e *exchanger) Exchange(ctx context.Context, q wire.Message) (wire.Message,
 	if _, err := io.ReadFull(stream, hdr[:]); err != nil {
 		return nil, fmt.Errorf("doq: read length: %w", err)
 	}
-	respLen := binary.BigEndian.Uint16(hdr[:])
+	respLen := int(binary.BigEndian.Uint16(hdr[:]))
+	if respLen > e.maxResponseBytes {
+		return nil, fmt.Errorf("doq: response length %d exceeds %d byte cap", respLen, e.maxResponseBytes)
+	}
 	body := make([]byte, respLen)
 	if _, err := io.ReadFull(stream, body); err != nil {
 		return nil, fmt.Errorf("doq: read body: %w", err)

@@ -76,7 +76,13 @@ func defaultClient() *http.Client {
 			return http.ErrUseLastResponse
 		},
 		Transport: &http.Transport{
-			Proxy: http.ProxyFromEnvironment,
+			// Proxy is intentionally nil. http.ProxyFromEnvironment
+			// would honour $HTTPS_PROXY / $HTTP_PROXY and silently
+			// route every DoH query (including the queried name)
+			// through whatever the env points at — surprising for
+			// a stub-resolver caller. Operators who want a proxy
+			// should pass a custom *http.Client via [WithClient].
+			Proxy: nil,
 			DialContext: (&net.Dialer{
 				Timeout:   10 * time.Second,
 				KeepAlive: 30 * time.Second,

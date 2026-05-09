@@ -14,11 +14,19 @@ type optionFunc func(*config)
 
 func (f optionFunc) applyDoQ(c *config) { f(c) }
 
+// DefaultMaxResponseBytes caps the body of a DoQ response a client
+// will allocate per stream. The wire prefix is uint16 so the absolute
+// ceiling is 65535; 16 KiB suffices for ordinary lookups while
+// rejecting attacker-induced inflation. Callers that need larger
+// bodies (XFR over DoQ) can raise via [WithMaxResponseBytes].
+const DefaultMaxResponseBytes = 16 * 1024
+
 type config struct {
-	timeout    time.Duration
-	tlsConfig  *tls.Config
-	serverName string
-	padding    bool
+	timeout          time.Duration
+	tlsConfig        *tls.Config
+	serverName       string
+	padding          bool
+	maxResponseBytes int
 }
 
 // WithTimeout sets a per-exchange timeout used when ctx has no deadline.
@@ -40,4 +48,11 @@ func WithServerName(name string) Option {
 // WithPadding toggles RFC 8467 §4.1 block-padding. Default is true.
 func WithPadding(v bool) Option {
 	return optionFunc(func(c *config) { c.padding = v })
+}
+
+// WithMaxResponseBytes caps how many response bytes the client will
+// allocate per stream. A non-positive value falls back to
+// [DefaultMaxResponseBytes].
+func WithMaxResponseBytes(n int) Option {
+	return optionFunc(func(c *config) { c.maxResponseBytes = n })
 }
