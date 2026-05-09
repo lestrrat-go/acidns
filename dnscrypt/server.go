@@ -71,15 +71,9 @@ type Server struct {
 // cert.ResolverPK; the package cannot verify this binding (signed
 // material is opaque) so a mismatch silently produces undecryptable
 // responses.
-func NewServer(addr netip.AddrPort, h acidns.Handler, cert *Cert, opts ...ServerOption) (*Server, error) {
+func NewServer(addr netip.AddrPort, h acidns.Handler, opts ...ServerOption) (*Server, error) {
 	if h == nil {
 		return nil, fmt.Errorf("dnscrypt: handler is nil")
-	}
-	if cert == nil {
-		return nil, fmt.Errorf("dnscrypt: cert is nil")
-	}
-	if cert.esVersion != ESVersion2 {
-		return nil, fmt.Errorf("%w: ES%d (only ES%d is implemented)", ErrUnsupportedESVersion, cert.esVersion, ESVersion2)
 	}
 	cfg := serverConfig{
 		bufferSize:   4096,
@@ -93,6 +87,12 @@ func NewServer(addr netip.AddrPort, h acidns.Handler, cert *Cert, opts ...Server
 	if cfg.now == nil {
 		cfg.now = time.Now
 	}
+	if cfg.cert == nil {
+		return nil, fmt.Errorf("dnscrypt: NewServer requires WithCert")
+	}
+	if cfg.cert.esVersion != ESVersion2 {
+		return nil, fmt.Errorf("%w: ES%d (only ES%d is implemented)", ErrUnsupportedESVersion, cfg.cert.esVersion, ESVersion2)
+	}
 	if !cfg.resolverSKSet {
 		return nil, fmt.Errorf("dnscrypt: NewServer requires WithResolverSecretKey")
 	}
@@ -103,7 +103,7 @@ func NewServer(addr netip.AddrPort, h acidns.Handler, cert *Cert, opts ...Server
 	return &Server{
 		addr:       addr,
 		handler:    h,
-		cert:       cert,
+		cert:       cfg.cert,
 		resolverSK: cfg.resolverSK,
 		cfg:        cfg,
 	}, nil

@@ -17,7 +17,16 @@ type serverConfig struct {
 	writeTimeout  time.Duration
 	resolverSK    [32]byte
 	resolverSKSet bool
+	cert          *Cert
 	now           func() time.Time
+}
+
+// WithCert supplies the signed [Cert] to advertise. Required —
+// [NewServer] returns an error if this option is omitted. The cert
+// MUST already be signed via [SignCert] before being supplied; the
+// server does not re-sign it.
+func WithCert(c *Cert) ServerOption {
+	return serverOptionFunc(func(cfg *serverConfig) { cfg.cert = c })
 }
 
 // WithResolverSecretKey supplies the X25519 32-byte resolver short-term
