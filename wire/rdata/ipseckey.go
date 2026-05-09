@@ -3,6 +3,7 @@ package rdata
 import (
 	"fmt"
 	"net/netip"
+	"slices"
 
 	"github.com/lestrrat-go/acidns/wire/rrtype"
 	"github.com/lestrrat-go/acidns/wire/wirebb"
@@ -50,7 +51,7 @@ func (k IPSECKEY) GatewayType() IPSECKEYGatewayType { return k.gt }
 func (k IPSECKEY) Algorithm() IPSECKEYAlgorithm     { return k.alg }
 func (k IPSECKEY) GatewayAddr() netip.Addr          { return k.gwAddr }
 func (k IPSECKEY) GatewayName() wirebb.Name         { return k.gwName }
-func (k IPSECKEY) PublicKey() []byte                { return k.pubkey }
+func (k IPSECKEY) PublicKey() []byte                { return slices.Clone(k.pubkey) }
 func (k IPSECKEY) Pack(p *wirebb.Packer) {
 	p.Uint8(k.prec)
 	p.Uint8(uint8(k.gt))

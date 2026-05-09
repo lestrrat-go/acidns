@@ -2,6 +2,7 @@ package rdata
 
 import (
 	"fmt"
+	"slices"
 	"time"
 
 	"github.com/lestrrat-go/acidns/wire/rrtype"
@@ -42,8 +43,8 @@ func (t TKEY) Inception() time.Time   { return time.Unix(int64(t.inception), 0).
 func (t TKEY) Expiration() time.Time  { return time.Unix(int64(t.expire), 0).UTC() }
 func (t TKEY) Mode() TKEYMode         { return t.mode }
 func (t TKEY) Error() uint16          { return t.errCode }
-func (t TKEY) KeyData() []byte        { return t.keyData }
-func (t TKEY) OtherData() []byte      { return t.otherData }
+func (t TKEY) KeyData() []byte        { return slices.Clone(t.keyData) }
+func (t TKEY) OtherData() []byte      { return slices.Clone(t.otherData) }
 func (t TKEY) Pack(p *wirebb.Packer) {
 	p.NameUncompressed(t.algorithm)
 	p.Uint32(t.inception)

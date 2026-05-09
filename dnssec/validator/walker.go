@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"slices"
 	"time"
 
 	"github.com/lestrrat-go/acidns/dnssec"
@@ -84,8 +85,8 @@ type chainStep struct {
 }
 
 func (s chainStep) Zone() wire.Name         { return s.zone }
-func (s chainStep) DNSKEYs() []rdata.DNSKEY { return s.keys }
-func (s chainStep) DSs() []rdata.DS         { return s.dss }
+func (s chainStep) DNSKEYs() []rdata.DNSKEY { return slices.Clone(s.keys) }
+func (s chainStep) DSs() []rdata.DS         { return slices.Clone(s.dss) }
 func (s chainStep) Result() Result          { return s.res }
 
 type answer struct {

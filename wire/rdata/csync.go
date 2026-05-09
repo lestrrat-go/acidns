@@ -1,6 +1,9 @@
 package rdata
 
 import (
+	"fmt"
+	"slices"
+
 	"github.com/lestrrat-go/acidns/wire/rrtype"
 	"github.com/lestrrat-go/acidns/wire/wirebb"
 )
@@ -18,7 +21,7 @@ func (CSYNC) Type() rrtype.Type      { return rrtype.CSYNC }
 func (CSYNC) typedRData()            {}
 func (c CSYNC) SOASerial() uint32    { return c.soaSerial }
 func (c CSYNC) Flags() uint16        { return c.flags }
-func (c CSYNC) Types() []rrtype.Type { return c.types }
+func (c CSYNC) Types() []rrtype.Type { return slices.Clone(c.types) }
 func (c CSYNC) Pack(p *wirebb.Packer) {
 	p.Uint32(c.soaSerial)
 	p.Uint16(c.flags)
@@ -33,6 +36,13 @@ func NewCSYNC(soaSerial uint32, flags uint16, types []rrtype.Type) CSYNC {
 
 func unpackCSYNC(u *wirebb.Unpacker, rdlen int) (CSYNC, error) {
 	var zero CSYNC
+	// CSYNC fixed prefix is uint32 serial + uint16 flags = 6 octets,
+	// followed by at least one type-bitmap window header. Reject up
+	// front so the Uint32/Uint16 reads cannot consume bytes from
+	// outside the rdata window even when rdlen is degenerate.
+	if rdlen < 6 {
+		return zero, fmt.Errorf("%w: CSYNC rdlen %d below minimum 6", ErrInvalidRData, rdlen)
+	}
 	end := u.Off() + rdlen
 	serial, err := u.Uint32()
 	if err != nil {

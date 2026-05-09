@@ -2,6 +2,7 @@ package rdata
 
 import (
 	"fmt"
+	"slices"
 
 	"github.com/lestrrat-go/acidns/wire/rrtype"
 	"github.com/lestrrat-go/acidns/wire/wirebb"
@@ -35,7 +36,7 @@ func (ZONEMD) typedRData()                          {}
 func (z ZONEMD) Serial() uint32                     { return z.serial }
 func (z ZONEMD) Scheme() ZONEMDScheme               { return z.scheme }
 func (z ZONEMD) HashAlgorithm() ZONEMDHashAlgorithm { return z.hash }
-func (z ZONEMD) Digest() []byte                     { return z.digest }
+func (z ZONEMD) Digest() []byte                     { return slices.Clone(z.digest) }
 func (z ZONEMD) Pack(p *wirebb.Packer) {
 	p.Uint32(z.serial)
 	p.Uint8(uint8(z.scheme))

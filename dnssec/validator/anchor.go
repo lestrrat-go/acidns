@@ -2,6 +2,7 @@ package validator
 
 import (
 	"fmt"
+	"slices"
 
 	"github.com/lestrrat-go/acidns/dnssec/validator/validatorbb"
 	"github.com/lestrrat-go/acidns/wire"
@@ -15,8 +16,9 @@ import (
 type Anchor interface {
 	// Name returns the apex of the trusted zone.
 	Name() wire.Name
-	// DSs returns the DS records that authenticate any DNSKEY claimed by
-	// the zone. The slice MUST NOT be mutated.
+	// DSs returns a copy of the DS records that authenticate any DNSKEY
+	// claimed by the zone. Mutating the returned slice does not affect
+	// the Anchor.
 	DSs() []rdata.DS
 }
 
@@ -26,7 +28,7 @@ type anchor struct {
 }
 
 func (a anchor) Name() wire.Name { return a.name }
-func (a anchor) DSs() []rdata.DS { return a.dss }
+func (a anchor) DSs() []rdata.DS { return slices.Clone(a.dss) }
 
 // NewAnchor returns an Anchor with the supplied name and DS records. The DS
 // list is copied; an empty list is rejected because an anchor without DS

@@ -2,6 +2,7 @@ package rdata
 
 import (
 	"fmt"
+	"slices"
 
 	"github.com/lestrrat-go/acidns/wire/rrtype"
 	"github.com/lestrrat-go/acidns/wire/wirebb"
@@ -38,7 +39,7 @@ func (CERT) typedRData()                  {}
 func (c CERT) CertType() CERTType         { return c.certType }
 func (c CERT) KeyTag() uint16             { return c.keyTag }
 func (c CERT) Algorithm() DNSSECAlgorithm { return c.algorithm }
-func (c CERT) Certificate() []byte        { return c.cert }
+func (c CERT) Certificate() []byte        { return slices.Clone(c.cert) }
 func (c CERT) Pack(p *wirebb.Packer) {
 	p.Uint16(uint16(c.certType))
 	p.Uint16(c.keyTag)

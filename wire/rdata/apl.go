@@ -88,6 +88,14 @@ func unpackAPL(u *wirebb.Unpacker, rdlen int) (APL, error) {
 		}
 		alen := int(nlen & 0x7f)
 		neg := nlen&0x80 != 0
+		// Refuse the read up front if alen would walk past the rdata
+		// window. Without this, a crafted APL with a bogus afdlength
+		// byte reads bytes belonging to subsequent records; the outer
+		// off==end check would catch the misframe only after the loop
+		// has already consumed misframed input.
+		if u.Off()+alen > end {
+			return zero, fmt.Errorf("%w: APL afdlength %d walks past rdata window", ErrInvalidRData, alen)
+		}
 		afd, err := u.Bytes(alen)
 		if err != nil {
 			return zero, err

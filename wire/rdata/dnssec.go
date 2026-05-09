@@ -72,7 +72,7 @@ func (DNSKEY) typedRData()                  {}
 func (k DNSKEY) Flags() uint16              { return k.flags }
 func (k DNSKEY) Protocol() uint8            { return k.protocol }
 func (k DNSKEY) Algorithm() DNSSECAlgorithm { return k.algorithm }
-func (k DNSKEY) PublicKey() []byte          { return k.pubkey }
+func (k DNSKEY) PublicKey() []byte          { return slices.Clone(k.pubkey) }
 func (k DNSKEY) Pack(p *wirebb.Packer) {
 	p.Uint16(k.flags)
 	p.Uint8(k.protocol)
@@ -127,7 +127,7 @@ func (DS) typedRData()                  {}
 func (d DS) KeyTag() uint16             { return d.keyTag }
 func (d DS) Algorithm() DNSSECAlgorithm { return d.algorithm }
 func (d DS) DigestType() DSDigestType   { return d.digestT }
-func (d DS) Digest() []byte             { return d.digest }
+func (d DS) Digest() []byte             { return slices.Clone(d.digest) }
 func (d DS) Pack(p *wirebb.Packer) {
 	p.Uint16(d.keyTag)
 	p.Uint8(uint8(d.algorithm))
@@ -192,7 +192,7 @@ func (r RRSIG) SignatureExpiration() time.Time { return time.Unix(int64(r.sigExp
 func (r RRSIG) SignatureInception() time.Time  { return time.Unix(int64(r.sigInc), 0).UTC() }
 func (r RRSIG) KeyTag() uint16                 { return r.keyTag }
 func (r RRSIG) SignerName() wirebb.Name        { return r.signerName }
-func (r RRSIG) Signature() []byte              { return r.signature }
+func (r RRSIG) Signature() []byte              { return slices.Clone(r.signature) }
 func (r RRSIG) Pack(p *wirebb.Packer) {
 	p.Uint16(uint16(r.typeCovered))
 	p.Uint8(uint8(r.algorithm))
@@ -295,7 +295,7 @@ type NSEC struct {
 func (NSEC) Type() rrtype.Type             { return rrtype.NSEC }
 func (NSEC) typedRData()                   {}
 func (n NSEC) NextDomainName() wirebb.Name { return n.next }
-func (n NSEC) Types() []rrtype.Type        { return n.types }
+func (n NSEC) Types() []rrtype.Type        { return slices.Clone(n.types) }
 func (n NSEC) Pack(p *wirebb.Packer) {
 	p.NameUncompressed(n.next)
 	encodeTypeBitmap(p, n.types)
@@ -426,9 +426,9 @@ func (NSEC3) typedRData()               {}
 func (n NSEC3) HashAlgorithm() uint8    { return n.hashAlg }
 func (n NSEC3) Flags() uint8            { return n.flags }
 func (n NSEC3) Iterations() uint16      { return n.iterations }
-func (n NSEC3) Salt() []byte            { return n.salt }
-func (n NSEC3) NextHashedOwner() []byte { return n.nextOwner }
-func (n NSEC3) Types() []rrtype.Type    { return n.types }
+func (n NSEC3) Salt() []byte            { return slices.Clone(n.salt) }
+func (n NSEC3) NextHashedOwner() []byte { return slices.Clone(n.nextOwner) }
+func (n NSEC3) Types() []rrtype.Type    { return slices.Clone(n.types) }
 func (n NSEC3) Pack(p *wirebb.Packer) {
 	p.Uint8(n.hashAlg)
 	p.Uint8(n.flags)

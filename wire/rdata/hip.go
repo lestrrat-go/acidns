@@ -2,6 +2,7 @@ package rdata
 
 import (
 	"fmt"
+	"slices"
 
 	"github.com/lestrrat-go/acidns/wire/rrtype"
 	"github.com/lestrrat-go/acidns/wire/wirebb"
@@ -33,9 +34,9 @@ type HIP struct {
 func (HIP) Type() rrtype.Type                  { return rrtype.HIP }
 func (HIP) typedRData()                        {}
 func (h HIP) Algorithm() HIPAlgorithm          { return h.alg }
-func (h HIP) HIT() []byte                      { return h.hit }
-func (h HIP) PublicKey() []byte                { return h.pubkey }
-func (h HIP) RendezvousServers() []wirebb.Name { return h.rvs }
+func (h HIP) HIT() []byte                      { return slices.Clone(h.hit) }
+func (h HIP) PublicKey() []byte                { return slices.Clone(h.pubkey) }
+func (h HIP) RendezvousServers() []wirebb.Name { return slices.Clone(h.rvs) }
 func (h HIP) Pack(p *wirebb.Packer) {
 	p.Uint8(uint8(len(h.hit)))
 	p.Uint8(uint8(h.alg))

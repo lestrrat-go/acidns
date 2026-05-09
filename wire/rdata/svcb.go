@@ -4,6 +4,7 @@ import (
 	"encoding/binary"
 	"fmt"
 	"net/netip"
+	"slices"
 
 	"github.com/lestrrat-go/acidns/wire/rrtype"
 	"github.com/lestrrat-go/acidns/wire/wirebb"
@@ -32,7 +33,7 @@ type SVCBParam struct {
 }
 
 func (p SVCBParam) Key() SvcParamKey { return p.key }
-func (p SVCBParam) Value() []byte    { return p.data }
+func (p SVCBParam) Value() []byte    { return slices.Clone(p.data) }
 
 // NewSVCBParam returns a generic SvcParam.
 func NewSVCBParam(key SvcParamKey, data []byte) SVCBParam {
