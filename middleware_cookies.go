@@ -52,25 +52,28 @@ func WithClock(now func() time.Time) CookieOption {
 	return cookieOptionFunc(func(c *cookieConfig) { c.now = now })
 }
 
-// WithRequireCookieForLargeResponse enables RFC 7873 §1's amplification
+// WithRequireCookieForLargeResponse toggles RFC 7873 §1's amplification
 // defence: an inbound UDP query that lacks a valid client/server cookie
 // receives a TC=1 truncated reply when the inner handler's response
 // would exceed maxBytes, forcing the client to retry over TCP (where
 // the 3-way handshake provides a path-validated channel that cannot be
 // spoofed). TCP queries pass through unchanged. A non-positive maxBytes
-// falls back to 512 (the classic pre-EDNS DNS UDP message ceiling).
+// falls back to 1232 (RFC 9715-recommended EDNS UDP ceiling).
 //
-// Default: off. Cookie middleware on its own attaches a cookie to the
-// response and short-circuits BADCOOKIE; this option additionally gates
-// large responses to non-cookie clients to bound a spoofed source's
-// amplification factor.
-func WithRequireCookieForLargeResponse(maxBytes int) CookieOption {
+// Default: enabled at 1232 bytes. Pass enable=false to disable on
+// listeners where amplification is not a concern (e.g. localhost-only
+// or LAN-only deployments). The previous "off by default" behaviour
+// silently disabled the defence; flipping the default closes the gap.
+func WithRequireCookieForLargeResponse(enable bool, maxBytes int) CookieOption {
 	return cookieOptionFunc(func(c *cookieConfig) {
-		c.requireForLarge = true
+		c.requireForLarge = enable
+		if !enable {
+			return
+		}
 		if maxBytes > 0 {
 			c.largeRespMaxSize = maxBytes
 		} else {
-			c.largeRespMaxSize = 512
+			c.largeRespMaxSize = 1232
 		}
 	})
 }
@@ -95,7 +98,11 @@ func WithRequireCookieForLargeResponse(maxBytes int) CookieOption {
 // runs. Cookies on a localhost-only or LAN-only listener do not
 // benefit from the rate limit and need no extra layer.
 func NewCookies(inner Handler, srv cookies.Server, opts ...CookieOption) Handler {
-	c := cookieConfig{now: time.Now}
+	c := cookieConfig{
+		now:              time.Now,
+		requireForLarge:  true,
+		largeRespMaxSize: 1232,
+	}
 	for _, o := range opts {
 		o.applyCookies(&c)
 	}
