@@ -41,6 +41,7 @@ import (
 	"golang.org/x/crypto/chacha20poly1305"
 
 	"github.com/lestrrat-go/acidns"
+	"github.com/lestrrat-go/acidns/internal/serverctl"
 	"github.com/lestrrat-go/acidns/wire"
 )
 
@@ -144,15 +145,14 @@ func (s *Server) Run(ctx context.Context) (*ServerController, error) {
 	}
 
 	ctrl := &ServerController{
-		addr: bound,
-		done: make(chan struct{}),
+		Core: serverctl.New(bound),
 		loop: loop,
 	}
 	go func() {
-		defer close(ctrl.done)
+		defer ctrl.CloseDone()
 		err := loop.run(ctx)
 		if err != nil && !errors.Is(err, ErrServerClosed) {
-			ctrl.setErr(err)
+			ctrl.SetErr(err)
 		}
 	}()
 	return ctrl, nil
@@ -171,11 +171,11 @@ type keyMaterial struct {
 // ServerController is the runtime handle returned by [Server.Run].
 // The name is prefixed Server because the dnscrypt package's other
 // long-lived runtime type is the client [Cert]; ambiguity is worse
-// than verbosity here.
+// than verbosity here. Embeds [serverctl.Core] (Addr / Done / Err /
+// Wait); dnscrypt-specific runtime queries (Rotate) belong on this
+// type.
 type ServerController struct {
-	addr netip.AddrPort
-	done chan struct{}
-	err  atomic.Pointer[error]
+	serverctl.Core
 	loop *serverLoop
 }
 
@@ -212,32 +212,6 @@ func (c *ServerController) Rotate(cert *Cert, resolverSK [32]byte) error {
 	}
 	c.loop.material.Store(&keyMaterial{cert: cert, resolverSK: resolverSK})
 	return nil
-}
-
-// Addr returns the bound UDP address.
-func (c *ServerController) Addr() netip.AddrPort { return c.addr }
-
-// Done closes when the work goroutine has exited.
-func (c *ServerController) Done() <-chan struct{} { return c.done }
-
-// Err returns the terminal error, or nil after a clean shutdown.
-func (c *ServerController) Err() error {
-	if p := c.err.Load(); p != nil {
-		return *p
-	}
-	return nil
-}
-
-// Wait blocks until the server has shut down.
-func (c *ServerController) Wait() error {
-	<-c.done
-	return c.Err()
-}
-
-func (c *ServerController) setErr(err error) {
-	if err != nil {
-		c.err.Store(&err)
-	}
 }
 
 type serverLoop struct {

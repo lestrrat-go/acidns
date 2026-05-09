@@ -9,6 +9,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/lestrrat-go/acidns/internal/serverctl"
 	"github.com/lestrrat-go/acidns/wire"
 )
 
@@ -126,7 +127,7 @@ func (s *UDPServer) Run(ctx context.Context) (*UDPController, error) {
 	}
 	bound := netip.AddrPortFrom(la.AddrPort().Addr(), uint16(la.Port))
 
-	ctrl := &UDPController{controllerCore: newCore(bound)}
+	ctrl := &UDPController{Core: serverctl.New(bound)}
 	loop := &udpLoop{
 		pc:      pc,
 		addr:    bound,
@@ -142,10 +143,10 @@ func (s *UDPServer) Run(ctx context.Context) (*UDPController, error) {
 	}
 
 	go func() {
-		defer close(ctrl.done)
+		defer ctrl.CloseDone()
 		err := loop.run(ctx)
 		if err != nil && !errors.Is(err, ErrServerClosed) {
-			ctrl.setErr(err)
+			ctrl.SetErr(err)
 		}
 	}()
 

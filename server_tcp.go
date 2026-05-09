@@ -12,6 +12,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/lestrrat-go/acidns/internal/serverctl"
 	"github.com/lestrrat-go/acidns/wire"
 )
 
@@ -173,12 +174,12 @@ func (s *TCPServer) Run(ctx context.Context) (*TCPController, error) {
 		return &b
 	}
 
-	ctrl := &TCPController{controllerCore: newCore(bound)}
+	ctrl := &TCPController{Core: serverctl.New(bound)}
 	go func() {
-		defer close(ctrl.done)
+		defer ctrl.CloseDone()
 		err := loop.run(ctx)
 		if err != nil && !errors.Is(err, ErrServerClosed) {
-			ctrl.setErr(err)
+			ctrl.SetErr(err)
 		}
 	}()
 	return ctrl, nil

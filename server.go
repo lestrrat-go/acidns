@@ -30,8 +30,8 @@ import (
 	"context"
 	"errors"
 	"net/netip"
-	"sync/atomic"
 
+	"github.com/lestrrat-go/acidns/internal/serverctl"
 	"github.com/lestrrat-go/acidns/wire"
 )
 
@@ -80,80 +80,6 @@ type ResponseWriter interface {
 	Network() string
 }
 
-// controllerCore is the shared runtime state behind every concrete
-// per-protocol Controller. Embedded by value so the public types
-// promote Addr / Done / Err / setErr without re-declaring them.
-//
-// Each protocol gets its own Controller type ([UDPController],
-// [TCPController]) so protocol-specific runtime queries — e.g.
-// "current TCP connections", "UDP packets dropped at the inflight
-// semaphore" — can be added without polluting the shape of the
-// other protocols' handles. Today the public types are equivalent;
-// the split exists for forward-compatibility, not present need.
-type controllerCore struct {
-	addr netip.AddrPort
-	done chan struct{}
-	err  atomic.Pointer[error]
-}
-
-func newCore(addr netip.AddrPort) controllerCore {
-	return controllerCore{addr: addr, done: make(chan struct{})}
-}
-
-// Addr returns the address the server is bound to. When the caller
-// asked for port 0, this reflects the kernel-assigned ephemeral port.
-func (c *controllerCore) Addr() netip.AddrPort { return c.addr }
-
-// Done returns a channel that is closed when the server's work
-// goroutine has fully exited (in-flight handlers drained, listening
-// socket closed). Wait on this in tests or in process shutdown.
-func (c *controllerCore) Done() <-chan struct{} { return c.done }
-
-// Err returns the error that terminated the work goroutine. Returns
-// nil before Done is closed and after a clean shutdown via context
-// cancellation. Non-nil only when an unexpected condition (e.g. an
-// Accept failure outside the recoverable set) ended the loop.
-//
-// Note: Err does NOT surface Handler panics. The Server framework
-// has no `recover()` around handler dispatch (by design — see the
-// [Handler] doc); a panicking handler propagates up to the listener
-// goroutine and crashes the process before the work loop exits.
-// Use a process-level supervisor for crash detection.
-func (c *controllerCore) Err() error {
-	if p := c.err.Load(); p != nil {
-		return *p
-	}
-	return nil
-}
-
-// Wait blocks until the server's work goroutine has exited and
-// returns its terminal error. It is equivalent to:
-//
-//	<-c.Done()
-//	return c.Err()
-//
-// and is provided as a convenience for the common "start the server,
-// wait for it to finish, check why it exited" call shape:
-//
-//	ctrl, err := srv.Run(ctx)
-//	if err != nil {
-//	    return err
-//	}
-//	return ctrl.Wait()
-//
-// For composing with other channels (e.g. waiting on multiple
-// controllers via select) use [controllerCore.Done] directly.
-func (c *controllerCore) Wait() error {
-	<-c.done
-	return c.Err()
-}
-
-func (c *controllerCore) setErr(err error) {
-	if err != nil {
-		c.err.Store(&err)
-	}
-}
-
 // UDPController is the runtime handle returned by [UDPServer.Run].
 // It is the only path to the running UDP server instance: cancelling
 // the ctx passed to Run is the only way to stop the instance, and
@@ -162,7 +88,7 @@ func (c *controllerCore) setErr(err error) {
 // Future protocol-specific runtime queries (e.g. inflight-handler
 // count, packets dropped at the semaphore) belong on this type.
 type UDPController struct {
-	controllerCore
+	serverctl.Core
 }
 
 // TCPController is the runtime handle returned by [TCPServer.Run].
@@ -173,5 +99,5 @@ type UDPController struct {
 // Future protocol-specific runtime queries (e.g. open-connection
 // count, queries-in-flight per connection) belong on this type.
 type TCPController struct {
-	controllerCore
+	serverctl.Core
 }

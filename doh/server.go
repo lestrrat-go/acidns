@@ -59,12 +59,12 @@ import (
 	"net/http"
 	"net/netip"
 	"slices"
-	"sync/atomic"
 	"time"
 
 	"golang.org/x/net/http2"
 
 	"github.com/lestrrat-go/acidns"
+	"github.com/lestrrat-go/acidns/internal/serverctl"
 	"github.com/lestrrat-go/acidns/wire"
 )
 
@@ -342,7 +342,7 @@ func (s *Server) Run(ctx context.Context) (*Controller, error) {
 		}
 	}
 
-	ctrl := &Controller{addr: bound, done: make(chan struct{})}
+	ctrl := &Controller{Core: serverctl.New(bound)}
 	go func() {
 		<-ctx.Done()
 		shutdownCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
@@ -350,45 +350,18 @@ func (s *Server) Run(ctx context.Context) (*Controller, error) {
 		_ = hs.Shutdown(shutdownCtx)
 	}()
 	go func() {
-		defer close(ctrl.done)
+		defer ctrl.CloseDone()
 		err := hs.ServeTLS(ln, "", "")
 		if err != nil && !errors.Is(err, http.ErrServerClosed) {
-			ctrl.setErr(fmt.Errorf("doh: serve: %w", err))
+			ctrl.SetErr(fmt.Errorf("doh: serve: %w", err))
 		}
 	}()
 	return ctrl, nil
 }
 
-// Controller is the runtime handle returned by [Server.Run].
+// Controller is the runtime handle returned by [Server.Run]. It
+// embeds [serverctl.Core] (Addr / Done / Err / Wait); doh-specific
+// runtime queries belong on this type.
 type Controller struct {
-	addr netip.AddrPort
-	done chan struct{}
-	err  atomic.Pointer[error]
-}
-
-// Addr returns the address the server is bound to.
-func (c *Controller) Addr() netip.AddrPort { return c.addr }
-
-// Done returns a channel closed when the server has shut down.
-func (c *Controller) Done() <-chan struct{} { return c.done }
-
-// Err returns the terminal error, or nil after a clean shutdown.
-func (c *Controller) Err() error {
-	if p := c.err.Load(); p != nil {
-		return *p
-	}
-	return nil
-}
-
-// Wait blocks until the server has shut down and returns the
-// terminal error.
-func (c *Controller) Wait() error {
-	<-c.done
-	return c.Err()
-}
-
-func (c *Controller) setErr(err error) {
-	if err != nil {
-		c.err.Store(&err)
-	}
+	serverctl.Core
 }

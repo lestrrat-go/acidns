@@ -32,12 +32,12 @@ import (
 	"net/netip"
 	"slices"
 	"sync"
-	"sync/atomic"
 	"time"
 
 	"github.com/quic-go/quic-go"
 
 	"github.com/lestrrat-go/acidns"
+	"github.com/lestrrat-go/acidns/internal/serverctl"
 	"github.com/lestrrat-go/acidns/wire"
 )
 
@@ -119,48 +119,22 @@ func (s *Server) Run(ctx context.Context) (*Controller, error) {
 	if s.cfg.maxConnections > 0 {
 		loop.sem = make(chan struct{}, s.cfg.maxConnections)
 	}
-	ctrl := &Controller{addr: bound, done: make(chan struct{})}
+	ctrl := &Controller{Core: serverctl.New(bound)}
 	go func() {
-		defer close(ctrl.done)
+		defer ctrl.CloseDone()
 		err := loop.run(ctx)
 		if err != nil && !errors.Is(err, ErrServerClosed) {
-			ctrl.setErr(err)
+			ctrl.SetErr(err)
 		}
 	}()
 	return ctrl, nil
 }
 
-// Controller is the runtime handle returned by [Server.Run].
+// Controller is the runtime handle returned by [Server.Run]. It
+// embeds [serverctl.Core] (Addr / Done / Err / Wait); doq-specific
+// runtime queries belong on this type.
 type Controller struct {
-	addr netip.AddrPort
-	done chan struct{}
-	err  atomic.Pointer[error]
-}
-
-// Addr returns the bound UDP address.
-func (c *Controller) Addr() netip.AddrPort { return c.addr }
-
-// Done closes when the work goroutine has exited.
-func (c *Controller) Done() <-chan struct{} { return c.done }
-
-// Err returns the terminal error, or nil after a clean shutdown.
-func (c *Controller) Err() error {
-	if p := c.err.Load(); p != nil {
-		return *p
-	}
-	return nil
-}
-
-// Wait blocks until the server has shut down.
-func (c *Controller) Wait() error {
-	<-c.done
-	return c.Err()
-}
-
-func (c *Controller) setErr(err error) {
-	if err != nil {
-		c.err.Store(&err)
-	}
+	serverctl.Core
 }
 
 type serverLoop struct {

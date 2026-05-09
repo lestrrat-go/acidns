@@ -38,11 +38,11 @@ import (
 	"net/netip"
 	"slices"
 	"sync"
-	"sync/atomic"
 	"syscall"
 	"time"
 
 	"github.com/lestrrat-go/acidns"
+	"github.com/lestrrat-go/acidns/internal/serverctl"
 	"github.com/lestrrat-go/acidns/wire"
 )
 
@@ -136,54 +136,22 @@ func (s *Server) Run(ctx context.Context) (*Controller, error) {
 		return &b
 	}
 
-	ctrl := &Controller{addr: bound, done: make(chan struct{})}
+	ctrl := &Controller{Core: serverctl.New(bound)}
 	go func() {
-		defer close(ctrl.done)
+		defer ctrl.CloseDone()
 		err := loop.run(ctx)
 		if err != nil && !errors.Is(err, ErrServerClosed) {
-			ctrl.setErr(err)
+			ctrl.SetErr(err)
 		}
 	}()
 	return ctrl, nil
 }
 
-// Controller is the runtime handle returned by [Server.Run]. It mirrors
-// [*acidns.TCPController] in shape — the names diverge because the
-// dot package owns its own protocol-specific runtime queries.
+// Controller is the runtime handle returned by [Server.Run]. It
+// embeds [serverctl.Core] which provides Addr / Done / Err / Wait;
+// dot-specific runtime queries belong on this type.
 type Controller struct {
-	addr netip.AddrPort
-	done chan struct{}
-	err  atomic.Pointer[error]
-}
-
-// Addr returns the address the server is bound to. When the caller
-// asked for port 0, this reflects the kernel-assigned ephemeral port.
-func (c *Controller) Addr() netip.AddrPort { return c.addr }
-
-// Done returns a channel closed when the work goroutine has exited
-// (in-flight handlers drained, listening socket closed).
-func (c *Controller) Done() <-chan struct{} { return c.done }
-
-// Err returns the error that terminated the work goroutine, or nil
-// after a clean shutdown via context cancellation.
-func (c *Controller) Err() error {
-	if p := c.err.Load(); p != nil {
-		return *p
-	}
-	return nil
-}
-
-// Wait blocks until the work goroutine has exited and returns the
-// terminal error.
-func (c *Controller) Wait() error {
-	<-c.done
-	return c.Err()
-}
-
-func (c *Controller) setErr(err error) {
-	if err != nil {
-		c.err.Store(&err)
-	}
+	serverctl.Core
 }
 
 type serverLoop struct {
