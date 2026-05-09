@@ -77,32 +77,87 @@ type Client interface {
 	Retry(server netip.AddrPort, resp wire.Message) (ok bool, err error)
 }
 
+// DefaultClientMaxEntries caps the number of distinct servers a Client
+// remembers cookies for. A long-running recursive resolver talks to
+// every authoritative server it ever asks; without a cap the cache
+// grows unbounded as the resolver visits more authoritatives. 8192
+// is comfortably above any healthy resolver's working set while
+// bounding worst-case memory.
+const DefaultClientMaxEntries = 8192
+
+// ClientOption configures a [Client] returned by [NewClient].
+type ClientOption interface{ applyClient(*clientConfig) }
+
+type clientOptionFunc func(*clientConfig)
+
+func (f clientOptionFunc) applyClient(c *clientConfig) { f(c) }
+
+type clientConfig struct {
+	maxEntries int
+	now        func() time.Time
+}
+
+// WithClientMaxEntries caps the number of (server, cookie) tuples
+// kept in memory. When the cap is reached the oldest-touched entry
+// is evicted before a new one is inserted. A non-positive value
+// disables the cap. Defaults to [DefaultClientMaxEntries].
+func WithClientMaxEntries(n int) ClientOption {
+	return clientOptionFunc(func(c *clientConfig) { c.maxEntries = n })
+}
+
+// WithClientClock injects a custom clock for the LRU eviction
+// timestamps. Intended for tests; production callers should leave
+// the default.
+func WithClientClock(now func() time.Time) ClientOption {
+	return clientOptionFunc(func(c *clientConfig) { c.now = now })
+}
+
 // NewClient returns a fresh Client backed by an in-memory map.
-func NewClient() Client {
-	return &client{cache: make(map[netip.AddrPort]clientEntry)}
+func NewClient(opts ...ClientOption) Client {
+	cfg := clientConfig{maxEntries: DefaultClientMaxEntries, now: time.Now}
+	for _, o := range opts {
+		o.applyClient(&cfg)
+	}
+	if cfg.now == nil {
+		cfg.now = time.Now
+	}
+	return &client{
+		cache:      make(map[netip.AddrPort]clientEntry),
+		maxEntries: cfg.maxEntries,
+		now:        cfg.now,
+	}
 }
 
 type clientEntry struct {
 	clientCookie [8]byte
 	serverCookie []byte
+	updated      time.Time
 }
 
 type client struct {
-	mu    sync.Mutex
-	cache map[netip.AddrPort]clientEntry
+	mu         sync.Mutex
+	cache      map[netip.AddrPort]clientEntry
+	maxEntries int
+	now        func() time.Time
 }
 
 func (c *client) Apply(server netip.AddrPort, b wire.EDNSBuilder) wire.EDNSBuilder {
 	c.mu.Lock()
+	now := c.now()
 	e, ok := c.cache[server]
 	if !ok {
+		if c.maxEntries > 0 && len(c.cache) >= c.maxEntries {
+			c.evictLocked()
+		}
 		// Generate a fresh client cookie. RFC 7873 recommends per-server
 		// uniqueness; we pick fresh random bytes.
 		var cc [8]byte
 		_, _ = rand.Read(cc[:])
-		e = clientEntry{clientCookie: cc}
-		c.cache[server] = e
+		e = clientEntry{clientCookie: cc, updated: now}
+	} else {
+		e.updated = now
 	}
+	c.cache[server] = e
 	cc := e.clientCookie
 	sc := append([]byte(nil), e.serverCookie...)
 	c.mu.Unlock()
@@ -123,9 +178,13 @@ func (c *client) Observe(server netip.AddrPort, resp wire.Message) {
 	}
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	e := c.cache[server]
+	e, exists := c.cache[server]
+	if !exists && c.maxEntries > 0 && len(c.cache) >= c.maxEntries {
+		c.evictLocked()
+	}
 	e.clientCookie = cc
 	e.serverCookie = append(e.serverCookie[:0], sc...)
+	e.updated = c.now()
 	c.cache[server] = e
 }
 
@@ -142,11 +201,36 @@ func (c *client) Retry(server netip.AddrPort, resp wire.Message) (bool, error) {
 	}
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	e := c.cache[server]
+	e, exists := c.cache[server]
+	if !exists && c.maxEntries > 0 && len(c.cache) >= c.maxEntries {
+		c.evictLocked()
+	}
 	e.clientCookie = cc
 	e.serverCookie = append(e.serverCookie[:0], sc...)
+	e.updated = c.now()
 	c.cache[server] = e
 	return true, nil
+}
+
+// evictLocked drops the single oldest-updated entry. Caller holds
+// c.mu. The cache holds at most one entry per upstream
+// [netip.AddrPort] so a single eviction is sufficient — at the next
+// insertion a fresh client cookie will be re-minted on demand if
+// the evicted server is contacted again.
+func (c *client) evictLocked() {
+	var oldestKey netip.AddrPort
+	var oldestTime time.Time
+	first := true
+	for k, e := range c.cache {
+		if first || e.updated.Before(oldestTime) {
+			oldestKey = k
+			oldestTime = e.updated
+			first = false
+		}
+	}
+	if !first {
+		delete(c.cache, oldestKey)
+	}
 }
 
 // combinedRCODE assembles the RFC 6891 §6.1.3 extended RCODE from msg's

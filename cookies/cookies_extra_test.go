@@ -255,3 +255,57 @@ func TestClientObserveSkipsNonCookieOptions(t *testing.T) {
 	require.True(t, ok)
 	require.Empty(t, sc)
 }
+
+// TestClientCacheEvictsAtMaxEntries verifies that the LRU cap drops
+// the oldest entry when a new server is encountered, and that the
+// most-recently-touched entry survives. Without the cap a long-
+// running recursive resolver would grow the map unboundedly.
+func TestClientCacheEvictsAtMaxEntries(t *testing.T) {
+	t.Parallel()
+
+	now := time.Unix(1_700_000_000, 0)
+	c := cookies.NewClient(
+		cookies.WithClientMaxEntries(4),
+		cookies.WithClientClock(func() time.Time { return now }),
+	)
+
+	// Fill the cap with four distinct servers, advancing the clock
+	// each time so the LRU ordering is well-defined.
+	addrs := []netip.AddrPort{
+		netip.MustParseAddrPort("192.0.2.1:53"),
+		netip.MustParseAddrPort("192.0.2.2:53"),
+		netip.MustParseAddrPort("192.0.2.3:53"),
+		netip.MustParseAddrPort("192.0.2.4:53"),
+	}
+	firstCookies := make(map[netip.AddrPort][8]byte)
+	for _, a := range addrs {
+		now = now.Add(time.Second)
+		cc, _, _ := findCookie(c.Apply(a, wire.NewEDNSBuilder()).Build())
+		firstCookies[a] = cc
+	}
+
+	// Touch the second server so it's the most-recently-used; the
+	// oldest is now addrs[0].
+	now = now.Add(time.Second)
+	_, _, _ = findCookie(c.Apply(addrs[1], wire.NewEDNSBuilder()).Build())
+
+	// Insert a fifth server: addrs[0] (the oldest by touch time) must
+	// be evicted to make room.
+	now = now.Add(time.Second)
+	fifth := netip.MustParseAddrPort("192.0.2.5:53")
+	_, _, _ = findCookie(c.Apply(fifth, wire.NewEDNSBuilder()).Build())
+
+	// addrs[1] was the most-recently-touched survivor — its client
+	// cookie must be the same one that was minted on its first Apply.
+	cc1, _, ok := findCookie(c.Apply(addrs[1], wire.NewEDNSBuilder()).Build())
+	require.True(t, ok)
+	require.Equal(t, firstCookies[addrs[1]], cc1)
+
+	// addrs[0] should have been evicted: re-applying mints a fresh
+	// client cookie, so it must differ from the original. (Random
+	// 8-byte clash is a 1-in-2^64 false negative — fine.)
+	now = now.Add(time.Second)
+	cc0, _, ok := findCookie(c.Apply(addrs[0], wire.NewEDNSBuilder()).Build())
+	require.True(t, ok)
+	require.NotEqual(t, firstCookies[addrs[0]], cc0)
+}
