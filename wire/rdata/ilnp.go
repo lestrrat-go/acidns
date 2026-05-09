@@ -26,8 +26,11 @@ func (n NID) Pack(p *wirebb.Packer) {
 // NewNID returns an NID rdata.
 func NewNID(pref uint16, nodeID uint64) NID { return NID{pref: pref, id: nodeID} }
 
-func unpackNID(u *wirebb.Unpacker) (NID, error) {
+func unpackNID(u *wirebb.Unpacker, rdlen int) (NID, error) {
 	var zero NID
+	if rdlen != 10 {
+		return zero, fmt.Errorf("%w: NID rdlen=%d, want 10", ErrInvalidRData, rdlen)
+	}
 	pref, err := u.Uint16()
 	if err != nil {
 		return zero, err
@@ -61,8 +64,11 @@ func (l L32) Pack(p *wirebb.Packer) {
 // NewL32 returns an L32 rdata.
 func NewL32(pref uint16, locator uint32) L32 { return L32{pref: pref, loc: locator} }
 
-func unpackL32(u *wirebb.Unpacker) (L32, error) {
+func unpackL32(u *wirebb.Unpacker, rdlen int) (L32, error) {
 	var zero L32
+	if rdlen != 6 {
+		return zero, fmt.Errorf("%w: L32 rdlen=%d, want 6", ErrInvalidRData, rdlen)
+	}
 	pref, err := u.Uint16()
 	if err != nil {
 		return zero, err
@@ -93,8 +99,11 @@ func (l L64) Pack(p *wirebb.Packer) {
 // NewL64 returns an L64 rdata.
 func NewL64(pref uint16, locator uint64) L64 { return L64{pref: pref, loc: locator} }
 
-func unpackL64(u *wirebb.Unpacker) (L64, error) {
+func unpackL64(u *wirebb.Unpacker, rdlen int) (L64, error) {
 	var zero L64
+	if rdlen != 10 {
+		return zero, fmt.Errorf("%w: L64 rdlen=%d, want 10", ErrInvalidRData, rdlen)
+	}
 	pref, err := u.Uint16()
 	if err != nil {
 		return zero, err

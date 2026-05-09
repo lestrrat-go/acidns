@@ -39,8 +39,11 @@ func MustNewA(addr netip.Addr) A {
 	return a
 }
 
-func unpackA(u *wirebb.Unpacker) (A, error) {
+func unpackA(u *wirebb.Unpacker, rdlen int) (A, error) {
 	var zero A
+	if rdlen != 4 {
+		return zero, fmt.Errorf("%w: A rdlen=%d, want 4", ErrInvalidRData, rdlen)
+	}
 	b, err := u.Bytes(4)
 	if err != nil {
 		return zero, err
@@ -78,8 +81,11 @@ func MustNewAAAA(addr netip.Addr) AAAA {
 	return a
 }
 
-func unpackAAAA(u *wirebb.Unpacker) (AAAA, error) {
+func unpackAAAA(u *wirebb.Unpacker, rdlen int) (AAAA, error) {
 	var zero AAAA
+	if rdlen != 16 {
+		return zero, fmt.Errorf("%w: AAAA rdlen=%d, want 16", ErrInvalidRData, rdlen)
+	}
 	b, err := u.Bytes(16)
 	if err != nil {
 		return zero, err

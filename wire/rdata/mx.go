@@ -42,8 +42,13 @@ func MustNewMX(pref uint16, exchange wirebb.Name) MX {
 	return m
 }
 
-func unpackMX(u *wirebb.Unpacker) (MX, error) {
+func unpackMX(u *wirebb.Unpacker, rdlen int) (MX, error) {
 	var zero MX
+	// preference(2) + minimum 1-byte name (root). Reject obvious garbage
+	// up front so callers don't reach into a too-small rdata window.
+	if rdlen < 3 {
+		return zero, fmt.Errorf("%w: MX rdlen=%d, want >=3", ErrInvalidRData, rdlen)
+	}
 	pref, err := u.Uint16()
 	if err != nil {
 		return zero, err
