@@ -8,9 +8,11 @@ package acidns
 // expected to compose two transports at the resolver layer.
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
+	"math/rand/v2"
 	"net"
 	"net/netip"
 	"time"
@@ -28,6 +30,7 @@ func (f udpExchangerOptionFunc) applyUDPExchanger(c *udpExchangerConfig) { f(c) 
 type udpExchangerConfig struct {
 	timeout    time.Duration
 	bufferSize int
+	use0x20    bool
 }
 
 // WithUDPTimeout sets a per-exchange timeout that takes effect when the caller
@@ -42,10 +45,29 @@ func WithUDPReadBufferSize(n int) UDPExchangerOption {
 	return udpExchangerOptionFunc(func(c *udpExchangerConfig) { c.bufferSize = n })
 }
 
+// WithUDP0x20 enables RFC 5452 §9.3 0x20 hardening: the exchanger
+// randomly toggles the case of ASCII letters in the QNAME of every
+// outbound query, then verifies the response's question section
+// matches case-exactly. A spoofer that guesses the 16-bit
+// transaction ID still has to reproduce the case-pattern, raising
+// the per-query search space by 2^N for an N-letter qname.
+//
+// Defaults to false: some old or buggy authoritative servers
+// silently lowercase the qname in their response, which would fail
+// case-sensitive verification and lose resolution for the affected
+// zones. Operators confident in their upstream's RFC 4343 case
+// preservation can opt in. The recursive resolver wires this
+// through automatically when [recursive.WithCaseRandomization] is
+// set.
+func WithUDP0x20(v bool) UDPExchangerOption {
+	return udpExchangerOptionFunc(func(c *udpExchangerConfig) { c.use0x20 = v })
+}
+
 type udpExchanger struct {
 	addr    netip.AddrPort
 	timeout time.Duration
 	bufsize int
+	use0x20 bool
 }
 
 // NewUDPExchanger returns an Exchanger that talks UDP to addr.
@@ -57,13 +79,30 @@ func NewUDPExchanger(addr netip.AddrPort, opts ...UDPExchangerOption) (Exchanger
 	for _, o := range opts {
 		o.applyUDPExchanger(&c)
 	}
-	return &udpExchanger{addr: addr, timeout: c.timeout, bufsize: c.bufferSize}, nil
+	return &udpExchanger{addr: addr, timeout: c.timeout, bufsize: c.bufferSize, use0x20: c.use0x20}, nil
 }
 
 func (e *udpExchanger) Exchange(ctx context.Context, q wire.Message) (wire.Message, error) {
 	msg, err := wire.Marshal(q)
 	if err != nil {
 		return nil, fmt.Errorf("udp: marshal query: %w", err)
+	}
+	// Pre-extract the sent question section so we can byte-compare
+	// against the response's question section when 0x20 is on. The
+	// case randomization happens after locating the question bytes
+	// (the locator only needs the length byte structure, which case
+	// flips don't affect).
+	var sentQuestion []byte
+	if e.use0x20 {
+		qs, qerr := questionSectionBytes(msg)
+		if qerr != nil {
+			return nil, fmt.Errorf("udp: extract sent question: %w", qerr)
+		}
+		// Randomize case in-place on the qname portion of msg, then
+		// snapshot the resulting question bytes so the inbound check
+		// has the exact pattern we sent.
+		randomizeQNameCase(msg[12 : 12+len(qs)-4])
+		sentQuestion = append([]byte(nil), msg[12:12+len(qs)]...)
 	}
 
 	var d net.Dialer
@@ -121,6 +160,90 @@ func (e *udpExchanger) Exchange(ctx context.Context, q wire.Message) (wire.Messa
 			// for a legit response.
 			continue
 		}
+		if e.use0x20 {
+			recvQuestion, qerr := questionSectionBytes(buf[:n])
+			if qerr != nil || !bytes.Equal(recvQuestion, sentQuestion) {
+				// 0x20 mismatch — response question's case doesn't
+				// match what we sent. Treat as forgery; keep waiting.
+				continue
+			}
+		}
 		return resp, nil
 	}
+}
+
+// randomizeQNameCase walks the qname bytes (length-prefixed labels
+// terminated by a zero byte) and flips a random subset of ASCII
+// letters to upper case. Only bytes inside label payloads are
+// touched; length octets and the terminator stay intact. The wire
+// layer canonicalises decoded names to lowercase, so on entry every
+// letter byte is 'a'-'z' — we either leave it or transform to
+// 'A'-'Z'. Each letter independently has 50% probability of being
+// flipped (math/rand is sufficient — the security property is
+// search-space size, not cryptographic unpredictability).
+func randomizeQNameCase(qname []byte) {
+	off := 0
+	for off < len(qname) {
+		l := int(qname[off])
+		if l == 0 {
+			return
+		}
+		if l&0xc0 != 0 {
+			return // pointer — should not occur in question section
+		}
+		off++
+		end := off + l
+		if end > len(qname) {
+			return
+		}
+		for i := off; i < end; i++ {
+			b := qname[i]
+			if b >= 'a' && b <= 'z' && randBit() {
+				qname[i] = b - 32
+			}
+		}
+		off = end
+	}
+}
+
+// randBit returns a single random bit. Uses math/rand/v2 because
+// the property 0x20 needs is "doubles the search space per letter"
+// — unpredictability per query is enough; cryptographic-grade RNG
+// is overkill and would slow every outbound query.
+func randBit() bool {
+	return rand.IntN(2) == 1
+}
+
+// questionSectionBytes returns msg[12 : start_of_answer_section] —
+// the wire bytes covering the single question (qname + qtype +
+// qclass). Used for byte-exact comparison of the question section
+// (case-sensitive 0x20 verification, RFC 5452 §9.3).
+//
+// RFC 1035 §4.1.2 forbids compression pointers in the question
+// because the question is the first name in the message and has no
+// prior name to point to. A peer that emits a pointer here is
+// non-conformant and we reject by surfacing an error.
+func questionSectionBytes(msg []byte) ([]byte, error) {
+	if len(msg) < 12 {
+		return nil, fmt.Errorf("message shorter than DNS header")
+	}
+	off := 12
+	for {
+		if off >= len(msg) {
+			return nil, fmt.Errorf("truncated qname in question")
+		}
+		l := int(msg[off])
+		if l == 0 {
+			off++
+			break
+		}
+		if l&0xc0 != 0 {
+			return nil, fmt.Errorf("compression pointer in question section")
+		}
+		off += 1 + l
+	}
+	if off+4 > len(msg) {
+		return nil, fmt.Errorf("truncated question fields")
+	}
+	return msg[12 : off+4], nil
 }

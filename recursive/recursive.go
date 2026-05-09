@@ -92,9 +92,21 @@ type recursive struct {
 	maxNegTTL     time.Duration
 	resolveBudget time.Duration
 	allowNoRD     bool
+	caseRandom    bool
 
 	inflightMu sync.Mutex
 	inflight   map[string]*inflightCall
+
+	// nsInProgressMu guards a Resolver-wide set of NS targets that
+	// any goroutine is currently chasing. Sharing the set across
+	// concurrent Resolves prevents the amplification an attacker
+	// would otherwise gain by triggering many parallel walks of an
+	// adversarial NS graph: the first walker marks the NS, every
+	// other walker that hits the same name treats it as a cycle
+	// and falls back to remaining alternatives instead of also
+	// chasing it.
+	nsInProgressMu sync.Mutex
+	nsInProgress   map[string]struct{}
 }
 
 // inflightCall coalesces concurrent resolveDepth invocations for the
@@ -129,7 +141,10 @@ func New(opts ...Option) Recursive {
 		c.stats = NewMemoryStats()
 	}
 	if c.dialer == nil {
-		c.dialer = defaultDialer{}
+		// caseRandom changes how the default dialer constructs its
+		// per-query UDP exchanger; a caller-supplied custom dialer
+		// is responsible for its own 0x20 verification.
+		c.dialer = defaultDialer{use0x20: c.caseRandom}
 	}
 	return &recursive{
 		roots:         append([]netip.AddrPort(nil), c.roots...),
@@ -144,17 +159,29 @@ func New(opts ...Option) Recursive {
 		maxNegTTL:     c.maxNegTTL,
 		resolveBudget: c.resolveBudget,
 		allowNoRD:     c.allowNoRD,
+		caseRandom:    c.caseRandom,
 		inflight:      make(map[string]*inflightCall),
+		nsInProgress:  make(map[string]struct{}),
 	}
 }
 
 // DefaultDialer returns the built-in Dialer.
 func DefaultDialer() Dialer { return defaultDialer{} }
 
-type defaultDialer struct{}
+// defaultDialer is the Resolver's built-in Dialer. It is per-request
+// stateless (no connection reuse) and constructs a fresh UDP
+// exchanger on every Exchange call. use0x20 toggles RFC 5452 §9.3
+// case randomization + verification on the UDP exchanger; the
+// recursive resolver sets it to true when WithCaseRandomization is
+// enabled.
+type defaultDialer struct {
+	use0x20 bool
+}
 
-func (defaultDialer) Exchange(ctx context.Context, server netip.AddrPort, q wire.Message) (wire.Message, error) {
-	uex, err := acidns.NewUDPExchanger(server)
+func (d defaultDialer) Exchange(ctx context.Context, server netip.AddrPort, q wire.Message) (wire.Message, error) {
+	uex, err := acidns.NewUDPExchanger(server,
+		acidns.WithUDP0x20(d.use0x20),
+	)
 	if err != nil {
 		return nil, err
 	}
@@ -258,12 +285,12 @@ func (r *recursive) Resolve(ctx context.Context, name wire.Name, t rrtype.Type) 
 		ctx, cancel = context.WithTimeout(ctx, r.resolveBudget)
 		defer cancel()
 	}
-	// Per-Resolve in-progress NS-resolution set. Recursive NS lookups
-	// (serversFromReferral) check this set before recursing so an
-	// adversarial graph where ns.a.example needs ns.b.example which
-	// needs ns.a.example cannot loop indefinitely under the
-	// (depth × iterations × budget) ceiling.
-	ctx = withNSInProgress(ctx)
+	// In-progress NS-resolution detection now lives on the Resolver
+	// itself (see r.nsInProgress / r.markNSInProgress). The set is
+	// shared across concurrent Resolve calls so an attacker cannot
+	// amplify by triggering N parallel walks of an adversarial NS
+	// graph; the first walker stakes the names and every other
+	// walker that hits the same name treats it as a cycle.
 	entry, err := r.resolveDepthFollow(ctx, name, t, 0, 0, nil)
 	if err != nil {
 		return Entry{}, err
@@ -543,14 +570,17 @@ func (r *recursive) serversFromReferral(ctx context.Context, resp wire.Message, 
 		return glued
 	}
 	var out []netip.AddrPort
-	nsSet := nsInProgress(ctx)
 	for _, ns := range ungluedNS {
 		nsKey := nameKey(ns)
-		if nsSet != nil {
-			if _, busy := nsSet[nsKey]; busy {
-				continue // already resolving this NS up-stack — would cycle
-			}
-			nsSet[nsKey] = struct{}{}
+		// Resolver-wide cycle set: if any goroutine (this one OR a
+		// concurrent Resolve) is currently chasing ns up its NS
+		// graph, treat it as a cycle and skip. This collapses the
+		// per-Resolve cycle detection (which only protected against
+		// in-stack loops) into a global guard that also bounds the
+		// amplification an attacker would gain from triggering many
+		// parallel walks of an adversarial graph.
+		if !r.markNSInProgress(nsKey) {
+			continue
 		}
 		// Resolve A first; on networks without v4 (or zones whose NS
 		// targets only have AAAA glue under their own zone), fall back
@@ -569,33 +599,32 @@ func (r *recursive) serversFromReferral(ctx context.Context, resp wire.Message, 
 				}
 			}
 		}
-		if nsSet != nil {
-			delete(nsSet, nsKey)
-		}
+		r.unmarkNSInProgress(nsKey)
 	}
 	return out
 }
 
-type nsInProgressKey struct{}
-
-// withNSInProgress attaches a fresh per-Resolve set to ctx so nested
-// NS-resolution recursion can detect cycles. Uses a plain map (not
-// sync.Map) because all access is on the single Resolve goroutine —
-// the recursive walker is not concurrent within a single Resolve
-// call.
-func withNSInProgress(ctx context.Context) context.Context {
-	if nsInProgress(ctx) != nil {
-		return ctx
+// markNSInProgress atomically claims ns. Returns true if the caller
+// should proceed with chasing ns; false if some goroutine is
+// already chasing it and this caller should skip ahead to the next
+// candidate. The caller must call [unmarkNSInProgress] on the same
+// key on success.
+func (r *recursive) markNSInProgress(nsKey string) bool {
+	r.nsInProgressMu.Lock()
+	defer r.nsInProgressMu.Unlock()
+	if _, busy := r.nsInProgress[nsKey]; busy {
+		return false
 	}
-	return context.WithValue(ctx, nsInProgressKey{}, make(map[string]struct{}))
+	r.nsInProgress[nsKey] = struct{}{}
+	return true
 }
 
-func nsInProgress(ctx context.Context) map[string]struct{} {
-	if v, ok := ctx.Value(nsInProgressKey{}).(map[string]struct{}); ok {
-		return v
-	}
-	return nil
+func (r *recursive) unmarkNSInProgress(nsKey string) {
+	r.nsInProgressMu.Lock()
+	delete(r.nsInProgress, nsKey)
+	r.nsInProgressMu.Unlock()
 }
+
 
 // referralZone returns the owner name of the NS RRset in resp's
 // authority section — i.e., the zone that owns the delegation. If no NS

@@ -25,6 +25,7 @@ type config struct {
 	maxNegTTL     time.Duration
 	resolveBudget time.Duration
 	allowNoRD     bool
+	caseRandom    bool
 }
 
 // WithRoots overrides the default root server list.
@@ -109,4 +110,23 @@ func WithMaxNegativeTTL(d time.Duration) Option {
 // risk is contained at the transport layer.
 func WithAllowNoRD() Option {
 	return optionFunc(func(c *config) { c.allowNoRD = true })
+}
+
+// WithCaseRandomization enables RFC 5452 §9.3 0x20 hardening: the
+// resolver randomly toggles the case of ASCII letters in the QNAME
+// of every outbound query, then verifies the response's question
+// section matches case-exactly. A spoofer that guesses the
+// 16-bit transaction ID still has to also reproduce the case-pattern
+// the resolver chose, multiplying the spoofing search space by 2^N
+// for an N-letter qname.
+//
+// Defaults to off because some old or buggy authoritative servers
+// silently lowercase the qname in their response, and rejecting
+// those would lose resolution for the affected zones. Operators
+// confident in their upstream's RFC 4343 compliance can opt in.
+//
+// Only the default Dialer honors this option; a caller-supplied
+// custom Dialer is responsible for its own 0x20 implementation.
+func WithCaseRandomization() Option {
+	return optionFunc(func(c *config) { c.caseRandom = true })
 }
