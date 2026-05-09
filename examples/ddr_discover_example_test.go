@@ -26,11 +26,15 @@ func Example_ddr_discover() {
 	// Build a SVCB record advertising a DoH endpoint, exactly as a
 	// production resolver would emit it from _dns.resolver.arpa.
 	alpn, _ := rdata.NewSvcParamALPN("h2")
-	svcb := rdata.NewSVCB(1, wire.MustParseName("doh.example.net"),
+	svcb, err := rdata.NewSVCB(1, wire.MustParseName("doh.example.net"),
 		alpn,
 		rdata.NewSvcParamPort(443),
 		rdata.NewSvcParamDOHPath("/dns-query{?dns}"),
 	)
+	if err != nil {
+		fmt.Println("svcb:", err)
+		return
+	}
 	r := &fakeResolver{records: []wire.Record{
 		wire.NewRecord(ddr.ResolverDomain, 60*time.Second, svcb),
 	}}

@@ -24,6 +24,7 @@ import (
 	"math/big"
 	"time"
 
+	"github.com/lestrrat-go/acidns/dnssec"
 	"github.com/lestrrat-go/acidns/dnssec/dnssecbb"
 	"github.com/lestrrat-go/acidns/wire"
 	"github.com/lestrrat-go/acidns/wire/rdata"
@@ -41,6 +42,13 @@ var (
 	ErrBadTime        = errors.New("sig0: time outside validity window")
 	ErrBadSignature   = errors.New("sig0: signature did not verify")
 	ErrUnsupportedAlg = errors.New("sig0: unsupported algorithm")
+	// ErrKeyTagMismatch is returned when the caller-supplied DNSKEY's
+	// computed keyTag does not match the keyTag carried in the SIG(0)
+	// RR. RFC 2535 §4.1 ties a SIG to the specific key that produced
+	// it; refusing the mismatch prevents a caller juggling a key ring
+	// from accidentally validating a message against a different
+	// identity than the one the SIG claims.
+	ErrKeyTagMismatch = errors.New("sig0: keytag mismatch between supplied DNSKEY and SIG(0) RR")
 )
 
 // Sign appends a SIG(0) RR to the additional section of msg and returns
@@ -54,6 +62,15 @@ func Sign(msg []byte, signer wire.Name, alg rdata.DNSSECAlgorithm, keyTag uint16
 		return nil, fmt.Errorf("sig0: msg too short")
 	}
 	exp := now.Add(validity)
+	// SIG(0) packs inception and expiration as 32-bit unsigned
+	// seconds-since-epoch (RFC 2535 §4.1) — the format wraps in
+	// 2106. Refuse to sign with timestamps outside that window so a
+	// signer running on a far-future or pre-epoch clock surfaces an
+	// error rather than silently producing a SIG whose validity
+	// wraps around to 1970.
+	if now.Unix() < 0 || exp.Unix() < 0 || now.Unix() > 0xFFFFFFFF || exp.Unix() > 0xFFFFFFFF {
+		return nil, fmt.Errorf("sig0: timestamp out of 32-bit unsigned range (RFC 2535 §4.1 wrap-around)")
+	}
 	rdataNoSig := buildSIGRDataPrefix(alg, uint32(exp.Unix()), uint32(now.Unix()), keyTag, signer)
 
 	signedData := append(append([]byte(nil), rdataNoSig...), msg...)
@@ -70,10 +87,15 @@ func Sign(msg []byte, signer wire.Name, alg rdata.DNSSECAlgorithm, keyTag uint16
 	return out, nil
 }
 
-// Verify confirms the trailing SIG(0) RR over msg using pubkeyWire, the
-// algorithm-specific public-key bytes (same msg format as a DNSKEY's
-// PublicKey field). Returns the msg bytes without the SIG(0) RR.
-func Verify(msg []byte, alg rdata.DNSSECAlgorithm, pubkeyWire []byte, expectedSigner wire.Name, now time.Time) ([]byte, error) {
+// Verify confirms the trailing SIG(0) RR over msg using key — the
+// DNSKEY published at the signer's name. The DNSKEY's algorithm,
+// keyTag, and public-key bytes must match the SIG(0) RR's
+// corresponding fields; a mismatch returns [ErrKeyTagMismatch] (or
+// [ErrUnsupportedAlg] for the algorithm) before the cryptographic
+// verification runs.
+//
+// Returns the msg bytes without the SIG(0) RR.
+func Verify(msg []byte, key rdata.DNSKEY, expectedSigner wire.Name, now time.Time) ([]byte, error) {
 	body, sig, err := stripSIG(msg)
 	if err != nil {
 		return nil, err
@@ -81,17 +103,21 @@ func Verify(msg []byte, alg rdata.DNSSECAlgorithm, pubkeyWire []byte, expectedSi
 	if !sig.signer.Equal(expectedSigner) {
 		return nil, fmt.Errorf("sig0: signer mismatch: got %s", sig.signer)
 	}
-	if alg != sig.algorithm {
+	if key.Algorithm() != sig.algorithm {
 		return nil, fmt.Errorf("%w: alg mismatch", ErrUnsupportedAlg)
+	}
+	if dnssec.KeyTag(key) != sig.keyTag {
+		return nil, fmt.Errorf("%w: SIG keytag %d, supplied DNSKEY %d",
+			ErrKeyTagMismatch, sig.keyTag, dnssec.KeyTag(key))
 	}
 	if now.Unix() > int64(sig.expiration) || now.Unix() < int64(sig.inception) {
 		return nil, ErrBadTime
 	}
 
-	rdataNoSig := buildSIGRDataPrefix(alg, sig.expiration, sig.inception, sig.keyTag, sig.signer)
+	rdataNoSig := buildSIGRDataPrefix(key.Algorithm(), sig.expiration, sig.inception, sig.keyTag, sig.signer)
 	signedData := append(append([]byte(nil), rdataNoSig...), body...)
 
-	if err := verifySignature(alg, pubkeyWire, signedData, sig.signature); err != nil {
+	if err := verifySignature(key.Algorithm(), key.PublicKey(), signedData, sig.signature); err != nil {
 		return nil, err
 	}
 	return body, nil

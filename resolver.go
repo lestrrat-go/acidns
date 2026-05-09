@@ -15,6 +15,7 @@ import (
 	"fmt"
 	"log/slog"
 	"net/netip"
+	"slices"
 	"time"
 
 	"github.com/lestrrat-go/acidns/resolvconf"
@@ -26,7 +27,7 @@ import (
 
 // ErrNoResolver is returned when New cannot construct a Resolver because no
 // transport or server list was provided.
-var ErrNoResolver = errors.New("dnsclient: no exchanger or servers configured")
+var ErrNoResolver = errors.New("acidns: no exchanger or servers configured")
 
 // Resolver performs DNS queries on behalf of an application. Resolve is the
 // single primitive — typed convenience helpers (LookupHost, ResolveAs[T],
@@ -236,7 +237,7 @@ func NewResolver(opts ...ResolverOption) (Resolver, error) {
 		return nil, ErrNoResolver
 	}
 	if c.exchanger != nil && len(c.servers) > 0 {
-		return nil, fmt.Errorf("dnsclient: WithExchanger and WithServers are mutually exclusive")
+		return nil, fmt.Errorf("acidns: WithExchanger and WithServers are mutually exclusive")
 	}
 
 	ex := c.exchanger
@@ -458,7 +459,7 @@ func matchAnswers(answers []wire.Record, qname wire.Name, qtype rrtype.Type) []w
 // SearchList satisfies SearchLister so package-level helpers (LookupHost,
 // future search-list-aware lookups) can expand short names against the
 // resolver's configured suffixes.
-func (r *resolver) SearchList() []wire.Name { return r.searchList }
+func (r *resolver) SearchList() []wire.Name { return slices.Clone(r.searchList) }
 
 // Ndots satisfies SearchLister.
 func (r *resolver) Ndots() int { return r.ndots }
@@ -466,7 +467,7 @@ func (r *resolver) Ndots() int { return r.ndots }
 func randomID() (uint16, error) {
 	var b [2]byte
 	if _, err := rand.Read(b[:]); err != nil {
-		return 0, fmt.Errorf("dnsclient: random id: %w", err)
+		return 0, fmt.Errorf("acidns: random id: %w", err)
 	}
 	return binary.BigEndian.Uint16(b[:]), nil
 }
@@ -504,13 +505,25 @@ type retryExchanger struct {
 
 func (r *retryExchanger) Exchange(ctx context.Context, q wire.Message) (wire.Message, error) {
 	var lastErr error
-	for range r.attempts {
+	for i := range r.attempts {
+		attempt := q
+		// Mint a fresh transaction ID for every retry — RFC 5452 §10
+		// expects each fired query to be an independent draw from the
+		// 16-bit ID space so an off-path attacker observing one timeout
+		// doesn't get N guesses at the same (id, qname) tuple.
+		if i > 0 {
+			id, err := randomID()
+			if err != nil {
+				return nil, err
+			}
+			attempt = wire.WithID(q, id)
+		}
 		attemptCtx := ctx
 		var cancel context.CancelFunc
 		if r.perAttempt > 0 {
 			attemptCtx, cancel = context.WithTimeout(ctx, r.perAttempt)
 		}
-		resp, err := r.inner.Exchange(attemptCtx, q)
+		resp, err := r.inner.Exchange(attemptCtx, attempt)
 		if cancel != nil {
 			cancel()
 		}
@@ -529,8 +542,16 @@ type failover struct{ exs []Exchanger }
 
 func (f *failover) Exchange(ctx context.Context, q wire.Message) (wire.Message, error) {
 	var lastErr error
-	for _, ex := range f.exs {
-		resp, err := ex.Exchange(ctx, q)
+	for i, ex := range f.exs {
+		attempt := q
+		if i > 0 {
+			id, err := randomID()
+			if err != nil {
+				return nil, err
+			}
+			attempt = wire.WithID(q, id)
+		}
+		resp, err := ex.Exchange(ctx, attempt)
 		if err == nil {
 			return resp, nil
 		}

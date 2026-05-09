@@ -53,15 +53,15 @@ func TestCertVerifyUnsupportedESVersion(t *testing.T) {
 	var resolverPK [32]byte
 	copy(resolverPK[:], resolverPKBytes)
 
-	cert := dnscrypt.NewCert(
-		dnscrypt.ESVersion1, // unsupported
-		0,
-		resolverPK,
-		[8]byte{'a', 'b', 'c', 'd', 'e', 'f', 'g', 'h'},
-		1,
-		time.Now().Add(-time.Hour).UTC().Truncate(time.Second),
-		time.Now().Add(24*time.Hour).UTC().Truncate(time.Second),
+	cert, err := dnscrypt.NewCert(
+		dnscrypt.WithCertESVersion(dnscrypt.ESVersion1), // unsupported
+		dnscrypt.WithCertResolverPK(resolverPK),
+		dnscrypt.WithCertClientMagic([8]byte{'a', 'b', 'c', 'd', 'e', 'f', 'g', 'h'}),
+		dnscrypt.WithCertSerial(1),
+		dnscrypt.WithCertValidFrom(time.Now().Add(-time.Hour).UTC().Truncate(time.Second)),
+		dnscrypt.WithCertValidUntil(time.Now().Add(24*time.Hour).UTC().Truncate(time.Second)),
 	)
+	require.NoError(t, err)
 	dnscrypt.SignCert(cert, providerPriv)
 
 	err = cert.Verify(providerPub, time.Now())
@@ -71,8 +71,15 @@ func TestCertVerifyUnsupportedESVersion(t *testing.T) {
 // TestEncryptUnsupportedESVersion covers the early-return guard in Encrypt.
 func TestEncryptUnsupportedESVersion(t *testing.T) {
 	t.Parallel()
-	cert := dnscrypt.NewCert(dnscrypt.ESVersion1, 0, [32]byte{}, [8]byte{}, 0, time.Time{}, time.Time{})
-	_, err := dnscrypt.Encrypt(cert, [32]byte{}, [32]byte{}, [12]byte{}, []byte("x"))
+	cert, err := dnscrypt.NewCert(
+		dnscrypt.WithCertESVersion(dnscrypt.ESVersion1),
+		dnscrypt.WithCertResolverPK([32]byte{}),
+		dnscrypt.WithCertClientMagic([8]byte{}),
+		dnscrypt.WithCertValidFrom(time.Time{}),
+		dnscrypt.WithCertValidUntil(time.Time{}),
+	)
+	require.NoError(t, err)
+	_, err = dnscrypt.Encrypt(cert, [32]byte{}, [32]byte{}, [12]byte{}, []byte("x"))
 	require.ErrorIs(t, err, dnscrypt.ErrUnsupportedESVersion)
 }
 
@@ -84,8 +91,16 @@ func TestDecryptErrors(t *testing.T) {
 
 	t.Run("unsupported ES version", func(t *testing.T) {
 		t.Parallel()
-		bad := dnscrypt.NewCert(dnscrypt.ESVersion1, 0, cert.ResolverPK(), cert.ClientMagic(), cert.Serial(), cert.ValidFrom(), cert.ValidUntil())
-		_, err := dnscrypt.Decrypt(bad, [32]byte{}, [12]byte{}, make([]byte, 64))
+		bad, err := dnscrypt.NewCert(
+			dnscrypt.WithCertESVersion(dnscrypt.ESVersion1),
+			dnscrypt.WithCertResolverPK(cert.ResolverPK()),
+			dnscrypt.WithCertClientMagic(cert.ClientMagic()),
+			dnscrypt.WithCertSerial(cert.Serial()),
+			dnscrypt.WithCertValidFrom(cert.ValidFrom()),
+			dnscrypt.WithCertValidUntil(cert.ValidUntil()),
+		)
+		require.NoError(t, err)
+		_, err = dnscrypt.Decrypt(bad, [32]byte{}, [12]byte{}, make([]byte, 64))
 		require.ErrorIs(t, err, dnscrypt.ErrUnsupportedESVersion)
 	})
 
@@ -214,7 +229,14 @@ func TestNewUnsupportedESVersion(t *testing.T) {
 	t.Parallel()
 	_, providerSK, err := ed25519.GenerateKey(rand.Reader)
 	require.NoError(t, err)
-	cert := dnscrypt.NewCert(dnscrypt.ESVersion1, 0, [32]byte{}, [8]byte{}, 0, time.Now().Add(-time.Hour), time.Now().Add(time.Hour))
+	cert, err := dnscrypt.NewCert(
+		dnscrypt.WithCertESVersion(dnscrypt.ESVersion1),
+		dnscrypt.WithCertResolverPK([32]byte{}),
+		dnscrypt.WithCertClientMagic([8]byte{}),
+		dnscrypt.WithCertValidFrom(time.Now().Add(-time.Hour)),
+		dnscrypt.WithCertValidUntil(time.Now().Add(time.Hour)),
+	)
+	require.NoError(t, err)
 	dnscrypt.SignCert(cert, providerSK) // marks verified=true
 	_, err = dnscrypt.New(netip.AddrPortFrom(netip.MustParseAddr("127.0.0.1"), 53), cert)
 	require.ErrorIs(t, err, dnscrypt.ErrUnsupportedESVersion)
@@ -224,8 +246,14 @@ func TestNewUnsupportedESVersion(t *testing.T) {
 // through Verify (and was not locally SignCert'd) is rejected by New.
 func TestNewRejectsUnverifiedCert(t *testing.T) {
 	t.Parallel()
-	cert := dnscrypt.NewCert(dnscrypt.ESVersion2, 0, [32]byte{}, [8]byte{}, 0, time.Now().Add(-time.Hour), time.Now().Add(time.Hour))
-	_, err := dnscrypt.New(netip.AddrPortFrom(netip.MustParseAddr("127.0.0.1"), 53), cert)
+	cert, err := dnscrypt.NewCert(
+		dnscrypt.WithCertResolverPK([32]byte{}),
+		dnscrypt.WithCertClientMagic([8]byte{}),
+		dnscrypt.WithCertValidFrom(time.Now().Add(-time.Hour)),
+		dnscrypt.WithCertValidUntil(time.Now().Add(time.Hour)),
+	)
+	require.NoError(t, err)
+	_, err = dnscrypt.New(netip.AddrPortFrom(netip.MustParseAddr("127.0.0.1"), 53), cert)
 	require.ErrorIs(t, err, dnscrypt.ErrCertUnverified)
 }
 

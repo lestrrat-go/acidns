@@ -3,6 +3,7 @@ package wire
 import (
 	"encoding/binary"
 	"fmt"
+	"slices"
 
 	"github.com/lestrrat-go/acidns/wire/wirebb"
 )
@@ -108,7 +109,7 @@ type ednsOption struct {
 }
 
 func (o ednsOption) Code() uint16 { return o.code }
-func (o ednsOption) Data() []byte { return o.data }
+func (o ednsOption) Data() []byte { return slices.Clone(o.data) }
 
 // NewEDNSOption returns an EDNS option. data is copied so the caller may
 // reuse the slice.
@@ -133,34 +134,36 @@ func (e *edns) UDPSize() uint16       { return e.udpSize }
 func (e *edns) ExtendedRCODE() uint8  { return e.extRCODE }
 func (e *edns) Version() uint8        { return e.version }
 func (e *edns) DO() bool              { return e.do }
-func (e *edns) Options() []EDNSOption { return e.opts }
+func (e *edns) Options() []EDNSOption { return slices.Clone(e.opts) }
 
-// EDNSBuilder constructs an EDNS payload. Like Builder, an EDNSBuilder
-// is owned by a single goroutine and is NOT safe for concurrent use; the
-// EDNS value returned by Build is immutable and may be shared.
-type EDNSBuilder interface {
-	UDPSize(uint16) EDNSBuilder
-	ExtendedRCODE(uint8) EDNSBuilder
-	Version(uint8) EDNSBuilder
-	DO(bool) EDNSBuilder
-	Option(EDNSOption) EDNSBuilder
-	// Build returns the EDNS payload, or an error if validation
-	// fails (e.g. duplicate EDNS option code).
-	Build() (EDNS, error)
-}
-
-type ednsBuilder struct{ e edns }
+// EDNSBuilder constructs an EDNS payload. Like [Builder], an
+// EDNSBuilder is owned by a single goroutine and is NOT safe for
+// concurrent use; the EDNS value returned by Build is immutable and
+// may be shared.
+type EDNSBuilder struct{ e edns }
 
 // NewEDNSBuilder returns a fresh EDNSBuilder with sensible defaults
 // (UDPSize=1232 — the IETF DNS Flag Day 2020 recommendation).
-func NewEDNSBuilder() EDNSBuilder { return &ednsBuilder{e: edns{udpSize: 1232}} }
+func NewEDNSBuilder() *EDNSBuilder { return &EDNSBuilder{e: edns{udpSize: 1232}} }
 
-func (b *ednsBuilder) UDPSize(v uint16) EDNSBuilder      { b.e.udpSize = v; return b }
-func (b *ednsBuilder) ExtendedRCODE(v uint8) EDNSBuilder { b.e.extRCODE = v; return b }
-func (b *ednsBuilder) Version(v uint8) EDNSBuilder       { b.e.version = v; return b }
-func (b *ednsBuilder) DO(v bool) EDNSBuilder             { b.e.do = v; return b }
-func (b *ednsBuilder) Option(o EDNSOption) EDNSBuilder   { b.e.opts = append(b.e.opts, o); return b }
-func (b *ednsBuilder) Build() (EDNS, error) {
+// UDPSize sets the requestor's UDP payload size advertised in OPT.
+func (b *EDNSBuilder) UDPSize(v uint16) *EDNSBuilder { b.e.udpSize = v; return b }
+
+// ExtendedRCODE sets the high 8 bits of the 12-bit EDNS extended RCODE.
+func (b *EDNSBuilder) ExtendedRCODE(v uint8) *EDNSBuilder { b.e.extRCODE = v; return b }
+
+// Version sets the EDNS version (RFC 6891 §6.1.3).
+func (b *EDNSBuilder) Version(v uint8) *EDNSBuilder { b.e.version = v; return b }
+
+// DO sets the DNSSEC OK flag.
+func (b *EDNSBuilder) DO(v bool) *EDNSBuilder { b.e.do = v; return b }
+
+// Option appends an EDNS option to the OPT rdata.
+func (b *EDNSBuilder) Option(o EDNSOption) *EDNSBuilder { b.e.opts = append(b.e.opts, o); return b }
+
+// Build returns the EDNS payload, or an error if validation
+// fails (e.g. duplicate EDNS option code).
+func (b *EDNSBuilder) Build() (EDNS, error) {
 	// Reject duplicate option codes — RFC 6891 §6.1.2 doesn't
 	// expressly forbid them but the on-wire interpretation is
 	// ambiguous and a well-formed payload should carry each option

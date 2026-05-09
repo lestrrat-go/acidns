@@ -89,10 +89,10 @@ type UDPServer struct {
 // multiple times to spawn multiple independent server instances.
 func NewUDPServer(addr netip.AddrPort, h Handler, opts ...UDPListenerOption) (*UDPServer, error) {
 	if h == nil {
-		return nil, fmt.Errorf("dnsserver: handler is nil")
+		return nil, fmt.Errorf("acidns: handler is nil")
 	}
 	if !addr.IsValid() {
-		return nil, fmt.Errorf("dnsserver: invalid bind address")
+		return nil, fmt.Errorf("acidns: invalid bind address")
 	}
 	cfg := udpListenerConfig{
 		bufferSize:     4096,
@@ -117,12 +117,12 @@ func NewUDPServer(addr netip.AddrPort, h Handler, opts ...UDPListenerOption) (*U
 func (s *UDPServer) Run(ctx context.Context) (*UDPController, error) {
 	pc, err := net.ListenPacket("udp", s.addr.String()) //nolint:noctx // socket lifetime is bound to Run's ctx, not the bind call
 	if err != nil {
-		return nil, fmt.Errorf("dnsserver: udp listen %s: %w", s.addr, err)
+		return nil, fmt.Errorf("acidns: udp listen %s: %w", s.addr, err)
 	}
 	la, ok := pc.LocalAddr().(*net.UDPAddr)
 	if !ok {
 		_ = pc.Close()
-		return nil, fmt.Errorf("dnsserver: udp listen %s: unexpected addr type %T", s.addr, pc.LocalAddr())
+		return nil, fmt.Errorf("acidns: udp listen %s: unexpected addr type %T", s.addr, pc.LocalAddr())
 	}
 	bound := netip.AddrPortFrom(la.AddrPort().Addr(), uint16(la.Port))
 
@@ -197,7 +197,7 @@ func (l *udpLoop) run(ctx context.Context) error {
 			if ctx.Err() != nil || errors.Is(err, net.ErrClosed) {
 				return ErrServerClosed
 			}
-			return fmt.Errorf("dnsserver: udp read: %w", err)
+			return fmt.Errorf("acidns: udp read: %w", err)
 		}
 
 		ua, ok := src.(*net.UDPAddr)
@@ -282,7 +282,7 @@ func (w *udpResponseWriter) Network() string            { return "udp" }
 
 func (w *udpResponseWriter) WriteMsg(m wire.Message) error {
 	if w.wrote {
-		return fmt.Errorf("dnsserver: WriteMsg called twice on UDP response")
+		return fmt.Errorf("acidns: WriteMsg called twice on UDP response")
 	}
 	buf, err := wire.Marshal(m)
 	if err != nil {

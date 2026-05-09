@@ -118,6 +118,13 @@ type walker struct {
 	maxZoneCuts  int
 	maxRRSIGsTry int
 	maxAlgs      int
+	// maxKeys caps the number of usable DNSKEYs (post-protocol /
+	// post-revoke filter) the walker will accept from any one zone.
+	// Without this, a zone publishing many DNSKEYs that share a
+	// keytag drives `maxRRSIGsTry × N` candidate Verify calls per
+	// signed RRset (cf. CVE-2023-50387 KeyTrap). Default 16; raise
+	// only with concrete evidence of a legitimate larger keyset.
+	maxKeys int
 }
 
 // NewWalker constructs a Walker. A Source is required; any other option may
@@ -137,6 +144,7 @@ func NewWalker(source Source, opts ...WalkerOption) (Walker, error) {
 		maxZoneCuts:  16,
 		maxRRSIGsTry: 8,
 		maxAlgs:      4,
+		maxKeys:      16,
 	}
 	for _, o := range opts {
 		o.applyWalker(w)
@@ -347,6 +355,10 @@ func (w *walker) fetchAndVerifyDNSKEY(ctx context.Context, zone wire.Name, dss [
 	}
 	if len(keys) == 0 {
 		return nil, fmt.Errorf("validator: no usable DNSKEY at %s (all revoked or wrong protocol)", zone)
+	}
+	if len(keys) > w.maxKeys {
+		return nil, fmt.Errorf("%w: zone %s advertises %d DNSKEYs (cap %d, KeyTrap guard)",
+			ErrIterationLimit, zone, len(keys), w.maxKeys)
 	}
 
 	// Find at least one KSK that matches a DS. Track which DSs were
@@ -933,6 +945,12 @@ func (w *walker) verifyRRsetAllAlgs(set []wire.Record, sigs []rdata.RRSIG, keys 
 }
 
 // verifyRRsetWithKeys verifies set against any of sigs using any of keys.
+//
+// Caps the cumulative number of dnssec.Verify calls at maxRRSIGsTry —
+// without this, a zone publishing many DNSKEYs that share a single
+// keytag drives `outer_sigs × N` Verify calls per signed RRset (cf.
+// CVE-2023-50387 KeyTrap). The maxKeys cap on the DNSKEY rrset bounds
+// N; this counter bounds the cross-product anyway.
 func (w *walker) verifyRRsetWithKeys(set []wire.Record, sigs []rdata.RRSIG, keys []rdata.DNSKEY) error {
 	if len(set) == 0 {
 		return fmt.Errorf("validator: empty rrset")
@@ -942,6 +960,7 @@ func (w *walker) verifyRRsetWithKeys(set []wire.Record, sigs []rdata.RRSIG, keys
 	}
 	now := w.now()
 	var lastErr error
+	tries := 0
 	for _, sig := range sigs {
 		if !validatorbb.RRSIGValidNowWithSkew(sig, now, w.skew) {
 			lastErr = fmt.Errorf("RRSIG outside validity window")
@@ -950,6 +969,13 @@ func (w *walker) verifyRRsetWithKeys(set []wire.Record, sigs []rdata.RRSIG, keys
 		for _, key := range keys {
 			if dnssec.KeyTag(key) != sig.KeyTag() || key.Algorithm() != sig.Algorithm() {
 				continue
+			}
+			tries++
+			if tries > w.maxRRSIGsTry {
+				if lastErr == nil {
+					lastErr = ErrIterationLimit
+				}
+				return lastErr
 			}
 			err := dnssec.Verify(set, sig, key)
 			if err == nil {

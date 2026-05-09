@@ -2,6 +2,7 @@ package wire
 
 import (
 	"fmt"
+	"slices"
 
 	"github.com/lestrrat-go/acidns/wire/wirebb"
 )
@@ -27,12 +28,36 @@ type message struct {
 	edns        EDNS
 }
 
+// WithID returns a copy of m whose transaction ID has been replaced
+// with id. Resolvers retry-loops use this to mint a fresh ID per
+// outbound attempt: RFC 5452 §10 expects each fired query to draw an
+// independent 16-bit ID so an off-path attacker observing one timeout
+// gets a fresh spoof window per retry rather than three guesses at the
+// same target.
+//
+// The returned Message shares no mutable storage with m — section
+// slices are cloned. EDNS is treated as immutable and shared.
+func WithID(m Message, id uint16) Message {
+	cp := &message{
+		id:          id,
+		flags:       m.Flags(),
+		questions:   cloneSlice(m.Questions()),
+		answers:     cloneSlice(m.Answers()),
+		authorities: cloneSlice(m.Authorities()),
+		additionals: cloneSlice(m.Additionals()),
+	}
+	if e, ok := m.EDNS(); ok {
+		cp.edns = e
+	}
+	return cp
+}
+
 func (m *message) ID() uint16            { return m.id }
 func (m *message) Flags() Flags          { return m.flags }
-func (m *message) Questions() []Question { return m.questions }
-func (m *message) Answers() []Record     { return m.answers }
-func (m *message) Authorities() []Record { return m.authorities }
-func (m *message) Additionals() []Record { return m.additionals }
+func (m *message) Questions() []Question { return slices.Clone(m.questions) }
+func (m *message) Answers() []Record     { return slices.Clone(m.answers) }
+func (m *message) Authorities() []Record { return slices.Clone(m.authorities) }
+func (m *message) Additionals() []Record { return slices.Clone(m.additionals) }
 func (m *message) EDNS() (EDNS, bool)    { return m.edns, m.edns != nil }
 
 // Marshal encodes m to a single DNS wire-format datagram, using compression

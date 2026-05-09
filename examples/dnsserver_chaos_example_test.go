@@ -17,10 +17,14 @@ func Example_dnsserver_chaos() {
 	// chaos.New responds to RFC 4892 identity queries (id.server,
 	// hostname.bind, version.server, version.bind) on the CHAOS class.
 	// Compose with another Handler via WithNext, or run it standalone.
-	h := chaos.New(
+	h, err := chaos.New(
 		chaos.WithIdentifier("ns1.example.net"),
 		chaos.WithVersion("acidns/dev"),
 	)
+	if err != nil {
+		fmt.Println("chaos:", err)
+		return
+	}
 	srv, err := acidns.NewUDPServer(netip.MustParseAddrPort("127.0.0.1:0"), h)
 	if err != nil {
 		fmt.Println("listen:", err)

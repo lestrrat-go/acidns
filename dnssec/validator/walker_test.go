@@ -44,8 +44,8 @@ func buildChain(t *testing.T, alg rdata.DNSSECAlgorithm, now time.Time) (*fixtur
 	require.NoError(t, err)
 
 	w, err := validator.NewWalker(src,
-		validator.WithAnchors(anchor),
-		validator.WithNow(func() time.Time { return now }),
+		validator.WithWalkerAnchors(anchor),
+		validator.WithWalkerNow(func() time.Time { return now }),
 	)
 	require.NoError(t, err)
 	return src, w, anchor
@@ -94,9 +94,9 @@ func TestWalkerNTAShortCircuit(t *testing.T) {
 
 	store := validator.NewNTAStore(wire.MustParseName("naughty.example."))
 	w, err := validator.NewWalker(src,
-		validator.WithAnchors(anchor),
-		validator.WithNTAStore(store),
-		validator.WithNow(func() time.Time { return now }),
+		validator.WithWalkerAnchors(anchor),
+		validator.WithWalkerNTAStore(store),
+		validator.WithWalkerNow(func() time.Time { return now }),
 	)
 	require.NoError(t, err)
 
@@ -113,8 +113,8 @@ func TestWalkerNoTrustAnchor(t *testing.T) {
 		rdata.NewDS(1, rdata.AlgECDSAP256SHA256, rdata.DigestSHA256, make([]byte, 32)))
 	require.NoError(t, err)
 	w, err := validator.NewWalker(src,
-		validator.WithAnchors(otherAnchor),
-		validator.WithNow(func() time.Time { return now }),
+		validator.WithWalkerAnchors(otherAnchor),
+		validator.WithWalkerNow(func() time.Time { return now }),
 	)
 	require.NoError(t, err)
 	ans, err := w.Resolve(t.Context(), wire.MustParseName("example.com."), rrtype.A)
@@ -128,9 +128,9 @@ func TestWalkerExpiredSignatureBogus(t *testing.T) {
 	src, _, anchor := buildChain(t, rdata.AlgECDSAP256SHA256, now)
 	// Walker with an effective time well past signature expiration.
 	wFuture, err := validator.NewWalker(src,
-		validator.WithAnchors(anchor),
-		validator.WithNow(func() time.Time { return now.Add(48 * time.Hour) }),
-		validator.WithBogusPolicy(validator.BogusReturnAnswer),
+		validator.WithWalkerAnchors(anchor),
+		validator.WithWalkerNow(func() time.Time { return now.Add(48 * time.Hour) }),
+		validator.WithWalkerBogusPolicy(validator.BogusReturnAnswer),
 	)
 	require.NoError(t, err)
 	ans, err := wFuture.Resolve(t.Context(), wire.MustParseName("www.sub.example."), rrtype.A)
@@ -157,8 +157,8 @@ func TestWalkerInsecureDelegation(t *testing.T) {
 	rootDS, _ := root.rootAnchor(t)
 	anchor, _ := validator.NewAnchor(rootDS.apex, rootDS.ds)
 	w, err := validator.NewWalker(src,
-		validator.WithAnchors(anchor),
-		validator.WithNow(func() time.Time { return now }),
+		validator.WithWalkerAnchors(anchor),
+		validator.WithWalkerNow(func() time.Time { return now }),
 	)
 	require.NoError(t, err)
 
@@ -176,9 +176,9 @@ func TestWalkerTamperedAnswerBogus(t *testing.T) {
 	require.True(t, tampered)
 
 	wTamper, err := validator.NewWalker(src,
-		validator.WithAnchors(anchor),
-		validator.WithNow(func() time.Time { return now }),
-		validator.WithBogusPolicy(validator.BogusReturnAnswer),
+		validator.WithWalkerAnchors(anchor),
+		validator.WithWalkerNow(func() time.Time { return now }),
+		validator.WithWalkerBogusPolicy(validator.BogusReturnAnswer),
 	)
 	require.NoError(t, err)
 	ans, err := wTamper.Resolve(t.Context(), wire.MustParseName("www.sub.example."), rrtype.A)
@@ -249,10 +249,10 @@ func TestWalkerMaxZoneCutsBomb(t *testing.T) {
 	now := time.Now().UTC().Truncate(time.Second)
 	src, _, anchor := buildChain(t, rdata.AlgECDSAP256SHA256, now)
 	wTight, err := validator.NewWalker(src,
-		validator.WithAnchors(anchor),
-		validator.WithNow(func() time.Time { return now }),
-		validator.WithMaxZoneCuts(1),
-		validator.WithBogusPolicy(validator.BogusReturnAnswer),
+		validator.WithWalkerAnchors(anchor),
+		validator.WithWalkerNow(func() time.Time { return now }),
+		validator.WithWalkerMaxZoneCuts(1),
+		validator.WithWalkerBogusPolicy(validator.BogusReturnAnswer),
 	)
 	require.NoError(t, err)
 	ans, err := wTight.Resolve(t.Context(), wire.MustParseName("www.sub.example."), rrtype.A)

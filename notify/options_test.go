@@ -1,6 +1,7 @@
 package notify_test
 
 import (
+	"context"
 	"net/netip"
 	"sync/atomic"
 	"testing"
@@ -17,7 +18,7 @@ func TestSendWithSOAAndTimeout(t *testing.T) {
 	t.Parallel()
 
 	var got atomic.Pointer[wire.Question]
-	addr := startSecondary(t, func(q wire.Question, _ acidns.ResponseWriter) {
+	addr := startSecondary(t, func(_ context.Context, q wire.Question, _ acidns.ResponseWriter) {
 		got.Store(&q)
 	})
 	ex, err := acidns.NewUDPExchanger(addr)

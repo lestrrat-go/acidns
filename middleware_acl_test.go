@@ -49,7 +49,8 @@ func aclMkQuery(t *testing.T) wire.Message {
 
 func TestAllowList(t *testing.T) {
 	t.Parallel()
-	h := acidns.NewACL(aclMkInner(), acidns.WithACLAllow(netip.MustParsePrefix("127.0.0.0/8")))
+	h, err := acidns.NewACL(aclMkInner(), acidns.WithACLAllow(netip.MustParsePrefix("127.0.0.0/8")))
+	require.NoError(t, err)
 
 	w1 := &fakeWriter{src: netip.MustParseAddrPort("127.0.0.1:12345")}
 	h.ServeDNS(context.Background(), w1, aclMkQuery(t))
@@ -62,7 +63,8 @@ func TestAllowList(t *testing.T) {
 
 func TestDenyList(t *testing.T) {
 	t.Parallel()
-	h := acidns.NewACL(aclMkInner(), acidns.WithACLDeny(netip.MustParsePrefix("192.168.0.0/16")))
+	h, err := acidns.NewACL(aclMkInner(), acidns.WithACLDeny(netip.MustParsePrefix("192.168.0.0/16")))
+	require.NoError(t, err)
 
 	w1 := &fakeWriter{src: netip.MustParseAddrPort("192.168.1.5:1000")}
 	h.ServeDNS(context.Background(), w1, aclMkQuery(t))
@@ -75,10 +77,11 @@ func TestDenyList(t *testing.T) {
 
 func TestDenyBeatsAllow(t *testing.T) {
 	t.Parallel()
-	h := acidns.NewACL(aclMkInner(),
+	h, err := acidns.NewACL(aclMkInner(),
 		acidns.WithACLAllow(netip.MustParsePrefix("10.0.0.0/8")),
 		acidns.WithACLDeny(netip.MustParsePrefix("10.1.0.0/16")),
 	)
+	require.NoError(t, err)
 
 	w1 := &fakeWriter{src: netip.MustParseAddrPort("10.1.2.3:1")}
 	h.ServeDNS(context.Background(), w1, aclMkQuery(t))
@@ -89,10 +92,8 @@ func TestDenyBeatsAllow(t *testing.T) {
 	require.Equal(t, wire.RCODENoError, w2.captured.Flags().RCODE())
 }
 
-func TestNoConfigPermitsAll(t *testing.T) {
+func TestNoRulesIsAnError(t *testing.T) {
 	t.Parallel()
-	h := acidns.NewACL(aclMkInner())
-	w := &fakeWriter{src: netip.MustParseAddrPort("8.8.8.8:53")}
-	h.ServeDNS(context.Background(), w, aclMkQuery(t))
-	require.Equal(t, wire.RCODENoError, w.captured.Flags().RCODE())
+	_, err := acidns.NewACL(aclMkInner())
+	require.ErrorIs(t, err, acidns.ErrACLNoRules)
 }

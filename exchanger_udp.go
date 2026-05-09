@@ -10,8 +10,8 @@ package acidns
 import (
 	"bytes"
 	"context"
+	"crypto/rand"
 	"fmt"
-	"math/rand/v2"
 	"net"
 	"net/netip"
 	"time"
@@ -32,8 +32,11 @@ type udpExchangerConfig struct {
 	use0x20    bool
 }
 
-// WithUDPTimeout sets a per-exchange timeout that takes effect when the caller
-// supplies a context without its own deadline. Defaults to 5 seconds.
+// WithUDPTimeout sets a per-exchange timeout that takes effect when
+// the caller supplies a context without its own deadline. Defaults
+// to 5 seconds. Pass 0 to disable the fallback (the context deadline
+// or kernel socket timeout becomes the only bound — typically what
+// you want only in tests or with a hard ctx deadline).
 func WithUDPTimeout(d time.Duration) UDPExchangerOption {
 	return udpExchangerOptionFunc(func(c *udpExchangerConfig) { c.timeout = d })
 }
@@ -99,7 +102,9 @@ func (e *udpExchanger) Exchange(ctx context.Context, q wire.Message) (wire.Messa
 		// Randomize case in-place on the qname portion of msg, then
 		// snapshot the resulting question bytes so the inbound check
 		// has the exact pattern we sent.
-		randomizeQNameCase(msg[12 : 12+len(qs)-4])
+		if err := randomizeQNameCase(msg[12 : 12+len(qs)-4]); err != nil {
+			return nil, fmt.Errorf("udp: 0x20 randomness: %w", err)
+		}
 		sentQuestion = append([]byte(nil), msg[12:12+len(qs)]...)
 	}
 
@@ -204,40 +209,53 @@ func (e *udpExchanger) Exchange(ctx context.Context, q wire.Message) (wire.Messa
 // touched; length octets and the terminator stay intact. The wire
 // layer canonicalises decoded names to lowercase, so on entry every
 // letter byte is 'a'-'z' — we either leave it or transform to
-// 'A'-'Z'. Each letter independently has 50% probability of being
-// flipped (math/rand is sufficient — the security property is
-// search-space size, not cryptographic unpredictability).
-func randomizeQNameCase(qname []byte) {
+// 'A'-'Z'.
+//
+// The bitstream comes from crypto/rand. A predictable PRNG would
+// let an off-path attacker who has observed several outbound
+// queries from the same process reconstruct the RNG state and
+// predict subsequent case patterns, defeating 0x20 exactly when it
+// matters most. The cost is one read of (qname_len/8) bytes from
+// the OS RNG per query — negligible against the UDP syscall.
+func randomizeQNameCase(qname []byte) error {
+	// At most one bit per byte; preallocate a comfortable upper
+	// bound so we never run short during the walk.
+	bits := make([]byte, (len(qname)+7)/8)
+	if _, err := rand.Read(bits); err != nil {
+		return err
+	}
+	bitIdx := 0
 	off := 0
 	for off < len(qname) {
 		l := int(qname[off])
 		if l == 0 {
-			return
+			return nil
 		}
 		if l&0xc0 != 0 {
-			return // pointer — should not occur in question section
+			return nil // pointer — should not occur in question section
 		}
 		off++
 		end := off + l
 		if end > len(qname) {
-			return
+			return nil
 		}
 		for i := off; i < end; i++ {
 			b := qname[i]
-			if b >= 'a' && b <= 'z' && randBit() {
+			if b < 'a' || b > 'z' {
+				continue
+			}
+			byteIdx := bitIdx / 8
+			if byteIdx >= len(bits) {
+				return nil
+			}
+			if bits[byteIdx]&(1<<(bitIdx%8)) != 0 {
 				qname[i] = b - 32
 			}
+			bitIdx++
 		}
 		off = end
 	}
-}
-
-// randBit returns a single random bit. Uses math/rand/v2 because
-// the property 0x20 needs is "doubles the search space per letter"
-// — unpredictability per query is enough; cryptographic-grade RNG
-// is overkill and would slow every outbound query.
-func randBit() bool {
-	return rand.IntN(2) == 1
+	return nil
 }
 
 // questionSectionBytes returns msg[12 : start_of_answer_section] —

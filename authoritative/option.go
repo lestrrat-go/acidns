@@ -16,11 +16,12 @@ type optionFunc func(*config)
 func (f optionFunc) applyAuth(c *config) { f(c) }
 
 type config struct {
-	zones         []zonefile.Zone
-	notifyHandler NotifyHandler
-	notifyPolicy  NotifyPolicy
-	axfrPolicy    AXFRPolicy
-	updatePolicy  UpdatePolicy
+	zones             []zonefile.Zone
+	notifyHandler     NotifyHandler
+	notifyPolicy      NotifyPolicy
+	maxNotifyInflight int
+	axfrPolicy        AXFRPolicy
+	updatePolicy      UpdatePolicy
 }
 
 // UpdatePolicy decides whether an inbound RFC 2136 UPDATE may proceed.
@@ -106,4 +107,13 @@ func WithAXFRPolicy(p AXFRPolicy) Option {
 // refused with REFUSED — see [NotifyPolicy] for the rationale.
 func WithNotifyPolicy(p NotifyPolicy) Option {
 	return optionFunc(func(c *config) { c.notifyPolicy = p })
+}
+
+// WithMaxNotifyInflight caps how many [NotifyHandler] goroutines may
+// run concurrently. NOTIFY-driven IXFR/AXFR fetches typically block
+// on network I/O for seconds; without a cap a NOTIFY storm (or a
+// misbehaving primary) spawns an unbounded goroutine pool. Default
+// 32; pass 0 to disable the cap entirely.
+func WithMaxNotifyInflight(n int) Option {
+	return optionFunc(func(c *config) { c.maxNotifyInflight = n })
 }

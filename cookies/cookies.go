@@ -67,7 +67,7 @@ type Client interface {
 	// server cookie has previously been Observed for that server, it is
 	// included; otherwise only the client cookie is sent (RFC 7873
 	// §5.2.2 — first-encounter case).
-	Apply(server netip.AddrPort, b wire.EDNSBuilder) wire.EDNSBuilder
+	Apply(server netip.AddrPort, b *wire.EDNSBuilder) *wire.EDNSBuilder
 	// Observe learns the server cookie from resp; subsequent Apply for
 	// the same server will include it.
 	Observe(server netip.AddrPort, resp wire.Message)
@@ -141,7 +141,7 @@ type client struct {
 	now        func() time.Time
 }
 
-func (c *client) Apply(server netip.AddrPort, b wire.EDNSBuilder) wire.EDNSBuilder {
+func (c *client) Apply(server netip.AddrPort, b *wire.EDNSBuilder) *wire.EDNSBuilder {
 	c.mu.Lock()
 	now := c.now()
 	e, ok := c.cache[server]
@@ -470,7 +470,7 @@ func (s *serverImpl) MaxAge() time.Duration { return s.maxAge }
 
 func (s *serverImpl) Make(clientCookie [8]byte, clientAddr netip.Addr, ts time.Time) []byte {
 	secret := s.pool.Current()
-	return mintCookie(secret, clientCookie, clientAddr, ts)
+	return mintCookie(secret, clientCookie, clientAddr.Unmap(), ts)
 }
 
 func (s *serverImpl) Validate(serverCookie []byte, clientCookie [8]byte, clientAddr netip.Addr, now time.Time) (time.Time, error) {
@@ -488,8 +488,13 @@ func (s *serverImpl) Validate(serverCookie []byte, clientCookie [8]byte, clientA
 		// Cookie issued in the (substantial) future → invalid.
 		return time.Time{}, ErrCookieExpired
 	}
+	// Canonicalise v4-mapped IPv6 ("::ffff:1.2.3.4") to plain IPv4
+	// before binding so a client that reconnects via the un-mapped
+	// form still validates the cookie minted under the mapped form
+	// (and vice versa).
+	addr := clientAddr.Unmap()
 	for _, sec := range s.pool.All() {
-		want := mintCookie(sec, clientCookie, clientAddr, ts)
+		want := mintCookie(sec, clientCookie, addr, ts)
 		if hmac.Equal(want[8:], serverCookie[8:]) {
 			return ts, nil
 		}

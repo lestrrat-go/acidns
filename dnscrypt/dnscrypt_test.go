@@ -33,15 +33,14 @@ func makeCert(t *testing.T) testCert {
 	var resolverPK [32]byte
 	copy(resolverPK[:], resolverPKBytes)
 
-	cert := dnscrypt.NewCert(
-		dnscrypt.ESVersion2,
-		0,
-		resolverPK,
-		[8]byte{'a', 'c', 'i', 'd', 'n', 's', 'c', 't'},
-		1,
-		time.Now().Add(-time.Hour).UTC().Truncate(time.Second),
-		time.Now().Add(24*time.Hour).UTC().Truncate(time.Second),
+	cert, err := dnscrypt.NewCert(
+		dnscrypt.WithCertResolverPK(resolverPK),
+		dnscrypt.WithCertClientMagic([8]byte{'a', 'c', 'i', 'd', 'n', 's', 'c', 't'}),
+		dnscrypt.WithCertSerial(1),
+		dnscrypt.WithCertValidFrom(time.Now().Add(-time.Hour).UTC().Truncate(time.Second)),
+		dnscrypt.WithCertValidUntil(time.Now().Add(24*time.Hour).UTC().Truncate(time.Second)),
 	)
+	require.NoError(t, err)
 	dnscrypt.SignCert(cert, providerPriv)
 	return testCert{cert: cert, providerPub: providerPub, resolverPK: resolverPK, resolverSK: resolverSK}
 }

@@ -92,7 +92,7 @@ func TestRunWithoutPrimingReturnsImmediately(t *testing.T) {
 	)
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
 	defer cancel()
-	require.NoError(t, r.Run(ctx))
+	require.NoError(t, r.RunMaintenance(ctx))
 }
 
 func TestRunCancelsOnContextDone(t *testing.T) {
@@ -107,7 +107,7 @@ func TestRunCancelsOnContextDone(t *testing.T) {
 	)
 	ctx, cancel := context.WithCancel(context.Background())
 	done := make(chan error, 1)
-	go func() { done <- r.Run(ctx) }()
+	go func() { done <- r.RunMaintenance(ctx) }()
 	cancel()
 	select {
 	case err := <-done:

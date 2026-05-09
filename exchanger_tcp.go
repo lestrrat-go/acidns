@@ -30,8 +30,9 @@ type tcpExchangerConfig struct {
 	timeout time.Duration
 }
 
-// WithTCPTimeout sets a per-exchange timeout used when the caller's context
-// has no deadline. Defaults to 5 seconds.
+// WithTCPTimeout sets a per-exchange timeout used when the caller's
+// context has no deadline. Defaults to 5 seconds. Pass 0 to disable
+// the fallback — see [WithUDPTimeout] for the same semantics.
 func WithTCPTimeout(d time.Duration) TCPExchangerOption {
 	return tcpExchangerOptionFunc(func(c *tcpExchangerConfig) { c.timeout = d })
 }

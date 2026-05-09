@@ -27,7 +27,11 @@ www IN  A    192.0.2.42
 	auth, _ := authoritative.New(authoritative.WithZone(z))
 
 	// Allow only loopback. Anyone else is refused.
-	guarded := acidns.NewACL(auth, acidns.WithACLAllow(netip.MustParsePrefix("127.0.0.0/8")))
+	guarded, err := acidns.NewACL(auth, acidns.WithACLAllow(netip.MustParsePrefix("127.0.0.0/8")))
+	if err != nil {
+		fmt.Println("acl:", err)
+		return
+	}
 
 	srv, err := acidns.NewUDPServer(netip.MustParseAddrPort("127.0.0.1:0"), guarded)
 	if err != nil {

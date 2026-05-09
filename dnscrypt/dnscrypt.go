@@ -92,23 +92,46 @@ type Cert struct {
 	verified bool
 }
 
-// NewCert returns an unsigned Cert populated from the supplied fields.
-// The caller passes the result to [SignCert] (with the provider's
-// long-term private key) before serialising or using it.
+// NewCert returns an unsigned Cert populated from the supplied
+// options. The caller passes the result to [SignCert] (with the
+// provider's long-term private key) before serialising or using it.
+//
+// Required: WithCertResolverPK, WithCertClientMagic,
+// WithCertValidFrom, WithCertValidUntil. Defaults: ESVersion2,
+// protocol minor 0, serial 0.
 //
 // Production code does NOT call this — verified certs come from
 // [ParseCert] over a wire blob. NewCert is provided for tests, fake
 // responders, and offline tooling.
-func NewCert(esVersion ESVersion, protocolMinor uint16, resolverPK [32]byte, clientMagic [8]byte, serial uint32, validFrom, validUntil time.Time) *Cert {
-	return &Cert{
-		esVersion:     esVersion,
-		protocolMinor: protocolMinor,
-		resolverPK:    resolverPK,
-		clientMagic:   clientMagic,
-		serial:        serial,
-		validFrom:     validFrom.UTC(),
-		validUntil:    validUntil.UTC(),
+func NewCert(opts ...CertOption) (*Cert, error) {
+	c := certConfig{esVersion: ESVersion2}
+	for _, o := range opts {
+		o.applyCert(&c)
 	}
+	if !c.resolverPKSet {
+		return nil, fmt.Errorf("dnscrypt: NewCert requires WithCertResolverPK")
+	}
+	if !c.clientMagicSet {
+		return nil, fmt.Errorf("dnscrypt: NewCert requires WithCertClientMagic")
+	}
+	if !c.validFromSet {
+		return nil, fmt.Errorf("dnscrypt: NewCert requires WithCertValidFrom")
+	}
+	if !c.validUntilSet {
+		return nil, fmt.Errorf("dnscrypt: NewCert requires WithCertValidUntil")
+	}
+	if c.validUntil.Before(c.validFrom) {
+		return nil, fmt.Errorf("dnscrypt: NewCert validUntil precedes validFrom")
+	}
+	return &Cert{
+		esVersion:     c.esVersion,
+		protocolMinor: c.protocolMinor,
+		resolverPK:    c.resolverPK,
+		clientMagic:   c.clientMagic,
+		serial:        c.serial,
+		validFrom:     c.validFrom,
+		validUntil:    c.validUntil,
+	}, nil
 }
 
 // ESVersion returns the ES version number from the cert.

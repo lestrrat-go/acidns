@@ -110,10 +110,10 @@ type TCPServer struct {
 // multiple times to spawn multiple independent server instances.
 func NewTCPServer(addr netip.AddrPort, h Handler, opts ...TCPListenerOption) (*TCPServer, error) {
 	if h == nil {
-		return nil, fmt.Errorf("dnsserver: handler is nil")
+		return nil, fmt.Errorf("acidns: handler is nil")
 	}
 	if !addr.IsValid() {
-		return nil, fmt.Errorf("dnsserver: invalid bind address")
+		return nil, fmt.Errorf("acidns: invalid bind address")
 	}
 	cfg := tcpListenerConfig{
 		idleTimeout:    10 * time.Second,
@@ -139,12 +139,12 @@ func NewTCPServer(addr netip.AddrPort, h Handler, opts ...TCPListenerOption) (*T
 func (s *TCPServer) Run(ctx context.Context) (*TCPController, error) {
 	ln, err := net.Listen("tcp", s.addr.String()) //nolint:noctx // socket lifetime is bound to Run's ctx, not the bind call
 	if err != nil {
-		return nil, fmt.Errorf("dnsserver: tcp listen %s: %w", s.addr, err)
+		return nil, fmt.Errorf("acidns: tcp listen %s: %w", s.addr, err)
 	}
 	la, ok := ln.Addr().(*net.TCPAddr)
 	if !ok {
 		_ = ln.Close()
-		return nil, fmt.Errorf("dnsserver: tcp listen %s: unexpected addr type %T", s.addr, ln.Addr())
+		return nil, fmt.Errorf("acidns: tcp listen %s: unexpected addr type %T", s.addr, ln.Addr())
 	}
 	bound := netip.AddrPortFrom(la.AddrPort().Addr(), uint16(la.Port))
 
@@ -241,7 +241,7 @@ func (l *tcpLoop) run(ctx context.Context) error {
 				}
 				continue
 			}
-			return fmt.Errorf("dnsserver: tcp accept: %w", err)
+			return fmt.Errorf("acidns: tcp accept: %w", err)
 		}
 		tempBackoff = 0
 		l.wg.Add(1)
@@ -424,7 +424,7 @@ func (w *tcpResponseWriter) WriteMsg(m wire.Message) error {
 		return err
 	}
 	if len(buf) > 0xffff {
-		return fmt.Errorf("dnsserver: tcp response exceeds 65535 bytes")
+		return fmt.Errorf("acidns: tcp response exceeds 65535 bytes")
 	}
 	w.writeMu.Lock()
 	defer w.writeMu.Unlock()

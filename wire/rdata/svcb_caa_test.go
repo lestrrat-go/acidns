@@ -13,7 +13,7 @@ import (
 func TestSVCBRoundTrip(t *testing.T) {
 	t.Parallel()
 
-	r := rdata.NewSVCB(1, wirebb.MustParse("svc.example.com"),
+	r := rdata.MustNewSVCB(1, wirebb.MustParse("svc.example.com"),
 		rdata.NewSVCBParam(rdata.SvcParamALPN, []byte{2, 'h', '2', 2, 'h', '3'}),
 		rdata.NewSVCBParam(rdata.SvcParamPort, []byte{0x01, 0xbb}),
 		rdata.NewSVCBParam(rdata.SvcParamIPv4Hint, []byte{192, 0, 2, 1, 192, 0, 2, 2}),
@@ -37,7 +37,7 @@ func TestSVCBRoundTrip(t *testing.T) {
 
 func TestHTTPSType(t *testing.T) {
 	t.Parallel()
-	r := rdata.NewHTTPS(1, wirebb.MustParse("example.com"))
+	r := rdata.MustNewHTTPS(1, wirebb.MustParse("example.com"))
 	require.Equal(t, rrtype.HTTPS, r.Type())
 
 	got := packUnpack(t, r).(rdata.HTTPS)
@@ -66,7 +66,7 @@ func TestCAA(t *testing.T) {
 // Sanity-check the wire bytes match the spec layout for a small SVCB.
 func TestSVCBWire(t *testing.T) {
 	t.Parallel()
-	r := rdata.NewSVCB(1, wirebb.MustParse("foo.example.com"),
+	r := rdata.MustNewSVCB(1, wirebb.MustParse("foo.example.com"),
 		rdata.NewSVCBParam(rdata.SvcParamPort, []byte{0x01, 0xbb}),
 	)
 	p := wirebb.NewPacker(nil)

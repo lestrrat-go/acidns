@@ -34,7 +34,7 @@ func TestDiscover(t *testing.T) {
 	require.NoError(t, err)
 	v4hint, err := rdata.NewSvcParamIPv4Hint(netip.MustParseAddr("192.0.2.1"))
 	require.NoError(t, err)
-	dohSVCB := rdata.NewSVCB(1, wire.MustParseName("doh.example.net"),
+	dohSVCB := rdata.MustNewSVCB(1, wire.MustParseName("doh.example.net"),
 		alpnH2,
 		rdata.NewSvcParamPort(443),
 		rdata.NewSvcParamDOHPath("/dns-query{?dns}"),
@@ -43,7 +43,7 @@ func TestDiscover(t *testing.T) {
 
 	alpnDoT, err := rdata.NewSvcParamALPN("dot")
 	require.NoError(t, err)
-	dotSVCB := rdata.NewSVCB(2, wire.MustParseName("dot.example.net"),
+	dotSVCB := rdata.MustNewSVCB(2, wire.MustParseName("dot.example.net"),
 		alpnDoT,
 		rdata.NewSvcParamPort(853),
 	)

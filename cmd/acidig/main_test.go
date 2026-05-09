@@ -184,13 +184,13 @@ func TestFormatRDataSVCB(t *testing.T) {
 	t.Parallel()
 	alpn, err := rdata.NewSvcParamALPN("h2")
 	require.NoError(t, err)
-	rd := rdata.NewSVCB(1, wire.MustParseName("svc.example.com"), alpn)
+	rd := rdata.MustNewSVCB(1, wire.MustParseName("svc.example.com"), alpn)
 	got := formatRData(rd)
 	require.Contains(t, got, "svc.example.com")
 }
 
 func TestFormatRDataHTTPS(t *testing.T) {
 	t.Parallel()
-	rd := rdata.NewHTTPS(1, wire.MustParseName("h.example.com"))
+	rd := rdata.MustNewHTTPS(1, wire.MustParseName("h.example.com"))
 	require.Contains(t, formatRData(rd), "h.example.com")
 }

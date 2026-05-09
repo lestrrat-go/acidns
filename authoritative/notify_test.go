@@ -33,7 +33,7 @@ func TestServeNotifyAcksAndCallsHandler(t *testing.T) {
 	h, err := authoritative.New(
 		authoritative.WithZone(z),
 		authoritative.WithNotifyPolicy(allowAllNotify),
-		authoritative.WithNotifyHandler(func(_ wire.Question, _ acidns.ResponseWriter) {
+		authoritative.WithNotifyHandler(func(_ context.Context, _ wire.Question, _ acidns.ResponseWriter) {
 			fired.Add(1)
 		}),
 	)

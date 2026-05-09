@@ -2,6 +2,7 @@ package rdata
 
 import (
 	"fmt"
+	"slices"
 
 	"github.com/lestrrat-go/acidns/wire/rrtype"
 	"github.com/lestrrat-go/acidns/wire/wirebb"
@@ -14,7 +15,7 @@ type SPF struct{ strs []string }
 
 func (SPF) Type() rrtype.Type   { return rrtype.SPF }
 func (SPF) typedRData()         {}
-func (s SPF) Strings() []string { return s.strs }
+func (s SPF) Strings() []string { return slices.Clone(s.strs) }
 func (s SPF) Pack(p *wirebb.Packer) {
 	for _, str := range s.strs {
 		_ = p.CharString([]byte(str))

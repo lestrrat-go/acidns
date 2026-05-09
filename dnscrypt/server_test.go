@@ -43,15 +43,14 @@ func mkFixture(t *testing.T) serverFixture {
 	var resolverPK [32]byte
 	copy(resolverPK[:], resolverPKBytes)
 
-	cert := dnscrypt.NewCert(
-		dnscrypt.ESVersion2,
-		0,
-		resolverPK,
-		[8]byte{'a', 'c', 'i', 'd', 'n', 's', 'c', 't'},
-		1,
-		time.Now().Add(-time.Hour).UTC().Truncate(time.Second),
-		time.Now().Add(24*time.Hour).UTC().Truncate(time.Second),
+	cert, err := dnscrypt.NewCert(
+		dnscrypt.WithCertResolverPK(resolverPK),
+		dnscrypt.WithCertClientMagic([8]byte{'a', 'c', 'i', 'd', 'n', 's', 'c', 't'}),
+		dnscrypt.WithCertSerial(1),
+		dnscrypt.WithCertValidFrom(time.Now().Add(-time.Hour).UTC().Truncate(time.Second)),
+		dnscrypt.WithCertValidUntil(time.Now().Add(24*time.Hour).UTC().Truncate(time.Second)),
 	)
+	require.NoError(t, err)
 	dnscrypt.SignCert(cert, providerPriv)
 	return serverFixture{cert: cert, resolverSK: resolverSK, providerPub: providerPub, providerSK: providerPriv}
 }
@@ -137,12 +136,14 @@ func TestServerDropsWrongClientMagic(t *testing.T) {
 	// complete X25519, then the server will drop because ClientMagic
 	// doesn't match. SignCert marks the cert verified for [New].
 	rpk := fx.cert.ResolverPK()
-	bad := dnscrypt.NewCert(
-		dnscrypt.ESVersion2, 0,
-		rpk,
-		[8]byte{'b', 'a', 'd', 'm', 'a', 'g', 'i', 'c'},
-		1, time.Now().Add(-time.Hour), time.Now().Add(time.Hour),
+	bad, err := dnscrypt.NewCert(
+		dnscrypt.WithCertResolverPK(rpk),
+		dnscrypt.WithCertClientMagic([8]byte{'b', 'a', 'd', 'm', 'a', 'g', 'i', 'c'}),
+		dnscrypt.WithCertSerial(1),
+		dnscrypt.WithCertValidFrom(time.Now().Add(-time.Hour)),
+		dnscrypt.WithCertValidUntil(time.Now().Add(time.Hour)),
 	)
+	require.NoError(t, err)
 	dnscrypt.SignCert(bad, fx.providerSK)
 
 	ex, err := dnscrypt.New(ctrl.Addr(), bad)
@@ -187,14 +188,14 @@ func TestNewServerRejectsNilCert(t *testing.T) {
 func TestRunRejectsExpiredCert(t *testing.T) {
 	t.Parallel()
 	fx := mkFixture(t)
-	expired := dnscrypt.NewCert(
-		dnscrypt.ESVersion2, 0,
-		fx.cert.ResolverPK(),
-		fx.cert.ClientMagic(),
-		1,
-		time.Now().Add(-2*time.Hour),
-		time.Now().Add(-time.Hour), // already expired
+	expired, err := dnscrypt.NewCert(
+		dnscrypt.WithCertResolverPK(fx.cert.ResolverPK()),
+		dnscrypt.WithCertClientMagic(fx.cert.ClientMagic()),
+		dnscrypt.WithCertSerial(1),
+		dnscrypt.WithCertValidFrom(time.Now().Add(-2*time.Hour)),
+		dnscrypt.WithCertValidUntil(time.Now().Add(-time.Hour)), // already expired
 	)
+	require.NoError(t, err)
 	srv, err := dnscrypt.NewServer(
 		netip.MustParseAddrPort("127.0.0.1:0"), &echoHandler{},
 		expired, fx.resolverSK,
@@ -283,11 +284,14 @@ func TestServerRotateRejectsExpired(t *testing.T) {
 	ctrl, err := srv.Run(ctx)
 	require.NoError(t, err)
 
-	expired := dnscrypt.NewCert(
-		dnscrypt.ESVersion2, 0,
-		fx.cert.ResolverPK(), fx.cert.ClientMagic(), 1,
-		time.Now().Add(-2*time.Hour), time.Now().Add(-time.Hour),
+	expired, err := dnscrypt.NewCert(
+		dnscrypt.WithCertResolverPK(fx.cert.ResolverPK()),
+		dnscrypt.WithCertClientMagic(fx.cert.ClientMagic()),
+		dnscrypt.WithCertSerial(1),
+		dnscrypt.WithCertValidFrom(time.Now().Add(-2*time.Hour)),
+		dnscrypt.WithCertValidUntil(time.Now().Add(-time.Hour)),
 	)
+	require.NoError(t, err)
 	err = ctrl.Rotate(expired, fx.resolverSK)
 	require.ErrorIs(t, err, dnscrypt.ErrCertExpired)
 }

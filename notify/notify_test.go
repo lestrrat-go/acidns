@@ -47,7 +47,7 @@ func TestSendNotifyAcks(t *testing.T) {
 	t.Parallel()
 
 	var fired atomic.Int32
-	addr := startSecondary(t, func(_ wire.Question, _ acidns.ResponseWriter) {
+	addr := startSecondary(t, func(_ context.Context, _ wire.Question, _ acidns.ResponseWriter) {
 		fired.Add(1)
 	})
 

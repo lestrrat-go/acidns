@@ -23,12 +23,16 @@ func Example_svcb_build() {
 		return
 	}
 
-	rr := rdata.NewHTTPS(1, wire.MustParseName("svc.example.com"),
+	rr, err := rdata.NewHTTPS(1, wire.MustParseName("svc.example.com"),
 		alpn,
 		rdata.NewSvcParamPort(443),
 		ipv4,
 		rdata.NewSvcParamDOHPath("/dns-query{?dns}"),
 	)
+	if err != nil {
+		fmt.Println("https:", err)
+		return
+	}
 
 	fmt.Println("priority:", rr.Priority())
 	fmt.Println("target:", rr.Target())

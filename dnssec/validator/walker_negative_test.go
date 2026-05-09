@@ -58,9 +58,9 @@ func TestWalkerValidateNegativeNXDOMAINBogus(t *testing.T) {
 	wrapped := &rcodeRewriter{inner: src, target: target, qtype: rrtype.AAAA}
 
 	w, err := validator.NewWalker(wrapped,
-		validator.WithAnchors(anchor),
-		validator.WithNow(func() time.Time { return now }),
-		validator.WithBogusPolicy(validator.BogusReturnAnswer),
+		validator.WithWalkerAnchors(anchor),
+		validator.WithWalkerNow(func() time.Time { return now }),
+		validator.WithWalkerBogusPolicy(validator.BogusReturnAnswer),
 	)
 	require.NoError(t, err)
 	ans, err := w.Resolve(t.Context(), target, rrtype.AAAA)
@@ -181,8 +181,8 @@ func TestWalkerValidateNegativeNXDOMAINSecure(t *testing.T) {
 	}
 
 	w, err := validator.NewWalker(wrapped,
-		validator.WithAnchors(anchor),
-		validator.WithNow(func() time.Time { return now }),
+		validator.WithWalkerAnchors(anchor),
+		validator.WithWalkerNow(func() time.Time { return now }),
 	)
 	require.NoError(t, err)
 	ans, err := w.Resolve(t.Context(), target, rrtype.AAAA)
@@ -223,9 +223,9 @@ func TestWalkerValidateNegativeNXDOMAINMissingWildcardProof(t *testing.T) {
 	}
 
 	w, err := validator.NewWalker(wrapped,
-		validator.WithAnchors(anchor),
-		validator.WithNow(func() time.Time { return now }),
-		validator.WithBogusPolicy(validator.BogusReturnAnswer),
+		validator.WithWalkerAnchors(anchor),
+		validator.WithWalkerNow(func() time.Time { return now }),
+		validator.WithWalkerBogusPolicy(validator.BogusReturnAnswer),
 	)
 	require.NoError(t, err)
 	ans, err := w.Resolve(t.Context(), target, rrtype.AAAA)
@@ -282,9 +282,9 @@ func TestWalkerValidateNoDataNSECNoSigs(t *testing.T) {
 	wrapped := &nodataSigStripper{inner: src, target: target, qtype: rrtype.AAAA}
 
 	w, err := validator.NewWalker(wrapped,
-		validator.WithAnchors(anchor),
-		validator.WithNow(func() time.Time { return now }),
-		validator.WithBogusPolicy(validator.BogusReturnAnswer),
+		validator.WithWalkerAnchors(anchor),
+		validator.WithWalkerNow(func() time.Time { return now }),
+		validator.WithWalkerBogusPolicy(validator.BogusReturnAnswer),
 	)
 	require.NoError(t, err)
 	ans, err := w.Resolve(t.Context(), target, rrtype.AAAA)

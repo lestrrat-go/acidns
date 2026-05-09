@@ -66,13 +66,13 @@ func TestDiscover_SkipsNonSVCB(t *testing.T) {
 	}
 
 	// AliasMode SVCB (priority 0) — must be filtered.
-	alias := rdata.NewSVCB(0, wire.MustParseName("alias.example.net"))
+	alias := rdata.MustNewSVCB(0, wire.MustParseName("alias.example.net"))
 	aliasRec := wire.NewRecord(ddr.ResolverDomain, 60*time.Second, alias)
 
 	// One legitimate ServiceMode SVCB so the result list is non-empty.
 	alpnDoT, err := rdata.NewSvcParamALPN("dot")
 	require.NoError(t, err)
-	good := rdata.NewSVCB(5, wire.MustParseName("dot.example.net"), alpnDoT,
+	good := rdata.MustNewSVCB(5, wire.MustParseName("dot.example.net"), alpnDoT,
 		rdata.NewSvcParamPort(853))
 	goodRec := wire.NewRecord(ddr.ResolverDomain, 60*time.Second, good)
 
@@ -92,9 +92,9 @@ func TestDiscover_SortsByPriority(t *testing.T) {
 
 	alpnDoT, err := rdata.NewSvcParamALPN("dot")
 	require.NoError(t, err)
-	hi := rdata.NewSVCB(10, wire.MustParseName("hi.example.net"), alpnDoT)
-	lo := rdata.NewSVCB(1, wire.MustParseName("lo.example.net"), alpnDoT)
-	mid := rdata.NewSVCB(5, wire.MustParseName("mid.example.net"), alpnDoT)
+	hi := rdata.MustNewSVCB(10, wire.MustParseName("hi.example.net"), alpnDoT)
+	lo := rdata.MustNewSVCB(1, wire.MustParseName("lo.example.net"), alpnDoT)
+	mid := rdata.MustNewSVCB(5, wire.MustParseName("mid.example.net"), alpnDoT)
 
 	records := []wire.Record{
 		wire.NewRecord(ddr.ResolverDomain, 60*time.Second, hi),
@@ -118,24 +118,24 @@ func TestDiscover_InferProtocolVariants(t *testing.T) {
 
 	alpnH3, err := rdata.NewSvcParamALPN("h3")
 	require.NoError(t, err)
-	h3SVCB := rdata.NewSVCB(1, wire.MustParseName("h3.example.net"), alpnH3)
+	h3SVCB := rdata.MustNewSVCB(1, wire.MustParseName("h3.example.net"), alpnH3)
 
 	alpnH1, err := rdata.NewSvcParamALPN("http/1.1")
 	require.NoError(t, err)
-	h1SVCB := rdata.NewSVCB(2, wire.MustParseName("h1.example.net"), alpnH1)
+	h1SVCB := rdata.MustNewSVCB(2, wire.MustParseName("h1.example.net"), alpnH1)
 
 	alpnDoQ, err := rdata.NewSvcParamALPN("doq")
 	require.NoError(t, err)
-	doqSVCB := rdata.NewSVCB(3, wire.MustParseName("doq.example.net"), alpnDoQ,
+	doqSVCB := rdata.MustNewSVCB(3, wire.MustParseName("doq.example.net"), alpnDoQ,
 		rdata.NewSvcParamPort(853))
 
 	// No ALPN, no DOHPath → ProtoUnknown.
-	bareSVCB := rdata.NewSVCB(4, wire.MustParseName("bare.example.net"))
+	bareSVCB := rdata.MustNewSVCB(4, wire.MustParseName("bare.example.net"))
 
 	// Mixed case ALPN — exercise the strings.ToLower normalization.
 	alpnMixed, err := rdata.NewSvcParamALPN("DoT")
 	require.NoError(t, err)
-	mixedSVCB := rdata.NewSVCB(5, wire.MustParseName("mixed.example.net"), alpnMixed)
+	mixedSVCB := rdata.MustNewSVCB(5, wire.MustParseName("mixed.example.net"), alpnMixed)
 
 	records := []wire.Record{
 		wire.NewRecord(ddr.ResolverDomain, 60*time.Second, h3SVCB),
@@ -167,7 +167,7 @@ func TestDiscover_IPv6Hints(t *testing.T) {
 	require.NoError(t, err)
 	v6hint, err := rdata.NewSvcParamIPv6Hint(netip.MustParseAddr("2001:db8::1"))
 	require.NoError(t, err)
-	s := rdata.NewSVCB(1, wire.MustParseName("dot.example.net"),
+	s := rdata.MustNewSVCB(1, wire.MustParseName("dot.example.net"),
 		alpnDoT,
 		rdata.NewSvcParamPort(853),
 		v6hint,

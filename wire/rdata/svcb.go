@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net/netip"
 	"slices"
+	"sort"
 
 	"github.com/lestrrat-go/acidns/wire/rrtype"
 	"github.com/lestrrat-go/acidns/wire/wirebb"
@@ -54,7 +55,7 @@ type svcbBody struct {
 
 func (s svcbBody) Priority() uint16    { return s.priority }
 func (s svcbBody) Target() wirebb.Name { return s.target }
-func (s svcbBody) Params() []SVCBParam { return s.params }
+func (s svcbBody) Params() []SVCBParam { return slices.Clone(s.params) }
 
 func (s svcbBody) packBody(p *wirebb.Packer) {
 	p.Uint16(s.priority)
@@ -209,23 +210,60 @@ func decodeALPN(buf []byte) []string {
 	return out
 }
 
-// NewSVCB returns an SVCB rdata.
-func NewSVCB(priority uint16, target wirebb.Name, params ...SVCBParam) SVCB {
-	return SVCB{svcbBody{
-		priority: priority,
-		target:   target,
-		params:   append([]SVCBParam(nil), params...),
-	}}
+// NewSVCB returns an SVCB rdata. params are sorted by key (RFC 9460
+// §2.2 requires strictly-increasing key order on the wire); duplicate
+// keys and any RFC 9460 §8 mandatory-param violation are rejected.
+func NewSVCB(priority uint16, target wirebb.Name, params ...SVCBParam) (SVCB, error) {
+	body, err := newSvcbBody(priority, target, params)
+	if err != nil {
+		return SVCB{}, err
+	}
+	return SVCB{body}, nil
 }
 
-// NewHTTPS returns an HTTPS rdata. Wire-format identical to SVCB; only the
-// RR type code differs.
-func NewHTTPS(priority uint16, target wirebb.Name, params ...SVCBParam) HTTPS {
-	return HTTPS{svcbBody{
-		priority: priority,
-		target:   target,
-		params:   append([]SVCBParam(nil), params...),
-	}}
+// NewHTTPS returns an HTTPS rdata. Wire-format identical to SVCB; only
+// the RR type code differs. Same param-ordering and mandatory-param
+// rules as NewSVCB.
+func NewHTTPS(priority uint16, target wirebb.Name, params ...SVCBParam) (HTTPS, error) {
+	body, err := newSvcbBody(priority, target, params)
+	if err != nil {
+		return HTTPS{}, err
+	}
+	return HTTPS{body}, nil
+}
+
+// MustNewSVCB is like NewSVCB but panics on validation failure. Intended
+// for static caller-known-good literals (tests, examples).
+func MustNewSVCB(priority uint16, target wirebb.Name, params ...SVCBParam) SVCB {
+	r, err := NewSVCB(priority, target, params...)
+	if err != nil {
+		panic(err)
+	}
+	return r
+}
+
+// MustNewHTTPS is like NewHTTPS but panics on validation failure. Intended
+// for static caller-known-good literals (tests, examples).
+func MustNewHTTPS(priority uint16, target wirebb.Name, params ...SVCBParam) HTTPS {
+	r, err := NewHTTPS(priority, target, params...)
+	if err != nil {
+		panic(err)
+	}
+	return r
+}
+
+func newSvcbBody(priority uint16, target wirebb.Name, params []SVCBParam) (svcbBody, error) {
+	cp := slices.Clone(params)
+	sort.SliceStable(cp, func(i, j int) bool { return cp[i].key < cp[j].key })
+	for i := 1; i < len(cp); i++ {
+		if cp[i].key == cp[i-1].key {
+			return svcbBody{}, fmt.Errorf("%w: duplicate SVCB param key %d", ErrInvalidRData, cp[i].key)
+		}
+	}
+	if err := validateMandatoryParam(cp); err != nil {
+		return svcbBody{}, err
+	}
+	return svcbBody{priority: priority, target: target, params: cp}, nil
 }
 
 func unpackSVCB(t rrtype.Type, u *wirebb.Unpacker, rdlen int) (RData, error) {

@@ -109,8 +109,9 @@ type MemoryReplayCache struct {
 	window time.Duration
 	now    func() time.Time
 
-	mu   sync.Mutex
-	seen map[string]time.Time
+	mu        sync.Mutex
+	seen      map[string]time.Time
+	lastSweep time.Time
 }
 
 // ErrReplay is returned by [VerifyWithReplay] when the message's MAC
@@ -147,7 +148,15 @@ func (c *MemoryReplayCache) Seen(keyName wire.Name, signedAt time.Time, mac []by
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
-	c.evictExpiredLocked(now)
+	// Sweep expired entries only when (a) the cache is at least
+	// half-full — so legitimate steady-state operation doesn't pay
+	// for it on every call — or (b) the previous sweep was more
+	// than window/4 ago. A linear sweep on every Seen() lets a
+	// TSIG-flooder amplify CPU pressure rather than relieve it.
+	if c.shouldSweepLocked(now) {
+		c.evictExpiredLocked(now)
+		c.lastSweep = now
+	}
 
 	if t, exists := c.seen[k]; exists {
 		// Refresh the timestamp so a steadily replayed signature
@@ -159,10 +168,32 @@ func (c *MemoryReplayCache) Seen(keyName wire.Name, signedAt time.Time, mac []by
 	}
 
 	if c.size > 0 && len(c.seen) >= c.size {
-		c.evictOldestLocked()
+		// Force a sweep at the cap before falling back to oldest-
+		// eviction; a sweep often releases enough room without
+		// touching live entries.
+		c.evictExpiredLocked(now)
+		c.lastSweep = now
+		if len(c.seen) >= c.size {
+			c.evictOldestLocked()
+		}
 	}
 	c.seen[k] = now
 	return false
+}
+
+// shouldSweepLocked decides whether the next Seen() call should run a
+// linear expiration sweep.
+func (c *MemoryReplayCache) shouldSweepLocked(now time.Time) bool {
+	if c.size > 0 && len(c.seen) >= c.size/2 {
+		return true
+	}
+	if c.window <= 0 {
+		return false
+	}
+	if c.lastSweep.IsZero() {
+		return true
+	}
+	return now.Sub(c.lastSweep) >= c.window/4
 }
 
 // Len reports the current number of cached signatures. Useful for

@@ -28,20 +28,23 @@ func Example_dnscrypt_decode_cert() {
 	var resolverPK [32]byte
 	copy(resolverPK[:], resolverPKBytes)
 
-	cert := dnscrypt.NewCert(
-		dnscrypt.ESVersion2,
-		0,
-		resolverPK,
-		[8]byte{'a', 'c', 'i', 'd', 'n', 's', 'c', 't'},
-		1,
-		time.Unix(1_700_000_000, 0).UTC(),
-		time.Unix(1_900_000_000, 0).UTC(),
+	cert, err := dnscrypt.NewCert(
+		dnscrypt.WithCertResolverPK(resolverPK),
+		dnscrypt.WithCertClientMagic([8]byte{'a', 'c', 'i', 'd', 'n', 's', 'c', 't'}),
+		dnscrypt.WithCertSerial(1),
+		dnscrypt.WithCertValidFrom(time.Unix(1_700_000_000, 0).UTC()),
+		dnscrypt.WithCertValidUntil(time.Unix(1_900_000_000, 0).UTC()),
 	)
+	if err != nil {
+		fmt.Println("newcert:", err)
+		return
+	}
 	dnscrypt.SignCert(cert, providerPriv)
 
 	// Round-trip through wire form.
 	wireForm := dnscrypt.EncodeCert(cert)
-	parsed, err := dnscrypt.ParseCert(wireForm)
+	parsed, err := dnscrypt.ParseCert(wireForm) //nolint:govet // shadow ok in example
+
 	if err != nil {
 		fmt.Println("parse:", err)
 		return

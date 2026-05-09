@@ -129,7 +129,10 @@ type Validator struct {
 
 // New returns a Validator. With no options the validator carries an
 // empty NTA store, [BogusReturnSERVFAIL], and time.Now as its clock.
-func New(opts ...ValidatorOption) *Validator {
+// The error return is currently always nil; it is part of the
+// signature so future option-validation can be added without breaking
+// callers.
+func New(opts ...ValidatorOption) (*Validator, error) {
 	c := validatorConfig{}
 	for _, o := range opts {
 		o.applyValidator(&c)
@@ -140,7 +143,7 @@ func New(opts ...ValidatorOption) *Validator {
 	if c.now == nil {
 		c.now = time.Now
 	}
-	return &Validator{cfg: c}
+	return &Validator{cfg: c}, nil
 }
 
 // NTAs exposes the validator's NTA store so callers can mutate it at

@@ -5,7 +5,13 @@ import (
 	"time"
 )
 
-// Option configures a DoT Exchanger.
+// Option configures the basic single-shot DoT Exchanger ([New]).
+// Distinct from [KeepAliveOption] (the persistent-connection
+// variant, [NewKeepAliveExchanger]) and [ServerOption] (the listen
+// side, [NewServer]); the three option-sets share concept names
+// (timeout, TLS config) but the Go type system enforces which
+// constructor accepts which option, so the unprefixed names here
+// match the unprefixed constructor.
 type Option interface{ applyDoT(*config) }
 
 type optionFunc func(*config)
@@ -19,8 +25,11 @@ type config struct {
 	padding    bool
 }
 
-// WithTimeout sets a per-exchange timeout used when the caller's context
-// has no deadline. Defaults to 10 seconds (TLS handshake adds overhead).
+// WithTimeout sets a per-exchange timeout used when the caller's
+// context has no deadline. Defaults to 10 seconds (TLS handshake
+// adds overhead). Pass 0 to disable the fallback — the caller's
+// context deadline or the kernel socket timeout becomes the only
+// bound.
 func WithTimeout(d time.Duration) Option {
 	return optionFunc(func(c *config) { c.timeout = d })
 }

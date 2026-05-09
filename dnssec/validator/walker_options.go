@@ -6,19 +6,19 @@ type walkerOptionFunc func(*walker)
 
 func (f walkerOptionFunc) applyWalker(w *walker) { f(w) }
 
-// WithAnchors configures one or more trust anchors. The walker selects the
-// closest covering anchor for each query. If unset, IANARootAnchor() is
-// used.
-func WithAnchors(anchors ...Anchor) WalkerOption {
+// WithWalkerAnchors configures one or more trust anchors. The walker
+// selects the closest covering anchor for each query. If unset,
+// IANARootAnchor() is used.
+func WithWalkerAnchors(anchors ...Anchor) WalkerOption {
 	return walkerOptionFunc(func(w *walker) {
 		w.anchors = append(w.anchors[:0], anchors...)
 	})
 }
 
-// WithNTAStore plugs in an existing NTA store. If unset, an empty store is
-// allocated. NTAs short-circuit validation for covered names; cf. the
-// project's DNSSEC stance.
-func WithNTAStore(s *NTAStore) WalkerOption {
+// WithWalkerNTAStore plugs in an existing NTA store. If unset, an
+// empty store is allocated. NTAs short-circuit validation for
+// covered names; cf. the project's DNSSEC stance.
+func WithWalkerNTAStore(s *NTAStore) WalkerOption {
 	return walkerOptionFunc(func(w *walker) {
 		if s != nil {
 			w.ntas = s
@@ -26,15 +26,17 @@ func WithNTAStore(s *NTAStore) WalkerOption {
 	})
 }
 
-// WithBogusPolicy sets the policy applied when validation fails. Default is
-// BogusReturnSERVFAIL (the strict reading of RFC 4035 §5.5).
-func WithBogusPolicy(p BogusPolicy) WalkerOption {
+// WithWalkerBogusPolicy sets the policy applied when validation
+// fails. Default is BogusReturnSERVFAIL (the strict reading of RFC
+// 4035 §5.5).
+func WithWalkerBogusPolicy(p BogusPolicy) WalkerOption {
 	return walkerOptionFunc(func(w *walker) { w.bogusPolicy = p })
 }
 
-// WithNow injects a clock. Tests use this to simulate signature inception
-// and expiration without sleeping. Default is time.Now.
-func WithNow(now func() time.Time) WalkerOption {
+// WithWalkerNow injects a clock. Tests use this to simulate
+// signature inception and expiration without sleeping. Default is
+// time.Now.
+func WithWalkerNow(now func() time.Time) WalkerOption {
 	return walkerOptionFunc(func(w *walker) {
 		if now != nil {
 			w.now = now
@@ -42,10 +44,11 @@ func WithNow(now func() time.Time) WalkerOption {
 	})
 }
 
-// WithClockSkew widens the RRSIG inception/expiration window by skew on
-// each side. Production deployments typically pick 5–15 minutes; the
-// default of 0 is the conservative reading of RFC 4035 §5.3.
-func WithClockSkew(skew time.Duration) WalkerOption {
+// WithWalkerClockSkew widens the RRSIG inception/expiration window
+// by skew on each side. Production deployments typically pick 5–15
+// minutes; the default of 0 is the conservative reading of RFC 4035
+// §5.3.
+func WithWalkerClockSkew(skew time.Duration) WalkerOption {
 	return walkerOptionFunc(func(w *walker) {
 		if skew >= 0 {
 			w.skew = skew
@@ -53,9 +56,9 @@ func WithClockSkew(skew time.Duration) WalkerOption {
 	})
 }
 
-// WithMaxZoneCuts caps the depth of the chain walk. Default 16 is enough
-// for any real qname and prevents zone-cut bombs.
-func WithMaxZoneCuts(n int) WalkerOption {
+// WithWalkerMaxZoneCuts caps the depth of the chain walk. Default 16
+// is enough for any real qname and prevents zone-cut bombs.
+func WithWalkerMaxZoneCuts(n int) WalkerOption {
 	return walkerOptionFunc(func(w *walker) {
 		if n > 0 {
 			w.maxZoneCuts = n
@@ -63,10 +66,10 @@ func WithMaxZoneCuts(n int) WalkerOption {
 	})
 }
 
-// WithMaxRRSIGsTry caps the number of RRSIGs verified per RRset. Default 8.
-// Without this cap a hostile zone could ship many RRSIGs to amplify CPU
-// cost on a verifier.
-func WithMaxRRSIGsTry(n int) WalkerOption {
+// WithWalkerMaxRRSIGsTry caps the number of RRSIGs verified per
+// RRset. Default 8. Without this cap a hostile zone could ship many
+// RRSIGs to amplify CPU cost on a verifier.
+func WithWalkerMaxRRSIGsTry(n int) WalkerOption {
 	return walkerOptionFunc(func(w *walker) {
 		if n > 0 {
 			w.maxRRSIGsTry = n
@@ -74,12 +77,27 @@ func WithMaxRRSIGsTry(n int) WalkerOption {
 	})
 }
 
-// WithMaxAlgorithms caps the number of distinct DNSSEC algorithms a single
-// zone may advertise (DAU bomb guard). Default 4.
-func WithMaxAlgorithms(n int) WalkerOption {
+// WithWalkerMaxAlgorithms caps the number of distinct DNSSEC
+// algorithms a single zone may advertise (DAU bomb guard). Default
+// 4.
+func WithWalkerMaxAlgorithms(n int) WalkerOption {
 	return walkerOptionFunc(func(w *walker) {
 		if n > 0 {
 			w.maxAlgs = n
+		}
+	})
+}
+
+// WithWalkerMaxKeysPerZone caps the number of usable DNSKEYs
+// (post-protocol / post-revoke filter) the walker will accept from
+// any single zone. Default 16. The cap defends against KeyTrap-style
+// amplification (CVE-2023-50387): a zone publishing many DNSKEYs
+// that share a keytag would otherwise drive maxRRSIGsTry × N
+// candidate Verify calls per signed RRset.
+func WithWalkerMaxKeysPerZone(n int) WalkerOption {
+	return walkerOptionFunc(func(w *walker) {
+		if n > 0 {
+			w.maxKeys = n
 		}
 	})
 }

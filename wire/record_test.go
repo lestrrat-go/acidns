@@ -42,7 +42,7 @@ func TestRDataAs_TypeFilterPreventsCNAMECollision(t *testing.T) {
 	t.Parallel()
 	name := wire.MustParseName("example.com")
 	target := wire.MustParseName("svc.example.net")
-	rec := wire.NewRecord(name, 60*time.Second, rdata.NewSVCB(1, target))
+	rec := wire.NewRecord(name, 60*time.Second, rdata.MustNewSVCB(1, target))
 
 	v, ok := wire.RDataAs[rdata.CNAME](rec)
 	require.False(t, ok)

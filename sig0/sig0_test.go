@@ -9,6 +9,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/lestrrat-go/acidns/dnssec"
 	"github.com/lestrrat-go/acidns/sig0"
 	"github.com/lestrrat-go/acidns/wire"
 	"github.com/lestrrat-go/acidns/wire/rdata"
@@ -35,12 +36,13 @@ func TestSignVerifyECDSAP256(t *testing.T) {
 	encPK, err2 := priv.PublicKey.Bytes()
 	require.NoError(t, err2)
 	pub := encPK[1:]
+	key := rdata.NewDNSKEY(257, 3, rdata.AlgECDSAP256SHA256, pub)
 
 	signer := wire.MustParseName("test.signer")
 	msg := mkMessage(t)
 	now := time.Now().Truncate(time.Second).UTC()
 
-	signed, err := sig0.Sign(msg, signer, rdata.AlgECDSAP256SHA256, 1234,
+	signed, err := sig0.Sign(msg, signer, rdata.AlgECDSAP256SHA256, dnssec.KeyTag(key),
 		func(payload []byte) ([]byte, error) {
 			h := sha256.Sum256(payload)
 			r, s, err := ecdsa.Sign(rand.Reader, priv, h[:])
@@ -54,7 +56,7 @@ func TestSignVerifyECDSAP256(t *testing.T) {
 		}, now, time.Hour)
 	require.NoError(t, err)
 
-	body, err := sig0.Verify(signed, rdata.AlgECDSAP256SHA256, pub, signer, now.Add(30*time.Minute))
+	body, err := sig0.Verify(signed, key, signer, now.Add(30*time.Minute))
 	require.NoError(t, err)
 
 	m, err := wire.Unmarshal(body)
@@ -66,16 +68,17 @@ func TestSignVerifyED25519(t *testing.T) {
 	t.Parallel()
 	pub, priv, err := ed25519.GenerateKey(rand.Reader)
 	require.NoError(t, err)
+	key := rdata.NewDNSKEY(257, 3, rdata.AlgED25519, pub)
 
 	signer := wire.MustParseName("test.signer")
 	msg := mkMessage(t)
 	now := time.Now().Truncate(time.Second).UTC()
-	signed, err := sig0.Sign(msg, signer, rdata.AlgED25519, 5678,
+	signed, err := sig0.Sign(msg, signer, rdata.AlgED25519, dnssec.KeyTag(key),
 		func(payload []byte) ([]byte, error) {
 			return ed25519.Sign(priv, payload), nil
 		}, now, time.Hour)
 	require.NoError(t, err)
-	_, err = sig0.Verify(signed, rdata.AlgED25519, pub, signer, now)
+	_, err = sig0.Verify(signed, key, signer, now)
 	require.NoError(t, err)
 }
 
@@ -83,15 +86,16 @@ func TestVerifyExpiredFails(t *testing.T) {
 	t.Parallel()
 	pub, priv, err := ed25519.GenerateKey(rand.Reader)
 	require.NoError(t, err)
+	key := rdata.NewDNSKEY(257, 3, rdata.AlgED25519, pub)
 	signer := wire.MustParseName("s")
 	msg := mkMessage(t)
 	signedAt := time.Now().Truncate(time.Second).UTC()
-	signed, err := sig0.Sign(msg, signer, rdata.AlgED25519, 1, func(p []byte) ([]byte, error) {
+	signed, err := sig0.Sign(msg, signer, rdata.AlgED25519, dnssec.KeyTag(key), func(p []byte) ([]byte, error) {
 		return ed25519.Sign(priv, p), nil
 	}, signedAt, time.Minute)
 	require.NoError(t, err)
 	// Two hours later → outside validity.
-	_, err = sig0.Verify(signed, rdata.AlgED25519, pub, signer, signedAt.Add(2*time.Hour))
+	_, err = sig0.Verify(signed, key, signer, signedAt.Add(2*time.Hour))
 	require.ErrorIs(t, err, sig0.ErrBadTime)
 }
 
@@ -99,15 +103,16 @@ func TestVerifyTamperedFails(t *testing.T) {
 	t.Parallel()
 	pub, priv, err := ed25519.GenerateKey(rand.Reader)
 	require.NoError(t, err)
+	key := rdata.NewDNSKEY(257, 3, rdata.AlgED25519, pub)
 	signer := wire.MustParseName("s")
 	msg := mkMessage(t)
 	now := time.Now().Truncate(time.Second).UTC()
-	signed, err := sig0.Sign(msg, signer, rdata.AlgED25519, 1, func(p []byte) ([]byte, error) {
+	signed, err := sig0.Sign(msg, signer, rdata.AlgED25519, dnssec.KeyTag(key), func(p []byte) ([]byte, error) {
 		return ed25519.Sign(priv, p), nil
 	}, now, time.Hour)
 	require.NoError(t, err)
 	// Flip a bit in the QTYPE field.
 	signed[26] ^= 0xff
-	_, err = sig0.Verify(signed, rdata.AlgED25519, pub, signer, now)
+	_, err = sig0.Verify(signed, key, signer, now)
 	require.ErrorIs(t, err, sig0.ErrBadSignature)
 }

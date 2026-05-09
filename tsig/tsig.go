@@ -185,6 +185,12 @@ func signWithPrefix(msg []byte, key Key, priorMAC []byte, timersOnly bool, now t
 	if len(msg) < 12 {
 		return nil, nil, fmt.Errorf("tsig: msg too short")
 	}
+	if fudge < 0 {
+		return nil, nil, fmt.Errorf("tsig: fudge must be non-negative, got %s", fudge)
+	}
+	if fudge.Seconds() > float64(0xFFFF) {
+		return nil, nil, fmt.Errorf("tsig: fudge %s exceeds the 16-bit on-the-wire field cap (~18h12m)", fudge)
+	}
 	algName := wire.MustParseName(string(key.algorithm))
 
 	timeSigned := uint64(now.Unix())

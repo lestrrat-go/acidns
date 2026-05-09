@@ -21,6 +21,13 @@ var ErrInvalidRData = errors.New("rdata: invalid")
 // reports the RR type; Pack appends the rdata wire encoding to p, including
 // the 16-bit length prefix is NOT this method's responsibility — it is
 // written by dnsmsg, which back-fills the length after Pack returns.
+//
+// Per-type Pack methods are exported (they're part of this contract);
+// per-type unpack helpers are deliberately unexported because
+// decoding is dispatched through the package-level [Unpack], which
+// is the public counterpart to [Pack]. The RFC 3597 unknown-type
+// roundtrip uses [Pack]/[Unpack] at the package level — no per-type
+// public Unpack is needed.
 type RData interface {
 	Type() rrtype.Type
 	Pack(p *wirebb.Packer)

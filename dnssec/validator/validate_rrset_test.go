@@ -56,7 +56,8 @@ func TestValidateRRsetSecure(t *testing.T) {
 	}
 	sig := signRRSIG(t, priv, set, key, now.Add(-time.Hour), now.Add(time.Hour))
 
-	v := validator.New(validator.WithValidatorNow(func() time.Time { return now }))
+	v, err := validator.New(validator.WithValidatorNow(func() time.Time { return now }))
+	require.NoError(t, err)
 	res, used, err := v.ValidateRRset(set, []rdata.RRSIG{sig}, []rdata.DNSKEY{key})
 	require.NoError(t, err)
 	require.Equal(t, validator.Secure, res)
@@ -65,14 +66,16 @@ func TestValidateRRsetSecure(t *testing.T) {
 
 func TestValidateRRsetEmptySet(t *testing.T) {
 	t.Parallel()
-	v := validator.New()
-	_, _, err := v.ValidateRRset(nil, nil, nil)
+	v, err := validator.New()
+	require.NoError(t, err)
+	_, _, err = v.ValidateRRset(nil, nil, nil)
 	require.Error(t, err)
 }
 
 func TestValidateRRsetNoRRSIG(t *testing.T) {
 	t.Parallel()
-	v := validator.New()
+	v, err := validator.New()
+	require.NoError(t, err)
 	set := []wire.Record{
 		wire.NewRecord(wire.MustParseName("example.com"), time.Hour,
 			rdata.MustNewA(netip.MustParseAddr("192.0.2.1"))),
@@ -85,7 +88,8 @@ func TestValidateRRsetNoRRSIG(t *testing.T) {
 func TestValidateRRsetNTAShortCircuits(t *testing.T) {
 	t.Parallel()
 	store := validator.NewNTAStore(wire.MustParseName("example.com"))
-	v := validator.New(validator.WithValidatorNTAStore(store))
+	v, err := validator.New(validator.WithValidatorNTAStore(store))
+	require.NoError(t, err)
 	set := []wire.Record{
 		wire.NewRecord(wire.MustParseName("example.com"), time.Hour,
 			rdata.MustNewA(netip.MustParseAddr("192.0.2.1"))),
@@ -106,7 +110,8 @@ func TestValidateRRsetExpiredRRSIG(t *testing.T) {
 	// Inception/expiration both in the past.
 	sig := signRRSIG(t, priv, set, key, now.Add(-2*time.Hour), now.Add(-time.Hour))
 
-	v := validator.New(validator.WithValidatorNow(func() time.Time { return now }), validator.WithValidatorBogusPolicy(validator.BogusReturnAnswer))
+	v, err := validator.New(validator.WithValidatorNow(func() time.Time { return now }), validator.WithValidatorBogusPolicy(validator.BogusReturnAnswer))
+	require.NoError(t, err)
 	res, _, err := v.ValidateRRset(set, []rdata.RRSIG{sig}, []rdata.DNSKEY{key})
 	require.Equal(t, validator.Bogus, res)
 	require.Error(t, err)
@@ -124,7 +129,8 @@ func TestValidateRRsetNoMatchingKey(t *testing.T) {
 
 	// Pass a wrong-algorithm key (synthetic).
 	wrongKey := rdata.NewDNSKEY(257, 3, rdata.AlgED25519, make([]byte, 32))
-	v := validator.New(validator.WithValidatorNow(func() time.Time { return now }), validator.WithValidatorBogusPolicy(validator.BogusReturnAnswer))
+	v, err := validator.New(validator.WithValidatorNow(func() time.Time { return now }), validator.WithValidatorBogusPolicy(validator.BogusReturnAnswer))
+	require.NoError(t, err)
 	res, _, err := v.ValidateRRset(set, []rdata.RRSIG{sig}, []rdata.DNSKEY{wrongKey})
 	require.Equal(t, validator.Bogus, res)
 	require.Error(t, err)
@@ -141,7 +147,8 @@ func TestValidateRRsetDefaultBogusPolicy(t *testing.T) {
 			rdata.MustNewA(netip.MustParseAddr("192.0.2.1"))),
 	}
 	sig := signRRSIG(t, priv, set, key, now.Add(-2*time.Hour), now.Add(-time.Hour))
-	v := validator.New(validator.WithValidatorNow(func() time.Time { return now }))
+	v, err := validator.New(validator.WithValidatorNow(func() time.Time { return now }))
+	require.NoError(t, err)
 	res, _, err := v.ValidateRRset(set, []rdata.RRSIG{sig}, []rdata.DNSKEY{key})
 	require.Equal(t, validator.Bogus, res)
 	require.Error(t, err)
@@ -162,7 +169,8 @@ func TestValidateRRsetSameAlgDifferentKeyTag(t *testing.T) {
 	// Build a different DNSKEY with the same algorithm but different bytes
 	// (so its KeyTag differs from `key`'s tag).
 	other := rdata.NewDNSKEY(257, 3, rdata.AlgECDSAP256SHA256, make([]byte, 64))
-	v := validator.New(validator.WithValidatorNow(func() time.Time { return now }), validator.WithValidatorBogusPolicy(validator.BogusReturnAnswer))
+	v, err := validator.New(validator.WithValidatorNow(func() time.Time { return now }), validator.WithValidatorBogusPolicy(validator.BogusReturnAnswer))
+	require.NoError(t, err)
 	res, _, err := v.ValidateRRset(set, []rdata.RRSIG{sig}, []rdata.DNSKEY{other, key})
 	require.Equal(t, validator.Secure, res, "the second key is the right one")
 	require.NoError(t, err)
@@ -186,7 +194,8 @@ func TestValidateRRsetMatchingKeyButVerifyFails(t *testing.T) {
 		now.Add(time.Hour), now.Add(-time.Hour),
 		dnssec.KeyTag(key), set[0].Name(), make([]byte, 64))
 
-	v := validator.New(validator.WithValidatorNow(func() time.Time { return now }), validator.WithValidatorBogusPolicy(validator.BogusReturnAnswer))
+	v, err := validator.New(validator.WithValidatorNow(func() time.Time { return now }), validator.WithValidatorBogusPolicy(validator.BogusReturnAnswer))
+	require.NoError(t, err)
 	res, _, err := v.ValidateRRset(set, []rdata.RRSIG{bogus}, []rdata.DNSKEY{key})
 	require.Equal(t, validator.Bogus, res)
 	require.Error(t, err)
@@ -201,7 +210,8 @@ func TestValidateRRsetNTACovers(t *testing.T) {
 	}
 	ntas := validator.NewNTAStore()
 	require.True(t, ntas.Add(owner, 0))
-	v := validator.New(validator.WithValidatorNTAStore(ntas))
+	v, err := validator.New(validator.WithValidatorNTAStore(ntas))
+	require.NoError(t, err)
 	res, _, err := v.ValidateRRset(set, nil, nil)
 	require.Equal(t, validator.Indeterminate, res)
 	require.NoError(t, err)
@@ -214,7 +224,8 @@ func TestVerifyDelegationNTACovers(t *testing.T) {
 	owner := wire.MustParseName("nta.example.")
 	ntas := validator.NewNTAStore()
 	require.True(t, ntas.Add(owner, 0))
-	v := validator.New(validator.WithValidatorNTAStore(ntas))
+	v, err := validator.New(validator.WithValidatorNTAStore(ntas))
+	require.NoError(t, err)
 	res, err := v.VerifyDelegation(owner, nil, nil)
 	require.NoError(t, err)
 	require.Equal(t, validator.Indeterminate, res)
@@ -223,7 +234,8 @@ func TestVerifyDelegationNTACovers(t *testing.T) {
 // TestVerifyDelegationInsecureNoDS drives the empty-DS Insecure branch.
 func TestVerifyDelegationInsecureNoDS(t *testing.T) {
 	t.Parallel()
-	v := validator.New()
+	v, err := validator.New()
+	require.NoError(t, err)
 	res, err := v.VerifyDelegation(wire.MustParseName("example."), nil, nil)
 	require.NoError(t, err)
 	require.Equal(t, validator.Insecure, res)
@@ -238,7 +250,8 @@ func TestVerifyDelegationSecure(t *testing.T) {
 	require.NoError(t, err)
 	ds := rdata.NewDS(dnssec.KeyTag(key), key.Algorithm(), rdata.DigestSHA256, digest)
 
-	v := validator.New()
+	v, err := validator.New()
+	require.NoError(t, err)
 	res, err := v.VerifyDelegation(owner, []rdata.DS{ds}, []rdata.DNSKEY{key})
 	require.NoError(t, err)
 	require.Equal(t, validator.Secure, res)
@@ -250,7 +263,8 @@ func TestVerifyDelegationBogus(t *testing.T) {
 	owner := wire.MustParseName("example.com")
 	// Bogus DS — random bytes.
 	ds := rdata.NewDS(dnssec.KeyTag(key), key.Algorithm(), rdata.DigestSHA256, make([]byte, 32))
-	v := validator.New()
+	v, err := validator.New()
+	require.NoError(t, err)
 	res, err := v.VerifyDelegation(owner, []rdata.DS{ds}, []rdata.DNSKEY{key})
 	require.Equal(t, validator.Bogus, res)
 	require.Error(t, err)
@@ -274,6 +288,7 @@ func TestNTAStoreNames(t *testing.T) {
 func TestValidatorNTAsAccessor(t *testing.T) {
 	t.Parallel()
 	store := validator.NewNTAStore()
-	v := validator.New(validator.WithValidatorNTAStore(store))
+	v, err := validator.New(validator.WithValidatorNTAStore(store))
+	require.NoError(t, err)
 	require.Same(t, store, v.NTAs())
 }

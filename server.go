@@ -39,7 +39,7 @@ import (
 // accept loop exits because ctx was cancelled or the listener was
 // closed for an expected reason. It is NOT returned from Run itself —
 // Run only returns errors that happened during socket bind.
-var ErrServerClosed = errors.New("dnsserver: server closed")
+var ErrServerClosed = errors.New("acidns: server closed")
 
 // Handler is the interface implemented by anything that answers DNS queries.
 //

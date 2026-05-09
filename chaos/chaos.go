@@ -21,13 +21,15 @@ import (
 	"github.com/lestrrat-go/acidns/wire/rrtype"
 )
 
-// New returns a Handler that answers CHAOS identity queries.
-func New(opts ...Option) acidns.Handler {
+// New returns a Handler that answers CHAOS identity queries. The
+// error return is currently always nil; it is part of the signature so
+// future option-validation can be added without breaking callers.
+func New(opts ...Option) (acidns.Handler, error) {
 	c := config{}
 	for _, o := range opts {
 		o.applyChaos(&c)
 	}
-	return &handler{cfg: c}
+	return &handler{cfg: c}, nil
 }
 
 type handler struct{ cfg config }

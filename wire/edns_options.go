@@ -172,7 +172,7 @@ func ClientSubnet(o EDNSOption) (netip.Prefix, uint8, bool) {
 }
 
 // ErrInvalidCookie is returned when a DNS cookie has an unexpected length.
-var ErrInvalidCookie = errors.New("dnsmsg: invalid DNS cookie")
+var ErrInvalidCookie = errors.New("wire: invalid DNS cookie")
 
 // NewClientCookie builds a query-side DNS cookie option (RFC 7873). The
 // client cookie MUST be exactly 8 bytes.

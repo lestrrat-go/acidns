@@ -34,15 +34,14 @@ func TestExchangerEndToEnd(t *testing.T) {
 	var rpk [32]byte
 	copy(rpk[:], resolverPK)
 
-	cert := dnscrypt.NewCert(
-		dnscrypt.ESVersion2,
-		0,
-		rpk,
-		[8]byte{'X', 'X', 'X', 'X', 'X', 'X', 'X', 'X'},
-		1,
-		time.Now().Add(-time.Hour).UTC().Truncate(time.Second),
-		time.Now().Add(24*time.Hour).UTC().Truncate(time.Second),
+	cert, err := dnscrypt.NewCert(
+		dnscrypt.WithCertResolverPK(rpk),
+		dnscrypt.WithCertClientMagic([8]byte{'X', 'X', 'X', 'X', 'X', 'X', 'X', 'X'}),
+		dnscrypt.WithCertSerial(1),
+		dnscrypt.WithCertValidFrom(time.Now().Add(-time.Hour).UTC().Truncate(time.Second)),
+		dnscrypt.WithCertValidUntil(time.Now().Add(24*time.Hour).UTC().Truncate(time.Second)),
 	)
+	require.NoError(t, err)
 	dnscrypt.SignCert(cert, providerPriv)
 
 	pc, err := net.ListenPacket("udp", "127.0.0.1:0")

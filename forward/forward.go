@@ -9,6 +9,7 @@ import (
 	"io"
 	"log/slog"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/lestrrat-go/acidns"
@@ -44,6 +45,14 @@ type Handler struct {
 	// inflightSem is a counting semaphore bounding the pool of distinct
 	// outbound upstream goroutines. nil when WithMaxInflight ≤ 0.
 	inflightSem chan struct{}
+
+	// closeOnce guards Close so it is idempotent — repeated calls
+	// observe the same upstream-Close error without re-invoking it.
+	closeOnce sync.Once
+	closeErr  error
+	// closed is set after Close returns; ServeDNS observes this and
+	// replies SERVFAIL rather than driving a now-dead upstream.
+	closed atomic.Bool
 }
 
 type inflightCall struct {
@@ -91,25 +100,36 @@ func (h *Handler) UpstreamName() string { return h.cfg.upstreamName }
 func (h *Handler) CacheSize() int { return h.cache.len() }
 
 // Close drops the cache and, if the configured upstream Exchanger
-// implements io.Closer, propagates the Close call to it. Callers SHOULD
-// stop sending queries through the handler before calling Close: any
-// in-flight ServeDNS goroutine will continue to use the (now possibly
-// closed) upstream until it completes.
+// implements io.Closer, propagates the Close call to it. Subsequent
+// ServeDNS calls reply SERVFAIL rather than dispatch to the (now
+// possibly closed) upstream; in-flight ServeDNS goroutines that
+// passed the closed check before Close fired will continue to use
+// the upstream until they complete.
 //
-// Returns the upstream's Close error, or nil if the upstream does not
-// implement io.Closer.
+// Close is idempotent — repeated calls return the same upstream
+// Close error (nil if the upstream does not implement io.Closer).
 func (h *Handler) Close() error {
-	h.cache.clear()
-	if c, ok := h.cfg.upstream.(io.Closer); ok {
-		return c.Close()
-	}
-	return nil
+	h.closeOnce.Do(func() {
+		h.closed.Store(true)
+		h.cache.clear()
+		if c, ok := h.cfg.upstream.(io.Closer); ok {
+			h.closeErr = c.Close()
+		}
+	})
+	return h.closeErr
 }
 
 // ServeDNS answers q by serving from cache when fresh, otherwise by
 // forwarding to the configured upstream and caching the result.
 func (h *Handler) ServeDNS(ctx context.Context, w acidns.ResponseWriter, q wire.Message) {
 	start := time.Now()
+	if h.closed.Load() {
+		_ = w.WriteMsg(buildErrorResponse(q, wire.RCODEServFail))
+		h.cfg.logger.LogAttrs(ctx, slog.LevelDebug, "forward.serve",
+			slog.String("decision", "closed"),
+			slog.Duration("elapsed", time.Since(start)))
+		return
+	}
 	// Framework-level ingress filters: drop QR=1 datagrams, FORMERR
 	// on QDCOUNT≠1. The transport layer normally applies these, but
 	// programmatic callers that invoke ServeDNS directly (tests,
@@ -222,7 +242,7 @@ func (h *Handler) exchangeSingleflight(ctx context.Context, in wire.Message, qq 
 		}
 		call = &inflightCall{done: make(chan struct{})}
 		h.inflight[key] = call
-		h.startExchange(call, key, in)
+		h.startExchange(ctx, call, key, in)
 	}
 	h.inflightMu.Unlock()
 
@@ -235,13 +255,13 @@ func (h *Handler) exchangeSingleflight(ctx context.Context, in wire.Message, qq 
 }
 
 // startExchange spawns the upstream Exchange goroutine for the given
-// inflight call. The goroutine's context is derived from
-// [context.Background] (with [context.WithoutCancel] applied to the
-// caller's ctx so caller-installed values are preserved for any
-// observers down the upstream stack) so a cancelled leader does not
-// abort an in-flight upstream call that other waiters still need.
-// The exchange is bounded by queryTimeout when configured.
-func (h *Handler) startExchange(call *inflightCall, key string, in wire.Message) {
+// inflight call. The goroutine's context detaches the caller's
+// cancellation via [context.WithoutCancel] (so a cancelled leader does
+// not abort an in-flight upstream call that other waiters still need)
+// while preserving caller-installed values — slog correlation ids,
+// trace spans, etc. — for observers down the upstream stack. The
+// exchange is bounded by queryTimeout when configured.
+func (h *Handler) startExchange(callerCtx context.Context, call *inflightCall, key string, in wire.Message) {
 	go func() {
 		defer func() {
 			h.inflightMu.Lock()
@@ -252,7 +272,7 @@ func (h *Handler) startExchange(call *inflightCall, key string, in wire.Message)
 			}
 			close(call.done)
 		}()
-		exchangeCtx, cancel := context.WithCancel(context.Background())
+		exchangeCtx, cancel := context.WithCancel(context.WithoutCancel(callerCtx))
 		defer cancel()
 		if h.cfg.queryTimeout > 0 {
 			var c2 context.CancelFunc

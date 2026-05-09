@@ -43,6 +43,7 @@ type authoritative struct {
 	zones         map[string]*zoneIndex
 	notifyHandler NotifyHandler
 	notifyPolicy  NotifyPolicy
+	notifySem     chan struct{} // counting semaphore; nil disables the cap
 	axfrPolicy    AXFRPolicy
 	updatePolicy  UpdatePolicy
 }
@@ -58,7 +59,7 @@ type zoneIndex struct {
 // New returns a new Authoritative.
 func New(opts ...Option) (Authoritative, error) {
 	a := &authoritative{zones: make(map[string]*zoneIndex)}
-	c := &config{}
+	c := &config{maxNotifyInflight: 32}
 	for _, o := range opts {
 		o.applyAuth(c)
 	}
@@ -66,6 +67,9 @@ func New(opts ...Option) (Authoritative, error) {
 	a.notifyPolicy = c.notifyPolicy
 	a.axfrPolicy = c.axfrPolicy
 	a.updatePolicy = c.updatePolicy
+	if c.maxNotifyInflight > 0 {
+		a.notifySem = make(chan struct{}, c.maxNotifyInflight)
+	}
 	for _, z := range c.zones {
 		if err := a.AddZone(z); err != nil {
 			return nil, err

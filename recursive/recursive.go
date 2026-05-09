@@ -52,22 +52,42 @@ type Recursive interface {
 	// (RFC 8109). It is safe to call concurrently with Resolve. A
 	// failed prime leaves the existing roots untouched.
 	Prime(ctx context.Context) error
-	// Run drives background maintenance tasks (currently root
-	// priming when enabled via [WithRootPriming]) until ctx is
-	// canceled. Returns ctx.Err() on cancellation, or nil
-	// immediately when no background work is configured. Resolve
-	// does not require Run to have been called.
-	Run(ctx context.Context) error
+	// RunMaintenance drives background maintenance tasks (currently
+	// root priming when enabled via [WithRootPriming], and the
+	// aggressive-NSEC sweep) and BLOCKS until ctx is canceled.
+	// Returns ctx.Err() on cancellation, or nil immediately when no
+	// background work is configured. Resolve does not require
+	// RunMaintenance to have been called.
+	//
+	// The name disambiguates from the non-blocking server-side Run
+	// (e.g. UDPServer.Run) used elsewhere in this module.
+	RunMaintenance(ctx context.Context) error
 }
 
-// Validator is the contract recursive expects from a DNSSEC validator.
-// Any implementation that satisfies validator.Walker also satisfies this
-// interface (acidns/dnssec/validator). The shape is structural so we avoid
-// importing the validator package and creating an import cycle through the
-// chain walker's Source path.
-type Validator interface {
+// ChainValidator is the contract recursive expects from a DNSSEC
+// chain validator — an implementation that walks the chain of trust
+// from a configured anchor down to (qname, qtype) and returns a
+// classified validation outcome.
+//
+// The shape is structural so we avoid importing the validator
+// package and creating an import cycle through the chain walker's
+// Source path; in practice an [github.com/lestrrat-go/acidns/dnssec/validator.Walker]
+// satisfies the call shape and is wrapped via a small adapter in
+// caller code (the package-level Result int values match the
+// validator package's, so the adapter is a one-liner).
+//
+// Renamed from `Validator` to disambiguate from
+// [github.com/lestrrat-go/acidns/dnssec/validator.Validator] (the
+// signature/RRsig verifier struct), which has a different API
+// surface entirely.
+type ChainValidator interface {
 	Resolve(ctx context.Context, name wire.Name, t rrtype.Type) (ValidationResult, error)
 }
+
+// Validator is a deprecated alias for [ChainValidator].
+//
+// Deprecated: use [ChainValidator].
+type Validator = ChainValidator
 
 // ValidationResult is what Validator.Resolve returns. It mirrors the
 // validator.Answer shape so any validator package can satisfy it.

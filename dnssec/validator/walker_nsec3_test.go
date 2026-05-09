@@ -36,8 +36,8 @@ func buildNSEC3Chain(t *testing.T, alg rdata.DNSSECAlgorithm, mode nsec3Mode, no
 	require.NoError(t, err)
 
 	w, err := validator.NewWalker(src,
-		validator.WithAnchors(anchor),
-		validator.WithNow(func() time.Time { return now }),
+		validator.WithWalkerAnchors(anchor),
+		validator.WithWalkerNow(func() time.Time { return now }),
 	)
 	require.NoError(t, err)
 	return src, w, anchor
@@ -88,8 +88,8 @@ func TestWalkerNSEC3OptOutInsecure(t *testing.T) {
 	rootDS, _ := root.rootAnchor(t)
 	anchor, _ := validator.NewAnchor(rootDS.apex, rootDS.ds)
 	w, err := validator.NewWalker(src,
-		validator.WithAnchors(anchor),
-		validator.WithNow(func() time.Time { return now }),
+		validator.WithWalkerAnchors(anchor),
+		validator.WithWalkerNow(func() time.Time { return now }),
 	)
 	require.NoError(t, err)
 	ans, err := w.Resolve(t.Context(), wire.MustParseName("ns.insecure.example."), rrtype.A)
@@ -105,9 +105,9 @@ func TestWalkerNSEC3IterationCap(t *testing.T) {
 	_, w, _ := buildNSEC3Chain(t, rdata.AlgECDSAP256SHA256, mode, now)
 	wBogus, err := validator.NewWalker(
 		newNSEC3SourceFrom(t, mode, rdata.AlgECDSAP256SHA256, now),
-		validator.WithAnchors(newRootAnchor(t, rdata.AlgECDSAP256SHA256, now)),
-		validator.WithNow(func() time.Time { return now }),
-		validator.WithBogusPolicy(validator.BogusReturnAnswer),
+		validator.WithWalkerAnchors(newRootAnchor(t, rdata.AlgECDSAP256SHA256, now)),
+		validator.WithWalkerNow(func() time.Time { return now }),
+		validator.WithWalkerBogusPolicy(validator.BogusReturnAnswer),
 	)
 	require.NoError(t, err)
 	_ = w

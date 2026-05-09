@@ -108,11 +108,15 @@ func primingAddrsFromResponse(resp wire.Message) []netip.AddrPort {
 	return out
 }
 
-// Run drives background maintenance: root priming (RFC 8109) when
-// configured, and periodic sweep of expired aggressive-NSEC entries
-// when WithAggressiveNSEC is on. Returns nil immediately when no
-// background tasks are configured so the call is always safe.
-func (r *recursive) Run(ctx context.Context) error {
+// RunMaintenance drives background maintenance: root priming (RFC
+// 8109) when configured, and periodic sweep of expired
+// aggressive-NSEC entries when WithAggressiveNSEC is on. Returns
+// nil immediately when no background tasks are configured so the
+// call is always safe.
+//
+// This method BLOCKS until ctx is canceled. The name disambiguates
+// from the non-blocking server-side Run (e.g. UDPServer.Run).
+func (r *recursive) RunMaintenance(ctx context.Context) error {
 	if !r.rootPriming && !r.aggressiveNSEC {
 		return nil
 	}

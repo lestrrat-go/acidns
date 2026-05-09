@@ -11,7 +11,7 @@ import (
 )
 
 // ErrInvalidMessage is returned when a DNS message fails to encode or decode.
-var ErrInvalidMessage = errors.New("dnsmsg: invalid message")
+var ErrInvalidMessage = errors.New("wire: invalid message")
 
 // Record is a resource record: name, type/class, TTL, and a typed rdata.
 type Record interface {

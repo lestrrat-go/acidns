@@ -12,20 +12,25 @@ package acidns
 //
 // # Default policy
 //
-// An ACL constructed with NO options (no allow list and no deny list)
-// is allow-all: every source is permitted. This makes NewACL safely
-// composable into a middleware chain ahead of policy decisions
-// without changing observed behaviour, but means a misconfigured
-// caller that thinks it's tightening access by adding the middleware
-// in isolation will get no protection. Always pair NewACL with at
-// least one of WithACLAllow / WithACLDeny in production.
+// NewACL requires at least one of WithACLAllow or WithACLDeny — a
+// rule-less ACL would be silently allow-all and would mask a
+// "tighten access by adding the middleware" misconfiguration.
+// Construction without rules returns [ErrACLNoRules].
 
 import (
 	"context"
+	"errors"
 	"net/netip"
 
 	"github.com/lestrrat-go/acidns/wire"
 )
+
+// ErrACLNoRules is returned by NewACL when neither WithACLAllow nor
+// WithACLDeny is supplied. Without rules, the ACL is silently
+// allow-all — a misconfiguration that adding the middleware "for
+// security" would mask. Refuse the construction instead so the
+// operator catches the omission immediately.
+var ErrACLNoRules = errors.New("acidns: NewACL requires at least one of WithACLAllow / WithACLDeny")
 
 // ACLOption configures the ACL.
 type ACLOption interface{ applyACL(*aclConfig) }
@@ -57,14 +62,18 @@ type acl struct {
 	deny  []netip.Prefix
 }
 
-// NewACL returns a Handler that applies the configured ACL before delegating
-// to inner.
-func NewACL(inner Handler, opts ...ACLOption) Handler {
+// NewACL returns a Handler that applies the configured ACL before
+// delegating to inner. At least one of [WithACLAllow] or
+// [WithACLDeny] is required; otherwise [ErrACLNoRules] is returned.
+func NewACL(inner Handler, opts ...ACLOption) (Handler, error) {
 	c := &aclConfig{}
 	for _, o := range opts {
 		o.applyACL(c)
 	}
-	return &acl{inner: inner, allow: c.allow, deny: c.deny}
+	if len(c.allow) == 0 && len(c.deny) == 0 {
+		return nil, ErrACLNoRules
+	}
+	return &acl{inner: inner, allow: c.allow, deny: c.deny}, nil
 }
 
 func (a *acl) ServeDNS(ctx context.Context, w ResponseWriter, q wire.Message) {

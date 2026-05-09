@@ -219,11 +219,11 @@ func TestWalkerClockSkewAcceptsBoundarySigs(t *testing.T) {
 	src, _, anchor := buildChain(t, rdata.AlgECDSAP256SHA256, now)
 	// Walk slightly past expiration but inside the clock-skew window.
 	w, err := validator.NewWalker(src,
-		validator.WithAnchors(anchor),
-		validator.WithNow(func() time.Time { return now.Add(time.Hour + time.Minute) }),
-		validator.WithClockSkew(0),            // ignored zero (still within default)
-		validator.WithClockSkew(-time.Second), // negative ignored
-		validator.WithClockSkew(2*time.Hour),
+		validator.WithWalkerAnchors(anchor),
+		validator.WithWalkerNow(func() time.Time { return now.Add(time.Hour + time.Minute) }),
+		validator.WithWalkerClockSkew(0),            // ignored zero (still within default)
+		validator.WithWalkerClockSkew(-time.Second), // negative ignored
+		validator.WithWalkerClockSkew(2*time.Hour),
 	)
 	require.NoError(t, err)
 	ans, err := w.Resolve(t.Context(), wire.MustParseName("www.sub.example."), rrtype.A)
@@ -238,13 +238,13 @@ func TestWalkerOptionGuards(t *testing.T) {
 	now := time.Now().UTC().Truncate(time.Second)
 	src, _, anchor := buildChain(t, rdata.AlgECDSAP256SHA256, now)
 	w, err := validator.NewWalker(src,
-		validator.WithAnchors(anchor),
-		validator.WithNow(func() time.Time { return now }),
-		validator.WithMaxRRSIGsTry(0),  // ignored
-		validator.WithMaxRRSIGsTry(16), // applied
-		validator.WithMaxAlgorithms(0), // ignored
-		validator.WithMaxAlgorithms(8), // applied
-		validator.WithMaxZoneCuts(0),   // ignored
+		validator.WithWalkerAnchors(anchor),
+		validator.WithWalkerNow(func() time.Time { return now }),
+		validator.WithWalkerMaxRRSIGsTry(0),  // ignored
+		validator.WithWalkerMaxRRSIGsTry(16), // applied
+		validator.WithWalkerMaxAlgorithms(0), // ignored
+		validator.WithWalkerMaxAlgorithms(8), // applied
+		validator.WithWalkerMaxZoneCuts(0),   // ignored
 	)
 	require.NoError(t, err)
 	ans, err := w.Resolve(t.Context(), wire.MustParseName("www.sub.example."), rrtype.A)
@@ -261,8 +261,8 @@ func TestWalkerSourceLookupError(t *testing.T) {
 		rdata.NewDS(1, rdata.AlgRSASHA256, rdata.DigestSHA256, make([]byte, 32)))
 	require.NoError(t, err)
 	w, err := validator.NewWalker(src,
-		validator.WithAnchors(a),
-		validator.WithBogusPolicy(validator.BogusReturnAnswer),
+		validator.WithWalkerAnchors(a),
+		validator.WithWalkerBogusPolicy(validator.BogusReturnAnswer),
 	)
 	require.NoError(t, err)
 	ans, err := w.Resolve(t.Context(), wire.MustParseName("example."), rrtype.A)
@@ -280,7 +280,7 @@ func TestWalkerSourceLookupErrorDefaultPolicy(t *testing.T) {
 	a, err := validator.NewAnchor(wire.RootName(),
 		rdata.NewDS(1, rdata.AlgRSASHA256, rdata.DigestSHA256, make([]byte, 32)))
 	require.NoError(t, err)
-	w, err := validator.NewWalker(src, validator.WithAnchors(a))
+	w, err := validator.NewWalker(src, validator.WithWalkerAnchors(a))
 	require.NoError(t, err)
 	ans, err := w.Resolve(t.Context(), wire.MustParseName("example."), rrtype.A)
 	require.ErrorContains(t, err, "dial timeout")
@@ -334,9 +334,9 @@ func TestWalkerNoDataMissingProof(t *testing.T) {
 	rootDS, _ := root.rootAnchor(t)
 	anchor, _ := validator.NewAnchor(rootDS.apex, rootDS.ds)
 	w, err := validator.NewWalker(stripper,
-		validator.WithAnchors(anchor),
-		validator.WithNow(func() time.Time { return now }),
-		validator.WithBogusPolicy(validator.BogusReturnAnswer),
+		validator.WithWalkerAnchors(anchor),
+		validator.WithWalkerNow(func() time.Time { return now }),
+		validator.WithWalkerBogusPolicy(validator.BogusReturnAnswer),
 	)
 	require.NoError(t, err)
 	// AAAA at ghost.example. → NoData with stripped authority.
@@ -417,9 +417,9 @@ func TestWalkerUnsignedAnswerInSignedZone(t *testing.T) {
 		qtype:  rrtype.A,
 	}
 	w, err := validator.NewWalker(wrapped,
-		validator.WithAnchors(anchor),
-		validator.WithNow(func() time.Time { return now }),
-		validator.WithBogusPolicy(validator.BogusReturnAnswer),
+		validator.WithWalkerAnchors(anchor),
+		validator.WithWalkerNow(func() time.Time { return now }),
+		validator.WithWalkerBogusPolicy(validator.BogusReturnAnswer),
 	)
 	require.NoError(t, err)
 	ans, err := w.Resolve(t.Context(), wire.MustParseName("www.sub.example."), rrtype.A)
@@ -447,9 +447,9 @@ func TestWalkerInsecureDelegationAnswerLookupError(t *testing.T) {
 	rootDS, _ := root.rootAnchor(t)
 	anchor, _ := validator.NewAnchor(rootDS.apex, rootDS.ds)
 	w, err := validator.NewWalker(wrapped,
-		validator.WithAnchors(anchor),
-		validator.WithNow(func() time.Time { return now }),
-		validator.WithBogusPolicy(validator.BogusReturnAnswer),
+		validator.WithWalkerAnchors(anchor),
+		validator.WithWalkerNow(func() time.Time { return now }),
+		validator.WithWalkerBogusPolicy(validator.BogusReturnAnswer),
 	)
 	require.NoError(t, err)
 	ans, err := w.Resolve(t.Context(), wire.MustParseName("ns.insecure.example."), rrtype.A)
@@ -481,7 +481,8 @@ func TestValidatorRRSIGFutureInception(t *testing.T) {
 	}
 	// Inception in the future.
 	sig := signRRSIG(t, priv, set, key, now.Add(time.Hour), now.Add(2*time.Hour))
-	v := validator.New(validator.WithValidatorNow(func() time.Time { return now }), validator.WithValidatorBogusPolicy(validator.BogusReturnAnswer))
+	v, err := validator.New(validator.WithValidatorNow(func() time.Time { return now }), validator.WithValidatorBogusPolicy(validator.BogusReturnAnswer))
+	require.NoError(t, err)
 	res, _, err := v.ValidateRRset(set, []rdata.RRSIG{sig}, []rdata.DNSKEY{key})
 	require.Equal(t, validator.Bogus, res)
 	require.ErrorContains(t, err, "inception/expiration outside now")
@@ -492,7 +493,8 @@ func TestValidatorRRSIGFutureInception(t *testing.T) {
 func TestValidatorVerifyDelegationNTAStillCovers(t *testing.T) {
 	t.Parallel()
 	store := validator.NewNTAStore(wire.MustParseName("zone.example."))
-	v := validator.New(validator.WithValidatorNTAStore(store))
+	v, err := validator.New(validator.WithValidatorNTAStore(store))
+	require.NoError(t, err)
 	// DS that would otherwise validate is irrelevant — NTA wins.
 	_, key := makeECDSAP256Key(t)
 	owner := wire.MustParseName("zone.example.")

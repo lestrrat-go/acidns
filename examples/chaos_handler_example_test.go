@@ -25,10 +25,14 @@ func Example_chaos_handler() {
 	// ServeDNS with a captured writer. Demonstrates RFC 4892 mapping:
 	// id.server / hostname.bind both yield the configured identifier;
 	// version.server / version.bind both yield the configured version.
-	h := chaos.New(
+	h, err := chaos.New(
 		chaos.WithIdentifier("ns1.example.net"),
 		chaos.WithVersion("acidns/dev"),
 	)
+	if err != nil {
+		fmt.Println("chaos:", err)
+		return
+	}
 
 	ask := func(name string) {
 		q, _ := wire.NewBuilder().

@@ -2,6 +2,7 @@ package wire
 
 import (
 	"fmt"
+	"slices"
 	"time"
 
 	"github.com/lestrrat-go/acidns/wire/rdata"
@@ -39,7 +40,7 @@ func (s rrset) Name() wirebb.Name   { return s.name }
 func (s rrset) Type() rrtype.Type   { return s.typ }
 func (s rrset) Class() rrtype.Class { return s.class }
 func (s rrset) TTL() time.Duration  { return s.ttl }
-func (s rrset) Records() []Record   { return s.records }
+func (s rrset) Records() []Record   { return slices.Clone(s.records) }
 func (s rrset) Len() int            { return len(s.records) }
 
 // NewRRset returns an RRset built from the supplied records. All records

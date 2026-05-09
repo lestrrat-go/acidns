@@ -102,7 +102,7 @@ func TestZONEMDAccessors(t *testing.T) {
 
 func TestSVCBPropertiesAccessors(t *testing.T) {
 	t.Parallel()
-	s := rdata.NewSVCB(1, wirebb.MustParse("example.com"))
+	s := rdata.MustNewSVCB(1, wirebb.MustParse("example.com"))
 	require.Equal(t, "example.com.", s.Target().String())
 	require.Empty(t, s.Params())
 	_, hasPort := s.Port()
@@ -122,7 +122,7 @@ func TestSVCBParamRoundTrip(t *testing.T) {
 	require.NoError(t, err)
 	v6, err := rdata.NewSvcParamIPv6Hint(netip.MustParseAddr("2001:db8::1"))
 	require.NoError(t, err)
-	s := rdata.NewSVCB(1, wirebb.MustParse("example.com"),
+	s := rdata.MustNewSVCB(1, wirebb.MustParse("example.com"),
 		alpn,
 		rdata.NewSvcParamPort(443),
 		v4, v6,

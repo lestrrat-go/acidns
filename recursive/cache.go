@@ -92,7 +92,22 @@ func (b *EntryBuilder) AA(v bool) *EntryBuilder { b.e.aa = v; return b }
 // AD sets the authentic-data bit.
 func (b *EntryBuilder) AD(v bool) *EntryBuilder { b.e.ad = v; return b }
 
-// ExpiresAt sets the absolute expiry instant.
+// TTL sets the entry's expiry to time.Now() + d. This is the
+// preferred form for builders driven from cache-Put paths because
+// the resulting time.Time carries the monotonic reading the [Get]
+// expiry check relies on (a wall-clock-only instant supplied via
+// [EntryBuilder.ExpiresAt] silently misbehaves across system-clock
+// jumps).
+func (b *EntryBuilder) TTL(d time.Duration) *EntryBuilder {
+	b.e.expiresAt = time.Now().Add(d)
+	return b
+}
+
+// ExpiresAt sets the absolute expiry instant. Prefer
+// [EntryBuilder.TTL] when the expiry is being computed from "now +
+// duration" — ExpiresAt accepts any time.Time, but a wall-clock-only
+// instant (e.g. time.Date / time.Unix) does not carry the monotonic
+// reading the [Get] expiry check uses for jump-immune comparison.
 func (b *EntryBuilder) ExpiresAt(t time.Time) *EntryBuilder { b.e.expiresAt = t; return b }
 
 // Build returns the constructed Entry. Currently infallible; the
