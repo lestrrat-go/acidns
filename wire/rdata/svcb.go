@@ -284,5 +284,51 @@ func unpackSvcbBody(u *wirebb.Unpacker, rdlen int) (svcbBody, error) {
 		copy(cp, v)
 		params = append(params, SVCBParam{key: SvcParamKey(key), data: cp})
 	}
+	if err := validateMandatoryParam(params); err != nil {
+		return zero, err
+	}
 	return svcbBody{priority: prio, target: target, params: params}, nil
+}
+
+// validateMandatoryParam enforces RFC 9460 §8 on SvcParamMandatory
+// (key 0): payload MUST be non-empty, MUST list each key in
+// strictly-increasing order without duplicates, MUST NOT list key 0
+// itself, and every listed key MUST also be present elsewhere in the
+// SVCB record. A peer can otherwise ship a syntactically-valid but
+// semantically broken record that downstream consumers treat as
+// trustworthy.
+func validateMandatoryParam(params []SVCBParam) error {
+	var mandatory *SVCBParam
+	seen := make(map[SvcParamKey]struct{}, len(params))
+	for i := range params {
+		seen[params[i].key] = struct{}{}
+		if params[i].key == SvcParamMandatory {
+			mandatory = &params[i]
+		}
+	}
+	if mandatory == nil {
+		return nil
+	}
+	data := mandatory.data
+	if len(data) == 0 {
+		return fmt.Errorf("%w: SVCB mandatory list is empty", ErrInvalidRData)
+	}
+	if len(data)%2 != 0 {
+		return fmt.Errorf("%w: SVCB mandatory length %d not multiple of 2", ErrInvalidRData, len(data))
+	}
+	lastKey := -1
+	for i := 0; i < len(data); i += 2 {
+		k := SvcParamKey(binary.BigEndian.Uint16(data[i : i+2]))
+		if k == SvcParamMandatory {
+			return fmt.Errorf("%w: SVCB mandatory list includes key 0 (itself)", ErrInvalidRData)
+		}
+		if int(k) <= lastKey {
+			return fmt.Errorf("%w: SVCB mandatory keys out of order or duplicate (key %d after %d)", ErrInvalidRData, k, lastKey)
+		}
+		lastKey = int(k)
+		if _, present := seen[k]; !present {
+			return fmt.Errorf("%w: SVCB mandatory key %d not present in record", ErrInvalidRData, k)
+		}
+	}
+	return nil
 }
