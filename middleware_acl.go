@@ -40,8 +40,9 @@ type aclOptionFunc func(*aclConfig)
 func (f aclOptionFunc) applyACL(c *aclConfig) { f(c) }
 
 type aclConfig struct {
-	allow []netip.Prefix
-	deny  []netip.Prefix
+	allow      []netip.Prefix
+	deny       []netip.Prefix
+	dropDenied bool
 }
 
 // WithACLAllow sets the explicit allow list. If non-empty, queries from any
@@ -56,10 +57,28 @@ func WithACLDeny(prefixes ...netip.Prefix) ACLOption {
 	return aclOptionFunc(func(c *aclConfig) { c.deny = append(c.deny, prefixes...) })
 }
 
+// WithACLDropDenied silently drops denied requests instead of replying
+// with REFUSED. The default REFUSED reply is itself an EDNS-shaped
+// echo of the question, giving an off-path attacker a small (~1.4×)
+// amplification primitive against any spoofed source IP. On a public
+// UDP listener — where the source address is unverifiable until
+// cookies or path validation kicks in — drop-mode keeps the
+// listener's amplification factor below 1×.
+//
+// Default: off (RFC 1035 expects servers to reply with REFUSED so an
+// in-band-discoverable misconfiguration surfaces). Enable on
+// internet-exposed UDP listeners; leave off behind a path-validated
+// gate (TCP, DoT, DoH, DoQ) where REFUSED's signal value outweighs
+// the amplification cost.
+func WithACLDropDenied(drop bool) ACLOption {
+	return aclOptionFunc(func(c *aclConfig) { c.dropDenied = drop })
+}
+
 type acl struct {
-	inner Handler
-	allow []netip.Prefix
-	deny  []netip.Prefix
+	inner      Handler
+	allow      []netip.Prefix
+	deny       []netip.Prefix
+	dropDenied bool
 }
 
 // NewACL returns a Handler that applies the configured ACL before
@@ -73,12 +92,15 @@ func NewACL(inner Handler, opts ...ACLOption) (Handler, error) {
 	if len(c.allow) == 0 && len(c.deny) == 0 {
 		return nil, ErrACLNoRules
 	}
-	return &acl{inner: inner, allow: c.allow, deny: c.deny}, nil
+	return &acl{inner: inner, allow: c.allow, deny: c.deny, dropDenied: c.dropDenied}, nil
 }
 
 func (a *acl) ServeDNS(ctx context.Context, w ResponseWriter, q wire.Message) {
 	src := w.RemoteAddr().Addr()
 	if !a.permit(src) {
+		if a.dropDenied {
+			return
+		}
 		a.refuse(w, q)
 		return
 	}
