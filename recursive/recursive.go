@@ -216,6 +216,9 @@ func New(opts ...Option) Recursive {
 			burst = c.upstreamQPS
 		}
 		r.upstreamLim = newUpstreamLimiter(c.upstreamQPS, burst, nil)
+		if c.upstreamMaxKeysSet {
+			r.upstreamLim.maxKeys = c.upstreamMaxKeys
+		}
 	}
 	if c.rootPriming {
 		r.rootPriming = true
@@ -826,7 +829,6 @@ func (r *recursive) unmarkNSInProgress(nsKey string) {
 	delete(r.nsInProgress, nsKey)
 	r.nsInProgressMu.Unlock()
 }
-
 
 // referralZone returns the owner name of the NS RRset in resp's
 // authority section — i.e., the zone that owns the delegation. If no NS

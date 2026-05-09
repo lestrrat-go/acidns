@@ -60,3 +60,58 @@ func TestUpstreamLimiterDisabled(t *testing.T) {
 		t.Fatalf("nil limiter should always allow")
 	}
 }
+
+func TestUpstreamLimiterEvictsAtCap(t *testing.T) {
+	now := time.Unix(1700000000, 0)
+	clock := func() time.Time { return now }
+
+	l := newUpstreamLimiter(100.0, 100.0, clock)
+	l.maxKeys = 4
+
+	// Fill the cap with four buckets, each consumed once so they
+	// aren't fully refilled (and thus survive the idle-pass evict).
+	for i := 0; i < 4; i++ {
+		now = now.Add(10 * time.Millisecond)
+		addr := netip.AddrPortFrom(netip.MustParseAddr("192.0.2.1"), uint16(1000+i))
+		if !l.Take(addr) {
+			t.Fatalf("seed Take should succeed")
+		}
+	}
+	if got := len(l.buckets); got != 4 {
+		t.Fatalf("expected 4 buckets, got %d", got)
+	}
+
+	// Inserting a fifth must evict — total stays bounded.
+	now = now.Add(10 * time.Millisecond)
+	if !l.Take(netip.MustParseAddrPort("192.0.2.99:53")) {
+		t.Fatalf("Take into capped map should still succeed")
+	}
+	if got := len(l.buckets); got > 4 {
+		t.Fatalf("cap breached: have %d buckets", got)
+	}
+}
+
+func TestUpstreamLimiterEvictsIdleFirst(t *testing.T) {
+	now := time.Unix(1700000000, 0)
+	clock := func() time.Time { return now }
+
+	l := newUpstreamLimiter(10.0, 10.0, clock)
+	l.maxKeys = 3
+
+	// Three idle buckets — full burst, untouched since creation. The
+	// idle-eviction pass should clear all of them when a fourth
+	// arrives.
+	for i := 0; i < 3; i++ {
+		_ = l.Take(netip.AddrPortFrom(netip.MustParseAddr("192.0.2.1"), uint16(2000+i)))
+	}
+	// Force them all into the "fully refilled / idle" state by
+	// advancing past idleFor (burst/qps + 1s = 2s).
+	now = now.Add(10 * time.Second)
+	if !l.Take(netip.MustParseAddrPort("192.0.2.99:53")) {
+		t.Fatalf("Take after eviction should succeed")
+	}
+	// After idle-pass eviction, only the new bucket should remain.
+	if got := len(l.buckets); got != 1 {
+		t.Fatalf("expected 1 bucket after idle eviction, got %d", got)
+	}
+}

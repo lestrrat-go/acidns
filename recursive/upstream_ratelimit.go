@@ -16,14 +16,24 @@ import (
 	"time"
 )
 
+// defaultUpstreamMaxKeys caps the bucket map for a recursive
+// resolver running against the open internet. The visited
+// authoritative-server count for a healthy resolver is on the order
+// of tens of thousands; 16384 leaves comfortable headroom while
+// bounding worst-case memory at roughly 1 MiB. Without this cap an
+// attacker that triggers many distinct upstream addresses
+// (NS-graph trickery) would grow the map without bound.
+const defaultUpstreamMaxKeys = 16384
+
 // upstreamLimiter is a per-AddrPort token-bucket. Tokens replenish
 // at `qps` per second up to a burst of `burst`. Take returns true
 // when a token was consumed (caller may proceed) or false when the
 // bucket was empty (caller should skip this server).
 type upstreamLimiter struct {
-	qps   float64
-	burst float64
-	now   func() time.Time
+	qps     float64
+	burst   float64
+	now     func() time.Time
+	maxKeys int
 
 	mu      sync.Mutex
 	buckets map[netip.AddrPort]*tokenBucket
@@ -42,6 +52,7 @@ func newUpstreamLimiter(qps float64, burst float64, now func() time.Time) *upstr
 		qps:     qps,
 		burst:   burst,
 		now:     now,
+		maxKeys: defaultUpstreamMaxKeys,
 		buckets: make(map[netip.AddrPort]*tokenBucket),
 	}
 }
@@ -59,6 +70,9 @@ func (l *upstreamLimiter) Take(addr netip.AddrPort) bool {
 	defer l.mu.Unlock()
 	b, ok := l.buckets[addr]
 	if !ok {
+		if l.maxKeys > 0 && len(l.buckets) >= l.maxKeys {
+			l.evictLocked(now)
+		}
 		b = &tokenBucket{tokens: l.burst, lastRefill: now}
 		l.buckets[addr] = b
 	}
@@ -76,4 +90,35 @@ func (l *upstreamLimiter) Take(addr netip.AddrPort) bool {
 	}
 	b.tokens--
 	return true
+}
+
+// evictLocked makes room in the bucket map. Two passes mirroring
+// the source-side rate limiter: drop fully-refilled (idle) buckets
+// first since they carry no useful state, then drop the single
+// oldest-updated bucket if the cap is still breached. Caller holds
+// l.mu.
+func (l *upstreamLimiter) evictLocked(now time.Time) {
+	if l.qps > 0 {
+		idleFor := time.Duration(l.burst/l.qps*float64(time.Second)) + time.Second
+		threshold := now.Add(-idleFor)
+		for k, b := range l.buckets {
+			if b.lastRefill.Before(threshold) {
+				delete(l.buckets, k)
+			}
+		}
+	}
+	if l.maxKeys <= 0 || len(l.buckets) < l.maxKeys {
+		return
+	}
+	var oldestKey netip.AddrPort
+	var oldestTime time.Time
+	first := true
+	for k, b := range l.buckets {
+		if first || b.lastRefill.Before(oldestTime) {
+			oldestKey = k
+			oldestTime = b.lastRefill
+			first = false
+		}
+	}
+	delete(l.buckets, oldestKey)
 }

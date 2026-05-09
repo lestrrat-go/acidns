@@ -13,25 +13,27 @@ type optionFunc func(*config)
 func (f optionFunc) applyRecursive(c *config) { f(c) }
 
 type config struct {
-	roots          []netip.AddrPort
-	cache          Cache
-	stats          ServerStats
-	maxIterations  int
-	maxDepth       int
-	maxCNAMEs      int
-	dialer         Dialer
-	validator      Validator
-	queryTimeout   time.Duration
-	maxNegTTL      time.Duration
-	resolveBudget  time.Duration
-	allowNoRD      bool
-	caseRandom     bool
-	qnameMin       bool
-	aggressiveNSEC bool
-	upstreamQPS    float64
-	upstreamBurst  float64
-	rootPriming    bool
-	rootRefresh    time.Duration
+	roots              []netip.AddrPort
+	cache              Cache
+	stats              ServerStats
+	maxIterations      int
+	maxDepth           int
+	maxCNAMEs          int
+	dialer             Dialer
+	validator          Validator
+	queryTimeout       time.Duration
+	maxNegTTL          time.Duration
+	resolveBudget      time.Duration
+	allowNoRD          bool
+	caseRandom         bool
+	qnameMin           bool
+	aggressiveNSEC     bool
+	upstreamQPS        float64
+	upstreamBurst      float64
+	upstreamMaxKeys    int
+	upstreamMaxKeysSet bool
+	rootPriming        bool
+	rootRefresh        time.Duration
 }
 
 // WithRoots overrides the default root server list.
@@ -196,6 +198,20 @@ func WithUpstreamRateLimit(qps, burst float64) Option {
 	return optionFunc(func(c *config) {
 		c.upstreamQPS = qps
 		c.upstreamBurst = burst
+	})
+}
+
+// WithUpstreamRateLimitMaxKeys caps the number of distinct upstream
+// addresses tracked by [WithUpstreamRateLimit]. Without this cap
+// the bucket map grows unbounded as the resolver visits more
+// authoritatives, eventually exhausting memory under attacker-driven
+// NS-graph trickery. When the cap is reached, idle (fully-refilled)
+// buckets are evicted first, then the oldest-updated bucket. A
+// non-positive value disables the cap. Defaults to 16384.
+func WithUpstreamRateLimitMaxKeys(n int) Option {
+	return optionFunc(func(c *config) {
+		c.upstreamMaxKeys = n
+		c.upstreamMaxKeysSet = true
 	})
 }
 
