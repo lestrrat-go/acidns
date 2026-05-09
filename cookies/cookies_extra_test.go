@@ -46,7 +46,7 @@ func TestServerMaxAgeDefault(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, time.Hour, srv.MaxAge())
 
-	srv2, err := cookies.NewServer(pool, cookies.WithServerMaxAge(17*time.Minute))
+	srv2, err := cookies.NewServer(pool, cookies.WithMaxAge(17*time.Minute))
 	require.NoError(t, err)
 	require.Equal(t, 17*time.Minute, srv2.MaxAge())
 }

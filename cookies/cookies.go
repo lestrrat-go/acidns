@@ -450,9 +450,9 @@ type serverConfig struct {
 	maxFutureSkew time.Duration
 }
 
-// WithServerMaxAge sets the cookie acceptance window. RFC 7873 §5.2.5
+// WithMaxAge sets the cookie acceptance window. RFC 7873 §5.2.5
 // recommends ~1 hour; that is the default if this option is not set.
-func WithServerMaxAge(d time.Duration) ServerOption {
+func WithMaxAge(d time.Duration) ServerOption {
 	return serverOptionFunc(func(c *serverConfig) {
 		if d > 0 {
 			c.maxAge = d
@@ -474,7 +474,7 @@ func WithClockSkew(d time.Duration) ServerOption {
 
 // NewServer returns a [Server] backed by pool. By default the cookie
 // acceptance window is 1 hour and the future-skew tolerance is
-// [DefaultMaxFutureSkew]; pass [WithServerMaxAge] / [WithClockSkew]
+// [DefaultMaxFutureSkew]; pass [WithMaxAge] / [WithClockSkew]
 // to override.
 func NewServer(pool SecretPool, opts ...ServerOption) (Server, error) {
 	cfg := serverConfig{maxAge: time.Hour, maxFutureSkew: DefaultMaxFutureSkew}

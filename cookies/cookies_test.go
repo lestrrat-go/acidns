@@ -46,7 +46,7 @@ func TestServerCookieRejectsExpired(t *testing.T) {
 	t.Parallel()
 	pool, _ := cookies.NewSecretPool()
 	t.Cleanup(pool.Close)
-	srv, err := cookies.NewServer(pool, cookies.WithServerMaxAge(30*time.Minute))
+	srv, err := cookies.NewServer(pool, cookies.WithMaxAge(30*time.Minute))
 	require.NoError(t, err)
 	cc := [8]byte{}
 	addr := netip.MustParseAddr("203.0.113.1")
