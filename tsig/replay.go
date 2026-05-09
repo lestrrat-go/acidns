@@ -113,6 +113,32 @@ type MemoryReplayCache struct {
 	seen map[string]time.Time
 }
 
+// ErrReplay is returned by [VerifyWithReplay] when the message's MAC
+// has already been observed within the cache window.
+var ErrReplay = errReplay{}
+
+type errReplay struct{}
+
+func (errReplay) Error() string { return "tsig: signature replay" }
+
+// VerifyWithReplay is the canonical "verify then check replay" wrapper.
+// It first calls [VerifyMAC]; if that returns nil it consults cache for
+// the (keyName, signedAt, mac) triple. A replay returns [ErrReplay].
+//
+// Using this wrapper instead of calling Verify and Seen separately
+// avoids the easy-to-forget two-step pattern that leaves the receiver
+// open to fudge-window replays. cache must be safe for concurrent use.
+func VerifyWithReplay(msg []byte, key Key, cache ReplayCache, now time.Time, fudge time.Duration) ([]byte, []byte, time.Time, error) {
+	body, mac, signed, err := VerifyMAC(msg, key, now, fudge)
+	if err != nil {
+		return nil, nil, time.Time{}, err
+	}
+	if cache != nil && cache.Seen(key.Name(), signed, mac) {
+		return nil, nil, signed, ErrReplay
+	}
+	return body, mac, signed, nil
+}
+
 // Seen records a verified signature and reports replay status.
 func (c *MemoryReplayCache) Seen(keyName wire.Name, signedAt time.Time, mac []byte) bool {
 	k := replayKey(keyName, signedAt, mac)

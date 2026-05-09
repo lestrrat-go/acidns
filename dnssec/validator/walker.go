@@ -335,7 +335,17 @@ func (w *walker) fetchAndVerifyDNSKEY(ctx context.Context, zone wire.Name, dss [
 		if !ok {
 			return nil, fmt.Errorf("validator: bad DNSKEY rdata at %s", zone)
 		}
+		// RFC 4034 §2.1.2 + RFC 5011 §2.1: a key with Protocol != 3 or
+		// the REVOKE flag set MUST NOT be used to validate. Skip rather
+		// than error so a zone publishing a single revoked key alongside
+		// live ones still validates against the live keys.
+		if k.Protocol() != 3 || k.Flags()&rdata.DNSKEYFlagRevoke != 0 {
+			continue
+		}
 		keys = append(keys, k)
+	}
+	if len(keys) == 0 {
+		return nil, fmt.Errorf("validator: no usable DNSKEY at %s (all revoked or wrong protocol)", zone)
 	}
 
 	// Find at least one KSK that matches a DS. Track which DSs were

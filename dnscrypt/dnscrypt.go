@@ -387,8 +387,15 @@ func (e *exchanger) Exchange(ctx context.Context, q wire.Message) (wire.Message,
 
 	var clientSK [32]byte
 	if _, err := rand.Read(clientSK[:]); err != nil {
-		return nil, err
+		return nil, fmt.Errorf("dnscrypt: rand: %w", err)
 	}
+	// Zero the ephemeral scalar before return so it does not linger in
+	// heap memory longer than this Exchange.
+	defer func() {
+		for i := range clientSK {
+			clientSK[i] = 0
+		}
+	}()
 	var clientPK [32]byte
 	pk, err := curve25519.X25519(clientSK[:], curve25519.Basepoint)
 	if err != nil {
@@ -398,7 +405,7 @@ func (e *exchanger) Exchange(ctx context.Context, q wire.Message) (wire.Message,
 
 	var nonce [12]byte
 	if _, err := rand.Read(nonce[:]); err != nil {
-		return nil, err
+		return nil, fmt.Errorf("dnscrypt: rand: %w", err)
 	}
 
 	enc, err := Encrypt(e.cert, clientPK, clientSK, nonce, msg)

@@ -132,8 +132,11 @@ type nsec3Params struct {
 }
 
 // extractNSEC3Params returns the (alg, iterations, salt) from any NSEC3 in
-// records. Returns ok=false if no NSEC3 records are present, or if the
-// records disagree (which is a protocol violation per RFC 5155 §4.1.1).
+// records. Returns ok=false if no NSEC3 records are present, if the
+// records disagree (a protocol violation per RFC 5155 §4.1.1), or if
+// the hash algorithm is anything other than SHA-1 — nsec3Hash always
+// SHA-1s, so accepting any other algorithm would compute a proof
+// against a hash the zone never published and weaken denial-of-existence.
 func extractNSEC3Params(records []wire.Record) (nsec3Params, bool) {
 	var params nsec3Params
 	first := true
@@ -144,6 +147,12 @@ func extractNSEC3Params(records []wire.Record) (nsec3Params, bool) {
 		n3, ok := wire.RDataAs[rdata.NSEC3](r)
 		if !ok {
 			continue
+		}
+		if n3.HashAlgorithm() != NSEC3HashSHA1 {
+			// Reject the entire denial proof rather than per-record:
+			// a single non-SHA-1 NSEC3 in the set means the proof is
+			// uninterpretable to this validator.
+			return nsec3Params{}, false
 		}
 		cur := nsec3Params{
 			alg:        n3.HashAlgorithm(),

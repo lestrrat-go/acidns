@@ -16,10 +16,57 @@ var ErrSignatureMismatch = dnssecbb.ErrSignatureMismatch
 // digest type values this package does not implement.
 var ErrUnsupportedAlgorithm = dnssecbb.ErrUnsupportedAlgorithm
 
+// ErrInvalidKey is returned when a DNSKEY is structurally unfit for
+// verification — wrong protocol field per RFC 4034 §2.1.2 or revoked
+// per RFC 5011 §2.1.
+var ErrInvalidKey = fmt.Errorf("dnssec: invalid DNSKEY")
+
+// rejectedAlgorithms is the explicit deny-list. Even though the
+// algorithm switch in Verify only handles modern algorithms, listing
+// the deprecated ones here makes the rejection intentional and stops
+// a future maintainer from silently weakening the validator by adding
+// a switch case.
+var rejectedAlgorithms = map[rdata.DNSSECAlgorithm]struct{}{
+	rdata.AlgRSAMD5:           {},
+	rdata.AlgDSA:              {},
+	rdata.AlgRSASHA1:          {},
+	rdata.AlgDSANSEC3SHA1:     {},
+	rdata.AlgRSASHA1NSEC3SHA1: {},
+}
+
+// IsRejectedAlgorithm reports whether alg is on the explicit deny-list
+// of deprecated DNSSEC algorithms. Callers that fetch an algorithm
+// from the wire and want to fail closed before reaching Verify can use
+// this directly.
+func IsRejectedAlgorithm(alg rdata.DNSSECAlgorithm) bool {
+	_, ok := rejectedAlgorithms[alg]
+	return ok
+}
+
+// validateDNSKEY enforces the structural preconditions that RFC 4034
+// §2.1.2 (Protocol == 3) and RFC 5011 §2.1 (Revoke flag) place on
+// every DNSKEY used to validate.
+func validateDNSKEY(key rdata.DNSKEY) error {
+	if key.Protocol() != 3 {
+		return fmt.Errorf("%w: protocol=%d (RFC 4034 §2.1.2 requires 3)",
+			ErrInvalidKey, key.Protocol())
+	}
+	if key.Flags()&rdata.DNSKEYFlagRevoke != 0 {
+		return fmt.Errorf("%w: REVOKE flag set (RFC 5011 §2.1)", ErrInvalidKey)
+	}
+	return nil
+}
+
 // Verify checks rrsig over set using key. It returns nil on success and a
 // concrete error on any failure (algorithm mismatch, key tag mismatch,
 // signature decode failure, or hash/signature mismatch).
 func Verify(set []wire.Record, rrsig rdata.RRSIG, key rdata.DNSKEY) error {
+	if err := validateDNSKEY(key); err != nil {
+		return err
+	}
+	if IsRejectedAlgorithm(rrsig.Algorithm()) {
+		return fmt.Errorf("%w: deprecated algorithm %d", ErrUnsupportedAlgorithm, rrsig.Algorithm())
+	}
 	if rrsig.Algorithm() != key.Algorithm() {
 		return fmt.Errorf("%w: rrsig alg %d vs dnskey alg %d",
 			ErrSignatureMismatch, rrsig.Algorithm(), key.Algorithm())
@@ -52,7 +99,30 @@ func Verify(set []wire.Record, rrsig rdata.RRSIG, key rdata.DNSKEY) error {
 
 // VerifyDS checks that ds matches the digest of (canonical owner ||
 // dnskey rdata) for the supplied DNSKEY.
+//
+// SHA-1 (digest type 1) is rejected by default — SHA-1 collisions are
+// within reach of motivated attackers and an attacker who can publish
+// a forged DNSKEY whose SHA-1 DS digest collides with a legitimate
+// one would otherwise pass this check. Callers that must still talk
+// to legacy zones should use [VerifyDSWithSHA1].
 func VerifyDS(owner wire.Name, ds rdata.DS, key rdata.DNSKEY) error {
+	return verifyDS(owner, ds, key, false)
+}
+
+// VerifyDSWithSHA1 is the same as [VerifyDS] but accepts SHA-1
+// (digest type 1) digests. Use only when interoperating with legacy
+// zones that have not yet rolled to SHA-256 or SHA-384.
+func VerifyDSWithSHA1(owner wire.Name, ds rdata.DS, key rdata.DNSKEY) error {
+	return verifyDS(owner, ds, key, true)
+}
+
+func verifyDS(owner wire.Name, ds rdata.DS, key rdata.DNSKEY, allowSHA1 bool) error {
+	if err := validateDNSKEY(key); err != nil {
+		return err
+	}
+	if !allowSHA1 && ds.DigestType() == rdata.DigestSHA1 {
+		return fmt.Errorf("%w: SHA-1 DS digest refused by default", ErrUnsupportedAlgorithm)
+	}
 	if ds.KeyTag() != KeyTag(key) {
 		return fmt.Errorf("%w: DS key tag mismatch", ErrSignatureMismatch)
 	}
