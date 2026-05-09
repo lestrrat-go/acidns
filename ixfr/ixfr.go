@@ -290,7 +290,7 @@ func (t *transfer) nextIncremental(ctx context.Context) (Event, error) {
 
 	if soaOldSerial == t.newSOA.Serial() {
 		// Closing bracket. Verify nothing follows.
-		if _, err := t.reader.Read(ctx); err != io.EOF {
+		if _, err := t.reader.Read(ctx); !errors.Is(err, io.EOF) {
 			if err != nil {
 				return nil, fmt.Errorf("ixfr: read past closing SOA: %w", err)
 			}

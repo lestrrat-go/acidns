@@ -127,13 +127,14 @@ func (l LP) Pack(p *wirebb.Packer) {
 // NewLP returns an LP rdata.
 func NewLP(pref uint16, fqdn wirebb.Name) LP { return LP{pref: pref, fqdn: fqdn} }
 
-func unpackLP(u *wirebb.Unpacker) (LP, error) {
+func unpackLP(u *wirebb.Unpacker, rdlen int) (LP, error) {
 	var zero LP
+	end := u.Off() + rdlen
 	pref, err := u.Uint16()
 	if err != nil {
 		return zero, err
 	}
-	n, err := u.UncompressedName()
+	n, err := u.UncompressedNameInRange(end)
 	if err != nil {
 		return zero, err
 	}

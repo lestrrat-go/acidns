@@ -32,8 +32,9 @@ func NewSRV(priority, weight, port uint16, target wirebb.Name) SRV {
 	return SRV{priority: priority, weight: weight, port: port, target: target}
 }
 
-func unpackSRV(u *wirebb.Unpacker) (SRV, error) {
+func unpackSRV(u *wirebb.Unpacker, rdlen int) (SRV, error) {
 	var zero SRV
+	end := u.Off() + rdlen
 	priority, err := u.Uint16()
 	if err != nil {
 		return zero, err
@@ -46,7 +47,7 @@ func unpackSRV(u *wirebb.Unpacker) (SRV, error) {
 	if err != nil {
 		return zero, err
 	}
-	target, err := u.UncompressedName()
+	target, err := u.UncompressedNameInRange(end)
 	if err != nil {
 		return zero, err
 	}

@@ -56,12 +56,21 @@ func unpackCAA(u *wirebb.Unpacker, rdlen int) (CAA, error) {
 	if err != nil {
 		return zero, err
 	}
+	if tlen == 0 || tlen > 15 {
+		return zero, fmt.Errorf("%w: CAA tag length must be 1-15", ErrInvalidRData)
+	}
 	if u.Off()+int(tlen) > end {
 		return zero, fmt.Errorf("%w: CAA tag length %d exceeds rdata window", ErrInvalidRData, tlen)
 	}
 	tag, err := u.Bytes(int(tlen))
 	if err != nil {
 		return zero, err
+	}
+	for _, c := range tag {
+		ok := (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9')
+		if !ok {
+			return zero, fmt.Errorf("%w: CAA tag must be alnum", ErrInvalidRData)
+		}
 	}
 	if u.Off() > end {
 		return zero, fmt.Errorf("%w: CAA over-read", ErrInvalidRData)

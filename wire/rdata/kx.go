@@ -26,13 +26,14 @@ func NewKX(pref uint16, exchanger wirebb.Name) KX {
 	return KX{pref: pref, exchange: exchanger}
 }
 
-func unpackKX(u *wirebb.Unpacker) (KX, error) {
+func unpackKX(u *wirebb.Unpacker, rdlen int) (KX, error) {
 	var zero KX
+	end := u.Off() + rdlen
 	pref, err := u.Uint16()
 	if err != nil {
 		return zero, err
 	}
-	n, err := u.UncompressedName()
+	n, err := u.UncompressedNameInRange(end)
 	if err != nil {
 		return zero, err
 	}

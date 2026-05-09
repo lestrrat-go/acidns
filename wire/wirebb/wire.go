@@ -149,6 +149,27 @@ func (u *Unpacker) CharString() ([]byte, error) {
 	return u.Bytes(int(l))
 }
 
+// CharStringInRange is [Unpacker.CharString] with an explicit upper bound;
+// useful when the character string is embedded in an RDLENGTH-bounded
+// rdata window (TXT, HINFO, NAPTR, SPF, RESINFO). Returns ErrTruncated
+// if the length byte plus the body would extend past end.
+func (u *Unpacker) CharStringInRange(end int) ([]byte, error) {
+	if end < 0 || end > len(u.msg) {
+		end = len(u.msg)
+	}
+	if u.off >= end {
+		return nil, ErrTruncated
+	}
+	l, err := u.Uint8()
+	if err != nil {
+		return nil, err
+	}
+	if u.off+int(l) > end {
+		return nil, ErrTruncated
+	}
+	return u.Bytes(int(l))
+}
+
 // Name decodes a domain name from the current offset, following any
 // compression pointers, and advances the offset past the on-the-wire
 // encoding (not past pointer targets).

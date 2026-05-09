@@ -48,8 +48,9 @@ func NewNAPTR(order, pref uint16, flags, services, regexp string, replacement wi
 	}, nil
 }
 
-func unpackNAPTR(u *wirebb.Unpacker) (NAPTR, error) {
+func unpackNAPTR(u *wirebb.Unpacker, rdlen int) (NAPTR, error) {
 	var zero NAPTR
+	end := u.Off() + rdlen
 	order, err := u.Uint16()
 	if err != nil {
 		return zero, err
@@ -58,19 +59,19 @@ func unpackNAPTR(u *wirebb.Unpacker) (NAPTR, error) {
 	if err != nil {
 		return zero, err
 	}
-	flags, err := u.CharString()
+	flags, err := u.CharStringInRange(end)
 	if err != nil {
 		return zero, err
 	}
-	services, err := u.CharString()
+	services, err := u.CharStringInRange(end)
 	if err != nil {
 		return zero, err
 	}
-	regexp, err := u.CharString()
+	regexp, err := u.CharStringInRange(end)
 	if err != nil {
 		return zero, err
 	}
-	replacement, err := u.UncompressedName()
+	replacement, err := u.UncompressedNameInRange(end)
 	if err != nil {
 		return zero, err
 	}

@@ -41,7 +41,7 @@ func unpackTXT(u *wirebb.Unpacker, rdlen int) (TXT, error) {
 	end := u.Off() + rdlen
 	var out []string
 	for u.Off() < end {
-		s, err := u.CharString()
+		s, err := u.CharStringInRange(end)
 		if err != nil {
 			return zero, err
 		}

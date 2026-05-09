@@ -35,13 +35,14 @@ func NewHINFO(cpu, os string) (HINFO, error) {
 	return HINFO{cpu: cpu, os: os}, nil
 }
 
-func unpackHINFO(u *wirebb.Unpacker) (HINFO, error) {
+func unpackHINFO(u *wirebb.Unpacker, rdlen int) (HINFO, error) {
 	var zero HINFO
-	cpu, err := u.CharString()
+	end := u.Off() + rdlen
+	cpu, err := u.CharStringInRange(end)
 	if err != nil {
 		return zero, err
 	}
-	os, err := u.CharString()
+	os, err := u.CharStringInRange(end)
 	if err != nil {
 		return zero, err
 	}

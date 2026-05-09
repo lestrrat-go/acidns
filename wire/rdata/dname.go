@@ -17,9 +17,10 @@ func (d DNAME) Pack(p *wirebb.Packer) { p.NameUncompressed(d.target) }
 // NewDNAME returns a DNAME rdata.
 func NewDNAME(target wirebb.Name) DNAME { return DNAME{target: target} }
 
-func unpackDNAME(u *wirebb.Unpacker) (DNAME, error) {
+func unpackDNAME(u *wirebb.Unpacker, rdlen int) (DNAME, error) {
 	var zero DNAME
-	n, err := u.UncompressedName()
+	end := u.Off() + rdlen
+	n, err := u.UncompressedNameInRange(end)
 	if err != nil {
 		return zero, err
 	}

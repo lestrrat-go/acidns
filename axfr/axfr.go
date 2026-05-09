@@ -162,7 +162,7 @@ func (rr *recReader) Read(ctx context.Context) (wire.Record, error) {
 		}
 		msg, err := rr.stream.Next(ctx)
 		if err != nil {
-			if err == io.EOF {
+			if errors.Is(err, io.EOF) {
 				rr.msgEOF = true
 				return nil, io.EOF
 			}

@@ -120,7 +120,9 @@ func NewClientSubnet(prefix netip.Prefix, scope uint8) (EDNSOption, error) {
 }
 
 // ClientSubnet decodes an ECS option into family, prefix, and scope. The
-// boolean is false if o is not an ECS option or is malformed.
+// boolean is false if o is not an ECS option or is malformed per
+// RFC 7871 §6 (source-prefix exceeds family width, or trailing bits past
+// source are non-zero).
 func ClientSubnet(o EDNSOption) (netip.Prefix, uint8, bool) {
 	if o.Code() != EDNSOptionClientSubnet || len(o.Data()) < 4 {
 		return netip.Prefix{}, 0, false
@@ -130,18 +132,43 @@ func ClientSubnet(o EDNSOption) (netip.Prefix, uint8, bool) {
 	source := d[2]
 	scope := d[3]
 	addr := d[4:]
+	var width int
 	switch family {
 	case ClientSubnetIPv4:
-		var b [4]byte
-		copy(b[:], addr)
-		return netip.PrefixFrom(netip.AddrFrom4(b), int(source)), scope, true
+		width = 32
 	case ClientSubnetIPv6:
-		var b [16]byte
-		copy(b[:], addr)
-		return netip.PrefixFrom(netip.AddrFrom16(b), int(source)), scope, true
+		width = 128
 	default:
 		return netip.Prefix{}, 0, false
 	}
+	if int(source) > width {
+		return netip.Prefix{}, 0, false
+	}
+	addrLen := (int(source) + 7) / 8
+	if len(addr) < addrLen {
+		return netip.Prefix{}, 0, false
+	}
+	// RFC 7871 §6: bits beyond source MUST be zero on the wire.
+	if addrLen > 0 {
+		trailing := uint(addrLen*8) - uint(source)
+		if trailing > 0 {
+			mask := byte(0xff << trailing)
+			if addr[addrLen-1]&^mask != 0 {
+				return netip.Prefix{}, 0, false
+			}
+		}
+	}
+	switch family {
+	case ClientSubnetIPv4:
+		var b [4]byte
+		copy(b[:], addr[:addrLen])
+		return netip.PrefixFrom(netip.AddrFrom4(b), int(source)), scope, true
+	case ClientSubnetIPv6:
+		var b [16]byte
+		copy(b[:], addr[:addrLen])
+		return netip.PrefixFrom(netip.AddrFrom16(b), int(source)), scope, true
+	}
+	return netip.Prefix{}, 0, false
 }
 
 // ErrInvalidCookie is returned when a DNS cookie has an unexpected length.

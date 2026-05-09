@@ -85,7 +85,7 @@ func NewTKEY(algorithm wirebb.Name, inception, expiration time.Time,
 func unpackTKEY(u *wirebb.Unpacker, rdlen int) (TKEY, error) {
 	var zero TKEY
 	end := u.Off() + rdlen
-	alg, err := u.UncompressedName()
+	alg, err := u.UncompressedNameInRange(end)
 	if err != nil {
 		return zero, err
 	}

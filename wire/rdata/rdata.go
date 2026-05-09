@@ -104,9 +104,9 @@ func unpackTyped(t rrtype.Type, u *wirebb.Unpacker, rdlen int) (RData, error) {
 	case rrtype.NSEC3PARAM:
 		return unpackNSEC3PARAM(u)
 	case rrtype.SRV:
-		return unpackSRV(u)
+		return unpackSRV(u, rdlen)
 	case rrtype.NAPTR:
-		return unpackNAPTR(u)
+		return unpackNAPTR(u, rdlen)
 	case rrtype.RP:
 		return unpackRP(u)
 	case rrtype.AFSDB:
@@ -138,7 +138,7 @@ func unpackTyped(t rrtype.Type, u *wirebb.Unpacker, rdlen int) (RData, error) {
 	case rrtype.L64:
 		return unpackL64(u)
 	case rrtype.LP:
-		return unpackLP(u)
+		return unpackLP(u, rdlen)
 	case rrtype.EUI48:
 		return unpackEUI48(u, rdlen)
 	case rrtype.EUI64:
@@ -160,11 +160,11 @@ func unpackTyped(t rrtype.Type, u *wirebb.Unpacker, rdlen int) (RData, error) {
 	case rrtype.CSYNC:
 		return unpackCSYNC(u, rdlen)
 	case rrtype.DNAME:
-		return unpackDNAME(u)
+		return unpackDNAME(u, rdlen)
 	case rrtype.HINFO:
-		return unpackHINFO(u)
+		return unpackHINFO(u, rdlen)
 	case rrtype.KX:
-		return unpackKX(u)
+		return unpackKX(u, rdlen)
 	case rrtype.CDS:
 		return unpackCDS(u, rdlen)
 	case rrtype.CDNSKEY:
