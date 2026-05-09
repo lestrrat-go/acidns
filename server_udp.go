@@ -61,13 +61,11 @@ func WithUDPMaxInflight(n int) UDPListenerOption {
 // pathological socket configuration a write can block. Default 5s;
 // non-positive disables the deadline.
 //
-// Implementation note: the listening socket is shared across all
-// in-flight handler goroutines, so [net.PacketConn.SetWriteDeadline]
-// races across writers. The setting is therefore best-effort — each
-// write may see a deadline a peer goroutine just installed for its
-// own write. The cumulative effect is still that no write outlasts
-// the cap by more than one peer's window, which is the safety
-// property we care about.
+// The listening socket is shared across all in-flight handler
+// goroutines, so [net.PacketConn.SetWriteDeadline] would race across
+// writers. The implementation serialises Deadline+WriteTo through a
+// per-listener mutex so each writer sees its own deadline. The hold
+// time is bounded by the deadline itself.
 func WithUDPWriteTimeout(d time.Duration) UDPListenerOption {
 	return udpListenerOptionFunc(func(c *udpListenerConfig) { c.writeTimeout = d })
 }
@@ -155,6 +153,11 @@ func (s *UDPServer) Run(ctx context.Context) (*UDPController, error) {
 // fields are written from the dispatch goroutine; nothing external
 // holds a pointer to udpLoop, so no synchronisation is required
 // beyond what handler dispatch already arranges.
+//
+// writeMu serialises (SetWriteDeadline, WriteTo) on the shared
+// [net.PacketConn] across handler goroutines. Without it concurrent
+// writers can clobber each other's deadlines, producing spurious
+// deadline-exceeded errors that look like network failures.
 type udpLoop struct {
 	pc      net.PacketConn
 	addr    netip.AddrPort
@@ -163,6 +166,7 @@ type udpLoop struct {
 	sem     chan struct{}
 	bufPool sync.Pool
 	wg      sync.WaitGroup
+	writeMu sync.Mutex
 }
 
 func (l *udpLoop) run(ctx context.Context) error {
@@ -239,6 +243,7 @@ func (l *udpLoop) handlePacket(ctx context.Context, body []byte, src netip.AddrP
 	ctx = contextWithRawRequest(ctx, body)
 	w := &udpResponseWriter{
 		pc:           l.pc,
+		writeMu:      &l.writeMu,
 		dst:          src,
 		local:        l.addr,
 		maxLen:       maxResp,
@@ -260,6 +265,7 @@ func (l *udpLoop) handlePacket(ctx context.Context, body []byte, src netip.AddrP
 
 type udpResponseWriter struct {
 	pc           net.PacketConn
+	writeMu      *sync.Mutex
 	dst          netip.AddrPort
 	local        netip.AddrPort
 	maxLen       int
@@ -310,6 +316,13 @@ func (w *udpResponseWriter) WriteMsg(m wire.Message) error {
 	}
 	w.wrote = true
 	udst := net.UDPAddrFromAddrPort(w.dst)
+	// Serialise (SetWriteDeadline, WriteTo) on the shared PacketConn:
+	// concurrent writers would otherwise race on the per-conn
+	// deadline.
+	if w.writeMu != nil {
+		w.writeMu.Lock()
+		defer w.writeMu.Unlock()
+	}
 	if w.writeTimeout > 0 {
 		_ = w.pc.SetWriteDeadline(time.Now().Add(w.writeTimeout))
 	}
