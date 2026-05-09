@@ -21,6 +21,11 @@ import (
 // configured.
 var ErrNoUpstream = errors.New("forward: no upstream configured")
 
+// ErrInflightFull is returned when a cache miss arrives while the
+// configured WithMaxInflight cap is saturated. Surfaces as SERVFAIL
+// to the inbound peer.
+var ErrInflightFull = errors.New("forward: max inflight upstream calls reached")
+
 // Handler is the caching forwarder. It is safe for concurrent use by
 // multiple goroutines: ServeDNS serialises cache reads/writes internally
 // and the configured upstream Exchanger is required to be concurrency-safe
@@ -36,6 +41,9 @@ type Handler struct {
 	// the rest reuse its result.
 	inflightMu sync.Mutex
 	inflight   map[string]*inflightCall
+	// inflightSem is a counting semaphore bounding the pool of distinct
+	// outbound upstream goroutines. nil when WithMaxInflight ≤ 0.
+	inflightSem chan struct{}
 }
 
 type inflightCall struct {
@@ -53,6 +61,7 @@ func New(opts ...Option) (*Handler, error) {
 		maxTTL:       24 * time.Hour,
 		maxNegTTL:    5 * time.Minute,
 		queryTimeout: 5 * time.Second,
+		maxInflight:  1024,
 		now:          time.Now,
 	}
 	for _, o := range opts {
@@ -67,7 +76,11 @@ func New(opts ...Option) (*Handler, error) {
 	if c.logger == nil {
 		c.logger = slog.New(slog.DiscardHandler)
 	}
-	return &Handler{cfg: c, cache: newCache(c.cacheSize), inflight: make(map[string]*inflightCall)}, nil
+	h := &Handler{cfg: c, cache: newCache(c.cacheSize), inflight: make(map[string]*inflightCall)}
+	if c.maxInflight > 0 {
+		h.inflightSem = make(chan struct{}, c.maxInflight)
+	}
+	return h, nil
 }
 
 // UpstreamName reports a human-readable description of the configured
@@ -195,6 +208,18 @@ func (h *Handler) exchangeSingleflight(ctx context.Context, in wire.Message, qq 
 	h.inflightMu.Lock()
 	call, ok := h.inflight[key]
 	if !ok {
+		// Try to acquire a slot in the inflight semaphore before
+		// publishing a new call entry. Fail fast on saturation rather
+		// than queueing — queuing would let an attacker pin a deeper
+		// resource pool by sustaining the burst.
+		if h.inflightSem != nil {
+			select {
+			case h.inflightSem <- struct{}{}:
+			default:
+				h.inflightMu.Unlock()
+				return nil, ErrInflightFull
+			}
+		}
 		call = &inflightCall{done: make(chan struct{})}
 		h.inflight[key] = call
 		h.startExchange(call, key, in)
@@ -222,6 +247,9 @@ func (h *Handler) startExchange(call *inflightCall, key string, in wire.Message)
 			h.inflightMu.Lock()
 			delete(h.inflight, key)
 			h.inflightMu.Unlock()
+			if h.inflightSem != nil {
+				<-h.inflightSem
+			}
 			close(call.done)
 		}()
 		exchangeCtx, cancel := context.WithCancel(context.Background())

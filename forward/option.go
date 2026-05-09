@@ -27,6 +27,7 @@ type config struct {
 	maxTTL       time.Duration
 	maxNegTTL    time.Duration
 	queryTimeout time.Duration
+	maxInflight  int
 	now          func() time.Time
 	logger       *slog.Logger
 	allowNoRD    bool
@@ -120,6 +121,18 @@ func WithMaxNegativeTTL(d time.Duration) Option {
 // seconds.
 func WithQueryTimeout(d time.Duration) Option {
 	return optionFunc(func(c *config) { c.queryTimeout = d })
+}
+
+// WithMaxInflight caps the number of concurrent distinct upstream
+// Exchange calls. Singleflight already coalesces concurrent requests
+// for the same (qname, qtype, class, DO bit), so this cap bounds the
+// pool of distinct upstream goroutines an attacker can pin by issuing
+// a flood of distinct random qnames. Excess cache misses past the cap
+// fail fast with [ErrInflightFull] (callers see SERVFAIL); the cap
+// does NOT delay or queue. Defaults to 1024. A non-positive value
+// disables the cap.
+func WithMaxInflight(n int) Option {
+	return optionFunc(func(c *config) { c.maxInflight = n })
 }
 
 // WithClock injects the clock used for cache freshness decisions.

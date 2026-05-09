@@ -108,29 +108,60 @@ func primingAddrsFromResponse(resp wire.Message) []netip.AddrPort {
 	return out
 }
 
-// Run drives background maintenance. With root priming enabled it
-// performs the initial prime synchronously, then refreshes on a
-// ticker until ctx is canceled. Without any background tasks
-// configured it returns nil immediately so the call is always safe.
+// Run drives background maintenance: root priming (RFC 8109) when
+// configured, and periodic sweep of expired aggressive-NSEC entries
+// when WithAggressiveNSEC is on. Returns nil immediately when no
+// background tasks are configured so the call is always safe.
 func (r *recursive) Run(ctx context.Context) error {
-	if !r.rootPriming {
+	if !r.rootPriming && !r.aggressiveNSEC {
 		return nil
 	}
-	// Initial prime — best-effort. If it fails the configured roots
-	// remain in place, which is the same situation as a resolver
-	// that never primes at all.
-	_ = r.Prime(ctx)
-	if ctx.Err() != nil {
-		return ctx.Err()
+
+	if r.rootPriming {
+		// Initial prime — best-effort. If it fails the configured roots
+		// remain in place, which is the same situation as a resolver
+		// that never primes at all.
+		_ = r.Prime(ctx)
+		if ctx.Err() != nil {
+			return ctx.Err()
+		}
 	}
-	ticker := time.NewTicker(r.rootRefresh)
-	defer ticker.Stop()
+
+	// Aggressive NSEC sweep cadence: 1/8 of the root refresh when
+	// priming is on, otherwise a stand-alone 5-minute tick.
+	const aggressiveSweepDefault = 5 * time.Minute
+	sweepInterval := aggressiveSweepDefault
+	if r.rootPriming && r.rootRefresh/8 > time.Second {
+		sweepInterval = r.rootRefresh / 8
+	}
+
+	var primeC <-chan time.Time
+	if r.rootPriming {
+		t := time.NewTicker(r.rootRefresh)
+		defer t.Stop()
+		primeC = t.C
+	}
+	var sweepC <-chan time.Time
+	if r.aggressiveNSEC {
+		t := time.NewTicker(sweepInterval)
+		defer t.Stop()
+		sweepC = t.C
+	}
+
 	for {
 		select {
 		case <-ctx.Done():
 			return ctx.Err()
-		case <-ticker.C:
+		case <-primeC:
 			_ = r.Prime(ctx)
+		case <-sweepC:
+			now := time.Now()
+			if r.nsecIdx != nil {
+				r.nsecIdx.SweepExpired(now)
+			}
+			if r.nsec3Idx != nil {
+				r.nsec3Idx.SweepExpired(now)
+			}
 		}
 	}
 }

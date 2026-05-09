@@ -96,18 +96,84 @@ type nsec3ZoneIndex struct {
 // nsec3Index aggregates per-zone NSEC3 hash-space indexes keyed by
 // the canonical wire form of the zone apex.
 type nsec3Index struct {
-	mu    sync.RWMutex
-	zones map[string]*nsec3ZoneIndex
+	mu     sync.RWMutex
+	zones  map[string]*nsec3ZoneIndex
+	maxLen int // total entries across all zones; 0 disables
 }
 
 func newNSEC3Index() *nsec3Index {
-	return &nsec3Index{zones: make(map[string]*nsec3ZoneIndex)}
+	return &nsec3Index{
+		zones:  make(map[string]*nsec3ZoneIndex),
+		maxLen: defaultAggressiveNSECCap,
+	}
+}
+
+// totalLocked returns the total number of NSEC3 entries across all
+// zones. Caller holds i.mu.
+func (i *nsec3Index) totalLocked() int {
+	n := 0
+	for _, z := range i.zones {
+		n += len(z.entries)
+	}
+	return n
+}
+
+// SweepExpired removes expired NSEC3 entries from every zone.
+// Empty zones are dropped. Called periodically by recursive.Run
+// when aggressive NSEC is on.
+func (i *nsec3Index) SweepExpired(now time.Time) {
+	i.mu.Lock()
+	defer i.mu.Unlock()
+	i.sweepExpiredLocked(now)
+}
+
+func (i *nsec3Index) sweepExpiredLocked(now time.Time) {
+	for k, z := range i.zones {
+		kept := z.entries[:0]
+		for _, e := range z.entries {
+			if e.expiresAt.After(now) {
+				kept = append(kept, e)
+			}
+		}
+		z.entries = kept
+		if len(z.entries) == 0 {
+			delete(i.zones, k)
+		}
+	}
+}
+
+// evictSoonestLocked picks the soonest-expiring entry across all
+// zones and removes it. Used when the hard cap is hit and a sweep
+// did not free space.
+func (i *nsec3Index) evictSoonestLocked() {
+	var soonestZone string
+	var soonestIdx int = -1
+	var soonestAt time.Time
+	for k, z := range i.zones {
+		for j, e := range z.entries {
+			if soonestIdx == -1 || e.expiresAt.Before(soonestAt) {
+				soonestZone = k
+				soonestIdx = j
+				soonestAt = e.expiresAt
+			}
+		}
+	}
+	if soonestIdx == -1 {
+		return
+	}
+	z := i.zones[soonestZone]
+	z.entries = slices.Delete(z.entries, soonestIdx, soonestIdx+1)
+	if len(z.entries) == 0 {
+		delete(i.zones, soonestZone)
+	}
 }
 
 // Insert adds e to the index under zoneApex's bucket. If params
 // differ from a previous insert in the same zone, the bucket is
 // reset — a parameter change on the authoritative side invalidates
-// every cached entry under the old params.
+// every cached entry under the old params. When the global hard cap
+// is reached, expired entries are swept first; if still full, the
+// soonest-expiring entry across all zones is evicted.
 func (i *nsec3Index) Insert(zoneApex wire.Name, params nsec3Params, e nsec3Entry) {
 	if params.alg != nsec3HashSHA1 || params.iterations > maxNSEC3Iterations {
 		return
@@ -125,6 +191,20 @@ func (i *nsec3Index) Insert(zoneApex wire.Name, params nsec3Params, e nsec3Entry
 	if found {
 		z.entries[idx] = e
 		return
+	}
+	if i.maxLen > 0 && i.totalLocked() >= i.maxLen {
+		i.sweepExpiredLocked(time.Now())
+	}
+	if i.maxLen > 0 && i.totalLocked() >= i.maxLen {
+		i.evictSoonestLocked()
+		// zone may have been deleted during eviction; rehydrate.
+		z, ok = i.zones[key]
+		if !ok {
+			z = &nsec3ZoneIndex{params: params}
+			i.zones[key] = z
+		}
+		idx, _ = slices.BinarySearchFunc(z.entries, e.ownerHash,
+			func(x nsec3Entry, target []byte) int { return bytes.Compare(x.ownerHash, target) })
 	}
 	z.entries = slices.Insert(z.entries, idx, e)
 }

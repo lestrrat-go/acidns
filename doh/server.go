@@ -61,6 +61,8 @@ import (
 	"sync/atomic"
 	"time"
 
+	"golang.org/x/net/http2"
+
 	"github.com/lestrrat-go/acidns"
 	"github.com/lestrrat-go/acidns/wire"
 )
@@ -250,12 +252,14 @@ func NewServer(addr netip.AddrPort, h acidns.Handler, opts ...ServerOption) (*Se
 		return nil, fmt.Errorf("doh: handler is nil")
 	}
 	cfg := serverConfig{
-		path:              "/dns-query",
-		maxRequestBytes:   MaxRequestBytes,
-		readHeaderTimeout: 10 * time.Second,
-		readTimeout:       30 * time.Second,
-		writeTimeout:      30 * time.Second,
-		idleTimeout:       60 * time.Second,
+		path:                 "/dns-query",
+		maxRequestBytes:      MaxRequestBytes,
+		readHeaderTimeout:    10 * time.Second,
+		readTimeout:          30 * time.Second,
+		writeTimeout:         30 * time.Second,
+		idleTimeout:          60 * time.Second,
+		maxConnections:       1024,
+		maxConcurrentStreams: 100,
 	}
 	for _, o := range opts {
 		o.applyDoHServer(&cfg)
@@ -297,6 +301,10 @@ func (s *Server) Run(ctx context.Context) (*Controller, error) {
 	}
 	bound := netip.AddrPortFrom(la.AddrPort().Addr(), uint16(la.Port))
 
+	if s.cfg.maxConnections > 0 {
+		ln = newLimitListener(ln, s.cfg.maxConnections)
+	}
+
 	mux := http.NewServeMux()
 	mux.Handle(s.cfg.path, NewHandler(s.handler, WithHandlerMaxRequestBytes(s.cfg.maxRequestBytes)))
 
@@ -308,6 +316,14 @@ func (s *Server) Run(ctx context.Context) (*Controller, error) {
 		WriteTimeout:      s.cfg.writeTimeout,
 		IdleTimeout:       s.cfg.idleTimeout,
 		BaseContext:       func(net.Listener) context.Context { return ctx },
+	}
+	if s.cfg.maxConcurrentStreams > 0 {
+		if err := http2.ConfigureServer(hs, &http2.Server{
+			MaxConcurrentStreams: s.cfg.maxConcurrentStreams,
+		}); err != nil {
+			_ = ln.Close()
+			return nil, fmt.Errorf("doh: configure http2: %w", err)
+		}
 	}
 
 	ctrl := &Controller{addr: bound, done: make(chan struct{})}

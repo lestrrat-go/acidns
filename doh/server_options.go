@@ -37,13 +37,15 @@ type serverOptionFunc func(*serverConfig)
 func (f serverOptionFunc) applyDoHServer(c *serverConfig) { f(c) }
 
 type serverConfig struct {
-	tlsConfig         *tls.Config
-	path              string
-	maxRequestBytes   int
-	readHeaderTimeout time.Duration
-	readTimeout       time.Duration
-	writeTimeout      time.Duration
-	idleTimeout       time.Duration
+	tlsConfig            *tls.Config
+	path                 string
+	maxRequestBytes      int
+	readHeaderTimeout    time.Duration
+	readTimeout          time.Duration
+	writeTimeout         time.Duration
+	idleTimeout          time.Duration
+	maxConnections       int
+	maxConcurrentStreams uint32
 }
 
 // WithServerTLSConfig installs the TLS configuration. The supplied
@@ -94,4 +96,21 @@ func WithServerWriteTimeout(d time.Duration) ServerOption {
 // can remain idle between requests. Defaults to 60s.
 func WithServerIdleTimeout(d time.Duration) ServerOption {
 	return serverOptionFunc(func(c *serverConfig) { c.idleTimeout = d })
+}
+
+// WithServerMaxConnections caps the number of concurrently-accepted
+// TCP connections. Excess connections block in the kernel listen
+// backlog and are accepted as slots free up. Mirrors the dot.Server
+// default of 1024. A non-positive value disables the cap.
+func WithServerMaxConnections(n int) ServerOption {
+	return serverOptionFunc(func(c *serverConfig) { c.maxConnections = n })
+}
+
+// WithServerMaxConcurrentStreams caps HTTP/2's per-connection
+// concurrent stream count. Without this, a single TLS session can
+// open ~100 streams (Go's http2 default) and pin that many
+// concurrent ServeDNS goroutines per peer. A non-positive value
+// disables the cap (http2 default applies).
+func WithServerMaxConcurrentStreams(n uint32) ServerOption {
+	return serverOptionFunc(func(c *serverConfig) { c.maxConcurrentStreams = n })
 }

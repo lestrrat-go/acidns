@@ -63,27 +63,67 @@ type nsecEntry struct {
 type nsecIndex struct {
 	mu      sync.RWMutex
 	entries []nsecEntry
+	maxLen  int // hard cap; 0 disables
 }
 
 func newNSECIndex() *nsecIndex {
-	return &nsecIndex{}
+	return &nsecIndex{maxLen: defaultAggressiveNSECCap}
 }
+
+// defaultAggressiveNSECCap bounds each NSEC/NSEC3 index to keep an
+// attacker-driven NXDOMAIN flood from pushing memory unboundedly.
+// Sustained validated negatives across many distinct zones is rare
+// in practice; 4096 is comfortably above any healthy resolver's
+// working set.
+const defaultAggressiveNSECCap = 4096
 
 // Insert adds e to the index, sorted by canonical owner. An existing
 // entry with the same owner+next is replaced (the replacement is
-// almost certainly a fresher TTL).
+// almost certainly a fresher TTL). When the index is at its hard
+// cap, expired entries are swept first; if still full, the
+// soonest-expiring entry is evicted to make room.
 func (i *nsecIndex) Insert(e nsecEntry) {
 	i.mu.Lock()
 	defer i.mu.Unlock()
 	idx, found := i.findByOwnerLocked(e.canonicalKey)
 	if found {
-		// Replace if the new entry has a longer remaining lifetime
-		// or carries the same boundary (refresh).
 		i.entries[idx] = e
 		return
 	}
-	// Insert at idx, maintaining sort.
+	if i.maxLen > 0 && len(i.entries) >= i.maxLen {
+		i.sweepExpiredLocked(time.Now())
+	}
+	if i.maxLen > 0 && len(i.entries) >= i.maxLen {
+		i.evictSoonestLocked()
+		idx, _ = i.findByOwnerLocked(e.canonicalKey)
+	}
 	i.entries = slices.Insert(i.entries, idx, e)
+}
+
+// evictSoonestLocked drops the entry whose expiresAt is earliest.
+// Caller holds i.mu.
+func (i *nsecIndex) evictSoonestLocked() {
+	if len(i.entries) == 0 {
+		return
+	}
+	soonest := 0
+	for j := 1; j < len(i.entries); j++ {
+		if i.entries[j].expiresAt.Before(i.entries[soonest].expiresAt) {
+			soonest = j
+		}
+	}
+	i.entries = slices.Delete(i.entries, soonest, soonest+1)
+}
+
+// sweepExpiredLocked is the locked half of SweepExpired.
+func (i *nsecIndex) sweepExpiredLocked(now time.Time) {
+	kept := i.entries[:0]
+	for _, e := range i.entries {
+		if e.expiresAt.After(now) {
+			kept = append(kept, e)
+		}
+	}
+	i.entries = kept
 }
 
 // nsecLookupKind classifies what kind of proof the index has for q.
@@ -154,17 +194,11 @@ func (i *nsecIndex) Lookup(q wire.Name, qtype rrtype.Type, now time.Time) (nsecE
 }
 
 // SweepExpired removes entries whose expiry is at-or-before now.
-// Called occasionally to keep the index from growing unbounded.
+// Called periodically by recursive.Run when aggressive NSEC is on.
 func (i *nsecIndex) SweepExpired(now time.Time) {
 	i.mu.Lock()
 	defer i.mu.Unlock()
-	kept := i.entries[:0]
-	for _, e := range i.entries {
-		if e.expiresAt.After(now) {
-			kept = append(kept, e)
-		}
-	}
-	i.entries = kept
+	i.sweepExpiredLocked(now)
 }
 
 // Len returns the current entry count. Test-only observability.

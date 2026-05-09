@@ -23,6 +23,7 @@ type config struct {
 	validator          Validator
 	queryTimeout       time.Duration
 	maxNegTTL          time.Duration
+	maxPosTTL          time.Duration
 	resolveBudget      time.Duration
 	allowNoRD          bool
 	caseRandom         bool
@@ -101,6 +102,15 @@ func WithResolveBudget(d time.Duration) Option {
 // Defaults to 1 hour.
 func WithMaxNegativeTTL(d time.Duration) Option {
 	return optionFunc(func(c *config) { c.maxNegTTL = d })
+}
+
+// WithMaxPositiveTTL caps the lifetime of positive cache entries. The
+// RFC 1035 TTL field is unsigned 31-bit, so a hostile authoritative
+// can pin a forged record for ~68 years; production resolvers
+// universally cap this. A non-positive value disables the cap.
+// Defaults to 24 hours, matching the forward handler.
+func WithMaxPositiveTTL(d time.Duration) Option {
+	return optionFunc(func(c *config) { c.maxPosTTL = d })
 }
 
 // WithAllowNoRD removes the safe default of refusing queries whose

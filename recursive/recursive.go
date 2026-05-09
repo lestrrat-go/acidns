@@ -107,6 +107,7 @@ type recursive struct {
 	validator      Validator
 	queryTimeout   time.Duration
 	maxNegTTL      time.Duration
+	maxPosTTL      time.Duration
 	resolveBudget  time.Duration
 	allowNoRD      bool
 	caseRandom     bool
@@ -168,6 +169,7 @@ func New(opts ...Option) Recursive {
 		maxCNAMEs:     8,
 		queryTimeout:  4 * time.Second,
 		maxNegTTL:     time.Hour,
+		maxPosTTL:     24 * time.Hour,
 		resolveBudget: 30 * time.Second,
 		qnameMin:      true, // RFC 9156 recommended for production resolvers
 		caseRandom:    true, // RFC 5452 §9.3 spoofing defence; pass WithCaseRandomization(false) to opt out
@@ -198,6 +200,7 @@ func New(opts ...Option) Recursive {
 		validator:      c.validator,
 		queryTimeout:   c.queryTimeout,
 		maxNegTTL:      c.maxNegTTL,
+		maxPosTTL:      c.maxPosTTL,
 		resolveBudget:  c.resolveBudget,
 		allowNoRD:      c.allowNoRD,
 		caseRandom:     c.caseRandom,
@@ -954,6 +957,11 @@ func (r *recursive) entryFromResponse(qname wire.Name, resp wire.Message) Entry 
 		if r.maxNegTTL > 0 && ttl > r.maxNegTTL {
 			ttl = r.maxNegTTL
 		}
+	} else if r.maxPosTTL > 0 && ttl > r.maxPosTTL {
+		// Cap positive TTLs so a hostile authoritative cannot pin a
+		// forged record for the lifetime of the process by claiming
+		// TTL = 2^31-1.
+		ttl = r.maxPosTTL
 	}
 	answers, authority, additional := bailiwickFilter(qname, resp)
 	return Entry{
