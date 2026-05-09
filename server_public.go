@@ -49,6 +49,7 @@ import (
 	"net/netip"
 
 	"github.com/lestrrat-go/acidns/cookies"
+	"github.com/lestrrat-go/option/v3"
 )
 
 // ErrPublicACLRequired is returned by [NewPublicUDPServer] /
@@ -60,12 +61,13 @@ var ErrPublicACLRequired = errors.New("acidns: public listener requires at least
 
 // PublicServerOption configures the public-listener wrappers.
 type PublicServerOption interface {
-	applyPublicServer(*publicServerConfig)
+	option.Interface
+	publicServerOption()
 }
 
-type publicServerOptionFunc func(*publicServerConfig)
+type publicServerOption struct{ option.Interface }
 
-func (f publicServerOptionFunc) applyPublicServer(c *publicServerConfig) { f(c) }
+func (publicServerOption) publicServerOption() {}
 
 type publicServerConfig struct {
 	aclOpts       []ACLOption
@@ -77,30 +79,38 @@ type publicServerConfig struct {
 	tcpOpts       []TCPListenerOption
 }
 
+type identPublicACLOptions struct{}
+type identPublicRateLimitOptions struct{}
+type identPublicRRLOptions struct{}
+type identPublicCookiesOptions struct{}
+type identPublicCookiesServer struct{}
+type identPublicUDPOptions struct{}
+type identPublicTCPOptions struct{}
+
 // WithPublicACLOptions threads ACL configuration through to the
 // inner [NewACL] call. At least one of [WithACLAllow] /
 // [WithACLDeny] MUST be supplied via this option, otherwise the
 // public-listener constructor returns [ErrPublicACLRequired].
 func WithPublicACLOptions(opts ...ACLOption) PublicServerOption {
-	return publicServerOptionFunc(func(c *publicServerConfig) { c.aclOpts = append(c.aclOpts, opts...) })
+	return publicServerOption{option.New(identPublicACLOptions{}, opts)}
 }
 
 // WithPublicRateLimitOptions threads per-source rate-limit
 // configuration through to the inner [NewRateLimit] call.
 func WithPublicRateLimitOptions(opts ...RateLimitOption) PublicServerOption {
-	return publicServerOptionFunc(func(c *publicServerConfig) { c.rateLimitOpts = append(c.rateLimitOpts, opts...) })
+	return publicServerOption{option.New(identPublicRateLimitOptions{}, opts)}
 }
 
 // WithPublicRRLOptions threads response-rate-limit configuration
 // through to the inner [NewRRL] call.
 func WithPublicRRLOptions(opts ...RRLOption) PublicServerOption {
-	return publicServerOptionFunc(func(c *publicServerConfig) { c.rrlOpts = append(c.rrlOpts, opts...) })
+	return publicServerOption{option.New(identPublicRRLOptions{}, opts)}
 }
 
 // WithPublicCookiesOptions threads cookies-middleware configuration
 // through to the inner [NewCookies] call.
 func WithPublicCookiesOptions(opts ...CookieOption) PublicServerOption {
-	return publicServerOptionFunc(func(c *publicServerConfig) { c.cookiesOpts = append(c.cookiesOpts, opts...) })
+	return publicServerOption{option.New(identPublicCookiesOptions{}, opts)}
 }
 
 // WithPublicCookiesServer supplies a pre-built [cookies.Server] to
@@ -109,19 +119,44 @@ func WithPublicCookiesOptions(opts ...CookieOption) PublicServerOption {
 // pre-built server when the secret pool needs a custom rotation
 // cadence or shared lifetime with the calling process.
 func WithPublicCookiesServer(srv cookies.Server) PublicServerOption {
-	return publicServerOptionFunc(func(c *publicServerConfig) { c.cookiesSrv = srv })
+	return publicServerOption{option.New(identPublicCookiesServer{}, srv)}
 }
 
 // WithPublicUDPOptions threads UDP-listener configuration through
 // to the inner [NewUDPServer] call.
 func WithPublicUDPOptions(opts ...UDPListenerOption) PublicServerOption {
-	return publicServerOptionFunc(func(c *publicServerConfig) { c.udpOpts = append(c.udpOpts, opts...) })
+	return publicServerOption{option.New(identPublicUDPOptions{}, opts)}
 }
 
 // WithPublicTCPOptions threads TCP-listener configuration through
 // to the inner [NewTCPServer] call.
 func WithPublicTCPOptions(opts ...TCPListenerOption) PublicServerOption {
-	return publicServerOptionFunc(func(c *publicServerConfig) { c.tcpOpts = append(c.tcpOpts, opts...) })
+	return publicServerOption{option.New(identPublicTCPOptions{}, opts)}
+}
+
+// applyPublicOptions parses opts into cfg, shared between
+// NewPublicUDPServer and NewPublicTCPServer.
+func applyPublicOptions(opts []PublicServerOption) publicServerConfig {
+	var cfg publicServerConfig
+	for _, o := range opts {
+		switch o.Ident() {
+		case identPublicACLOptions{}:
+			cfg.aclOpts = append(cfg.aclOpts, option.MustGet[[]ACLOption](o)...)
+		case identPublicRateLimitOptions{}:
+			cfg.rateLimitOpts = append(cfg.rateLimitOpts, option.MustGet[[]RateLimitOption](o)...)
+		case identPublicRRLOptions{}:
+			cfg.rrlOpts = append(cfg.rrlOpts, option.MustGet[[]RRLOption](o)...)
+		case identPublicCookiesOptions{}:
+			cfg.cookiesOpts = append(cfg.cookiesOpts, option.MustGet[[]CookieOption](o)...)
+		case identPublicCookiesServer{}:
+			cfg.cookiesSrv = option.MustGet[cookies.Server](o)
+		case identPublicUDPOptions{}:
+			cfg.udpOpts = append(cfg.udpOpts, option.MustGet[[]UDPListenerOption](o)...)
+		case identPublicTCPOptions{}:
+			cfg.tcpOpts = append(cfg.tcpOpts, option.MustGet[[]TCPListenerOption](o)...)
+		}
+	}
+	return cfg
 }
 
 // NewPublicUDPServer constructs a UDP server pre-wrapped with the
@@ -142,10 +177,7 @@ func WithPublicTCPOptions(opts ...TCPListenerOption) PublicServerOption {
 // via [WithPublicCookiesServer], a fresh in-process secret pool +
 // server is built with defaults.
 func NewPublicUDPServer(addr netip.AddrPort, h Handler, opts ...PublicServerOption) (*UDPServer, error) {
-	cfg := publicServerConfig{}
-	for _, o := range opts {
-		o.applyPublicServer(&cfg)
-	}
+	cfg := applyPublicOptions(opts)
 	if len(cfg.aclOpts) == 0 {
 		return nil, ErrPublicACLRequired
 	}
@@ -184,10 +216,7 @@ func NewPublicUDPServer(addr netip.AddrPort, h Handler, opts ...PublicServerOpti
 // supplied via [WithPublicACLOptions]; otherwise
 // [ErrPublicACLRequired] is returned.
 func NewPublicTCPServer(addr netip.AddrPort, h Handler, opts ...PublicServerOption) (*TCPServer, error) {
-	cfg := publicServerConfig{}
-	for _, o := range opts {
-		o.applyPublicServer(&cfg)
-	}
+	cfg := applyPublicOptions(opts)
 	if len(cfg.aclOpts) == 0 {
 		return nil, ErrPublicACLRequired
 	}

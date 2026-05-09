@@ -23,6 +23,7 @@ import (
 	"github.com/lestrrat-go/acidns/wire"
 	"github.com/lestrrat-go/acidns/wire/rdata"
 	"github.com/lestrrat-go/acidns/wire/rrtype"
+	"github.com/lestrrat-go/option/v3"
 )
 
 // ErrNoResolver is returned when New cannot construct a Resolver because no
@@ -83,11 +84,14 @@ func (a *Answer) Authoritative() bool    { return a.raw.Flags().Authoritative() 
 func (a *Answer) Truncated() bool        { return a.raw.Flags().Truncated() }
 
 // ResolverOption configures a Resolver.
-type ResolverOption interface{ applyResolver(*resolverConfig) }
+type ResolverOption interface {
+	option.Interface
+	resolverOption()
+}
 
-type resolverOptionFunc func(*resolverConfig)
+type resolverOption struct{ option.Interface }
 
-func (f resolverOptionFunc) applyResolver(c *resolverConfig) { f(c) }
+func (resolverOption) resolverOption() {}
 
 type resolverConfig struct {
 	exchanger         Exchanger
@@ -109,35 +113,49 @@ type resolverConfig struct {
 	systemErr         error
 }
 
+type identExchanger struct{}
+type identServers struct{}
+type identEDNSUDPSize struct{}
+type identDNSSEC struct{}
+type identEDNS struct{}
+type identAttempts struct{}
+type identPerAttemptTimeout struct{}
+type identSystemResolvers struct{}
+type identCaseRandomization struct{}
+type identSpecialUse struct{}
+type identSearchList struct{}
+type identNdots struct{}
+type identLogger struct{}
+
 // WithExchanger pins the Resolver to a specific transport. Mutually
 // exclusive with WithServers.
 func WithExchanger(ex Exchanger) ResolverOption {
-	return resolverOptionFunc(func(c *resolverConfig) { c.exchanger = ex })
+	return resolverOption{option.New(identExchanger{}, ex)}
 }
 
 // WithServers configures the Resolver to talk UDP to the given servers in
 // order, falling over to the next on failure.
 func WithServers(servers ...netip.AddrPort) ResolverOption {
-	return resolverOptionFunc(func(c *resolverConfig) { c.servers = append(c.servers[:0], servers...) })
+	return resolverOption{option.New(identServers{}, servers)}
 }
 
 // WithEDNSUDPSize advertises a non-default UDP payload size in OPT.
 // The default (1232) follows IETF DNS Flag Day 2020.
 func WithEDNSUDPSize(n uint16) ResolverOption {
-	return resolverOptionFunc(func(c *resolverConfig) { c.ednsUDP = n })
+	return resolverOption{option.New(identEDNSUDPSize{}, n)}
 }
 
 // WithDNSSEC toggles the DO bit in OPT. When true (default false), DNSSEC
 // RRs are requested in responses.
 func WithDNSSEC(v bool) ResolverOption {
-	return resolverOptionFunc(func(c *resolverConfig) { c.ednsDO = v })
+	return resolverOption{option.New(identDNSSEC{}, v)}
 }
 
 // WithEDNS toggles inclusion of the OPT pseudo-RR in outgoing queries.
 // Default is true — pass false only when targeting servers known to
 // misbehave on EDNS.
 func WithEDNS(v bool) ResolverOption {
-	return resolverOptionFunc(func(c *resolverConfig) { c.disableEDNS = !v })
+	return resolverOption{option.New(identEDNS{}, v)}
 }
 
 // WithAttempts sets how many times each server is retried before failover
@@ -145,14 +163,14 @@ func WithEDNS(v bool) ResolverOption {
 // caller-supplied WithExchanger handles its own retry policy and combining
 // the two options is a configuration error caught by NewResolver.
 func WithAttempts(n int) ResolverOption {
-	return resolverOptionFunc(func(c *resolverConfig) { c.attempts = n; c.attemptsSet = true })
+	return resolverOption{option.New(identAttempts{}, n)}
 }
 
 // WithPerAttemptTimeout caps the duration of each attempt. Zero means the
 // outer context's deadline (if any) is the only bound. Applied only to
 // WithServers; combining with WithExchanger is rejected by NewResolver.
 func WithPerAttemptTimeout(d time.Duration) ResolverOption {
-	return resolverOptionFunc(func(c *resolverConfig) { c.perAttempt = d; c.perAttemptSet = true })
+	return resolverOption{option.New(identPerAttemptTimeout{}, d)}
 }
 
 // WithSystemResolvers loads /etc/resolv.conf and uses its nameservers,
@@ -165,18 +183,7 @@ func WithPerAttemptTimeout(d time.Duration) ResolverOption {
 // malformed or hostile resolv.conf cannot pin a multi-minute attempt
 // or hundreds of retries.
 func WithSystemResolvers() ResolverOption {
-	return resolverOptionFunc(func(c *resolverConfig) {
-		cfg, err := resolvconf.Load("")
-		if err != nil {
-			c.systemErr = err
-			return
-		}
-		if len(cfg.Nameservers()) == 0 {
-			c.systemErr = resolvconf.ErrNoNameserver
-			return
-		}
-		applyResolvconfToConfig(c, cfg)
-	})
+	return resolverOption{option.New(identSystemResolvers{}, true)}
 }
 
 // applyResolvconfToConfig copies a parsed resolv.conf into a
@@ -217,7 +224,7 @@ func applyResolvconfToConfig(c *resolverConfig, cfg *resolvconf.Config) {
 // a caller-built Exchanger applies whatever 0x20 policy its own constructor
 // was given.
 func WithCaseRandomization(v bool) ResolverOption {
-	return resolverOptionFunc(func(c *resolverConfig) { c.disable0x20 = !v; c.disable0x20Set = true })
+	return resolverOption{option.New(identCaseRandomization{}, v)}
 }
 
 // WithSpecialUse toggles the RFC 6761 short-circuits applied to names like
@@ -225,19 +232,19 @@ func WithCaseRandomization(v bool) ResolverOption {
 // tooling that needs to interrogate a DNS server about how it handles those
 // names rather than having the resolver answer locally.
 func WithSpecialUse(v bool) ResolverOption {
-	return resolverOptionFunc(func(c *resolverConfig) { c.disableSpecialUse = !v })
+	return resolverOption{option.New(identSpecialUse{}, v)}
 }
 
 // WithSearchList sets the suffixes appended to short names by LookupHost.
 // Names with a trailing dot bypass the search list.
 func WithSearchList(suffixes ...wire.Name) ResolverOption {
-	return resolverOptionFunc(func(c *resolverConfig) { c.searchList = append(c.searchList[:0], suffixes...) })
+	return resolverOption{option.New(identSearchList{}, suffixes)}
 }
 
 // WithNdots sets the threshold of dots above which a name is tried in
 // absolute form before applying the search list. Defaults to 1.
 func WithNdots(n int) ResolverOption {
-	return resolverOptionFunc(func(c *resolverConfig) { c.ndots = n; c.ndotsSet = true })
+	return resolverOption{option.New(identNdots{}, n)}
 }
 
 // WithLogger attaches a slog.Logger that the Resolver uses to emit
@@ -247,7 +254,7 @@ func WithNdots(n int) ResolverOption {
 //
 // The default is a no-op handler — passing nil restores the default.
 func WithLogger(l *slog.Logger) ResolverOption {
-	return resolverOptionFunc(func(c *resolverConfig) { c.logger = l })
+	return resolverOption{option.New(identLogger{}, l)}
 }
 
 type resolver struct {
@@ -266,7 +273,47 @@ type resolver struct {
 func NewResolver(opts ...ResolverOption) (Resolver, error) {
 	c := resolverConfig{ednsUDP: 1232}
 	for _, o := range opts {
-		o.applyResolver(&c)
+		switch o.Ident() {
+		case identExchanger{}:
+			c.exchanger = option.MustGet[Exchanger](o)
+		case identServers{}:
+			servers := option.MustGet[[]netip.AddrPort](o)
+			c.servers = append(c.servers[:0], servers...)
+		case identEDNSUDPSize{}:
+			c.ednsUDP = option.MustGet[uint16](o)
+		case identDNSSEC{}:
+			c.ednsDO = option.MustGet[bool](o)
+		case identEDNS{}:
+			c.disableEDNS = !option.MustGet[bool](o)
+		case identAttempts{}:
+			c.attempts = option.MustGet[int](o)
+			c.attemptsSet = true
+		case identPerAttemptTimeout{}:
+			c.perAttempt = option.MustGet[time.Duration](o)
+			c.perAttemptSet = true
+		case identSystemResolvers{}:
+			cfg, err := resolvconf.Load("")
+			if err != nil {
+				c.systemErr = err
+			} else if len(cfg.Nameservers()) == 0 {
+				c.systemErr = resolvconf.ErrNoNameserver
+			} else {
+				applyResolvconfToConfig(&c, cfg)
+			}
+		case identCaseRandomization{}:
+			c.disable0x20 = !option.MustGet[bool](o)
+			c.disable0x20Set = true
+		case identSpecialUse{}:
+			c.disableSpecialUse = !option.MustGet[bool](o)
+		case identSearchList{}:
+			suffixes := option.MustGet[[]wire.Name](o)
+			c.searchList = append(c.searchList[:0], suffixes...)
+		case identNdots{}:
+			c.ndots = option.MustGet[int](o)
+			c.ndotsSet = true
+		case identLogger{}:
+			c.logger = option.MustGet[*slog.Logger](o)
+		}
 	}
 	if c.systemErr != nil {
 		return nil, c.systemErr
