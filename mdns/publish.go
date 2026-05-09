@@ -12,6 +12,7 @@ import (
 	"github.com/lestrrat-go/acidns/wire"
 	"github.com/lestrrat-go/acidns/wire/rdata"
 	"github.com/lestrrat-go/acidns/wire/rrtype"
+	"github.com/lestrrat-go/option/v3"
 )
 
 // CacheFlushBit is the high bit of the CLASS field (RFC 6762 §10.2). When
@@ -176,7 +177,20 @@ func NewAnnouncer(opts ...AnnouncerOption) (Announcer, error) {
 		now:           time.Now,
 	}
 	for _, o := range opts {
-		o.applyAnnouncer(&c)
+		switch o.Ident() {
+		case identAnnouncerTransport{}:
+			c.transport = option.MustGet[Transport](o)
+		case identProbeTiming{}:
+			t := option.MustGet[timing](o)
+			c.probeWait = t.wait
+			c.probeCount = t.count
+		case identAnnounceTiming{}:
+			t := option.MustGet[timing](o)
+			c.announceWait = t.wait
+			c.announceCount = t.count
+		case identAnnouncerClock{}:
+			c.now = option.MustGet[func() time.Time](o)
+		}
 	}
 	if c.transport == nil {
 		return nil, fmt.Errorf("mdns: NewAnnouncer requires a Transport")

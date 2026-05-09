@@ -1,15 +1,20 @@
 package dnscrypt
 
-import "time"
+import (
+	"time"
+
+	"github.com/lestrrat-go/option/v3"
+)
 
 // ServerOption configures a DNSCrypt [Server].
 type ServerOption interface {
-	applyDNSCryptServer(*serverConfig)
+	option.Interface
+	dnscryptServerOption()
 }
 
-type serverOptionFunc func(*serverConfig)
+type dnscryptServerOption struct{ option.Interface }
 
-func (f serverOptionFunc) applyDNSCryptServer(c *serverConfig) { f(c) }
+func (dnscryptServerOption) dnscryptServerOption() {}
 
 type serverConfig struct {
 	bufferSize    int
@@ -25,12 +30,23 @@ type serverConfig struct {
 	replayMax     int
 }
 
+type identServerCert struct{}
+type identServerResolverSK struct{}
+type identServerBufferSize struct{}
+type identServerMaxInflight struct{}
+type identServerClock struct{}
+type identServerClockSkew struct{}
+type identServerReplay struct{}
+type identServerReplayWindow struct{}
+type identServerReplayMax struct{}
+type identServerWriteTimeout struct{}
+
 // WithCert supplies the signed [Cert] to advertise. Required —
 // [NewServer] returns an error if this option is omitted. The cert
 // MUST already be signed via [SignCert] before being supplied; the
 // server does not re-sign it.
 func WithCert(c *Cert) ServerOption {
-	return serverOptionFunc(func(cfg *serverConfig) { cfg.cert = c })
+	return dnscryptServerOption{option.New(identServerCert{}, c)}
 }
 
 // WithResolverSecretKey supplies the X25519 32-byte resolver short-term
@@ -40,10 +56,7 @@ func WithCert(c *Cert) ServerOption {
 // ResolverPK; the package cannot verify this binding (signed material
 // is opaque) so a mismatch silently produces undecryptable responses.
 func WithResolverSecretKey(sk [32]byte) ServerOption {
-	return serverOptionFunc(func(c *serverConfig) {
-		c.resolverSK = sk
-		c.resolverSKSet = true
-	})
+	return dnscryptServerOption{option.New(identServerResolverSK{}, sk)}
 }
 
 // WithServerBufferSize sets the size of the per-packet read buffer.
@@ -51,11 +64,7 @@ func WithResolverSecretKey(sk [32]byte) ServerOption {
 // plus DNSCrypt v2 framing. A non-positive value falls back to the
 // default.
 func WithServerBufferSize(n int) ServerOption {
-	return serverOptionFunc(func(c *serverConfig) {
-		if n > 0 {
-			c.bufferSize = n
-		}
-	})
+	return dnscryptServerOption{option.New(identServerBufferSize{}, n)}
 }
 
 // WithServerMaxInflight caps the number of concurrently-running
@@ -67,7 +76,7 @@ func WithServerBufferSize(n int) ServerOption {
 // + ChaCha20-Poly1305 Open, so a higher cap lets a junk-flood
 // attacker pin a CPU.
 func WithServerMaxInflight(n int) ServerOption {
-	return serverOptionFunc(func(c *serverConfig) { c.maxInflight = n })
+	return dnscryptServerOption{option.New(identServerMaxInflight{}, n)}
 }
 
 // WithServerClock injects a clock function for cert validity checks
@@ -75,7 +84,7 @@ func WithServerMaxInflight(n int) ServerOption {
 // this unset; tests can pin time to verify boundary behaviour without
 // monkey-patching the system clock.
 func WithServerClock(now func() time.Time) ServerOption {
-	return serverOptionFunc(func(c *serverConfig) { c.now = now })
+	return dnscryptServerOption{option.New(identServerClock{}, now)}
 }
 
 // WithServerClockSkew widens the cert validity-window check by ±d.
@@ -88,7 +97,7 @@ func WithServerClock(now func() time.Time) ServerOption {
 // expired" up to d in the future) — pick d small enough that an
 // attacker cannot replay an expired cert long after revocation.
 func WithServerClockSkew(d time.Duration) ServerOption {
-	return serverOptionFunc(func(c *serverConfig) { c.clockSkew = d })
+	return dnscryptServerOption{option.New(identServerClockSkew{}, d)}
 }
 
 // WithServerReplayProtection toggles the (clientPK, nonce) replay
@@ -98,7 +107,7 @@ func WithServerClockSkew(d time.Duration) ServerOption {
 // handler. Disable only when the upstream protocol layer already
 // guarantees nonce uniqueness or when running stateless-only tests.
 func WithServerReplayProtection(v bool) ServerOption {
-	return serverOptionFunc(func(c *serverConfig) { c.replay = v })
+	return dnscryptServerOption{option.New(identServerReplay{}, v)}
 }
 
 // WithServerReplayWindow sets the sliding window over which a
@@ -108,7 +117,7 @@ func WithServerReplayProtection(v bool) ServerOption {
 // happen to share a (poorly-chosen) nonce. A non-positive value
 // falls back to the default.
 func WithServerReplayWindow(d time.Duration) ServerOption {
-	return serverOptionFunc(func(c *serverConfig) { c.replayWindow = d })
+	return dnscryptServerOption{option.New(identServerReplayWindow{}, d)}
 }
 
 // WithServerReplayCacheMax bounds the in-memory replay cache. Once
@@ -117,7 +126,7 @@ func WithServerReplayWindow(d time.Duration) ServerOption {
 // evicted. Defaults to 10,000. A non-positive value falls back to
 // the default.
 func WithServerReplayCacheMax(n int) ServerOption {
-	return serverOptionFunc(func(c *serverConfig) { c.replayMax = n })
+	return dnscryptServerOption{option.New(identServerReplayMax{}, n)}
 }
 
 // WithServerWriteTimeout caps the time the server will spend writing
@@ -130,5 +139,5 @@ func WithServerReplayCacheMax(n int) ServerOption {
 //
 // Defaults to 5 seconds. A non-positive value disables the deadline.
 func WithServerWriteTimeout(d time.Duration) ServerOption {
-	return serverOptionFunc(func(c *serverConfig) { c.writeTimeout = d })
+	return dnscryptServerOption{option.New(identServerWriteTimeout{}, d)}
 }

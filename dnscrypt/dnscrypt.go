@@ -34,6 +34,7 @@ import (
 
 	"github.com/lestrrat-go/acidns"
 	"github.com/lestrrat-go/acidns/wire"
+	"github.com/lestrrat-go/option/v3"
 )
 
 // Certificate magic values.
@@ -106,7 +107,26 @@ type Cert struct {
 func NewCert(opts ...CertOption) (*Cert, error) {
 	c := certConfig{esVersion: ESVersion2}
 	for _, o := range opts {
-		o.applyCert(&c)
+		switch o.Ident() {
+		case identCertESVersion{}:
+			c.esVersion = option.MustGet[ESVersion](o)
+		case identCertProtocolMinor{}:
+			c.protocolMinor = option.MustGet[uint16](o)
+		case identCertResolverPK{}:
+			c.resolverPK = option.MustGet[[32]byte](o)
+			c.resolverPKSet = true
+		case identCertClientMagic{}:
+			c.clientMagic = option.MustGet[[8]byte](o)
+			c.clientMagicSet = true
+		case identCertSerial{}:
+			c.serial = option.MustGet[uint32](o)
+		case identCertValidFrom{}:
+			c.validFrom = option.MustGet[time.Time](o)
+			c.validFromSet = true
+		case identCertValidUntil{}:
+			c.validUntil = option.MustGet[time.Time](o)
+			c.validUntilSet = true
+		}
 	}
 	if !c.resolverPKSet {
 		return nil, fmt.Errorf("dnscrypt: NewCert requires WithCertResolverPK")
@@ -390,7 +410,14 @@ func New(addr netip.AddrPort, cert *Cert, opts ...Option) (acidns.Exchanger, err
 	}
 	c := config{timeout: 5 * time.Second, now: time.Now, clockSkew: 5 * time.Second}
 	for _, o := range opts {
-		o.applyDNSCrypt(&c)
+		switch o.Ident() {
+		case identTimeout{}:
+			c.timeout = option.MustGet[time.Duration](o)
+		case identClockSkew{}:
+			c.clockSkew = option.MustGet[time.Duration](o)
+		case identClock{}:
+			c.now = option.MustGet[func() time.Time](o)
+		}
 	}
 	if c.now == nil {
 		c.now = time.Now

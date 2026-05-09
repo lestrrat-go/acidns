@@ -3,37 +3,43 @@ package mdns
 import (
 	"net"
 	"time"
+
+	"github.com/lestrrat-go/option/v3"
 )
 
 // BrowseOption configures Browse.
 type BrowseOption interface {
-	applyBrowse(*browseConfig)
+	option.Interface
+	browseOption()
 }
 
-type browseOptionFunc func(*browseConfig)
+type browseOption struct{ option.Interface }
 
-func (f browseOptionFunc) applyBrowse(c *browseConfig) { f(c) }
+func (browseOption) browseOption() {}
 
 type browseConfig struct {
 	openConn func() (net.PacketConn, error)
 }
+
+type identBrowseConn struct{}
 
 // WithBrowseConn injects the function used to open the listening
 // socket. The default opens the IPv4 mDNS multicast group on udp4. Tests
 // pass an in-process [net.PacketConn] factory to avoid binding the real
 // multicast group.
 func WithBrowseConn(open func() (net.PacketConn, error)) BrowseOption {
-	return browseOptionFunc(func(c *browseConfig) { c.openConn = open })
+	return browseOption{option.New(identBrowseConn{}, open)}
 }
 
 // AnnouncerOption configures NewAnnouncer.
 type AnnouncerOption interface {
-	applyAnnouncer(*announcerConfig)
+	option.Interface
+	announcerOption()
 }
 
-type announcerOptionFunc func(*announcerConfig)
+type announcerOption struct{ option.Interface }
 
-func (f announcerOptionFunc) applyAnnouncer(c *announcerConfig) { f(c) }
+func (announcerOption) announcerOption() {}
 
 type announcerConfig struct {
 	transport     Transport
@@ -44,28 +50,33 @@ type announcerConfig struct {
 	now           func() time.Time
 }
 
+// timing carries a (wait, count) pair for probe / announce options.
+type timing struct {
+	wait  time.Duration
+	count int
+}
+
+type identAnnouncerTransport struct{}
+type identProbeTiming struct{}
+type identAnnounceTiming struct{}
+type identAnnouncerClock struct{}
+
 // WithAnnouncerTransport sets the transport. Required.
 func WithAnnouncerTransport(t Transport) AnnouncerOption {
-	return announcerOptionFunc(func(c *announcerConfig) { c.transport = t })
+	return announcerOption{option.New(identAnnouncerTransport{}, t)}
 }
 
 // WithProbeTiming overrides the probe wait + count.
 func WithProbeTiming(wait time.Duration, count int) AnnouncerOption {
-	return announcerOptionFunc(func(c *announcerConfig) {
-		c.probeWait = wait
-		c.probeCount = count
-	})
+	return announcerOption{option.New(identProbeTiming{}, timing{wait: wait, count: count})}
 }
 
 // WithAnnounceTiming overrides the announce wait + count.
 func WithAnnounceTiming(wait time.Duration, count int) AnnouncerOption {
-	return announcerOptionFunc(func(c *announcerConfig) {
-		c.announceWait = wait
-		c.announceCount = count
-	})
+	return announcerOption{option.New(identAnnounceTiming{}, timing{wait: wait, count: count})}
 }
 
 // WithClock injects a clock for tests.
 func WithClock(now func() time.Time) AnnouncerOption {
-	return announcerOptionFunc(func(c *announcerConfig) { c.now = now })
+	return announcerOption{option.New(identAnnouncerClock{}, now)}
 }

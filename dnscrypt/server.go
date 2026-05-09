@@ -43,6 +43,7 @@ import (
 	"github.com/lestrrat-go/acidns"
 	"github.com/lestrrat-go/acidns/internal/serverctl"
 	"github.com/lestrrat-go/acidns/wire"
+	"github.com/lestrrat-go/option/v3"
 )
 
 // ErrServerClosed is recorded on the [ServerController] after a
@@ -87,7 +88,31 @@ func NewServer(addr netip.AddrPort, h acidns.Handler, opts ...ServerOption) (*Se
 		replayMax:    10_000,
 	}
 	for _, o := range opts {
-		o.applyDNSCryptServer(&cfg)
+		switch o.Ident() {
+		case identServerCert{}:
+			cfg.cert = option.MustGet[*Cert](o)
+		case identServerResolverSK{}:
+			cfg.resolverSK = option.MustGet[[32]byte](o)
+			cfg.resolverSKSet = true
+		case identServerBufferSize{}:
+			if n := option.MustGet[int](o); n > 0 {
+				cfg.bufferSize = n
+			}
+		case identServerMaxInflight{}:
+			cfg.maxInflight = option.MustGet[int](o)
+		case identServerClock{}:
+			cfg.now = option.MustGet[func() time.Time](o)
+		case identServerClockSkew{}:
+			cfg.clockSkew = option.MustGet[time.Duration](o)
+		case identServerReplay{}:
+			cfg.replay = option.MustGet[bool](o)
+		case identServerReplayWindow{}:
+			cfg.replayWindow = option.MustGet[time.Duration](o)
+		case identServerReplayMax{}:
+			cfg.replayMax = option.MustGet[int](o)
+		case identServerWriteTimeout{}:
+			cfg.writeTimeout = option.MustGet[time.Duration](o)
+		}
 	}
 	if cfg.now == nil {
 		cfg.now = time.Now

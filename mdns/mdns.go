@@ -22,6 +22,7 @@ import (
 	"github.com/lestrrat-go/acidns/wire"
 	"github.com/lestrrat-go/acidns/wire/rdata"
 	"github.com/lestrrat-go/acidns/wire/rrtype"
+	"github.com/lestrrat-go/option/v3"
 )
 
 // Default mDNS link-local addresses (RFC 6762 §3).
@@ -225,7 +226,10 @@ func Browse(ctx context.Context, service string, opts ...BrowseOption) ([]Servic
 		openConn: func() (net.PacketConn, error) { return openMulticast() },
 	}
 	for _, opt := range opts {
-		opt.applyBrowse(&cfg)
+		switch opt.Ident() {
+		case identBrowseConn{}:
+			cfg.openConn = option.MustGet[func() (net.PacketConn, error)](opt)
+		}
 	}
 
 	q, err := BuildBrowseQuery(service)
