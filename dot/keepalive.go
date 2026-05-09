@@ -102,11 +102,11 @@ func NewKeepAliveExchanger(addr netip.AddrPort, opts ...KeepAliveOption) (acidns
 	} else {
 		tcfg = &tls.Config{MinVersion: tls.VersionTLS13}
 	}
-	switch {
-	case tcfg.MinVersion == 0:
+	// Match the floor in [New]: any caller-supplied MinVersion below
+	// TLS 1.3 is silently raised. RFC 7858 §9 SHOULD use TLS 1.3 and
+	// the keep-alive client must not be a back-door for TLS 1.2.
+	if tcfg.MinVersion < tls.VersionTLS13 {
 		tcfg.MinVersion = tls.VersionTLS13
-	case tcfg.MinVersion < tls.VersionTLS12:
-		tcfg.MinVersion = tls.VersionTLS12
 	}
 	if c.serverName != "" {
 		tcfg.ServerName = c.serverName
