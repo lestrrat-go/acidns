@@ -82,59 +82,6 @@ const (
 	BogusReturnAnswer
 )
 
-// ValidatorOption configures a [Validator] at construction. Distinct
-// from [WalkerOption] because the same package hosts both types and
-// the option-set names already collide on the walker side; a single
-// shared interface would either require the walker options to
-// implement an unused applyValidator, or vice versa. The names below
-// mirror the walker option-set with a Validator prefix.
-type ValidatorOption interface{ applyValidator(*validatorConfig) }
-
-type validatorOptionFunc func(*validatorConfig)
-
-func (f validatorOptionFunc) applyValidator(c *validatorConfig) { f(c) }
-
-type validatorConfig struct {
-	ntas        *NTAStore
-	bogusPolicy BogusPolicy
-	now         func() time.Time
-	skew        time.Duration
-}
-
-// WithValidatorNTAStore installs a Negative Trust Anchor store on
-// the validator. Names covered by the store short-circuit validation
-// to Indeterminate per RFC 7646. A nil store is equivalent to
-// passing no option — a fresh empty store is allocated by [New].
-func WithValidatorNTAStore(s *NTAStore) ValidatorOption {
-	return validatorOptionFunc(func(c *validatorConfig) { c.ntas = s })
-}
-
-// WithValidatorBogusPolicy controls how the validator handles
-// signature failures. Defaults to [BogusReturnSERVFAIL].
-func WithValidatorBogusPolicy(p BogusPolicy) ValidatorOption {
-	return validatorOptionFunc(func(c *validatorConfig) { c.bogusPolicy = p })
-}
-
-// WithValidatorClock injects a clock used for RRSIG
-// inception/expiration checks. Defaults to time.Now. Test-only —
-// production code should leave this unset. The bare-name spelling
-// matches the Walker's WithWalkerClock.
-func WithValidatorClock(now func() time.Time) ValidatorOption {
-	return validatorOptionFunc(func(c *validatorConfig) { c.now = now })
-}
-
-// WithValidatorClockSkew widens the RRSIG inception/expiration window by
-// skew on each side. Production deployments typically pick 5–15
-// minutes; the default of 0 is the conservative reading of RFC 4035
-// §5.3. Mirrors the walker's WithWalkerClockSkew.
-func WithValidatorClockSkew(skew time.Duration) ValidatorOption {
-	return validatorOptionFunc(func(c *validatorConfig) {
-		if skew >= 0 {
-			c.skew = skew
-		}
-	})
-}
-
 // Validator wraps the dnssec verification primitives with NTA support and
 // a bogus-answer policy.
 type Validator struct {
