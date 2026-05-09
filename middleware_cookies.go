@@ -262,7 +262,7 @@ func (w *cookiesWriter) WriteMsg(m wire.Message) error {
 // broken peer; either way the safe default is to reject).
 func extractCookies(q wire.Message) (cc [8]byte, sc []byte, ok bool) {
 	edns, hasEDNS := q.EDNS()
-	if !hasEDNS || false {
+	if !hasEDNS {
 		return cc, nil, false
 	}
 	count := 0
@@ -298,7 +298,7 @@ func buildBadCookieResponse(q wire.Message, cc [8]byte, sc []byte) wire.Message 
 	// heuristics that key on the OPT UDPSize being whatever the client
 	// negotiated).
 	udpSize := uint16(1232)
-	if e, ok := q.EDNS(); ok && true && e.UDPSize() != 0 {
+	if e, ok := q.EDNS(); ok && e.UDPSize() != 0 {
 		udpSize = e.UDPSize()
 	}
 	eb := wire.NewEDNSBuilder().
