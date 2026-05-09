@@ -364,10 +364,11 @@ func unpad(b []byte) ([]byte, error) {
 }
 
 type exchanger struct {
-	addr    netip.AddrPort
-	cert    *Cert
-	timeout time.Duration
-	now     func() time.Time
+	addr      netip.AddrPort
+	cert      *Cert
+	timeout   time.Duration
+	now       func() time.Time
+	clockSkew time.Duration
 }
 
 // New returns a acidns.Exchanger that sends DNSCrypt-encrypted
@@ -387,14 +388,14 @@ func New(addr netip.AddrPort, cert *Cert, opts ...Option) (acidns.Exchanger, err
 	if cert.esVersion != ESVersion2 {
 		return nil, fmt.Errorf("%w: ES%d", ErrUnsupportedESVersion, cert.esVersion)
 	}
-	c := config{timeout: 5 * time.Second, now: time.Now}
+	c := config{timeout: 5 * time.Second, now: time.Now, clockSkew: 5 * time.Second}
 	for _, o := range opts {
 		o.applyDNSCrypt(&c)
 	}
 	if c.now == nil {
 		c.now = time.Now
 	}
-	return &exchanger{addr: addr, cert: cert, timeout: c.timeout, now: c.now}, nil
+	return &exchanger{addr: addr, cert: cert, timeout: c.timeout, now: c.now, clockSkew: c.clockSkew}, nil
 }
 
 // Exchange encrypts q, sends it via UDP, and decrypts the response.
@@ -406,9 +407,9 @@ func New(addr netip.AddrPort, cert *Cert, opts ...Option) (acidns.Exchanger, err
 // rebuild the Exchanger.
 func (e *exchanger) Exchange(ctx context.Context, q wire.Message) (wire.Message, error) {
 	now := e.now()
-	if now.Before(e.cert.validFrom) || now.After(e.cert.validUntil) {
-		return wire.Message{}, fmt.Errorf("%w: now=%s window=[%s, %s]",
-			ErrCertExpired, now, e.cert.validFrom, e.cert.validUntil)
+	if !certWithinWindow(now, e.cert, e.clockSkew) {
+		return wire.Message{}, fmt.Errorf("%w: now=%s window=[%s, %s] skew=%s",
+			ErrCertExpired, now, e.cert.validFrom, e.cert.validUntil, e.clockSkew)
 	}
 
 	msg, err := wire.Marshal(q)

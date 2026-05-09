@@ -19,6 +19,10 @@ type serverConfig struct {
 	resolverSKSet bool
 	cert          *Cert
 	now           func() time.Time
+	clockSkew     time.Duration
+	replay        bool
+	replayWindow  time.Duration
+	replayMax     int
 }
 
 // WithCert supplies the signed [Cert] to advertise. Required —
@@ -72,6 +76,48 @@ func WithServerMaxInflight(n int) ServerOption {
 // monkey-patching the system clock.
 func WithServerClock(now func() time.Time) ServerOption {
 	return serverOptionFunc(func(c *serverConfig) { c.now = now })
+}
+
+// WithServerClockSkew widens the cert validity-window check by ±d.
+// Hourly cert rotation can fail under modest clock drift between the
+// server and the cert-signing host: a server with a slightly fast
+// clock rejects the cert that just became valid. The default is 5
+// seconds; pass 0 to require an exact within-window match. A
+// non-zero value tolerates skew at the lower bound (accept "not yet
+// valid" up to d in the past) and at the upper bound (accept "just
+// expired" up to d in the future) — pick d small enough that an
+// attacker cannot replay an expired cert long after revocation.
+func WithServerClockSkew(d time.Duration) ServerOption {
+	return serverOptionFunc(func(c *serverConfig) { c.clockSkew = d })
+}
+
+// WithServerReplayProtection toggles the (clientPK, nonce) replay
+// cache. When enabled (the default), each accepted packet is checked
+// against a sliding-window cache of recently seen tuples; an exact
+// duplicate within the window is dropped without invoking the
+// handler. Disable only when the upstream protocol layer already
+// guarantees nonce uniqueness or when running stateless-only tests.
+func WithServerReplayProtection(v bool) ServerOption {
+	return serverOptionFunc(func(c *serverConfig) { c.replay = v })
+}
+
+// WithServerReplayWindow sets the sliding window over which a
+// (clientPK, nonce) pair is considered a replay. Defaults to 1
+// minute, which is wide enough to cover ordinary network re-ordering
+// without retaining state for legitimately-distinct queries that
+// happen to share a (poorly-chosen) nonce. A non-positive value
+// falls back to the default.
+func WithServerReplayWindow(d time.Duration) ServerOption {
+	return serverOptionFunc(func(c *serverConfig) { c.replayWindow = d })
+}
+
+// WithServerReplayCacheMax bounds the in-memory replay cache. Once
+// the cache reaches max entries, expired entries are swept; if the
+// cache is still full after the sweep, the oldest entries are
+// evicted. Defaults to 10,000. A non-positive value falls back to
+// the default.
+func WithServerReplayCacheMax(n int) ServerOption {
+	return serverOptionFunc(func(c *serverConfig) { c.replayMax = n })
 }
 
 // WithServerWriteTimeout caps the time the server will spend writing

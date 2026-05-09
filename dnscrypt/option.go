@@ -10,13 +10,23 @@ type optionFunc func(*config)
 func (f optionFunc) applyDNSCrypt(c *config) { f(c) }
 
 type config struct {
-	timeout time.Duration
-	now     func() time.Time
+	timeout   time.Duration
+	now       func() time.Time
+	clockSkew time.Duration
 }
 
 // WithTimeout sets the per-exchange timeout when ctx has no deadline.
 func WithTimeout(d time.Duration) Option {
 	return optionFunc(func(c *config) { c.timeout = d })
+}
+
+// WithClockSkew widens the cert validity-window check by ±d on every
+// Exchange. Mirrors [WithServerClockSkew] on the server side: small
+// drift between the resolver's clock and the cert-signing host
+// otherwise turns hourly cert rotation into a hard outage. Defaults
+// to 5 seconds; pass 0 to require an exact within-window match.
+func WithClockSkew(d time.Duration) Option {
+	return optionFunc(func(c *config) { c.clockSkew = d })
 }
 
 // WithClock injects a clock function. Defaults to time.Now. Used for

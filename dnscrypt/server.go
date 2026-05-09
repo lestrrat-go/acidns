@@ -81,12 +81,22 @@ func NewServer(addr netip.AddrPort, h acidns.Handler, opts ...ServerOption) (*Se
 		maxInflight:  256,
 		writeTimeout: 5 * time.Second,
 		now:          time.Now,
+		clockSkew:    5 * time.Second,
+		replay:       true,
+		replayWindow: time.Minute,
+		replayMax:    10_000,
 	}
 	for _, o := range opts {
 		o.applyDNSCryptServer(&cfg)
 	}
 	if cfg.now == nil {
 		cfg.now = time.Now
+	}
+	if cfg.replayWindow <= 0 {
+		cfg.replayWindow = time.Minute
+	}
+	if cfg.replayMax <= 0 {
+		cfg.replayMax = 10_000
 	}
 	if cfg.cert == nil {
 		return nil, fmt.Errorf("dnscrypt: NewServer requires WithCert")
@@ -114,9 +124,9 @@ func NewServer(addr netip.AddrPort, h acidns.Handler, opts ...ServerOption) (*Se
 // Cancelling ctx is the only way to stop the instance.
 func (s *Server) Run(ctx context.Context) (*ServerController, error) {
 	now := s.cfg.now()
-	if now.Before(s.cert.validFrom) || now.After(s.cert.validUntil) {
-		return nil, fmt.Errorf("%w: now=%s window=[%s, %s]",
-			ErrCertExpired, now, s.cert.validFrom, s.cert.validUntil)
+	if !certWithinWindow(now, s.cert, s.cfg.clockSkew) {
+		return nil, fmt.Errorf("%w: now=%s window=[%s, %s] skew=%s",
+			ErrCertExpired, now, s.cert.validFrom, s.cert.validUntil, s.cfg.clockSkew)
 	}
 	pc, err := net.ListenPacket("udp", s.addr.String()) //nolint:noctx // socket lifetime is bound to Run's ctx
 	if err != nil {
@@ -134,6 +144,9 @@ func (s *Server) Run(ctx context.Context) (*ServerController, error) {
 		addr:    bound,
 		handler: s.handler,
 		cfg:     s.cfg,
+	}
+	if s.cfg.replay {
+		loop.replay = newReplayCache(s.cfg.replayWindow, s.cfg.replayMax)
 	}
 	loop.material.Store(&keyMaterial{cert: s.cert, resolverSK: s.resolverSK})
 	if s.cfg.maxInflight > 0 {
@@ -206,12 +219,28 @@ func (c *ServerController) Rotate(cert *Cert, resolverSK [32]byte) error {
 		return fmt.Errorf("dnscrypt: Rotate: resolver secret key is zero")
 	}
 	now := c.loop.cfg.now()
-	if now.Before(cert.validFrom) || now.After(cert.validUntil) {
-		return fmt.Errorf("%w: now=%s window=[%s, %s]",
-			ErrCertExpired, now, cert.validFrom, cert.validUntil)
+	if !certWithinWindow(now, cert, c.loop.cfg.clockSkew) {
+		return fmt.Errorf("%w: now=%s window=[%s, %s] skew=%s",
+			ErrCertExpired, now, cert.validFrom, cert.validUntil, c.loop.cfg.clockSkew)
 	}
 	c.loop.material.Store(&keyMaterial{cert: cert, resolverSK: resolverSK})
 	return nil
+}
+
+// certWithinWindow reports whether now lies in [validFrom-skew,
+// validUntil+skew]. Negative skew is clamped to zero so a caller
+// cannot accidentally tighten the window past validFrom/validUntil.
+func certWithinWindow(now time.Time, cert *Cert, skew time.Duration) bool {
+	if skew < 0 {
+		skew = 0
+	}
+	if now.Before(cert.validFrom.Add(-skew)) {
+		return false
+	}
+	if now.After(cert.validUntil.Add(skew)) {
+		return false
+	}
+	return true
 }
 
 type serverLoop struct {
@@ -223,6 +252,7 @@ type serverLoop struct {
 	sem      chan struct{}
 	bufPool  sync.Pool
 	wg       sync.WaitGroup
+	replay   *replayCache
 	// writeMu serialises (SetWriteDeadline, WriteTo) on the shared
 	// PacketConn across handler goroutines. Without it concurrent
 	// writers can clobber each other's deadlines, producing spurious
@@ -332,6 +362,13 @@ func (l *serverLoop) handlePacket(ctx context.Context, body []byte, src netip.Ad
 	var clientNonce [12]byte
 	copy(clientNonce[:], body[40:52])
 	ct := body[52:]
+
+	// Replay defence: drop a (clientPK, nonce) tuple we've already
+	// dispatched within the window. Run BEFORE the X25519+AEAD spend
+	// so a flood of replays cannot pin a CPU on cryptographic work.
+	if l.replay != nil && l.replay.seen(clientPK, clientNonce, l.cfg.now()) {
+		return
+	}
 
 	shared, err := sharedKey(clientPK, mat.resolverSK)
 	if err != nil {
