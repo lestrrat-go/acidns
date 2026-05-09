@@ -65,7 +65,7 @@ func (h *echoHandler) ServeDNS(_ context.Context, w acidns.ResponseWriter, q wir
 		return
 	}
 	qq := q.Questions()[0]
-	resp, _ := wire.NewBuilder().
+	resp, _ := wire.NewMessageBuilder().
 		ID(q.ID()).
 		Response(true).
 		Question(qq).
@@ -95,7 +95,7 @@ func TestServerRoundTrip(t *testing.T) {
 	ex, err := dnscrypt.New(ctrl.Addr(), fx.cert)
 	require.NoError(t, err)
 
-	q, err := wire.NewBuilder().
+	q, err := wire.NewMessageBuilder().
 		ID(0xa1f1).
 		RecursionDesired(true).
 		Question(wire.NewQuestion(wire.MustParseName("a.test."), rrtype.A)).
@@ -148,7 +148,7 @@ func TestServerDropsWrongClientMagic(t *testing.T) {
 
 	ex, err := dnscrypt.New(ctrl.Addr(), bad)
 	require.NoError(t, err)
-	q, _ := wire.NewBuilder().
+	q, _ := wire.NewMessageBuilder().
 		ID(1).
 		RecursionDesired(true).
 		Question(wire.NewQuestion(wire.MustParseName("x.test."), rrtype.A)).
@@ -250,7 +250,7 @@ func TestServerRotate(t *testing.T) {
 	// Round-trip under the original cert.
 	ex1, err := dnscrypt.New(ctrl.Addr(), first.cert)
 	require.NoError(t, err)
-	q, _ := wire.NewBuilder().
+	q, _ := wire.NewMessageBuilder().
 		ID(1).
 		RecursionDesired(true).
 		Question(wire.NewQuestion(wire.MustParseName("pre.test."), rrtype.A)).
@@ -268,7 +268,7 @@ func TestServerRotate(t *testing.T) {
 	// New client under the new cert succeeds.
 	ex2, err := dnscrypt.New(ctrl.Addr(), second.cert)
 	require.NoError(t, err)
-	q2, _ := wire.NewBuilder().
+	q2, _ := wire.NewMessageBuilder().
 		ID(2).
 		RecursionDesired(true).
 		Question(wire.NewQuestion(wire.MustParseName("post.test."), rrtype.A)).
@@ -280,7 +280,7 @@ func TestServerRotate(t *testing.T) {
 	require.Equal(t, int32(2), h.hits.Load())
 
 	// Old client (uses old ClientMagic) is now silently dropped.
-	q3, _ := wire.NewBuilder().
+	q3, _ := wire.NewMessageBuilder().
 		ID(3).
 		RecursionDesired(true).
 		Question(wire.NewQuestion(wire.MustParseName("stale.test."), rrtype.A)).

@@ -19,7 +19,7 @@ func Example_mdns_parse() {
 	host := wire.MustParseName("printer.local")
 
 	txt, _ := rdata.NewTXT("path=/admin", "model=acidns")
-	resp, _ := wire.NewBuilder().
+	resp, _ := wire.NewMessageBuilder().
 		ID(0).
 		Response(true).
 		Answer(wire.NewRecord(svcType, time.Minute, rdata.MustNewPTR(instance))).

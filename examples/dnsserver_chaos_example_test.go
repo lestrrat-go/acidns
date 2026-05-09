@@ -39,7 +39,7 @@ func Example_dnsserver_chaos() {
 	}
 
 	// Build a CHAOS-class TXT query for id.server.
-	q, _ := wire.NewBuilder().
+	q, _ := wire.NewMessageBuilder().
 		ID(1).
 		Question(wire.NewQuestionClass(wire.MustParseName("id.server."), rrtype.TXT, rrtype.ClassCH)).
 		Build()

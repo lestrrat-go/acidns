@@ -69,7 +69,7 @@ func TestRetryRespectsContext(t *testing.T) {
 
 // Suppress unused import warning when running this file standalone.
 var (
-	_ = wire.NewBuilder
+	_ = wire.NewMessageBuilder
 	_ rdata.A
 	_ = rrtype.A
 	_ = wire.MustParseName

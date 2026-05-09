@@ -16,7 +16,7 @@ import (
 // Kashpureff-style cache poisoning vector.
 func TestFilterBailiwickDropsForgedAnswerRecords(t *testing.T) {
 	qname := wire.MustParseName("legit.example.")
-	resp, err := wire.NewBuilder().
+	resp, err := wire.NewMessageBuilder().
 		ID(1).
 		Response(true).
 		Question(wire.NewQuestion(qname, rrtype.A)).
@@ -38,7 +38,7 @@ func TestFilterBailiwickDropsForgedAnswerRecords(t *testing.T) {
 func TestFilterBailiwickKeepsCNAMEChain(t *testing.T) {
 	qname := wire.MustParseName("alias.example.")
 	target := wire.MustParseName("real.example.")
-	resp, err := wire.NewBuilder().
+	resp, err := wire.NewMessageBuilder().
 		ID(1).
 		Response(true).
 		Question(wire.NewQuestion(qname, rrtype.A)).
@@ -59,7 +59,7 @@ func TestFilterBailiwickKeepsCNAMEChain(t *testing.T) {
 // records owned by unrelated parent zones are removed.
 func TestFilterBailiwickDropsOutOfBailiwickAuthority(t *testing.T) {
 	qname := wire.MustParseName("a.example.")
-	resp, err := wire.NewBuilder().
+	resp, err := wire.NewMessageBuilder().
 		ID(1).
 		Response(true).
 		Question(wire.NewQuestion(qname, rrtype.A)).

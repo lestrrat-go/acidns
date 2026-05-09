@@ -13,7 +13,7 @@ func TestEDNSOPTEchoOnAnswer(t *testing.T) {
 	t.Parallel()
 	a := newAuth(t)
 
-	q, err := wire.NewBuilder().
+	q, err := wire.NewMessageBuilder().
 		ID(99).
 		RecursionDesired(true).
 		Question(wire.NewQuestion(wire.MustParseName("www.example.com"), rrtype.A)).
@@ -53,7 +53,7 @@ func TestEDNSExtendedRCODESplit(t *testing.T) {
 	// upper bits leak in for ordinary responses).
 	a := newAuth(t)
 
-	q, err := wire.NewBuilder().
+	q, err := wire.NewMessageBuilder().
 		ID(7).
 		Question(wire.NewQuestion(wire.MustParseName("not-our-zone.test"), rrtype.A)).
 		EDNS(mustEDNS(t, wire.NewEDNSBuilder().UDPSize(1232))).
@@ -73,7 +73,7 @@ func TestEDNSOPTEchoOnRefusedNoZone(t *testing.T) {
 	t.Parallel()
 	a := newAuth(t)
 
-	q, err := wire.NewBuilder().
+	q, err := wire.NewMessageBuilder().
 		ID(123).
 		Question(wire.NewQuestion(wire.MustParseName("not-our-zone.test"), rrtype.A)).
 		EDNS(mustEDNS(t, wire.NewEDNSBuilder().UDPSize(1232))).

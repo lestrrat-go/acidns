@@ -34,7 +34,7 @@ func TestParseBrowseResponse(t *testing.T) {
 	srv := rdata.MustNewSRV(0, 0, 80, host)
 	a := rdata.MustNewA(netip.MustParseAddr("192.0.2.50"))
 
-	resp, err := wire.NewBuilder().
+	resp, err := wire.NewMessageBuilder().
 		ID(0).
 		Response(true).
 		Answer(wire.NewRecord(svcType, time.Minute, rdata.MustNewPTR(instance))).
@@ -62,7 +62,7 @@ func TestParseBrowseResponse(t *testing.T) {
 
 func TestParseBrowseResponseEmpty(t *testing.T) {
 	t.Parallel()
-	resp, _ := wire.NewBuilder().ID(0).Response(true).Build()
+	resp, _ := wire.NewMessageBuilder().ID(0).Response(true).Build()
 	require.Equal(t, 0, len(mdns.ParseBrowseResponse(resp)))
 }
 

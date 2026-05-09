@@ -91,7 +91,7 @@ func TestEntryFromResponseCapsNegativeTTL(t *testing.T) {
 			365*24*time.Hour, // SOA MINIMUM = 1 year
 		))
 
-	resp, err := wire.NewBuilder().
+	resp, err := wire.NewMessageBuilder().
 		ID(1).
 		Response(true).
 		RCODE(wire.RCODENXDomain).
@@ -126,7 +126,7 @@ func TestBailiwickFilterDropsForgedAnswerRecords(t *testing.T) {
 	zoneNS := wire.NewRecord(wire.MustParseName("evil.example."), 60*time.Second,
 		rdata.MustNewNS(wire.MustParseName("ns.evil.example.")))
 
-	resp, err := wire.NewBuilder().
+	resp, err := wire.NewMessageBuilder().
 		ID(1).
 		Response(true).
 		Authoritative(true).
@@ -158,7 +158,7 @@ func TestReferralZone(t *testing.T) {
 	t.Parallel()
 	rec := wire.NewRecord(wire.MustParseName("example.com"), 0,
 		rdata.MustNewNS(wire.MustParseName("ns1.example.com")))
-	resp, err := wire.NewBuilder().Authority(rec).Build()
+	resp, err := wire.NewMessageBuilder().Authority(rec).Build()
 	require.NoError(t, err)
 	z := referralZone(resp)
 	require.True(t, z.Equal(wire.MustParseName("example.com")))

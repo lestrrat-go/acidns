@@ -11,7 +11,7 @@ func Example_dnsmsg_marshal() {
 	// Marshal serialises a Message to msg-format bytes; Unmarshal is the
 	// inverse. The pair is what every transport (UDP, TCP, DoT, DoH, DoQ)
 	// hands to the network.
-	original, _ := wire.NewBuilder().
+	original, _ := wire.NewMessageBuilder().
 		ID(0xabcd).
 		Question(wire.NewQuestion(wire.MustParseName("example.com"), rrtype.A)).
 		Build()

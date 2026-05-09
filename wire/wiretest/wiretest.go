@@ -1,7 +1,7 @@
 // Package wiretest provides one-line fixture builders for tests that need
 // to synthesise DNS messages and records. It is intended for use from
 // _test.go files anywhere in or outside the acidns module — production
-// code should construct messages explicitly via wire.NewBuilder.
+// code should construct messages explicitly via wire.NewMessageBuilder.
 //
 // Functions here panic on programmer error (invalid IP literal, oversized
 // builder) instead of returning an error. They mirror the wire.MustParseName
@@ -19,7 +19,7 @@ import (
 
 // Query builds a minimal client query (RD=1) for the given name and type.
 func Query(name wire.Name, t rrtype.Type) wire.Message {
-	m, err := wire.NewBuilder().
+	m, err := wire.NewMessageBuilder().
 		ID(0).
 		RecursionDesired(true).
 		Question(wire.NewQuestion(name, t)).
@@ -34,7 +34,7 @@ func Query(name wire.Name, t rrtype.Type) wire.Message {
 // the supplied answer records. Authoritative is false (use Authoritative
 // if you need AA=1).
 func Response(q wire.Message, answers ...wire.Record) wire.Message {
-	b := wire.NewBuilder().
+	b := wire.NewMessageBuilder().
 		ID(q.ID()).
 		Response(true).
 		RecursionDesired(q.Flags().RecursionDesired()).
@@ -54,7 +54,7 @@ func Response(q wire.Message, answers ...wire.Record) wire.Message {
 
 // Authoritative is like Response but with AA=1.
 func Authoritative(q wire.Message, answers ...wire.Record) wire.Message {
-	b := wire.NewBuilder().
+	b := wire.NewMessageBuilder().
 		ID(q.ID()).
 		Response(true).
 		Authoritative(true).
@@ -94,7 +94,7 @@ func Refused(q wire.Message) wire.Message {
 // Useful as a placeholder in test fakes that need any wire.Message but do
 // not exercise its contents.
 func EmptyResponse() wire.Message {
-	m, err := wire.NewBuilder().Response(true).Build()
+	m, err := wire.NewMessageBuilder().Response(true).Build()
 	if err != nil {
 		panic(err)
 	}
@@ -102,7 +102,7 @@ func EmptyResponse() wire.Message {
 }
 
 func rcodeResponse(q wire.Message, code wire.RCODE, aa bool) wire.Message {
-	b := wire.NewBuilder().
+	b := wire.NewMessageBuilder().
 		ID(q.ID()).
 		Response(true).
 		Authoritative(aa).

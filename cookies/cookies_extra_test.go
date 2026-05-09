@@ -161,7 +161,7 @@ func TestClientObserveIgnoresMissingCookie(t *testing.T) {
 	server := netip.MustParseAddrPort("198.51.100.20:53")
 
 	// Response with no EDNS at all.
-	resp, err := wire.NewBuilder().Response(true).Build()
+	resp, err := wire.NewMessageBuilder().Response(true).Build()
 	require.NoError(t, err)
 	c.Observe(server, resp) // must not panic / set state.
 
@@ -186,7 +186,7 @@ func TestClientObserveIgnoresShortCookie(t *testing.T) {
 	// (zero server bytes).
 	cc := [8]byte{1, 2, 3, 4, 5, 6, 7, 8}
 	respEDNS := mustEDNS(t, wire.NewEDNSBuilder().Option(wire.NewClientCookie(cc)))
-	resp, err := wire.NewBuilder().Response(true).EDNS(respEDNS).Build()
+	resp, err := wire.NewMessageBuilder().Response(true).EDNS(respEDNS).Build()
 	require.NoError(t, err)
 	c.Observe(server, resp)
 
@@ -207,14 +207,14 @@ func TestClientRetryMissingCookie(t *testing.T) {
 
 	// Build a BADCOOKIE response with EDNS but no cookie option.
 	respEDNS := mustEDNS(t, wire.NewEDNSBuilder().ExtendedRCODE(1))
-	resp, err := wire.NewBuilder().Response(true).RCODE(7).EDNS(respEDNS).Build()
+	resp, err := wire.NewMessageBuilder().Response(true).RCODE(7).EDNS(respEDNS).Build()
 	require.NoError(t, err)
 	ok, err := c.Retry(server, resp)
 	require.False(t, ok)
 	require.ErrorIs(t, err, cookies.ErrCookieMissing)
 
 	// And BADCOOKIE without any EDNS at all: also missing.
-	resp2, err := wire.NewBuilder().Response(true).RCODE(7).Build()
+	resp2, err := wire.NewMessageBuilder().Response(true).RCODE(7).Build()
 	require.NoError(t, err)
 	// Without OPT the extended rcode is just the low 4 bits = 7, not 23,
 	// so Retry returns ok=false, nil — exercises the early-return branch.
@@ -237,7 +237,7 @@ func TestClientRetryShortServerCookie(t *testing.T) {
 	respEDNS := mustEDNS(t, wire.NewEDNSBuilder().
 		ExtendedRCODE(1).
 		Option(wire.NewClientCookie(cc)))
-	resp, err := wire.NewBuilder().Response(true).RCODE(7).EDNS(respEDNS).Build()
+	resp, err := wire.NewMessageBuilder().Response(true).RCODE(7).EDNS(respEDNS).Build()
 	require.NoError(t, err)
 	ok, err := c.Retry(server, resp)
 	require.False(t, ok)
@@ -256,7 +256,7 @@ func TestClientObserveSkipsNonCookieOptions(t *testing.T) {
 	// Build EDNS with only an extended-error option (not a cookie).
 	ede := wire.NewExtendedError(0, "")
 	respEDNS := mustEDNS(t, wire.NewEDNSBuilder().Option(ede))
-	resp, err := wire.NewBuilder().Response(true).EDNS(respEDNS).Build()
+	resp, err := wire.NewMessageBuilder().Response(true).EDNS(respEDNS).Build()
 	require.NoError(t, err)
 	c.Observe(server, resp) // must not crash / set cache.
 

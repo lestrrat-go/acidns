@@ -32,7 +32,7 @@ func rateLimitMkInner() acidns.Handler {
 	return acidns.HandlerFunc(func(_ context.Context, w acidns.ResponseWriter, q wire.Message) {
 		ans := wire.NewRecord(q.Questions()[0].Name(), time.Minute,
 			rdata.MustNewA(netip.MustParseAddr("203.0.113.1")))
-		resp, _ := wire.NewBuilder().
+		resp, _ := wire.NewMessageBuilder().
 			ID(q.ID()).
 			Response(true).
 			Question(q.Questions()[0]).
@@ -44,7 +44,7 @@ func rateLimitMkInner() acidns.Handler {
 
 func rateLimitMkQuery(t *testing.T) wire.Message {
 	t.Helper()
-	q, err := wire.NewBuilder().
+	q, err := wire.NewMessageBuilder().
 		ID(1).
 		Question(wire.NewQuestion(wire.MustParseName("example.com"), rrtype.A)).
 		Build()

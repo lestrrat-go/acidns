@@ -17,7 +17,7 @@ import (
 func TestAXFRRefusedOverUDP(t *testing.T) {
 	t.Parallel()
 	a := newAuth(t)
-	q, _ := wire.NewBuilder().
+	q, _ := wire.NewMessageBuilder().
 		ID(1).
 		Question(wire.NewQuestion(wire.MustParseName("example.com"), rrtype.AXFR)).
 		Build()
@@ -29,7 +29,7 @@ func TestAXFRRefusedOverUDP(t *testing.T) {
 func TestAXFRNotAuthForOtherZone(t *testing.T) {
 	t.Parallel()
 	a := newAuth(t)
-	q, _ := wire.NewBuilder().
+	q, _ := wire.NewMessageBuilder().
 		ID(1).
 		Question(wire.NewQuestion(wire.MustParseName("example.org"), rrtype.AXFR)).
 		Build()
@@ -61,7 +61,7 @@ func TestAXFROverTCP(t *testing.T) {
 	ex, err := acidns.NewTCPExchanger(ctrl.Addr())
 	require.NoError(t, err)
 
-	q, _ := wire.NewBuilder().
+	q, _ := wire.NewMessageBuilder().
 		ID(0xa1f1).
 		Question(wire.NewQuestion(wire.MustParseName("example.com"), rrtype.AXFR)).
 		Build()

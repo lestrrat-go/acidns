@@ -33,7 +33,7 @@ func TestTCPServerEcho(t *testing.T) {
 	h := acidns.HandlerFunc(func(_ context.Context, w acidns.ResponseWriter, q wire.Message) {
 		ans := wire.NewRecord(q.Questions()[0].Name(), time.Minute,
 			rdata.MustNewA(netip.MustParseAddr("203.0.113.88")))
-		resp, _ := wire.NewBuilder().
+		resp, _ := wire.NewMessageBuilder().
 			ID(q.ID()).
 			Response(true).
 			Question(q.Questions()[0]).
@@ -126,7 +126,7 @@ func TestTCPServerCancelsHandlerOnShutdown(t *testing.T) {
 	require.NoError(t, err)
 	defer c.Close()
 
-	q, _ := wire.NewBuilder().
+	q, _ := wire.NewMessageBuilder().
 		ID(1).
 		Question(wire.NewQuestion(wire.MustParseName("example.com"), rrtype.A)).
 		Build()
@@ -239,7 +239,7 @@ func TestTCPServerNoTruncation(t *testing.T) {
 	t.Parallel()
 
 	h := acidns.HandlerFunc(func(_ context.Context, w acidns.ResponseWriter, q wire.Message) {
-		b := wire.NewBuilder().
+		b := wire.NewMessageBuilder().
 			ID(q.ID()).
 			Response(true).
 			Question(q.Questions()[0])
@@ -259,7 +259,7 @@ func TestTCPServerNoTruncation(t *testing.T) {
 	ex, err := acidns.NewTCPExchanger(ctrl.Addr())
 	require.NoError(t, err)
 
-	q, _ := wire.NewBuilder().
+	q, _ := wire.NewMessageBuilder().
 		ID(1).
 		Question(wire.NewQuestion(wire.MustParseName("example.com"), rrtype.TXT)).
 		Build()

@@ -19,7 +19,7 @@ import (
 
 func mkMessage(t *testing.T) []byte {
 	t.Helper()
-	m, err := wire.NewBuilder().
+	m, err := wire.NewMessageBuilder().
 		ID(0xbeef).
 		Question(wire.NewQuestion(wire.MustParseName("example.com"), rrtype.A)).
 		Build()

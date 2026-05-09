@@ -354,7 +354,7 @@ func (r *resolver) resolve(ctx context.Context, name wire.Name, t rrtype.Type) (
 	if err != nil {
 		return nil, err
 	}
-	b := wire.NewBuilder().
+	b := wire.NewMessageBuilder().
 		ID(id).
 		RecursionDesired(true).
 		Question(wire.NewQuestion(name, t))
@@ -455,7 +455,7 @@ func (r *resolver) specialUseAnswer(name wire.Name, t rrtype.Type) (*Answer, boo
 }
 
 func synthMessage(name wire.Name, t rrtype.Type, records []wire.Record, rcode wire.RCODE) wire.Message {
-	b := wire.NewBuilder().
+	b := wire.NewMessageBuilder().
 		ID(0).
 		Response(true).
 		RecursionDesired(true).

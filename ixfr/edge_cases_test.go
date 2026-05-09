@@ -90,7 +90,7 @@ func TestStartFirstReadError(t *testing.T) {
 // TestStartFirstNotSOA covers the "stream must begin with SOA" branch.
 func TestStartFirstNotSOA(t *testing.T) {
 	t.Parallel()
-	resp, err := wire.NewBuilder().
+	resp, err := wire.NewMessageBuilder().
 		ID(1).Response(true).
 		Answer(aRR("foo.example.com", "192.0.2.1")).
 		Build()
@@ -121,7 +121,7 @@ func (s *firstThenErrStream) Close() error { return nil }
 func TestStartSecondReadError(t *testing.T) {
 	t.Parallel()
 	// First message has only a single SOA record, then stream errors.
-	resp, err := wire.NewBuilder().ID(1).Response(true).Answer(soaRR(100)).Build()
+	resp, err := wire.NewMessageBuilder().ID(1).Response(true).Answer(soaRR(100)).Build()
 	require.NoError(t, err)
 	sentinel := errors.New("stream torn down")
 	ex := &errStreamExchangerOpens{s: &firstThenErrStream{first: resp, err: sentinel}}
@@ -134,7 +134,7 @@ func TestStartSecondReadError(t *testing.T) {
 // the bracketing SOAs match each other but not the client's serial.
 func TestStartEmptyAXFRFallback(t *testing.T) {
 	t.Parallel()
-	resp, err := wire.NewBuilder().
+	resp, err := wire.NewMessageBuilder().
 		ID(1).Response(true).
 		Answer(soaRR(100)).
 		Answer(soaRR(100)).
@@ -168,7 +168,7 @@ func TestStartEmptyAXFRFallback(t *testing.T) {
 // when the server emits a second matching SOA.
 func TestStartUpToDateTwoSOAs(t *testing.T) {
 	t.Parallel()
-	resp, err := wire.NewBuilder().
+	resp, err := wire.NewMessageBuilder().
 		ID(1).Response(true).
 		Answer(soaRR(50)).
 		Answer(soaRR(50)).
@@ -190,7 +190,7 @@ func TestStartUpToDateTwoSOAs(t *testing.T) {
 // newer per RFC 1982 — invalid.
 func TestStartInvalidSOAPair(t *testing.T) {
 	t.Parallel()
-	resp, err := wire.NewBuilder().
+	resp, err := wire.NewMessageBuilder().
 		ID(1).Response(true).
 		Answer(soaRR(100)).
 		Answer(soaRR(200)).
@@ -209,7 +209,7 @@ func TestNextAXFRReadError(t *testing.T) {
 	// Build a response with leading SOA + non-SOA record so init sets
 	// KindAXFRFallback and pushes both records back. Then we exhaust
 	// the pushback and the next stream read must fail.
-	resp, err := wire.NewBuilder().
+	resp, err := wire.NewMessageBuilder().
 		ID(1).Response(true).
 		Answer(soaRR(100)).
 		Answer(aRR("foo.example.com", "192.0.2.1")).
@@ -240,7 +240,7 @@ func TestNextIncrementalUnexpectedAfterClosing(t *testing.T) {
 	zone := wire.MustParseName("example.com")
 	removed := aRR("a.example.com", "192.0.2.1")
 	added := aRR("b.example.com", "192.0.2.2")
-	resp, err := wire.NewBuilder().
+	resp, err := wire.NewMessageBuilder().
 		ID(1).Response(true).
 		Answer(soaRR(101)). // newSOA
 		Answer(soaRR(100)). // sub-diff start
@@ -275,7 +275,7 @@ func TestNextIncrementalAfterDoneEOF(t *testing.T) {
 	zone := wire.MustParseName("example.com")
 	removed := aRR("a.example.com", "192.0.2.1")
 	added := aRR("b.example.com", "192.0.2.2")
-	resp, err := wire.NewBuilder().
+	resp, err := wire.NewMessageBuilder().
 		ID(1).Response(true).
 		Answer(soaRR(101)).
 		Answer(soaRR(100)).
@@ -312,7 +312,7 @@ func TestNextIncrementalAfterDoneEOF(t *testing.T) {
 func TestNextIncrementalReadRemovedError(t *testing.T) {
 	t.Parallel()
 	zone := wire.MustParseName("example.com")
-	first, err := wire.NewBuilder().
+	first, err := wire.NewMessageBuilder().
 		ID(1).Response(true).
 		Answer(soaRR(101)). // newSOA
 		Answer(soaRR(100)). // sub-diff start (gets pushed back)
@@ -339,7 +339,7 @@ func TestNextIncrementalReadRemovedError(t *testing.T) {
 func TestNextIncrementalReadAddedError(t *testing.T) {
 	t.Parallel()
 	zone := wire.MustParseName("example.com")
-	first, err := wire.NewBuilder().
+	first, err := wire.NewMessageBuilder().
 		ID(1).Response(true).
 		Answer(soaRR(101)).
 		Answer(soaRR(100)).
@@ -364,7 +364,7 @@ func TestNextIncrementalReadAddedError(t *testing.T) {
 func TestNextIncrementalNoClosingSOA(t *testing.T) {
 	t.Parallel()
 	zone := wire.MustParseName("example.com")
-	resp, err := wire.NewBuilder().
+	resp, err := wire.NewMessageBuilder().
 		ID(1).Response(true).
 		Answer(soaRR(101)).
 		Answer(soaRR(100)).
@@ -389,14 +389,14 @@ func TestNextIncrementalNoClosingSOA(t *testing.T) {
 func TestNextIncrementalMultiMessage(t *testing.T) {
 	t.Parallel()
 	zone := wire.MustParseName("example.com")
-	msg1, err := wire.NewBuilder().
+	msg1, err := wire.NewMessageBuilder().
 		ID(1).Response(true).
 		Answer(soaRR(101)).
 		Answer(soaRR(100)).
 		Answer(aRR("a.example.com", "192.0.2.1")).
 		Build()
 	require.NoError(t, err)
-	msg2, err := wire.NewBuilder().
+	msg2, err := wire.NewMessageBuilder().
 		ID(1).Response(true).
 		Answer(soaRR(101)).
 		Answer(aRR("b.example.com", "192.0.2.2")).
@@ -424,13 +424,13 @@ func TestNextIncrementalMultiMessage(t *testing.T) {
 func TestRecReaderRcodeError(t *testing.T) {
 	t.Parallel()
 	zone := wire.MustParseName("example.com")
-	msg1, err := wire.NewBuilder().
+	msg1, err := wire.NewMessageBuilder().
 		ID(1).Response(true).
 		Answer(soaRR(101)).
 		Answer(soaRR(100)).
 		Build()
 	require.NoError(t, err)
-	msg2, err := wire.NewBuilder().
+	msg2, err := wire.NewMessageBuilder().
 		ID(1).Response(true).RCODE(wire.RCODEServFail).
 		Build()
 	require.NoError(t, err)
@@ -447,7 +447,7 @@ func TestRecReaderRcodeError(t *testing.T) {
 // TestRcodeErrorAtInit covers the rcode-check inside init's first read.
 func TestRcodeErrorAtInit(t *testing.T) {
 	t.Parallel()
-	resp, err := wire.NewBuilder().
+	resp, err := wire.NewMessageBuilder().
 		ID(1).Response(true).RCODE(wire.RCODERefused).
 		Build()
 	require.NoError(t, err)
@@ -466,7 +466,7 @@ func TestSerialWrapAroundIncremental(t *testing.T) {
 	zone := wire.MustParseName("example.com")
 	const oldSerial uint32 = 0xFFFFFFF0
 	const newSerial uint32 = 5 // wraps; per RFC 1982 newSerial > oldSerial
-	resp, err := wire.NewBuilder().
+	resp, err := wire.NewMessageBuilder().
 		ID(1).Response(true).
 		Answer(soaRR(newSerial)).
 		Answer(soaRR(oldSerial)).
@@ -499,7 +499,7 @@ func TestSerialWrapAroundIncremental(t *testing.T) {
 // flow through Start without error).
 func TestWithTimeoutOption(t *testing.T) {
 	t.Parallel()
-	resp, err := wire.NewBuilder().
+	resp, err := wire.NewMessageBuilder().
 		ID(1).Response(true).
 		Answer(soaRR(50)).
 		Build()

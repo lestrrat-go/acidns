@@ -18,7 +18,7 @@ import (
 type fakeResolver struct{ records []wire.Record }
 
 func (f *fakeResolver) Resolve(_ context.Context, _ wire.Name, _ rrtype.Type) (*acidns.Answer, error) {
-	raw, _ := wire.NewBuilder().Response(true).Build()
+	raw, _ := wire.NewMessageBuilder().Response(true).Build()
 	return acidns.NewAnswer(wire.Question{}, f.records, raw), nil
 }
 

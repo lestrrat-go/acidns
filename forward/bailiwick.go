@@ -101,7 +101,7 @@ func filterBailiwick(qname wire.Name, resp wire.Message) wire.Message {
 		}
 	}
 
-	b := wire.NewBuilder().ID(resp.ID()).Flags(resp.Flags())
+	b := wire.NewMessageBuilder().ID(resp.ID()).Flags(resp.Flags())
 	for _, qq := range resp.Questions() {
 		b = b.Question(qq)
 	}

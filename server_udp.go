@@ -323,7 +323,7 @@ func (w *udpResponseWriter) WriteMsg(m wire.Message) error {
 		// client can still classify the response. AA and AD describe
 		// statements about the answer data — they do not hold over a
 		// stripped body, so clear them.
-		b := wire.NewBuilder().
+		b := wire.NewMessageBuilder().
 			ID(m.ID()).
 			Flags(m.Flags().
 				WithTruncated(true).

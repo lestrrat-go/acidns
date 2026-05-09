@@ -29,7 +29,7 @@ func (r *recordingExchanger) Exchange(_ context.Context, q wire.Message) (wire.M
 
 func newEmptyResponse(t *testing.T, qname wire.Name, qtype rrtype.Type) wire.Message {
 	t.Helper()
-	m, err := wire.NewBuilder().
+	m, err := wire.NewMessageBuilder().
 		ID(7).
 		Response(true).
 		RCODE(wire.RCODENoError).
@@ -361,7 +361,7 @@ func (s *authorityStripper) Lookup(ctx context.Context, qname wire.Name, qtype r
 	if m.Flags().RCODE() != wire.RCODENoError || len(m.Answers()) > 0 {
 		return m, nil
 	}
-	b := wire.NewBuilder().
+	b := wire.NewMessageBuilder().
 		ID(m.ID()).
 		Response(true).
 		RCODE(m.Flags().RCODE()).
@@ -389,7 +389,7 @@ func (s *sigStripper) Lookup(ctx context.Context, qname wire.Name, qtype rrtype.
 	if !qname.Equal(s.target) || qtype != s.qtype {
 		return m, nil
 	}
-	b := wire.NewBuilder().
+	b := wire.NewMessageBuilder().
 		ID(m.ID()).
 		Response(true).
 		RCODE(m.Flags().RCODE()).

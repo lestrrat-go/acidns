@@ -98,7 +98,7 @@ func (b *Builder) Build() (wire.Message, error) {
 	if err != nil {
 		return wire.Message{}, err
 	}
-	mb := wire.NewBuilder().
+	mb := wire.NewMessageBuilder().
 		ID(id).
 		Opcode(wire.OpcodeUpdate).
 		Question(wire.NewQuestion(b.zone, rrtype.SOA))

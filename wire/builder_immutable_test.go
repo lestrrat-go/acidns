@@ -18,7 +18,7 @@ import (
 // Builder.Answer call could grow the underlying array in place.
 func TestBuilderBuildSnapshotsAnswers(t *testing.T) {
 	t.Parallel()
-	b := wire.NewBuilder().
+	b := wire.NewMessageBuilder().
 		ID(1).
 		Question(wire.NewQuestion(wire.MustParseName("a.test."), rrtype.A)).
 		Answer(wire.NewRecord(

@@ -93,7 +93,7 @@ func TestUDP0x20OutboundHasMixedCase(t *testing.T) {
 
 func mkUDPQuery(t *testing.T, qname string) wire.Message {
 	t.Helper()
-	q, err := wire.NewBuilder().
+	q, err := wire.NewMessageBuilder().
 		ID(0x1234).
 		RecursionDesired(true).
 		Question(wire.NewQuestion(wire.MustParseName(qname), rrtype.A)).
@@ -133,7 +133,7 @@ func startCaseEchoServer(t *testing.T, preserveCase bool) netip.AddrPort {
 			if !preserveCase {
 				respQ = wire.NewQuestionClass(qq.Name(), qq.Type(), qq.Class())
 			}
-			respMsg, _ := wire.NewBuilder().
+			respMsg, _ := wire.NewMessageBuilder().
 				ID(req.ID()).
 				Response(true).
 				Question(respQ).

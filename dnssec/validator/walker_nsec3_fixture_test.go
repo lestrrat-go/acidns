@@ -39,7 +39,7 @@ func (s *nsec3Source) Lookup(_ context.Context, qname wire.Name, qtype rrtype.Ty
 		zone = s.findZone(qname)
 	}
 	if zone == nil {
-		return wire.NewBuilder().
+		return wire.NewMessageBuilder().
 			ID(1).
 			Response(true).
 			RCODE(wire.RCODENXDomain).
@@ -117,7 +117,7 @@ func (s *nsec3Source) buildNoDataNSEC3(z *signedZone, qname wire.Name, qtype rrt
 	rec := wire.NewRecord(owner, time.Hour,
 		rdata.MustNewNSEC3(1, flags, s.mode.iterations, s.mode.salt, next, types))
 	sig := z.signRRset([]wire.Record{rec})
-	return wire.NewBuilder().
+	return wire.NewMessageBuilder().
 		ID(1).
 		Response(true).
 		RCODE(wire.RCODENoError).
@@ -161,7 +161,7 @@ func (s *nsec3Source) buildNXDOMAINNSEC3(z *signedZone, qname wire.Name, qtype r
 	// (3) covering NSEC3 for *.encloser.
 	wcOwner, wcRec := s.coveringNSEC3(z, wildcard, flags)
 
-	b := wire.NewBuilder().
+	b := wire.NewMessageBuilder().
 		ID(1).
 		Response(true).
 		RCODE(wire.RCODENXDomain).

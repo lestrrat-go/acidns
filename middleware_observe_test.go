@@ -35,7 +35,7 @@ func TestNewObservedCapturesEvent(t *testing.T) {
 	inner := acidns.HandlerFunc(func(_ context.Context, w acidns.ResponseWriter, q wire.Message) {
 		ans := wire.NewRecord(q.Questions()[0].Name(), 30*time.Second,
 			rdata.MustNewA(netip.MustParseAddr("203.0.113.7")))
-		resp, _ := wire.NewBuilder().
+		resp, _ := wire.NewMessageBuilder().
 			ID(q.ID()).
 			Response(true).
 			Question(q.Questions()[0]).
@@ -54,7 +54,7 @@ func TestNewObservedCapturesEvent(t *testing.T) {
 		mu.Unlock()
 	})
 
-	q, err := wire.NewBuilder().
+	q, err := wire.NewMessageBuilder().
 		ID(0xdead).
 		Question(wire.NewQuestion(wire.MustParseName("example.com"), rrtype.A)).
 		Build()
@@ -82,7 +82,7 @@ func TestNewObservedNilObsReturnsInner(t *testing.T) {
 	})
 	wrapped := acidns.NewObserved(inner, nil)
 
-	q, err := wire.NewBuilder().
+	q, err := wire.NewMessageBuilder().
 		ID(1).
 		Question(wire.NewQuestion(wire.MustParseName("example.com"), rrtype.A)).
 		Build()

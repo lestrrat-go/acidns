@@ -23,7 +23,7 @@ type chainHandler struct {
 
 func (h chainHandler) ServeDNS(_ context.Context, w acidns.ResponseWriter, q wire.Message) {
 	question := q.Questions()[0]
-	b := wire.NewBuilder().
+	b := wire.NewMessageBuilder().
 		ID(q.ID()).
 		Response(true).
 		Authoritative(true).
@@ -148,7 +148,7 @@ type selectiveServfailDialer struct {
 func (d selectiveServfailDialer) Exchange(ctx context.Context, server netip.AddrPort, q wire.Message) (wire.Message, error) {
 	if server == d.target {
 		question := q.Questions()[0]
-		resp, _ := wire.NewBuilder().
+		resp, _ := wire.NewMessageBuilder().
 			ID(q.ID()).
 			Response(true).
 			RCODE(wire.RCODEServFail).
@@ -250,7 +250,7 @@ func TestQueryTimeoutSurvivesContextRespect(t *testing.T) {
 	slow := acidns.HandlerFunc(func(_ context.Context, w acidns.ResponseWriter, q wire.Message) {
 		time.Sleep(100 * time.Millisecond)
 		question := q.Questions()[0]
-		resp, _ := wire.NewBuilder().
+		resp, _ := wire.NewMessageBuilder().
 			ID(q.ID()).
 			Response(true).
 			Authoritative(true).

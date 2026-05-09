@@ -286,7 +286,7 @@ func TestExchangerSourceLookupBuildErrorPathUnreachable(t *testing.T) {
 	// a valid wire.Question — but we can still drive the success path
 	// through with various option combinations to cover the remainder.
 	qname := wire.MustParseName("foo.example.")
-	resp, _ := wire.NewBuilder().ID(1).Response(true).
+	resp, _ := wire.NewMessageBuilder().ID(1).Response(true).
 		RCODE(wire.RCODENoError).
 		Question(wire.NewQuestion(qname, rrtype.A)).
 		Build()

@@ -31,7 +31,7 @@ func TestMessageWithEDNS(t *testing.T) {
 
 	e := mustEDNS(t, wire.NewEDNSBuilder().UDPSize(4096).DO(true))
 	q := wire.NewQuestion(wirebb.MustParse("example.com"), rrtype.A)
-	m, err := wire.NewBuilder().
+	m, err := wire.NewMessageBuilder().
 		ID(1).
 		RecursionDesired(true).
 		Question(q).
@@ -57,7 +57,7 @@ func TestEDNSRoundTrip(t *testing.T) {
 		Version(0).
 		Option(cookie))
 	q := wire.NewQuestion(wirebb.MustParse("example.com"), rrtype.A)
-	m, err := wire.NewBuilder().
+	m, err := wire.NewMessageBuilder().
 		ID(0xbeef).
 		RecursionDesired(true).
 		Question(q).

@@ -14,7 +14,7 @@ import (
 // newQuery builds a minimal valid query message with the given ID.
 func newQuery(t *testing.T, id uint16) wire.Message {
 	t.Helper()
-	q, err := wire.NewBuilder().
+	q, err := wire.NewMessageBuilder().
 		ID(id).
 		RecursionDesired(true).
 		Question(wire.NewQuestion(wire.MustParseName("example.com"), rrtype.A)).
@@ -125,7 +125,7 @@ func TestExchangeIDMismatch(t *testing.T) {
 	t.Parallel()
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		// Build a response that is well-formed but uses a different ID.
-		resp, err := wire.NewBuilder().
+		resp, err := wire.NewMessageBuilder().
 			ID(0xbeef). // does not match the query (0x4567)
 			Response(true).
 			Question(wire.NewQuestion(wire.MustParseName("example.com"), rrtype.A)).

@@ -138,7 +138,7 @@ func (h *dohHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		// Handler returned without writing — emit a SERVFAIL so the
 		// client sees a deterministic outcome rather than a hung HTTP
 		// connection. RFC 8484 has no notion of "no answer."
-		fb, _ := wire.NewBuilder().ID(q.ID()).Response(true).RCODE(wire.RCODEServFail).Build()
+		fb, _ := wire.NewMessageBuilder().ID(q.ID()).Response(true).RCODE(wire.RCODEServFail).Build()
 		_ = rw.WriteMsg(fb)
 	}
 }

@@ -39,7 +39,7 @@ func cookieMkInner() acidns.Handler {
 	return acidns.HandlerFunc(func(_ context.Context, w acidns.ResponseWriter, q wire.Message) {
 		ans := wire.NewRecord(q.Questions()[0].Name(), 60*time.Second,
 			rdata.MustNewA(netip.MustParseAddr("203.0.113.99")))
-		resp, _ := wire.NewBuilder().
+		resp, _ := wire.NewMessageBuilder().
 			ID(q.ID()).
 			Response(true).
 			Question(q.Questions()[0]).
@@ -79,7 +79,7 @@ func TestCookiesPassThroughForNonCookieClient(t *testing.T) {
 	srv := newCookiesServer(t)
 	h := acidns.NewCookies(cookieMkInner(), srv)
 
-	q, err := wire.NewBuilder().
+	q, err := wire.NewMessageBuilder().
 		ID(1).
 		Question(wire.NewQuestion(wire.MustParseName("example.com"), rrtype.A)).
 		Build()
@@ -100,7 +100,7 @@ func TestCookiesAttachesServerCookieOnFirstContact(t *testing.T) {
 
 	cc := [8]byte{1, 2, 3, 4, 5, 6, 7, 8}
 	clientOpt := wire.NewClientCookie(cc)
-	q, err := wire.NewBuilder().
+	q, err := wire.NewMessageBuilder().
 		ID(2).
 		Question(wire.NewQuestion(wire.MustParseName("example.com"), rrtype.A)).
 		EDNS(mustEDNS(t, wire.NewEDNSBuilder().Option(clientOpt))).
@@ -127,7 +127,7 @@ func TestCookiesAcceptsValidServerCookie(t *testing.T) {
 	cookieOpt, err := wire.NewClientServerCookie(cc, sc)
 	require.NoError(t, err)
 
-	q, err := wire.NewBuilder().
+	q, err := wire.NewMessageBuilder().
 		ID(3).
 		Question(wire.NewQuestion(wire.MustParseName("example.com"), rrtype.A)).
 		EDNS(mustEDNS(t, wire.NewEDNSBuilder().Option(cookieOpt))).
@@ -157,7 +157,7 @@ func TestCookiesRejectsInvalidServerCookieWithBADCOOKIE(t *testing.T) {
 	cookieOpt, err := wire.NewClientServerCookie(cc, bogus)
 	require.NoError(t, err)
 
-	q, err := wire.NewBuilder().
+	q, err := wire.NewMessageBuilder().
 		ID(4).
 		Question(wire.NewQuestion(wire.MustParseName("example.com"), rrtype.A)).
 		EDNS(mustEDNS(t, wire.NewEDNSBuilder().Option(cookieOpt))).
@@ -187,7 +187,7 @@ func TestCookiesRejectsInvalidServerCookieWithBADCOOKIE(t *testing.T) {
 func largeAnswerInner() acidns.Handler {
 	return acidns.HandlerFunc(func(_ context.Context, w acidns.ResponseWriter, q wire.Message) {
 		qq := q.Questions()[0]
-		bldr := wire.NewBuilder().
+		bldr := wire.NewMessageBuilder().
 			ID(q.ID()).
 			Response(true).
 			Question(qq)
@@ -212,7 +212,7 @@ func TestCookiesLargeResponseGateUDPTruncates(t *testing.T) {
 	h := acidns.NewCookies(largeAnswerInner(), srv,
 		acidns.WithRequireCookieForLargeResponse(true, 512))
 
-	q, err := wire.NewBuilder().
+	q, err := wire.NewMessageBuilder().
 		ID(10).
 		Question(wire.NewQuestion(wire.MustParseName("example.com"), rrtype.TXT)).
 		Build()
@@ -235,7 +235,7 @@ func TestCookiesLargeResponseGateTCPPassesThrough(t *testing.T) {
 	h := acidns.NewCookies(largeAnswerInner(), srv,
 		acidns.WithRequireCookieForLargeResponse(true, 512))
 
-	q, err := wire.NewBuilder().
+	q, err := wire.NewMessageBuilder().
 		ID(11).
 		Question(wire.NewQuestion(wire.MustParseName("example.com"), rrtype.TXT)).
 		Build()
@@ -264,7 +264,7 @@ func TestCookiesLargeResponseGateValidCookieAllowsLarge(t *testing.T) {
 	cookieOpt, err := wire.NewClientServerCookie(cc, sc)
 	require.NoError(t, err)
 
-	q, err := wire.NewBuilder().
+	q, err := wire.NewMessageBuilder().
 		ID(12).
 		Question(wire.NewQuestion(wire.MustParseName("example.com"), rrtype.TXT)).
 		EDNS(mustEDNS(t, wire.NewEDNSBuilder().Option(cookieOpt))).
@@ -294,7 +294,7 @@ func TestCookiesBadCookieEchoesRequestorUDPSize(t *testing.T) {
 	require.NoError(t, err)
 
 	const requestedUDPSize uint16 = 4096
-	q, err := wire.NewBuilder().
+	q, err := wire.NewMessageBuilder().
 		ID(13).
 		Question(wire.NewQuestion(wire.MustParseName("example.com"), rrtype.A)).
 		EDNS(mustEDNS(t, wire.NewEDNSBuilder().UDPSize(requestedUDPSize).Option(cookieOpt))).

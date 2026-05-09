@@ -54,7 +54,7 @@ func (f *fakeUpstream) Exchange(_ context.Context, q wire.Message) (wire.Message
 }
 
 func answer(q wire.Message, ttl time.Duration, addr netip.Addr) wire.Message {
-	a, _ := wire.NewBuilder().
+	a, _ := wire.NewMessageBuilder().
 		ID(q.ID()).
 		Response(true).
 		RecursionDesired(q.Flags().RecursionDesired()).
@@ -71,7 +71,7 @@ func nxdomain(q wire.Message, soaTTL, soaMin time.Duration) wire.Message {
 		wire.MustParseName("hostmaster.example."),
 		1, time.Hour, time.Minute, 24*time.Hour, soaMin,
 	)
-	a, _ := wire.NewBuilder().
+	a, _ := wire.NewMessageBuilder().
 		ID(q.ID()).
 		Response(true).
 		RecursionDesired(q.Flags().RecursionDesired()).
@@ -89,7 +89,7 @@ func nodata(q wire.Message, soaTTL, soaMin time.Duration) wire.Message {
 		wire.MustParseName("hostmaster.example."),
 		1, time.Hour, time.Minute, 24*time.Hour, soaMin,
 	)
-	a, _ := wire.NewBuilder().
+	a, _ := wire.NewMessageBuilder().
 		ID(q.ID()).
 		Response(true).
 		RecursionDesired(q.Flags().RecursionDesired()).
@@ -102,7 +102,7 @@ func nodata(q wire.Message, soaTTL, soaMin time.Duration) wire.Message {
 
 func clientQuery(t *testing.T, name string, qtype rrtype.Type) wire.Message {
 	t.Helper()
-	q, err := wire.NewBuilder().
+	q, err := wire.NewMessageBuilder().
 		ID(0xabcd).
 		RecursionDesired(true).
 		Question(wire.NewQuestion(wire.MustParseName(name), qtype)).
@@ -259,7 +259,7 @@ func TestServFailNotCached(t *testing.T) {
 	t.Parallel()
 	upstream := &fakeUpstream{
 		handler: func(q wire.Message) wire.Message {
-			a, _ := wire.NewBuilder().
+			a, _ := wire.NewMessageBuilder().
 				ID(q.ID()).
 				Response(true).
 				RCODE(wire.RCODEServFail).
@@ -381,7 +381,7 @@ func TestNonQueryOpcodeRejectedNotImp(t *testing.T) {
 	h, err := forward.New(forward.WithUpstream(up))
 	require.NoError(t, err)
 
-	q, err := wire.NewBuilder().
+	q, err := wire.NewMessageBuilder().
 		ID(0xbeef).
 		Opcode(wire.OpcodeUpdate).
 		RecursionDesired(true).
@@ -408,7 +408,7 @@ func TestZeroQuestionsRejectedFormErr(t *testing.T) {
 	h, err := forward.New(forward.WithUpstream(up))
 	require.NoError(t, err)
 
-	q, err := wire.NewBuilder().ID(0x1234).RecursionDesired(true).Build()
+	q, err := wire.NewMessageBuilder().ID(0x1234).RecursionDesired(true).Build()
 	require.NoError(t, err)
 
 	w := &captureWriter{}
@@ -428,7 +428,7 @@ func TestMultipleQuestionsRejectedFormErr(t *testing.T) {
 	h, err := forward.New(forward.WithUpstream(up))
 	require.NoError(t, err)
 
-	q, err := wire.NewBuilder().
+	q, err := wire.NewMessageBuilder().
 		ID(0x1234).
 		RecursionDesired(true).
 		Question(wire.NewQuestion(wire.MustParseName("a.example."), rrtype.A)).
@@ -457,7 +457,7 @@ func TestEDNSPreservedAndForwarded(t *testing.T) {
 				sawUDPSize.Store(uint32(e.UDPSize()))
 			}
 			respEDNS := mustEDNS(t, wire.NewEDNSBuilder().UDPSize(4096).DO(true))
-			a, _ := wire.NewBuilder().
+			a, _ := wire.NewMessageBuilder().
 				ID(q.ID()).
 				Response(true).
 				RecursionDesired(q.Flags().RecursionDesired()).
@@ -474,7 +474,7 @@ func TestEDNSPreservedAndForwarded(t *testing.T) {
 	require.NoError(t, err)
 
 	clientEDNS := mustEDNS(t, wire.NewEDNSBuilder().UDPSize(1232).DO(true))
-	q, err := wire.NewBuilder().
+	q, err := wire.NewMessageBuilder().
 		ID(0xc0de).
 		RecursionDesired(true).
 		Question(wire.NewQuestion(wire.MustParseName("example.com"), rrtype.A)).
@@ -501,7 +501,7 @@ func TestNXDomainNoSOAFallsBackToMaxNeg(t *testing.T) {
 	t.Parallel()
 	up := &fakeUpstream{
 		handler: func(q wire.Message) wire.Message {
-			a, _ := wire.NewBuilder().
+			a, _ := wire.NewMessageBuilder().
 				ID(q.ID()).
 				Response(true).
 				RecursionDesired(q.Flags().RecursionDesired()).
@@ -534,7 +534,7 @@ func TestNoDataNoSOANotCached(t *testing.T) {
 	t.Parallel()
 	up := &fakeUpstream{
 		handler: func(q wire.Message) wire.Message {
-			a, _ := wire.NewBuilder().
+			a, _ := wire.NewMessageBuilder().
 				ID(q.ID()).
 				Response(true).
 				RecursionDesired(q.Flags().RecursionDesired()).
@@ -767,7 +767,7 @@ func TestUDPTCPFallbackOnTruncated(t *testing.T) {
 	t.Parallel()
 	udpHandler := acidns.HandlerFunc(func(_ context.Context, w acidns.ResponseWriter, q wire.Message) {
 		// Build a truncated empty response.
-		m, _ := wire.NewBuilder().
+		m, _ := wire.NewMessageBuilder().
 			ID(q.ID()).
 			Response(true).
 			RecursionDesired(q.Flags().RecursionDesired()).

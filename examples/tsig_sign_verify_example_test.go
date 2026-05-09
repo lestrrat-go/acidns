@@ -15,7 +15,7 @@ func Example_tsig_sign_verify() {
 	// algorithm, and shared secret out of band.
 	key := tsig.NewKey(wire.MustParseName("example-key"), tsig.HMACSHA256, []byte("a-shared-secret-of-at-least-256-bits"))
 
-	q, _ := wire.NewBuilder().
+	q, _ := wire.NewMessageBuilder().
 		ID(1).
 		Question(wire.NewQuestion(wire.MustParseName("example.com"), rrtype.A)).
 		Build()

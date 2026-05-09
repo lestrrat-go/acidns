@@ -9,7 +9,7 @@ import (
 
 func Example_dnsmsg_build() {
 	// Builder constructs a Message piece-by-piece. Setters chain.
-	q, err := wire.NewBuilder().
+	q, err := wire.NewMessageBuilder().
 		ID(0x1234).
 		RecursionDesired(true).
 		Question(wire.NewQuestion(wire.MustParseName("example.com"), rrtype.A)).

@@ -71,7 +71,7 @@ func TestMessageEqual_DiffersOnTTL(t *testing.T) {
 func TestMessageEqual_EDNSOptionsOrderInsensitive(t *testing.T) {
 	t.Parallel()
 	q := wire.NewQuestion(wire.MustParseName("example.com"), rrtype.A)
-	a, _ := wire.NewBuilder().
+	a, _ := wire.NewMessageBuilder().
 		ID(1).
 		RecursionDesired(true).
 		Question(q).
@@ -79,7 +79,7 @@ func TestMessageEqual_EDNSOptionsOrderInsensitive(t *testing.T) {
 			Option(wire.NewNSID(nil)).
 			Option(wire.NewKeyTag(19036)))).
 		Build()
-	b, _ := wire.NewBuilder().
+	b, _ := wire.NewMessageBuilder().
 		ID(1).
 		RecursionDesired(true).
 		Question(q).
@@ -93,8 +93,8 @@ func TestMessageEqual_EDNSOptionsOrderInsensitive(t *testing.T) {
 func TestMessageEqual_DiffersOnEDNSPresence(t *testing.T) {
 	t.Parallel()
 	q := wire.NewQuestion(wire.MustParseName("example.com"), rrtype.A)
-	a, _ := wire.NewBuilder().ID(1).Question(q).Build()
-	b, _ := wire.NewBuilder().ID(1).Question(q).
+	a, _ := wire.NewMessageBuilder().ID(1).Question(q).Build()
+	b, _ := wire.NewMessageBuilder().ID(1).Question(q).
 		EDNS(mustEDNS(t, wire.NewEDNSBuilder().UDPSize(1232))).
 		Build()
 	require.False(t, wire.MessageEqual(a, b))

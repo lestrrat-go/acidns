@@ -21,7 +21,7 @@ type scriptedDialer struct {
 
 func (d scriptedDialer) Exchange(_ context.Context, server netip.AddrPort, q wire.Message) (wire.Message, error) {
 	question := q.Questions()[0]
-	b := wire.NewBuilder().ID(q.ID()).Response(true).Question(question)
+	b := wire.NewMessageBuilder().ID(q.ID()).Response(true).Question(question)
 
 	switch server {
 	case d.root:

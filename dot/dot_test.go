@@ -77,7 +77,7 @@ func startDoT(t *testing.T) (netip.AddrPort, *tls.Config) {
 				if err != nil {
 					return
 				}
-				resp, _ := wire.NewBuilder().
+				resp, _ := wire.NewMessageBuilder().
 					ID(req.ID()).
 					Response(true).
 					Question(req.Questions()[0]).
@@ -103,7 +103,7 @@ func TestDoTExchange(t *testing.T) {
 	ex, err := dot.New(addr, dot.WithTLSConfig(cfg), dot.WithServerName("127.0.0.1"))
 	require.NoError(t, err)
 
-	q, _ := wire.NewBuilder().
+	q, _ := wire.NewMessageBuilder().
 		ID(0xaa55).
 		RecursionDesired(true).
 		Question(wire.NewQuestion(wire.MustParseName("example.com"), rrtype.A)).
@@ -128,7 +128,7 @@ func TestDoTContextCancel(t *testing.T) {
 	ex, err := dot.New(addr, dot.WithServerName("127.0.0.1"))
 	require.NoError(t, err)
 
-	q, _ := wire.NewBuilder().
+	q, _ := wire.NewMessageBuilder().
 		ID(1).
 		Question(wire.NewQuestion(wire.MustParseName("example.com"), rrtype.A)).
 		Build()
@@ -207,7 +207,7 @@ func TestDoTStreamDialError(t *testing.T) {
 	ex, err := dot.New(addr, dot.WithServerName("127.0.0.1"), dot.WithTimeout(200*time.Millisecond))
 	require.NoError(t, err)
 
-	q, _ := wire.NewBuilder().
+	q, _ := wire.NewMessageBuilder().
 		ID(1).
 		Question(wire.NewQuestion(wire.MustParseName("example.com"), rrtype.A)).
 		Build()
@@ -235,7 +235,7 @@ func TestDoTStreamWriteError(t *testing.T) {
 	)
 	require.NoError(t, err)
 
-	q, _ := wire.NewBuilder().
+	q, _ := wire.NewMessageBuilder().
 		ID(1).
 		Question(wire.NewQuestion(wire.MustParseName("example.com"), rrtype.A)).
 		Build()

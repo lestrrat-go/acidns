@@ -42,7 +42,7 @@ func TestVerifyAcceptsTruncatedMAC(t *testing.T) {
 	key := NewKey(wire.MustParseName("test.key"), HMACSHA256, secret)
 	now := time.Now().Truncate(time.Second)
 
-	q, err := wire.NewBuilder().
+	q, err := wire.NewMessageBuilder().
 		ID(0xabcd).
 		Question(wire.NewQuestion(wire.MustParseName("example.com"), rrtype.A)).
 		Build()
@@ -65,7 +65,7 @@ func TestVerifyRejectsBelowFloor(t *testing.T) {
 	key := NewKey(wire.MustParseName("test.key"), HMACSHA256, secret)
 	now := time.Now().Truncate(time.Second)
 
-	q, err := wire.NewBuilder().
+	q, err := wire.NewMessageBuilder().
 		ID(0xabcd).
 		Question(wire.NewQuestion(wire.MustParseName("example.com"), rrtype.A)).
 		Build()

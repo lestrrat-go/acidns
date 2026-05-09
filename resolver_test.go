@@ -34,7 +34,7 @@ func startServer(t *testing.T, v4 []netip.Addr, v6 []netip.Addr) netip.AddrPort 
 				continue
 			}
 			q := req.Questions()[0]
-			b := wire.NewBuilder().
+			b := wire.NewMessageBuilder().
 				ID(req.ID()).
 				Response(true).
 				RecursionDesired(req.Flags().RecursionDesired()).

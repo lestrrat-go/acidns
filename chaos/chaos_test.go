@@ -27,7 +27,7 @@ func (c *captureWriter) Network() string            { return "udp" }
 
 func mustQuery(t *testing.T, name string, class rrtype.Class) wire.Message {
 	t.Helper()
-	q, err := wire.NewBuilder().
+	q, err := wire.NewMessageBuilder().
 		ID(1).
 		Question(wire.NewQuestionClass(wire.MustParseName(name), rrtype.TXT, class)).
 		Build()
@@ -75,7 +75,7 @@ func TestChaosDelegatesOnNonChaos(t *testing.T) {
 	delegated := false
 	next := acidns.HandlerFunc(func(_ context.Context, w acidns.ResponseWriter, q wire.Message) {
 		delegated = true
-		resp, _ := wire.NewBuilder().ID(q.ID()).Response(true).Build()
+		resp, _ := wire.NewMessageBuilder().ID(q.ID()).Response(true).Build()
 		_ = w.WriteMsg(resp)
 	})
 	h, err := chaos.New(chaos.WithIdentifier("foo"), chaos.WithNext(next))
@@ -123,13 +123,13 @@ func TestChaosWrongTypePassesThrough(t *testing.T) {
 	delegated := false
 	next := acidns.HandlerFunc(func(_ context.Context, w acidns.ResponseWriter, q wire.Message) {
 		delegated = true
-		resp, _ := wire.NewBuilder().ID(q.ID()).Response(true).Build()
+		resp, _ := wire.NewMessageBuilder().ID(q.ID()).Response(true).Build()
 		_ = w.WriteMsg(resp)
 	})
 	h, err := chaos.New(chaos.WithIdentifier("foo"), chaos.WithNext(next))
 	require.NoError(t, err)
 	w := &captureWriter{}
-	q, err := wire.NewBuilder().
+	q, err := wire.NewMessageBuilder().
 		ID(2).
 		Question(wire.NewQuestionClass(wire.MustParseName("id.server."), rrtype.A, rrtype.ClassCH)).
 		Build()
@@ -143,7 +143,7 @@ func TestChaosNonChaosClassWithMatchingNamePassesThrough(t *testing.T) {
 	delegated := false
 	next := acidns.HandlerFunc(func(_ context.Context, w acidns.ResponseWriter, q wire.Message) {
 		delegated = true
-		resp, _ := wire.NewBuilder().ID(q.ID()).Response(true).Build()
+		resp, _ := wire.NewMessageBuilder().ID(q.ID()).Response(true).Build()
 		_ = w.WriteMsg(resp)
 	})
 	h, err := chaos.New(chaos.WithIdentifier("foo"), chaos.WithNext(next))
@@ -181,7 +181,7 @@ func TestChaosVersionDisabledFallsThrough(t *testing.T) {
 	delegated := false
 	next := acidns.HandlerFunc(func(_ context.Context, w acidns.ResponseWriter, q wire.Message) {
 		delegated = true
-		resp, _ := wire.NewBuilder().ID(q.ID()).Response(true).Build()
+		resp, _ := wire.NewMessageBuilder().ID(q.ID()).Response(true).Build()
 		_ = w.WriteMsg(resp)
 	})
 	h, err := chaos.New(chaos.WithIdentifier("only-id"), chaos.WithNext(next))
@@ -196,7 +196,7 @@ func TestChaosNoQuestionRefused(t *testing.T) {
 	h, err := chaos.New(chaos.WithIdentifier("foo"))
 	require.NoError(t, err)
 	w := &captureWriter{}
-	q, err := wire.NewBuilder().ID(7).Build()
+	q, err := wire.NewMessageBuilder().ID(7).Build()
 	require.NoError(t, err)
 	h.ServeDNS(t.Context(), w, q)
 	require.NotNil(t, w.resp)
@@ -208,13 +208,13 @@ func TestChaosMultiQuestionDelegates(t *testing.T) {
 	delegated := false
 	next := acidns.HandlerFunc(func(_ context.Context, w acidns.ResponseWriter, q wire.Message) {
 		delegated = true
-		resp, _ := wire.NewBuilder().ID(q.ID()).Response(true).Build()
+		resp, _ := wire.NewMessageBuilder().ID(q.ID()).Response(true).Build()
 		_ = w.WriteMsg(resp)
 	})
 	h, err := chaos.New(chaos.WithIdentifier("foo"), chaos.WithNext(next))
 	require.NoError(t, err)
 	w := &captureWriter{}
-	q, err := wire.NewBuilder().
+	q, err := wire.NewMessageBuilder().
 		ID(8).
 		Question(wire.NewQuestionClass(wire.MustParseName("id.server."), rrtype.TXT, rrtype.ClassCH)).
 		Question(wire.NewQuestionClass(wire.MustParseName("hostname.bind."), rrtype.TXT, rrtype.ClassCH)).

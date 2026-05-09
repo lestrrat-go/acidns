@@ -17,7 +17,7 @@ import (
 // to install a policy that performs TSIG (RFC 3007) or SIG(0)
 // verification before admitting an update.
 func (a *Authoritative) serveUpdate(ctx context.Context, w acidns.ResponseWriter, q wire.Message) {
-	b := wire.NewBuilder().
+	b := wire.NewMessageBuilder().
 		ID(q.ID()).
 		Response(true).
 		Opcode(wire.OpcodeUpdate)

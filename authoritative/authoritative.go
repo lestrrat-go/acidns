@@ -187,7 +187,7 @@ func StreamAXFR(w acidns.ResponseWriter, q wire.Message, soa wire.Record, body [
 	}
 	question := q.Questions()[0]
 	header := func() *wire.Builder {
-		return wire.NewBuilder().
+		return wire.NewMessageBuilder().
 			ID(q.ID()).
 			Response(true).
 			RecursionDesired(q.Flags().RecursionDesired()).
@@ -238,7 +238,7 @@ func StreamAXFR(w acidns.ResponseWriter, q wire.Message, soa wire.Record, body [
 func (a *Authoritative) serveAXFR(ctx context.Context, w acidns.ResponseWriter, q wire.Message) {
 	question := q.Questions()[0]
 	header := func() *wire.Builder {
-		return wire.NewBuilder().
+		return wire.NewMessageBuilder().
 			ID(q.ID()).
 			Response(true).
 			RecursionDesired(q.Flags().RecursionDesired()).
@@ -282,7 +282,7 @@ func estimateRecordSize(rec wire.Record) int {
 }
 
 func (a *Authoritative) answer(q wire.Message) wire.Message {
-	b := wire.NewBuilder().
+	b := wire.NewMessageBuilder().
 		ID(q.ID()).
 		Response(true).
 		RecursionDesired(q.Flags().RecursionDesired())
@@ -389,7 +389,7 @@ func mustBuild(b *wire.Builder, q wire.Message) wire.Message {
 	if err == nil {
 		return m
 	}
-	fb := wire.NewBuilder().
+	fb := wire.NewMessageBuilder().
 		ID(q.ID()).
 		Response(true).
 		RecursionDesired(q.Flags().RecursionDesired())
@@ -405,7 +405,7 @@ func mustBuild(b *wire.Builder, q wire.Message) wire.Message {
 		return out
 	}
 	// Last resort — must not hang the caller; this should never trigger.
-	out, _ := wire.NewBuilder().Response(true).RCODE(wire.RCODEServFail).Build()
+	out, _ := wire.NewMessageBuilder().Response(true).RCODE(wire.RCODEServFail).Build()
 	return out
 }
 

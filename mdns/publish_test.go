@@ -94,7 +94,7 @@ func TestAnnounceConflictAborts(t *testing.T) {
 
 	// Inject a conflicting answer: someone else owns Host with a
 	// different address.
-	conflict, _ := wire.NewBuilder().
+	conflict, _ := wire.NewMessageBuilder().
 		Response(true).
 		Authoritative(true).
 		Answer(wire.NewRecord(wire.MustParseName("tv-living-room.local."),

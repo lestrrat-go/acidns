@@ -32,7 +32,7 @@ func rrlPositiveAnswer() acidns.Handler {
 	return acidns.HandlerFunc(func(_ context.Context, w acidns.ResponseWriter, q wire.Message) {
 		ans := wire.NewRecord(q.Questions()[0].Name(), 60*time.Second,
 			rdata.MustNewA(netip.MustParseAddr("203.0.113.7")))
-		resp, _ := wire.NewBuilder().
+		resp, _ := wire.NewMessageBuilder().
 			ID(q.ID()).
 			Response(true).
 			Question(q.Questions()[0]).
@@ -44,7 +44,7 @@ func rrlPositiveAnswer() acidns.Handler {
 
 func rrlNXDomain() acidns.Handler {
 	return acidns.HandlerFunc(func(_ context.Context, w acidns.ResponseWriter, q wire.Message) {
-		resp, _ := wire.NewBuilder().
+		resp, _ := wire.NewMessageBuilder().
 			ID(q.ID()).
 			Response(true).
 			Question(q.Questions()[0]).
@@ -56,7 +56,7 @@ func rrlNXDomain() acidns.Handler {
 
 func rrlQuery(t *testing.T, name string) wire.Message {
 	t.Helper()
-	q, err := wire.NewBuilder().
+	q, err := wire.NewMessageBuilder().
 		ID(1).
 		Question(wire.NewQuestion(wire.MustParseName(name), rrtype.A)).
 		Build()

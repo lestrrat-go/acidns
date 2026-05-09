@@ -87,7 +87,7 @@ func Example_dot_exchange() {
 				if err != nil {
 					return
 				}
-				resp, _ := wire.NewBuilder().
+				resp, _ := wire.NewMessageBuilder().
 					ID(req.ID()).Response(true).
 					Question(req.Questions()[0]).
 					Answer(wire.NewRecord(req.Questions()[0].Name(), time.Minute,
@@ -111,7 +111,7 @@ func Example_dot_exchange() {
 		return
 	}
 
-	q, _ := wire.NewBuilder().
+	q, _ := wire.NewMessageBuilder().
 		ID(0xaa55).RecursionDesired(true).
 		Question(wire.NewQuestion(wire.MustParseName("example.com"), rrtype.A)).
 		Build()

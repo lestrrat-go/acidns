@@ -31,7 +31,7 @@ func TestNotifySignedQueryHasTSIG(t *testing.T) {
 		[]byte("0123456789abcdef0123456789abcdef"),
 	)
 
-	resp, err := wire.NewBuilder().
+	resp, err := wire.NewMessageBuilder().
 		ID(1).
 		Opcode(wire.OpcodeNotify).
 		Response(true).
@@ -76,7 +76,7 @@ func (r *roundTripExchanger) Exchange(_ context.Context, q wire.Message) (wire.M
 		return wire.Message{}, err
 	}
 	r.got = raw
-	resp, err := wire.NewBuilder().ID(q.ID()).Opcode(wire.OpcodeNotify).Response(true).Build()
+	resp, err := wire.NewMessageBuilder().ID(q.ID()).Opcode(wire.OpcodeNotify).Response(true).Build()
 	return resp, err
 }
 

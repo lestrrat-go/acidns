@@ -66,7 +66,7 @@ func TestIXFRTSIGSignedQueryAndVerifiedResponse(t *testing.T) {
 		fudge: 5 * time.Minute,
 		makeMsg: func(reqMAC []byte) []wire.Message {
 			// Up-to-date response: a single SOA matching the client's serial.
-			resp, err := wire.NewBuilder().
+			resp, err := wire.NewMessageBuilder().
 				ID(1).Response(true).
 				Answer(soaRR(100)).
 				Build()
@@ -112,7 +112,7 @@ func TestIXFRTSIGUnsignedFirstFails(t *testing.T) {
 		now:   now,
 		fudge: 5 * time.Minute,
 		makeMsg: func(_ []byte) []wire.Message {
-			resp, err := wire.NewBuilder().ID(1).Response(true).Answer(soaRR(100)).Build()
+			resp, err := wire.NewMessageBuilder().ID(1).Response(true).Answer(soaRR(100)).Build()
 			require.NoError(t, err)
 			return []wire.Message{resp}
 		},

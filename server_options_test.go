@@ -15,7 +15,7 @@ import (
 type echoHandler struct{}
 
 func (echoHandler) ServeDNS(_ context.Context, w acidns.ResponseWriter, q wire.Message) {
-	resp, _ := wire.NewBuilder().ID(q.ID()).Response(true).Question(q.Questions()[0]).Build()
+	resp, _ := wire.NewMessageBuilder().ID(q.ID()).Response(true).Question(q.Questions()[0]).Build()
 	_ = w.WriteMsg(resp)
 }
 
@@ -34,7 +34,7 @@ func TestUDPListenWithOptions(t *testing.T) {
 
 	ex, err := acidns.NewUDPExchanger(ctrl.Addr())
 	require.NoError(t, err)
-	q, _ := wire.NewBuilder().
+	q, _ := wire.NewMessageBuilder().
 		ID(1).
 		Question(wire.NewQuestion(wire.MustParseName("example.com"), rrtype.A)).
 		Build()
@@ -59,7 +59,7 @@ func TestTCPListenWithOptions(t *testing.T) {
 
 	ex, err := acidns.NewTCPExchanger(ctrl.Addr())
 	require.NoError(t, err)
-	q, _ := wire.NewBuilder().
+	q, _ := wire.NewMessageBuilder().
 		ID(2).
 		Question(wire.NewQuestion(wire.MustParseName("example.com"), rrtype.A)).
 		Build()

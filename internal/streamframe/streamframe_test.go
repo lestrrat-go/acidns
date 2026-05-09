@@ -16,7 +16,7 @@ import (
 
 func mustQuery(t *testing.T, id uint16, name string) wire.Message {
 	t.Helper()
-	q, err := wire.NewBuilder().
+	q, err := wire.NewMessageBuilder().
 		ID(id).
 		Question(wire.NewQuestion(wire.MustParseName(name), rrtype.A)).
 		Build()
@@ -26,7 +26,7 @@ func mustQuery(t *testing.T, id uint16, name string) wire.Message {
 
 func mustResponse(t *testing.T, id uint16, name string) wire.Message {
 	t.Helper()
-	q, err := wire.NewBuilder().
+	q, err := wire.NewMessageBuilder().
 		ID(id).
 		Response(true).
 		Question(wire.NewQuestion(wire.MustParseName(name), rrtype.A)).

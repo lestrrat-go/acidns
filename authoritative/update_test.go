@@ -65,7 +65,7 @@ func TestUpdateAddRRset(t *testing.T) {
 	require.Equal(t, wire.RCODENoError, resp.Flags().RCODE())
 
 	// Verify the new record appears in subsequent queries.
-	q, _ := wire.NewBuilder().
+	q, _ := wire.NewMessageBuilder().
 		ID(2).
 		Question(wire.NewQuestion(wire.MustParseName("blog.example.com"), rrtype.A)).
 		Build()
@@ -91,7 +91,7 @@ func TestUpdateDeleteRRset(t *testing.T) {
 	require.Equal(t, wire.RCODENoError, resp.Flags().RCODE())
 
 	// Now www.example.com should NXDOMAIN (we don't keep namesExist after delete) or NODATA.
-	q, _ := wire.NewBuilder().
+	q, _ := wire.NewMessageBuilder().
 		ID(3).
 		Question(wire.NewQuestion(wire.MustParseName("www.example.com"), rrtype.A)).
 		Build()
@@ -184,7 +184,7 @@ func TestUpdateConcurrentWithQuery(t *testing.T) {
 			if err != nil {
 				return
 			}
-			q, _ := wire.NewBuilder().
+			q, _ := wire.NewMessageBuilder().
 				ID(1).
 				Question(wire.NewQuestion(wire.MustParseName("blog.example.com"), rrtype.A)).
 				Build()

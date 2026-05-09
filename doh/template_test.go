@@ -47,7 +47,7 @@ func templateProbeServer(t *testing.T) *httptest.Server {
 			http.Error(w, err.Error(), http.StatusBadRequest)
 			return
 		}
-		resp, _ := wire.NewBuilder().
+		resp, _ := wire.NewMessageBuilder().
 			ID(req.ID()).
 			Response(true).
 			Question(req.Questions()[0]).
@@ -83,7 +83,7 @@ func pathProbeServer(t *testing.T) *httptest.Server {
 		}
 		body, _ := io.ReadAll(r.Body)
 		_ = body
-		resp, _ := wire.NewBuilder().
+		resp, _ := wire.NewMessageBuilder().
 			ID(req.ID()).
 			Response(true).
 			Question(req.Questions()[0]).
@@ -105,7 +105,7 @@ func TestGETFormTemplate(t *testing.T) {
 	ex, err := doh.New(endpoint, doh.WithMethod(doh.MethodGET), doh.WithInsecure())
 	require.NoError(t, err)
 
-	q, _ := wire.NewBuilder().
+	q, _ := wire.NewMessageBuilder().
 		ID(0xface).
 		Question(wire.NewQuestion(wire.MustParseName("example.com"), rrtype.A)).
 		Build()
@@ -123,7 +123,7 @@ func TestGETPathTemplate(t *testing.T) {
 	ex, err := doh.New(endpoint, doh.WithMethod(doh.MethodGET), doh.WithInsecure())
 	require.NoError(t, err)
 
-	q, _ := wire.NewBuilder().
+	q, _ := wire.NewMessageBuilder().
 		ID(0xbeef).
 		Question(wire.NewQuestion(wire.MustParseName("example.com"), rrtype.A)).
 		Build()
@@ -141,7 +141,7 @@ func TestGETLegacyAppendQuery(t *testing.T) {
 	ex, err := doh.New(endpoint, doh.WithMethod(doh.MethodGET), doh.WithInsecure())
 	require.NoError(t, err)
 
-	q, _ := wire.NewBuilder().
+	q, _ := wire.NewMessageBuilder().
 		ID(0xc0de).
 		Question(wire.NewQuestion(wire.MustParseName("example.com"), rrtype.A)).
 		Build()

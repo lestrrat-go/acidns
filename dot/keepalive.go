@@ -284,7 +284,7 @@ func ensureKeepAliveOption(q wire.Message) wire.Message {
 		}
 	}
 
-	b := wire.NewBuilder().
+	b := wire.NewMessageBuilder().
 		ID(q.ID()).
 		Flags(q.Flags())
 	for _, qq := range q.Questions() {

@@ -37,7 +37,7 @@ func TestPadEncrypted_AlreadyPadded_NoChange(t *testing.T) {
 	// Add a 5-byte Padding option ourselves.
 	preset, err := wire.NewEDNSOption(wire.EDNSOptionPadding, []byte{0, 0, 0, 0, 0})
 	require.NoError(t, err)
-	b := wire.NewBuilder().
+	b := wire.NewMessageBuilder().
 		ID(q.ID()).
 		Flags(q.Flags()).
 		Question(q.Questions()[0]).
@@ -57,7 +57,7 @@ func TestPadEncrypted_AlreadyPadded_NoChange(t *testing.T) {
 func TestPadEncrypted_NoEDNS_AddsOPT(t *testing.T) {
 	t.Parallel()
 	// Build a query with NO EDNS.
-	bare, err := wire.NewBuilder().
+	bare, err := wire.NewMessageBuilder().
 		ID(0xbeef).
 		RecursionDesired(true).
 		Question(wire.NewQuestion(wire.MustParseName("example.com"), rrtype.A)).
@@ -78,7 +78,7 @@ func TestPadEncrypted_NoEDNS_AddsOPT(t *testing.T) {
 
 func TestPadEncrypted_PreservesExistingOptions(t *testing.T) {
 	t.Parallel()
-	q := wire.NewBuilder().
+	q := wire.NewMessageBuilder().
 		ID(1).
 		RecursionDesired(true).
 		Question(wire.NewQuestion(wire.MustParseName("example.com"), rrtype.A)).

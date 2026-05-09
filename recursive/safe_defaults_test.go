@@ -28,7 +28,7 @@ func (w *noopWriter) Network() string               { return "udp" }
 func TestServeDNSRefusedWithoutRD(t *testing.T) {
 	t.Parallel()
 	r := mustRecursive(t, recursive.WithRoots(netip.MustParseAddrPort("127.0.0.1:1")))
-	q, err := wire.NewBuilder().
+	q, err := wire.NewMessageBuilder().
 		ID(1).
 		Question(wire.NewQuestion(wire.MustParseName("a.test."), rrtype.A)).
 		Build()
@@ -50,7 +50,7 @@ func TestServeDNSAllowNoRDOptIn(t *testing.T) {
 		recursive.WithMaxIterations(1),
 		recursive.WithAllowNoRD(true),
 	)
-	q, err := wire.NewBuilder().
+	q, err := wire.NewMessageBuilder().
 		ID(2).
 		Question(wire.NewQuestion(wire.MustParseName("a.test."), rrtype.A)).
 		Build()

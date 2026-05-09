@@ -33,7 +33,7 @@ func TestUDPResponseWriterAddrAccessors(t *testing.T) {
 			local:   w.LocalAddr(),
 			network: w.Network(),
 		}
-		resp, _ := wire.NewBuilder().
+		resp, _ := wire.NewMessageBuilder().
 			ID(q.ID()).
 			Response(true).
 			Question(q.Questions()[0]).
@@ -51,7 +51,7 @@ func TestUDPResponseWriterAddrAccessors(t *testing.T) {
 
 	ex, err := acidns.NewUDPExchanger(ctrl.Addr())
 	require.NoError(t, err)
-	q, _ := wire.NewBuilder().
+	q, _ := wire.NewMessageBuilder().
 		ID(0xab12).
 		Question(wire.NewQuestion(wire.MustParseName("example.com"), rrtype.A)).
 		Build()
@@ -76,7 +76,7 @@ func TestUDPWriteMsgTwiceFails(t *testing.T) {
 
 	errCh := make(chan error, 1)
 	h := acidns.HandlerFunc(func(_ context.Context, w acidns.ResponseWriter, q wire.Message) {
-		resp, _ := wire.NewBuilder().
+		resp, _ := wire.NewMessageBuilder().
 			ID(q.ID()).
 			Response(true).
 			Question(q.Questions()[0]).
@@ -95,7 +95,7 @@ func TestUDPWriteMsgTwiceFails(t *testing.T) {
 
 	ex, err := acidns.NewUDPExchanger(ctrl.Addr())
 	require.NoError(t, err)
-	q, _ := wire.NewBuilder().
+	q, _ := wire.NewMessageBuilder().
 		ID(0xab13).
 		Question(wire.NewQuestion(wire.MustParseName("example.com"), rrtype.A)).
 		Build()
@@ -128,7 +128,7 @@ func TestTCPResponseWriterAddrAccessors(t *testing.T) {
 			local:   w.LocalAddr(),
 			network: w.Network(),
 		}
-		resp, _ := wire.NewBuilder().
+		resp, _ := wire.NewMessageBuilder().
 			ID(q.ID()).
 			Response(true).
 			Question(q.Questions()[0]).
@@ -146,7 +146,7 @@ func TestTCPResponseWriterAddrAccessors(t *testing.T) {
 
 	ex, err := acidns.NewTCPExchanger(ctrl.Addr())
 	require.NoError(t, err)
-	q, _ := wire.NewBuilder().
+	q, _ := wire.NewMessageBuilder().
 		ID(0xcd34).
 		Question(wire.NewQuestion(wire.MustParseName("example.com"), rrtype.A)).
 		Build()
@@ -173,7 +173,7 @@ func TestTCPWriteMsgTooLarge(t *testing.T) {
 
 	errCh := make(chan error, 1)
 	h := acidns.HandlerFunc(func(_ context.Context, w acidns.ResponseWriter, q wire.Message) {
-		b := wire.NewBuilder().
+		b := wire.NewMessageBuilder().
 			ID(q.ID()).
 			Response(true).
 			Question(q.Questions()[0])
@@ -208,7 +208,7 @@ func TestTCPWriteMsgTooLarge(t *testing.T) {
 	require.NoError(t, err)
 	defer func() { _ = conn.Close() }()
 
-	q, _ := wire.NewBuilder().
+	q, _ := wire.NewMessageBuilder().
 		ID(0xff01).
 		Question(wire.NewQuestion(wire.MustParseName("example.com"), rrtype.TXT)).
 		Build()
@@ -294,7 +294,7 @@ func TestKeepAlivePreservesExistingOption(t *testing.T) {
 	ex, err := acidns.NewTCPKeepAliveExchanger(addr)
 	require.NoError(t, err)
 
-	q, err := wire.NewBuilder().
+	q, err := wire.NewMessageBuilder().
 		ID(0x9999).
 		RecursionDesired(true).
 		Question(wire.NewQuestion(wire.MustParseName("example.com"), rrtype.A)).
@@ -368,7 +368,7 @@ func TestKeepAliveIDMismatch(t *testing.T) {
 		if err != nil {
 			return
 		}
-		bad, _ := wire.NewBuilder().
+		bad, _ := wire.NewMessageBuilder().
 			ID(req.ID() ^ 0xffff).
 			Response(true).
 			Question(req.Questions()[0]).
@@ -417,7 +417,7 @@ func TestUDPDialFailure(t *testing.T) {
 	// "0.0.0.0:0" is invalid as a destination; DialContext will report.
 	ex, err := acidns.NewUDPExchanger(netip.MustParseAddrPort("0.0.0.0:0"))
 	require.NoError(t, err)
-	q, _ := wire.NewBuilder().ID(1).
+	q, _ := wire.NewMessageBuilder().ID(1).
 		Question(wire.NewQuestion(wire.MustParseName("example.com"), rrtype.A)).
 		Build()
 	ctx, cancel := context.WithTimeout(t.Context(), 200*time.Millisecond)
@@ -453,7 +453,7 @@ func TestUDPDropsMalformedThenDelivers(t *testing.T) {
 		// Garbage first.
 		_, _ = pc.WriteTo([]byte{0x00}, src)
 		// Then a valid response.
-		good, _ := wire.NewBuilder().
+		good, _ := wire.NewMessageBuilder().
 			ID(req.ID()).
 			Response(true).
 			Question(req.Questions()[0]).
@@ -466,7 +466,7 @@ func TestUDPDropsMalformedThenDelivers(t *testing.T) {
 
 	ex, err := acidns.NewUDPExchanger(addr, acidns.WithUDPTimeout(2*time.Second))
 	require.NoError(t, err)
-	q, _ := wire.NewBuilder().
+	q, _ := wire.NewMessageBuilder().
 		ID(0x4321).
 		Question(wire.NewQuestion(wire.MustParseName("example.com"), rrtype.A)).
 		Build()
@@ -496,7 +496,7 @@ func TestTCFallbackOnTruncation(t *testing.T) {
 			if err != nil {
 				continue
 			}
-			resp, err := wire.NewBuilder().
+			resp, err := wire.NewMessageBuilder().
 				ID(req.ID()).
 				Response(true).
 				Truncated(true).
@@ -537,7 +537,7 @@ func TestTCFallbackOnTruncation(t *testing.T) {
 				if err != nil {
 					return
 				}
-				resp, _ := wire.NewBuilder().
+				resp, _ := wire.NewMessageBuilder().
 					ID(req.ID()).
 					Response(true).
 					Question(req.Questions()[0]).
@@ -605,7 +605,7 @@ func TestRetryEventuallySucceeds(t *testing.T) {
 			if err != nil {
 				continue
 			}
-			resp, _ := wire.NewBuilder().
+			resp, _ := wire.NewMessageBuilder().
 				ID(req.ID()).
 				Response(true).
 				Question(req.Questions()[0]).

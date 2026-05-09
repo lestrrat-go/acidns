@@ -56,7 +56,7 @@ func Example_ixfr_transfer() {
 	added := wire.NewRecord(wire.MustParseName("b.example.com"), 60*time.Second,
 		rdata.MustNewA(netip.MustParseAddr("192.0.2.2")))
 
-	resp, err := wire.NewBuilder().
+	resp, err := wire.NewMessageBuilder().
 		ID(1).Response(true).
 		Answer(soa(101)). // newSOA
 		Answer(soa(100)). // sub-diff start (old serial)

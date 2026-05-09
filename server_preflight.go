@@ -82,7 +82,7 @@ func formErrReply(q wire.Message) (wire.Message, bool) {
 		WithResponse(true).
 		WithRecursionAvailable(false).
 		WithRCODE(wire.RCODEFormErr)
-	b := wire.NewBuilder().ID(q.ID()).Flags(flags)
+	b := wire.NewMessageBuilder().ID(q.ID()).Flags(flags)
 	if e, ok := q.EDNS(); ok {
 		size := min(e.UDPSize(), formErrUDPSize)
 		ed, err := wire.NewEDNSBuilder().

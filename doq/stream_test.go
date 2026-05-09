@@ -24,7 +24,7 @@ func TestDoQStream(t *testing.T) {
 	)
 	require.NoError(t, err)
 
-	q, _ := wire.NewBuilder().
+	q, _ := wire.NewMessageBuilder().
 		ID(0xa1b2).
 		Question(wire.NewQuestion(wire.MustParseName("example.com"), rrtype.A)).
 		Build()

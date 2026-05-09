@@ -37,7 +37,7 @@ func Send(ctx context.Context, ex acidns.Exchanger, zone wire.Name, opts ...Opti
 	if err != nil {
 		return wire.Message{}, err
 	}
-	b := wire.NewBuilder().
+	b := wire.NewMessageBuilder().
 		ID(id).
 		Opcode(wire.OpcodeNotify).
 		Authoritative(true).

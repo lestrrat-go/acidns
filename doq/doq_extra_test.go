@@ -126,7 +126,7 @@ func writeFrame(stream *quic.Stream, payload []byte) {
 
 func buildQuery(t *testing.T, id uint16) wire.Message {
 	t.Helper()
-	q, err := wire.NewBuilder().
+	q, err := wire.NewMessageBuilder().
 		ID(id).
 		RecursionDesired(true).
 		Question(wire.NewQuestion(wire.MustParseName("example.com"), rrtype.A)).
@@ -137,7 +137,7 @@ func buildQuery(t *testing.T, id uint16) wire.Message {
 
 func buildAnswer(t *testing.T, id uint16, q wire.Question) wire.Message {
 	t.Helper()
-	resp, err := wire.NewBuilder().
+	resp, err := wire.NewMessageBuilder().
 		ID(id).
 		Response(true).
 		Question(q).
@@ -771,7 +771,7 @@ func TestExchangeMarshalError(t *testing.T) {
 	t.Parallel()
 	huge := make([]byte, 0x10001)
 	rd := rdata.NewUnknown(rrtype.Type(65000), huge)
-	bad, err := wire.NewBuilder().
+	bad, err := wire.NewMessageBuilder().
 		ID(1).
 		Question(wire.NewQuestion(wire.MustParseName("example.com"), rrtype.A)).
 		Answer(wire.NewRecord(wire.MustParseName("example.com"), time.Minute, rd)).

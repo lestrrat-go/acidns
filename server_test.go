@@ -26,7 +26,7 @@ func startUDP(t *testing.T, h acidns.Handler) (*acidns.UDPController, context.Ca
 
 func mkQuery(t *testing.T, name string, rt rrtype.Type) wire.Message {
 	t.Helper()
-	q, err := wire.NewBuilder().
+	q, err := wire.NewMessageBuilder().
 		ID(0x1234).
 		RecursionDesired(true).
 		Question(wire.NewQuestion(wire.MustParseName(name), rt)).
@@ -41,7 +41,7 @@ func TestUDPServerEcho(t *testing.T) {
 	h := acidns.HandlerFunc(func(_ context.Context, w acidns.ResponseWriter, q wire.Message) {
 		ans := wire.NewRecord(q.Questions()[0].Name(), time.Minute,
 			rdata.MustNewA(netip.MustParseAddr("203.0.113.77")))
-		resp, _ := wire.NewBuilder().
+		resp, _ := wire.NewMessageBuilder().
 			ID(q.ID()).
 			Response(true).
 			RecursionAvailable(true).
@@ -86,7 +86,7 @@ func TestUDPServerTruncation(t *testing.T) {
 	// Build a response so large it can't fit in the default 512-byte UDP
 	// limit: 50 long TXT records.
 	h := acidns.HandlerFunc(func(_ context.Context, w acidns.ResponseWriter, q wire.Message) {
-		b := wire.NewBuilder().
+		b := wire.NewMessageBuilder().
 			ID(q.ID()).
 			Response(true).
 			Question(q.Questions()[0])
@@ -107,7 +107,7 @@ func TestUDPServerTruncation(t *testing.T) {
 	require.NoError(t, err)
 
 	// Send a query WITHOUT EDNS so the server caps at 512 bytes.
-	q, err := wire.NewBuilder().
+	q, err := wire.NewMessageBuilder().
 		ID(1).
 		Question(wire.NewQuestion(wire.MustParseName("example.com"), rrtype.TXT)).
 		Build()
@@ -123,7 +123,7 @@ func TestUDPServerEDNSPayloadSize(t *testing.T) {
 	t.Parallel()
 
 	h := acidns.HandlerFunc(func(_ context.Context, w acidns.ResponseWriter, q wire.Message) {
-		b := wire.NewBuilder().
+		b := wire.NewMessageBuilder().
 			ID(q.ID()).
 			Response(true).
 			Question(q.Questions()[0])
@@ -150,7 +150,7 @@ func TestUDPServerEDNSPayloadSize(t *testing.T) {
 	require.NoError(t, err)
 
 	// Query with EDNS advertising 4096 bytes — server should not truncate.
-	q, err := wire.NewBuilder().
+	q, err := wire.NewMessageBuilder().
 		ID(1).
 		Question(wire.NewQuestion(wire.MustParseName("example.com"), rrtype.TXT)).
 		EDNS(mustEDNS(t, wire.NewEDNSBuilder().UDPSize(4096))).

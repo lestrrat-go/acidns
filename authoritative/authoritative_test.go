@@ -72,7 +72,7 @@ func (w *inProcWriter) Network() string {
 
 func ask(t *testing.T, a acidns.Handler, name string, rt rrtype.Type) wire.Message {
 	t.Helper()
-	q, err := wire.NewBuilder().
+	q, err := wire.NewMessageBuilder().
 		ID(1).
 		RecursionDesired(true).
 		Question(wire.NewQuestion(wire.MustParseName(name), rt)).

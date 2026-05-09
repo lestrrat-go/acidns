@@ -126,7 +126,7 @@ func (a *acl) permit(src netip.Addr) bool {
 }
 
 func (a *acl) refuse(w ResponseWriter, q wire.Message) {
-	b := wire.NewBuilder().
+	b := wire.NewMessageBuilder().
 		ID(q.ID()).
 		Response(true).
 		RecursionDesired(q.Flags().RecursionDesired()).
@@ -139,7 +139,7 @@ func (a *acl) refuse(w ResponseWriter, q wire.Message) {
 		// Builder failure is implausible for a fixed-shape REFUSED;
 		// fall back to a header-only SERVFAIL so the peer at least
 		// sees something rather than a silent drop.
-		fb, ferr := wire.NewBuilder().ID(q.ID()).Response(true).RCODE(wire.RCODEServFail).Build()
+		fb, ferr := wire.NewMessageBuilder().ID(q.ID()).Response(true).RCODE(wire.RCODEServFail).Build()
 		if ferr == nil {
 			_ = w.WriteMsg(fb)
 		}

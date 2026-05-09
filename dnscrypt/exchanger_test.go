@@ -66,7 +66,7 @@ func TestExchangerEndToEnd(t *testing.T) {
 	ex, err := dnscrypt.New(addr, cert)
 	require.NoError(t, err)
 
-	q, _ := wire.NewBuilder().
+	q, _ := wire.NewMessageBuilder().
 		ID(0xface).
 		Question(wire.NewQuestion(wire.MustParseName("example.com"), rrtype.A)).
 		Build()
@@ -100,7 +100,7 @@ func buildFakeResponse(query []byte, _ *dnscrypt.Cert, resolverSK [32]byte) ([]b
 	if err != nil {
 		return nil, err
 	}
-	resp, err := wire.NewBuilder().
+	resp, err := wire.NewMessageBuilder().
 		ID(req.ID()).
 		Response(true).
 		Question(req.Questions()[0]).

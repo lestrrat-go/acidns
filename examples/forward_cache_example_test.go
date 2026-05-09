@@ -21,7 +21,7 @@ type stubUpstream struct {
 
 func (s *stubUpstream) Exchange(_ context.Context, q wire.Message) (wire.Message, error) {
 	s.calls.Add(1)
-	resp, _ := wire.NewBuilder().
+	resp, _ := wire.NewMessageBuilder().
 		ID(q.ID()).
 		Response(true).
 		RecursionAvailable(true).
@@ -52,7 +52,7 @@ func Example_forward_cache() {
 		return
 	}
 
-	q, _ := wire.NewBuilder().
+	q, _ := wire.NewMessageBuilder().
 		ID(0xabcd).
 		RecursionDesired(true).
 		Question(wire.NewQuestion(wire.MustParseName("example.com"), rrtype.A)).

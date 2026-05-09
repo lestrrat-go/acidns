@@ -71,7 +71,7 @@ func TestIncrementalDiffEvents(t *testing.T) {
 	//   SOA(101)               // new serial mid-diff — end of removed list
 	//   added
 	//   SOA(101)               // closing bracket
-	resp, err := wire.NewBuilder().
+	resp, err := wire.NewMessageBuilder().
 		ID(1).Response(true).
 		Answer(soaRR(101)).
 		Answer(soaRR(100)).
@@ -107,7 +107,7 @@ func TestIncrementalDiffEvents(t *testing.T) {
 // already current: a single SOA record with the client's own serial.
 func TestUpToDate(t *testing.T) {
 	t.Parallel()
-	resp, err := wire.NewBuilder().
+	resp, err := wire.NewMessageBuilder().
 		ID(1).Response(true).
 		Answer(soaRR(50)).
 		Build()

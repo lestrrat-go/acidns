@@ -156,7 +156,7 @@ func Start(ctx context.Context, ex acidns.StreamExchanger, zone wire.Name, clien
 	if err != nil {
 		return nil, err
 	}
-	q, err := wire.NewBuilder().
+	q, err := wire.NewMessageBuilder().
 		ID(id).
 		Question(wire.NewQuestion(zone, rrtype.IXFR)).
 		Authority(wire.NewRecord(zone, time.Second, clientSOA)).

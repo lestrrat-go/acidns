@@ -40,7 +40,7 @@ func TestTSIGMarshalRoundtripIsStable(t *testing.T) {
 	}
 
 	// Also try with a question section (closer to a real AXFR response).
-	respQ, err := wire.NewBuilder().Response(true).
+	respQ, err := wire.NewMessageBuilder().Response(true).
 		Question(wire.NewQuestion(wire.MustParseName("example.com"), rrtype.AXFR)).
 		Answer(soa).Answer(soa).Build()
 	require.NoError(t, err)

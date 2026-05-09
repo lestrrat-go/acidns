@@ -59,7 +59,7 @@ type recordingExchanger struct{ called bool }
 
 func (r *recordingExchanger) Exchange(_ context.Context, q wire.Message) (wire.Message, error) {
 	r.called = true
-	resp, _ := wire.NewBuilder().
+	resp, _ := wire.NewMessageBuilder().
 		ID(q.ID()).
 		Response(true).
 		Question(q.Questions()[0]).

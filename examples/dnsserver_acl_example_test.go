@@ -48,7 +48,7 @@ www IN  A    192.0.2.42
 	}
 
 	// Loopback request — allowed.
-	q, _ := wire.NewBuilder().
+	q, _ := wire.NewMessageBuilder().
 		ID(1).
 		Question(wire.NewQuestion(wire.MustParseName("www.example.com"), rrtype.A)).
 		Build()

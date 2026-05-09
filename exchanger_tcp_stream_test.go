@@ -18,7 +18,7 @@ func TestTCPStream(t *testing.T) {
 	ex, err := acidns.NewTCPExchanger(addr, acidns.WithTCPTimeout(2*time.Second))
 	require.NoError(t, err)
 
-	q, err := wire.NewBuilder().
+	q, err := wire.NewMessageBuilder().
 		ID(0xc0de).
 		Question(wire.NewQuestion(wire.MustParseName("example.com"), rrtype.A)).
 		Build()
@@ -44,7 +44,7 @@ func TestTCPDialFailure(t *testing.T) {
 	t.Parallel()
 	ex, err := acidns.NewTCPExchanger(netip.MustParseAddrPort("127.0.0.1:1"))
 	require.NoError(t, err)
-	q, _ := wire.NewBuilder().ID(1).
+	q, _ := wire.NewMessageBuilder().ID(1).
 		Question(wire.NewQuestion(wire.MustParseName("example.com"), rrtype.A)).
 		Build()
 	ctx, cancel := context.WithTimeout(t.Context(), 200*time.Millisecond)

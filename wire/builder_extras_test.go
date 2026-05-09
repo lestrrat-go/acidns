@@ -18,7 +18,7 @@ func TestBuilderFullSetters(t *testing.T) {
 		rdata.MustNewA(netip.MustParseAddr("192.0.2.1")))
 	q := wire.NewQuestion(wirebb.MustParse("example.com"), rrtype.A)
 
-	m, err := wire.NewBuilder().
+	m, err := wire.NewMessageBuilder().
 		ID(0xbeef).
 		Flags(wire.Flags(0)).
 		Response(true).
@@ -54,7 +54,7 @@ func TestBuilderEDNS(t *testing.T) {
 	t.Parallel()
 	e := mustEDNS(t, wire.NewEDNSBuilder().UDPSize(4096).DO(true))
 	q := wire.NewQuestion(wirebb.MustParse("example.com"), rrtype.A)
-	m, err := wire.NewBuilder().ID(1).Question(q).EDNS(e).Build()
+	m, err := wire.NewMessageBuilder().ID(1).Question(q).EDNS(e).Build()
 	require.NoError(t, err)
 	got, ok := m.EDNS()
 	require.True(t, ok)

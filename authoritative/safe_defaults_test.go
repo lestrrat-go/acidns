@@ -24,7 +24,7 @@ func TestAXFRRefusedWithoutPolicy(t *testing.T) {
 	a, err := authoritative.New(authoritative.WithZone(z))
 	require.NoError(t, err)
 
-	q, err := wire.NewBuilder().
+	q, err := wire.NewMessageBuilder().
 		ID(1).
 		Question(wire.NewQuestion(wire.MustParseName("example.com"), rrtype.AXFR)).
 		Build()
@@ -48,7 +48,7 @@ func TestAXFRRefusedWhenPolicyDenies(t *testing.T) {
 	)
 	require.NoError(t, err)
 
-	q, err := wire.NewBuilder().
+	q, err := wire.NewMessageBuilder().
 		ID(1).
 		Question(wire.NewQuestion(wire.MustParseName("example.com"), rrtype.AXFR)).
 		Build()
@@ -67,7 +67,7 @@ func TestNotifyRefusedWithoutPolicy(t *testing.T) {
 	a, err := authoritative.New(authoritative.WithZone(z))
 	require.NoError(t, err)
 
-	q, err := wire.NewBuilder().
+	q, err := wire.NewMessageBuilder().
 		ID(1).
 		Opcode(wire.OpcodeNotify).
 		Question(wire.NewQuestion(wire.MustParseName("example.com"), rrtype.SOA)).

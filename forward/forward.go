@@ -336,7 +336,7 @@ func edsoDOBit(q wire.Message) bool {
 // per RFC 7871 §7.1.2.
 func buildForwardQuery(q wire.Message) wire.Message {
 	id, _ := newID()
-	b := wire.NewBuilder().
+	b := wire.NewMessageBuilder().
 		ID(id).
 		RecursionDesired(true).
 		CheckingDisabled(q.Flags().CheckingDisabled())
@@ -385,7 +385,7 @@ func isForwardSafeEDNSOption(code uint16) bool {
 // the authoritative-answer bit (a recursive-style answer is never
 // authoritative).
 func rebuildForClient(in, resp wire.Message) wire.Message {
-	b := wire.NewBuilder().
+	b := wire.NewMessageBuilder().
 		ID(in.ID()).
 		Response(true).
 		RecursionDesired(in.Flags().RecursionDesired()).
@@ -416,7 +416,7 @@ func rebuildForClient(in, resp wire.Message) wire.Message {
 // adjusting each TTL by the time elapsed since the entry was cached.
 func buildFromCache(in wire.Message, e entry, now time.Time) wire.Message {
 	elapsed := now.Sub(e.insertedAt)
-	b := wire.NewBuilder().
+	b := wire.NewMessageBuilder().
 		ID(in.ID()).
 		Response(true).
 		RecursionDesired(in.Flags().RecursionDesired()).
@@ -568,7 +568,7 @@ func cloneRecs(s []wire.Record) []wire.Record {
 }
 
 func buildErrorResponse(q wire.Message, code wire.RCODE) wire.Message {
-	b := wire.NewBuilder().
+	b := wire.NewMessageBuilder().
 		ID(q.ID()).
 		Response(true).
 		RecursionDesired(q.Flags().RecursionDesired()).

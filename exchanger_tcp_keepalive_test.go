@@ -92,7 +92,7 @@ func (s *keepAliveServer) handle(c net.Conn, stop <-chan struct{}) {
 		if err != nil {
 			return
 		}
-		respMsg, err := wire.NewBuilder().
+		respMsg, err := wire.NewMessageBuilder().
 			ID(q.ID()).
 			Response(true).
 			RecursionAvailable(true).
@@ -132,7 +132,7 @@ func readFull(c net.Conn, b []byte) (int, error) {
 
 func newQuery(t *testing.T, name string) wire.Message {
 	t.Helper()
-	q, err := wire.NewBuilder().
+	q, err := wire.NewMessageBuilder().
 		ID(0x4242).
 		RecursionDesired(true).
 		Question(wire.NewQuestion(wire.MustParseName(name), rrtype.A)).

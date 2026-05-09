@@ -35,7 +35,7 @@ func (s *rcodeRewriter) Lookup(ctx context.Context, qname wire.Name, qtype rrtyp
 	if m.Flags().RCODE() != wire.RCODENoError || len(m.Answers()) > 0 {
 		return m, nil
 	}
-	b := wire.NewBuilder().
+	b := wire.NewMessageBuilder().
 		ID(m.ID()).
 		Response(true).
 		RCODE(wire.RCODENXDomain).
@@ -102,7 +102,7 @@ func (s *nxdomainForger) Lookup(ctx context.Context, qname wire.Name, qtype rrty
 	qnameRec := wire.NewRecord(s.owner, time.Hour, qnameNSEC)
 	qnameSig := s.zone.signRRset([]wire.Record{qnameRec})
 
-	b := wire.NewBuilder().
+	b := wire.NewMessageBuilder().
 		ID(m.ID()).
 		Response(true).
 		RCODE(wire.RCODENXDomain).
@@ -256,7 +256,7 @@ func (s *nodataSigStripper) Lookup(ctx context.Context, qname wire.Name, qtype r
 	if m.Flags().RCODE() != wire.RCODENoError || len(m.Answers()) > 0 {
 		return m, nil
 	}
-	b := wire.NewBuilder().
+	b := wire.NewMessageBuilder().
 		ID(m.ID()).
 		Response(true).
 		RCODE(m.Flags().RCODE()).

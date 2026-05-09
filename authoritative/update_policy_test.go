@@ -49,7 +49,7 @@ func TestUpdateRefusedByDefault(t *testing.T) {
 		"unauthenticated UPDATE must be REFUSED when no policy is configured")
 
 	// And the zone state must be unchanged.
-	q, err := wire.NewBuilder().
+	q, err := wire.NewMessageBuilder().
 		ID(0xfeed).
 		Question(wire.NewQuestion(wire.MustParseName("blog.example.com"), rrtype.A)).
 		Build()

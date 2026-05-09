@@ -93,7 +93,7 @@ case rdata.MX:   fmt.Println("MX", v.Priority(), v.Target())
 
 ```go
 h := acidns.HandlerFunc(func(ctx context.Context, w acidns.ResponseWriter, q wire.Message) {
-    resp, _ := wire.NewBuilder().ID(q.ID()).Response(true).Build()
+    resp, _ := wire.NewMessageBuilder().ID(q.ID()).Response(true).Build()
     _ = w.WriteMsg(resp)
 })
 srv, err := acidns.NewUDPServer(netip.MustParseAddrPort("127.0.0.1:5353"), h)

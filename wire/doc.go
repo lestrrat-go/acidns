@@ -5,7 +5,7 @@
 // # Messages
 //
 // The Message interface represents a parsed DNS protocol message. It is
-// constructed by NewBuilder().…Build() (immutable thereafter) or by
+// constructed by NewMessageBuilder().…Build() (immutable thereafter) or by
 // Unmarshal of a byte slice. Marshal serialises a Message back to wire
 // bytes; Unmarshal parses wire bytes into a Message.
 //

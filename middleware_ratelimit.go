@@ -208,7 +208,7 @@ func (l *limiter) key(src netip.Addr) string {
 }
 
 func (l *limiter) refuse(w ResponseWriter, q wire.Message) {
-	b := wire.NewBuilder().
+	b := wire.NewMessageBuilder().
 		ID(q.ID()).
 		Response(true).
 		RecursionDesired(q.Flags().RecursionDesired()).

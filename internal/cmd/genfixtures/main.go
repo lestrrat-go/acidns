@@ -37,7 +37,7 @@ func mustEDNSResponse(q wire.Message, opts ...wire.EDNSOption) wire.Message {
 	if err != nil {
 		panic(err)
 	}
-	b := wire.NewBuilder().
+	b := wire.NewMessageBuilder().
 		ID(q.ID()).
 		Response(true).
 		RecursionDesired(q.Flags().RecursionDesired()).

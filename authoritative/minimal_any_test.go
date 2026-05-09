@@ -78,7 +78,7 @@ func TestMinimalANYNotForCHAOSClass(t *testing.T) {
 	a, err := authoritative.New(authoritative.WithZone(z))
 	require.NoError(t, err)
 
-	q, err := wire.NewBuilder().
+	q, err := wire.NewMessageBuilder().
 		ID(1).
 		Question(wire.NewQuestionClass(wire.MustParseName("www.example.com"), rrtype.ANY, rrtype.ClassCH)).
 		Build()

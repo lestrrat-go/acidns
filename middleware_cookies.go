@@ -211,7 +211,7 @@ func (g *cookieSizeGate) WriteMsg(m wire.Message) error {
 // truncate helper but lives here so the cookies middleware does not
 // leak through the rrl writer abstraction.
 func truncateForCookieGate(m wire.Message, q wire.Message) wire.Message {
-	b := wire.NewBuilder().
+	b := wire.NewMessageBuilder().
 		ID(m.ID()).
 		Flags(m.Flags().WithTruncated(true).WithResponse(true))
 	if qs := m.Questions(); len(qs) > 0 {
@@ -308,10 +308,10 @@ func buildBadCookieResponse(q wire.Message, cc [8]byte, sc []byte) wire.Message 
 
 	ed, err := eb.Build()
 	if err != nil {
-		fb, _ := wire.NewBuilder().Response(true).RCODE(wire.RCODEServFail).Build()
+		fb, _ := wire.NewMessageBuilder().Response(true).RCODE(wire.RCODEServFail).Build()
 		return fb
 	}
-	b := wire.NewBuilder().
+	b := wire.NewMessageBuilder().
 		ID(q.ID()).
 		Response(true).
 		RecursionDesired(q.Flags().RecursionDesired()).
@@ -322,7 +322,7 @@ func buildBadCookieResponse(q wire.Message, cc [8]byte, sc []byte) wire.Message 
 	}
 	out, err := b.Build()
 	if err != nil {
-		fb, _ := wire.NewBuilder().Response(true).RCODE(wire.RCODEServFail).Build()
+		fb, _ := wire.NewMessageBuilder().Response(true).RCODE(wire.RCODEServFail).Build()
 		return fb
 	}
 	return out
@@ -359,7 +359,7 @@ func attachCookieOption(m wire.Message, cc [8]byte, sc []byte) wire.Message {
 	if err != nil {
 		return m
 	}
-	b := wire.NewBuilder().
+	b := wire.NewMessageBuilder().
 		ID(m.ID()).
 		Flags(m.Flags()).
 		EDNS(ed)

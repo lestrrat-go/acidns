@@ -88,7 +88,7 @@ func startMultiDoT(t *testing.T, idleTimeout time.Duration) (netip.AddrPort, *tl
 					if idleTimeout > 0 {
 						eb = eb.Option(wire.NewTCPKeepalive(idleTimeout))
 					}
-					resp, _ := wire.NewBuilder().
+					resp, _ := wire.NewMessageBuilder().
 						ID(req.ID()).
 						Response(true).
 						Question(req.Questions()[0]).
@@ -121,7 +121,7 @@ func TestDoTKeepAliveReusesConnection(t *testing.T) {
 	require.NoError(t, err)
 
 	mkQuery := func(id uint16) wire.Message {
-		q, _ := wire.NewBuilder().
+		q, _ := wire.NewMessageBuilder().
 			ID(id).
 			Question(wire.NewQuestion(wire.MustParseName("a.example."), rrtype.A)).
 			Build()
@@ -156,7 +156,7 @@ func TestDoTKeepAliveExpiresIdleConnection(t *testing.T) {
 	require.NoError(t, err)
 
 	mkQuery := func(id uint16) wire.Message {
-		q, _ := wire.NewBuilder().
+		q, _ := wire.NewMessageBuilder().
 			ID(id).
 			Question(wire.NewQuestion(wire.MustParseName("a.example."), rrtype.A)).
 			Build()

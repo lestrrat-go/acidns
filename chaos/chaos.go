@@ -55,7 +55,7 @@ func (h *handler) ServeDNS(ctx context.Context, w acidns.ResponseWriter, q wire.
 		return
 	}
 	rec := wire.NewRecordClass(qst.Name(), rrtype.ClassCH, 0*time.Second, rd)
-	resp, err := wire.NewBuilder().
+	resp, err := wire.NewMessageBuilder().
 		ID(q.ID()).
 		Response(true).
 		Authoritative(true).
@@ -95,7 +95,7 @@ func (h *handler) delegateOrRefuse(ctx context.Context, w acidns.ResponseWriter,
 }
 
 func writeRefused(w acidns.ResponseWriter, q wire.Message) error {
-	b := wire.NewBuilder().ID(q.ID()).Response(true).RCODE(wire.RCODERefused)
+	b := wire.NewMessageBuilder().ID(q.ID()).Response(true).RCODE(wire.RCODERefused)
 	for _, qq := range q.Questions() {
 		b = b.Question(qq)
 	}

@@ -112,7 +112,7 @@ func TestPeekingWriter(t *testing.T) {
 	t.Parallel()
 	stub := &stubResponseWriter{}
 	pw := &peekingWriter{ResponseWriter: stub}
-	m, _ := wire.NewBuilder().ID(1).Response(true).Build()
+	m, _ := wire.NewMessageBuilder().ID(1).Response(true).Build()
 	require.NoError(t, pw.WriteMsg(m))
 	require.NotNil(t, pw.captured)
 }
@@ -127,7 +127,7 @@ func TestHybridFallthroughOnRefused(t *testing.T) {
 	h := hybrid{auth: auth, rec: rec}
 
 	// Out-of-zone query → auth REFUSEDs, hybrid then forwards to rec.
-	q, _ := wire.NewBuilder().
+	q, _ := wire.NewMessageBuilder().
 		ID(1).
 		Question(wire.NewQuestion(wire.MustParseName("example.org"), rrtype.A)).
 		Build()

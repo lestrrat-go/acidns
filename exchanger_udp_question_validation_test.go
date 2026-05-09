@@ -41,7 +41,7 @@ func TestUDPExchangerRejectsMismatchedQuestion(t *testing.T) {
 			spoofedQ := wire.NewQuestion(wire.MustParseName("attacker.example"), rrtype.A)
 			ans := wire.NewRecord(wire.MustParseName("attacker.example"), 60*time.Second,
 				rdata.MustNewA(netip.MustParseAddr("198.51.100.66")))
-			resp, err := wire.NewBuilder().
+			resp, err := wire.NewMessageBuilder().
 				ID(req.ID()).
 				Response(true).
 				Question(spoofedQ).
@@ -62,7 +62,7 @@ func TestUDPExchangerRejectsMismatchedQuestion(t *testing.T) {
 	ex, err := acidns.NewUDPExchanger(addr, acidns.WithUDPTimeout(300*time.Millisecond))
 	require.NoError(t, err)
 
-	q, err := wire.NewBuilder().
+	q, err := wire.NewMessageBuilder().
 		ID(0xbeef).
 		Question(wire.NewQuestion(wire.MustParseName("real.example"), rrtype.A)).
 		Build()

@@ -31,14 +31,14 @@ func TestSetRCODESplits12Bit(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 
-			q, err := wire.NewBuilder().
+			q, err := wire.NewMessageBuilder().
 				ID(1).
 				Question(wire.NewQuestion(wire.MustParseName("test.example"), rrtype.A)).
 				EDNS(mustEDNS(t, wire.NewEDNSBuilder().UDPSize(1232))).
 				Build()
 			require.NoError(t, err)
 
-			b := wire.NewBuilder().
+			b := wire.NewMessageBuilder().
 				ID(q.ID()).
 				Response(true).
 				Question(q.Questions()[0])
@@ -63,13 +63,13 @@ func TestSetRCODESplits12Bit(t *testing.T) {
 // RCODE anyway).
 func TestSetRCODENoEDNSDoesNotAttachOPT(t *testing.T) {
 	t.Parallel()
-	q, err := wire.NewBuilder().
+	q, err := wire.NewMessageBuilder().
 		ID(1).
 		Question(wire.NewQuestion(wire.MustParseName("test.example"), rrtype.A)).
 		Build()
 	require.NoError(t, err)
 
-	b := wire.NewBuilder().ID(q.ID()).Response(true).Question(q.Questions()[0])
+	b := wire.NewMessageBuilder().ID(q.ID()).Response(true).Question(q.Questions()[0])
 	b = setRCODE(b, q, wire.RCODE(23)) // BADCOOKIE
 	out, err := b.Build()
 	require.NoError(t, err)

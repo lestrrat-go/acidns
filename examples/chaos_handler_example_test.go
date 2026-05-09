@@ -35,7 +35,7 @@ func Example_chaos_handler() {
 	}
 
 	ask := func(name string) {
-		q, _ := wire.NewBuilder().
+		q, _ := wire.NewMessageBuilder().
 			ID(1).
 			Question(wire.NewQuestionClass(wire.MustParseName(name), rrtype.TXT, rrtype.ClassCH)).
 			Build()

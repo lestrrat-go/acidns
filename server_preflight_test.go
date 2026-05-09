@@ -23,7 +23,7 @@ type recordingHandler struct {
 
 func (r *recordingHandler) ServeDNS(_ context.Context, w acidns.ResponseWriter, q wire.Message) {
 	r.hits.Add(1)
-	b := wire.NewBuilder().ID(q.ID()).Response(true)
+	b := wire.NewMessageBuilder().ID(q.ID()).Response(true)
 	for _, qq := range q.Questions() {
 		b = b.Question(qq)
 	}
@@ -39,7 +39,7 @@ func TestPreflightDropsQRSetOnUDP(t *testing.T) {
 	h := &recordingHandler{}
 	ctrl, _ := startUDP(t, h)
 
-	resp, err := wire.NewBuilder().
+	resp, err := wire.NewMessageBuilder().
 		ID(0xbeef).
 		Response(true).
 		Question(wire.NewQuestion(wire.MustParseName("a.test."), rrtype.A)).
@@ -70,7 +70,7 @@ func TestPreflightFormErrOnZeroQuestionsUDP(t *testing.T) {
 	h := &recordingHandler{}
 	ctrl, _ := startUDP(t, h)
 
-	q, err := wire.NewBuilder().ID(0x4242).RecursionDesired(true).Build()
+	q, err := wire.NewMessageBuilder().ID(0x4242).RecursionDesired(true).Build()
 	require.NoError(t, err)
 	ex, err := acidns.NewUDPExchanger(ctrl.Addr())
 	require.NoError(t, err)
@@ -95,7 +95,7 @@ func TestPreflightFormErrClampsUDPSize(t *testing.T) {
 
 	ed, err := wire.NewEDNSBuilder().UDPSize(65535).Build()
 	require.NoError(t, err)
-	q, err := wire.NewBuilder().
+	q, err := wire.NewMessageBuilder().
 		ID(0x4243).
 		RecursionDesired(true).
 		EDNS(ed).

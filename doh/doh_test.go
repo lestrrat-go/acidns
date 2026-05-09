@@ -47,7 +47,7 @@ func makeServer(t *testing.T, expectedMethod string) *httptest.Server {
 			http.Error(w, err.Error(), http.StatusBadRequest)
 			return
 		}
-		resp, _ := wire.NewBuilder().
+		resp, _ := wire.NewMessageBuilder().
 			ID(req.ID()).
 			Response(true).
 			Question(req.Questions()[0]).
@@ -68,7 +68,7 @@ func TestDoHPost(t *testing.T) {
 	ex, err := doh.New(srv.URL+"/dns-query", doh.WithInsecure())
 	require.NoError(t, err)
 
-	q, _ := wire.NewBuilder().
+	q, _ := wire.NewMessageBuilder().
 		ID(0x55aa).
 		RecursionDesired(true).
 		Question(wire.NewQuestion(wire.MustParseName("example.com"), rrtype.A)).
@@ -87,7 +87,7 @@ func TestDoHGet(t *testing.T) {
 	ex, err := doh.New(srv.URL+"/dns-query", doh.WithMethod(doh.MethodGET), doh.WithInsecure())
 	require.NoError(t, err)
 
-	q, _ := wire.NewBuilder().
+	q, _ := wire.NewMessageBuilder().
 		ID(0xcafe).
 		RecursionDesired(true).
 		Question(wire.NewQuestion(wire.MustParseName("example.com"), rrtype.A)).
@@ -107,7 +107,7 @@ func TestDoHHTTPError(t *testing.T) {
 	ex, err := doh.New(srv.URL, doh.WithInsecure())
 	require.NoError(t, err)
 
-	q, _ := wire.NewBuilder().
+	q, _ := wire.NewMessageBuilder().
 		ID(1).
 		Question(wire.NewQuestion(wire.MustParseName("example.com"), rrtype.A)).
 		Build()
@@ -128,7 +128,7 @@ func TestDoHContextCancel(t *testing.T) {
 	ex, err := doh.New(srv.URL, doh.WithInsecure())
 	require.NoError(t, err)
 
-	q, _ := wire.NewBuilder().
+	q, _ := wire.NewMessageBuilder().
 		ID(1).
 		Question(wire.NewQuestion(wire.MustParseName("example.com"), rrtype.A)).
 		Build()

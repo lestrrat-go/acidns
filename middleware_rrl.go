@@ -400,7 +400,7 @@ func responseKeyName(m wire.Message, q wire.Message) wire.Name {
 // question, and OPT (if any) from the original response, sets TC=1.
 // The client will retry over TCP, where RRL doesn't apply.
 func truncateForRRL(m wire.Message, q wire.Message) wire.Message {
-	b := wire.NewBuilder().
+	b := wire.NewMessageBuilder().
 		ID(m.ID()).
 		Flags(m.Flags().WithTruncated(true).WithResponse(true))
 	if qs := m.Questions(); len(qs) > 0 {

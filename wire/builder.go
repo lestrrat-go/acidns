@@ -20,8 +20,8 @@ type Builder struct {
 	err         error
 }
 
-// NewBuilder returns a fresh Builder.
-func NewBuilder() *Builder { return &Builder{} }
+// NewMessageBuilder returns a fresh Builder.
+func NewMessageBuilder() *Builder { return &Builder{} }
 
 func (b *Builder) ID(v uint16) *Builder     { b.id = v; return b }
 func (b *Builder) Flags(f Flags) *Builder   { b.flags = f; return b }

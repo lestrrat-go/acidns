@@ -29,7 +29,7 @@ type NotifyHandler func(ctx context.Context, zone wire.Question, src acidns.Resp
 // serveNotify acknowledges a NOTIFY for a zone the server hosts. NOTIFY
 // queries from peers about zones we don't hold receive REFUSED.
 func (a *Authoritative) serveNotify(ctx context.Context, w acidns.ResponseWriter, q wire.Message) {
-	b := wire.NewBuilder().
+	b := wire.NewMessageBuilder().
 		ID(q.ID()).
 		Response(true).
 		Opcode(wire.OpcodeNotify)

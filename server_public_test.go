@@ -18,7 +18,7 @@ func publicMkInner() acidns.Handler {
 	return acidns.HandlerFunc(func(_ context.Context, w acidns.ResponseWriter, q wire.Message) {
 		ans := wire.NewRecord(q.Questions()[0].Name(), time.Minute,
 			rdata.MustNewA(netip.MustParseAddr("203.0.113.42")))
-		resp, _ := wire.NewBuilder().
+		resp, _ := wire.NewMessageBuilder().
 			ID(q.ID()).
 			Response(true).
 			RecursionAvailable(true).
@@ -69,7 +69,7 @@ func TestNewPublicUDPServer_HappyPath(t *testing.T) {
 	// Allowed source: full round trip works.
 	ex, err := acidns.NewUDPExchanger(ctrl.Addr())
 	require.NoError(t, err)
-	q, err := wire.NewBuilder().
+	q, err := wire.NewMessageBuilder().
 		ID(0x4242).
 		RecursionDesired(true).
 		Question(wire.NewQuestion(wire.MustParseName("example.com"), rrtype.A)).
@@ -107,7 +107,7 @@ func TestNewPublicUDPServer_DropsDeniedSilently(t *testing.T) {
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = conn.Close() })
 
-	q, err := wire.NewBuilder().
+	q, err := wire.NewMessageBuilder().
 		ID(0x9999).
 		Question(wire.NewQuestion(wire.MustParseName("example.com"), rrtype.A)).
 		Build()

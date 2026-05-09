@@ -23,7 +23,7 @@ func Example_sig0_sign_verify() {
 		return
 	}
 
-	q, _ := wire.NewBuilder().
+	q, _ := wire.NewMessageBuilder().
 		ID(0xdead).
 		Question(wire.NewQuestion(wire.MustParseName("example.com"), rrtype.A)).
 		Build()

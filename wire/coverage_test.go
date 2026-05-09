@@ -445,14 +445,14 @@ func TestUnmarshalDoubleOPTRejected(t *testing.T) {
 
 	e := mustEDNS(t, wire.NewEDNSBuilder().UDPSize(1232))
 	q := wire.NewQuestion(wirebb.MustParse("example.com"), rrtype.A)
-	m, err := wire.NewBuilder().ID(1).Question(q).EDNS(e).Build()
+	m, err := wire.NewMessageBuilder().ID(1).Question(q).EDNS(e).Build()
 	require.NoError(t, err)
 
 	buf, err := wire.Marshal(m)
 	require.NoError(t, err)
 
 	// Forge a second OPT by appending another packed OPT and bumping arcount.
-	m2, err := wire.NewBuilder().ID(1).Question(q).EDNS(e).Build()
+	m2, err := wire.NewMessageBuilder().ID(1).Question(q).EDNS(e).Build()
 	require.NoError(t, err)
 	buf2, err := wire.Marshal(m2)
 	require.NoError(t, err)
@@ -508,7 +508,7 @@ func TestMarshalRDataTooLarge(t *testing.T) {
 	require.NoError(t, err)
 
 	rec := wire.NewRecord(wirebb.MustParse("example.com"), 60*time.Second, txt)
-	m, err := wire.NewBuilder().Answer(rec).Build()
+	m, err := wire.NewMessageBuilder().Answer(rec).Build()
 	require.NoError(t, err)
 
 	_, err = wire.Marshal(m)
@@ -583,7 +583,7 @@ func TestMarshalAuthorityOversize(t *testing.T) {
 	require.NoError(t, err)
 
 	rec := wire.NewRecord(wirebb.MustParse("example.com"), 60*time.Second, txt)
-	m, err := wire.NewBuilder().Authority(rec).Build()
+	m, err := wire.NewMessageBuilder().Authority(rec).Build()
 	require.NoError(t, err)
 
 	_, err = wire.Marshal(m)
@@ -602,7 +602,7 @@ func TestMarshalAdditionalOversize(t *testing.T) {
 	require.NoError(t, err)
 
 	rec := wire.NewRecord(wirebb.MustParse("example.com"), 60*time.Second, txt)
-	m, err := wire.NewBuilder().Additional(rec).Build()
+	m, err := wire.NewMessageBuilder().Additional(rec).Build()
 	require.NoError(t, err)
 
 	_, err = wire.Marshal(m)
@@ -664,7 +664,7 @@ func TestUnmarshalOPTMalformedOption(t *testing.T) {
 func TestBuilderBuildSucceedsWithoutErr(t *testing.T) {
 	t.Parallel()
 
-	m, err := wire.NewBuilder().Build()
+	m, err := wire.NewMessageBuilder().Build()
 	require.NoError(t, err)
 	require.NotNil(t, m)
 	require.Equal(t, uint16(0), m.ID())

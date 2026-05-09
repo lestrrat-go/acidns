@@ -44,7 +44,7 @@ func startSearchServer(t *testing.T, wanted string) (netip.AddrPort, func() []st
 			cur = append(cur, q.Name().String())
 			queriedAtomic.Store(&cur)
 
-			b := wire.NewBuilder().
+			b := wire.NewMessageBuilder().
 				ID(req.ID()).
 				Response(true).
 				RecursionAvailable(true).

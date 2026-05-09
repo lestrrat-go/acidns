@@ -64,7 +64,7 @@ func (r *failReader) Read(p []byte) (int, error) {
 
 func mustQ(t *testing.T, id uint16) wire.Message {
 	t.Helper()
-	q, err := wire.NewBuilder().
+	q, err := wire.NewMessageBuilder().
 		ID(id).
 		Question(wire.NewQuestion(wire.MustParseName("example.com"), rrtype.A)).
 		Build()
@@ -74,7 +74,7 @@ func mustQ(t *testing.T, id uint16) wire.Message {
 
 func mustResp(t *testing.T, id uint16) wire.Message {
 	t.Helper()
-	r, err := wire.NewBuilder().
+	r, err := wire.NewMessageBuilder().
 		ID(id).
 		Response(true).
 		Question(wire.NewQuestion(wire.MustParseName("example.com"), rrtype.A)).
@@ -91,7 +91,7 @@ func buildOversized(t *testing.T) wire.Message {
 	require.NoError(t, err)
 	rec := wire.NewRecord(wire.MustParseName("example.com"), time.Minute, txt)
 
-	b := wire.NewBuilder().
+	b := wire.NewMessageBuilder().
 		ID(1).
 		Question(wire.NewQuestion(wire.MustParseName("example.com"), rrtype.A))
 	// each record contributes ~270 bytes; 300 → ~80KB > 64KB.

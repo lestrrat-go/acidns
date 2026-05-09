@@ -75,7 +75,7 @@ func TestOptionAccessors(t *testing.T) {
 func TestAnswerMethods(t *testing.T) {
 	t.Parallel()
 	// Build a synthetic answer by exercising Resolve with a stub.
-	q, err := wire.NewBuilder().
+	q, err := wire.NewMessageBuilder().
 		ID(1).
 		Response(true).
 		Authoritative(true).

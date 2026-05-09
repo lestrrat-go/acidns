@@ -40,7 +40,7 @@ www IN  A    192.0.2.42
 
 	ex, err := acidns.NewUDPExchanger(ctrl.Addr())
 	require.NoError(t, err)
-	q, err := wire.NewBuilder().
+	q, err := wire.NewMessageBuilder().
 		ID(0xbeef).
 		Question(wire.NewQuestion(wire.MustParseName("www.example.com"), rrtype.A)).
 		RecursionDesired(true).
@@ -67,7 +67,7 @@ func TestServeDNSFormErrOnEmptyQuestion(t *testing.T) {
 
 	require.NoError(t, err)
 
-	q, err := wire.NewBuilder().ID(1).Build() // no question
+	q, err := wire.NewMessageBuilder().ID(1).Build() // no question
 	require.NoError(t, err)
 	ex, err := acidns.NewUDPExchanger(ctrl.Addr())
 	require.NoError(t, err)
@@ -93,7 +93,7 @@ func TestServeDNSServFailOnUnreachable(t *testing.T) {
 
 	require.NoError(t, err)
 
-	q, err := wire.NewBuilder().
+	q, err := wire.NewMessageBuilder().
 		ID(2).
 		RecursionDesired(true).
 		Question(wire.NewQuestion(wire.MustParseName("nope.invalid"), rrtype.A)).

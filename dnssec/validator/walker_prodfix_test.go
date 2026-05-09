@@ -58,7 +58,7 @@ func (s *extraSigPrepender) Lookup(ctx context.Context, qname wire.Name, qtype r
 	if !legitFound {
 		return m, nil
 	}
-	b := wire.NewBuilder().
+	b := wire.NewMessageBuilder().
 		ID(m.ID()).
 		Response(true).
 		RCODE(m.Flags().RCODE()).

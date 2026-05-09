@@ -30,7 +30,7 @@ func Example_doh_exchange() {
 			http.Error(w, err.Error(), http.StatusBadRequest)
 			return
 		}
-		resp, _ := wire.NewBuilder().
+		resp, _ := wire.NewMessageBuilder().
 			ID(req.ID()).Response(true).
 			Question(req.Questions()[0]).
 			Answer(wire.NewRecord(req.Questions()[0].Name(), time.Minute,
@@ -50,7 +50,7 @@ func Example_doh_exchange() {
 		return
 	}
 
-	q, _ := wire.NewBuilder().
+	q, _ := wire.NewMessageBuilder().
 		ID(0x55aa).RecursionDesired(true).
 		Question(wire.NewQuestion(wire.MustParseName("example.com"), rrtype.A)).
 		Build()

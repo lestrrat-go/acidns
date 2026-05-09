@@ -287,7 +287,7 @@ func TestNewWithTimeoutOption(t *testing.T) {
 	ex, err := dnscrypt.New(addr, cert, dnscrypt.WithTimeout(3*time.Second))
 	require.NoError(t, err)
 
-	q, _ := wire.NewBuilder().
+	q, _ := wire.NewMessageBuilder().
 		ID(0xbeef).
 		Question(wire.NewQuestion(wire.MustParseName("example.com"), rrtype.A)).
 		Build()
@@ -310,7 +310,7 @@ func TestExchangeDialFailure(t *testing.T) {
 	ex, err := dnscrypt.New(addr, cert)
 	require.NoError(t, err)
 
-	q, _ := wire.NewBuilder().
+	q, _ := wire.NewMessageBuilder().
 		ID(1).
 		Question(wire.NewQuestion(wire.MustParseName("example.com"), rrtype.A)).
 		Build()
@@ -342,7 +342,7 @@ func TestExchangeReadTimeout(t *testing.T) {
 	ex, err := dnscrypt.New(addr, cert, dnscrypt.WithTimeout(50*time.Millisecond))
 	require.NoError(t, err)
 
-	q, _ := wire.NewBuilder().
+	q, _ := wire.NewMessageBuilder().
 		ID(2).
 		Question(wire.NewQuestion(wire.MustParseName("example.com"), rrtype.A)).
 		Build()
@@ -381,7 +381,7 @@ func TestExchangeBadResponse(t *testing.T) {
 	ex, err := dnscrypt.New(addr, cert)
 	require.NoError(t, err)
 
-	q, _ := wire.NewBuilder().
+	q, _ := wire.NewMessageBuilder().
 		ID(3).
 		Question(wire.NewQuestion(wire.MustParseName("example.com"), rrtype.A)).
 		Build()
@@ -441,7 +441,7 @@ func TestExchangeUnmarshalFailure(t *testing.T) {
 	ex, err := dnscrypt.New(addr, cert)
 	require.NoError(t, err)
 
-	q, _ := wire.NewBuilder().
+	q, _ := wire.NewMessageBuilder().
 		ID(4).
 		Question(wire.NewQuestion(wire.MustParseName("example.com"), rrtype.A)).
 		Build()

@@ -23,7 +23,7 @@ func (f *fakeResolver) Resolve(_ context.Context, _ wire.Name, _ rrtype.Type) (*
 }
 
 func newFakeAnswer(q wire.Question, records []wire.Record) *acidns.Answer {
-	raw, _ := wire.NewBuilder().Response(true).Build()
+	raw, _ := wire.NewMessageBuilder().Response(true).Build()
 	return acidns.NewAnswer(q, records, raw)
 }
 

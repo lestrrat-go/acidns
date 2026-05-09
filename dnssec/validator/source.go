@@ -94,7 +94,7 @@ func (s *exchangerSource) Lookup(ctx context.Context, qname wire.Name, qtype rrt
 	if err != nil {
 		return wire.Message{}, fmt.Errorf("validator: build EDNS: %w", err)
 	}
-	q, err := wire.NewBuilder().
+	q, err := wire.NewMessageBuilder().
 		ID(s.nextID()).
 		Opcode(wire.OpcodeQuery).
 		RecursionDesired(true).

@@ -31,7 +31,7 @@ func (d stubDialer) Exchange(ctx context.Context, server netip.AddrPort, q wire.
 func mkResp(t *testing.T, q wire.Message, build func(b *wire.Builder) *wire.Builder) wire.Message {
 	t.Helper()
 	question := q.Questions()[0]
-	b := wire.NewBuilder().
+	b := wire.NewMessageBuilder().
 		ID(q.ID()).
 		Response(true).
 		Question(question)
@@ -416,7 +416,7 @@ func TestServeDNSWithAuthorityAndAdditional(t *testing.T) {
 
 	require.NoError(t, err)
 
-	q, err := wire.NewBuilder().
+	q, err := wire.NewMessageBuilder().
 		ID(7).
 		RecursionDesired(true).
 		Question(wire.NewQuestion(wire.MustParseName("nope.example."), rrtype.A)).
@@ -461,7 +461,7 @@ func TestServeDNSBogusServfailWithEDE(t *testing.T) {
 
 	require.NoError(t, err)
 
-	q, err := wire.NewBuilder().
+	q, err := wire.NewMessageBuilder().
 		ID(8).
 		RecursionDesired(true).
 		Question(wire.NewQuestion(wire.MustParseName("www.example."), rrtype.A)).
@@ -510,7 +510,7 @@ func TestTCPFallbackOnTruncated(t *testing.T) {
 	t.Parallel()
 	udpHandler := acidns.HandlerFunc(func(_ context.Context, w acidns.ResponseWriter, q wire.Message) {
 		question := q.Questions()[0]
-		resp, _ := wire.NewBuilder().
+		resp, _ := wire.NewMessageBuilder().
 			ID(q.ID()).
 			Response(true).
 			Authoritative(true).
@@ -523,7 +523,7 @@ func TestTCPFallbackOnTruncated(t *testing.T) {
 		question := q.Questions()[0]
 		a := wire.NewRecord(question.Name(), 60*time.Second,
 			rdata.MustNewA(netip.MustParseAddr("192.0.2.99")))
-		resp, _ := wire.NewBuilder().
+		resp, _ := wire.NewMessageBuilder().
 			ID(q.ID()).
 			Response(true).
 			Authoritative(true).
@@ -549,7 +549,7 @@ func TestTCPFallbackOnTruncated(t *testing.T) {
 	require.NoError(t, err)
 
 	d := recursive.DefaultDialer()
-	q, err := wire.NewBuilder().
+	q, err := wire.NewMessageBuilder().
 		ID(0xdead).
 		Question(wire.NewQuestion(wire.MustParseName("www.example."), rrtype.A)).
 		Build()
@@ -572,7 +572,7 @@ func TestTCPFallbackTCPDialFails(t *testing.T) {
 	t.Parallel()
 	udpHandler := acidns.HandlerFunc(func(_ context.Context, w acidns.ResponseWriter, q wire.Message) {
 		question := q.Questions()[0]
-		resp, _ := wire.NewBuilder().
+		resp, _ := wire.NewMessageBuilder().
 			ID(q.ID()).
 			Response(true).
 			Authoritative(true).
@@ -590,7 +590,7 @@ func TestTCPFallbackTCPDialFails(t *testing.T) {
 	require.NoError(t, err)
 
 	d := recursive.DefaultDialer()
-	q, err := wire.NewBuilder().
+	q, err := wire.NewMessageBuilder().
 		ID(0xbeef).
 		Question(wire.NewQuestion(wire.MustParseName("www.example."), rrtype.A)).
 		Build()

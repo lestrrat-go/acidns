@@ -98,7 +98,7 @@ func TestClientApplyAndObserveAndRetry(t *testing.T) {
 
 	// Server replies with a cookie. Observe stores it.
 	respEDNS := mustEDNS(t, wire.NewEDNSBuilder().Option(mustClientServer(t, cc, []byte{0xa, 0xb, 0xc, 0xd, 0xe, 0xf, 0x1, 0x2})))
-	resp, err := wire.NewBuilder().Response(true).EDNS(respEDNS).Build()
+	resp, err := wire.NewMessageBuilder().Response(true).EDNS(respEDNS).Build()
 	require.NoError(t, err)
 	c.Observe(server, resp)
 
@@ -118,7 +118,7 @@ func TestClientApplyAndObserveAndRetry(t *testing.T) {
 	respEDNS2 := mustEDNS(t, wire.NewEDNSBuilder().
 		ExtendedRCODE(1).
 		Option(mustClientServer(t, cc, freshSC)))
-	resp2, _ := wire.NewBuilder().Response(true).RCODE(7).EDNS(respEDNS2).Build()
+	resp2, _ := wire.NewMessageBuilder().Response(true).RCODE(7).EDNS(respEDNS2).Build()
 	ok, err = c.Retry(server, resp2)
 	require.NoError(t, err)
 	require.True(t, ok)
@@ -129,7 +129,7 @@ func TestClientRetryNotBADCOOKIENoOp(t *testing.T) {
 	c, err := cookies.NewClient()
 	require.NoError(t, err)
 	server := netip.MustParseAddrPort("198.51.100.10:53")
-	resp, _ := wire.NewBuilder().Response(true).Build()
+	resp, _ := wire.NewMessageBuilder().Response(true).Build()
 	ok, err := c.Retry(server, resp)
 	require.NoError(t, err)
 	require.False(t, ok)

@@ -137,7 +137,7 @@ func BuildBrowseQuery(service string) (wire.Message, error) {
 	if err != nil {
 		return wire.Message{}, err
 	}
-	return wire.NewBuilder().
+	return wire.NewMessageBuilder().
 		ID(0). // RFC 6762 §18.1 — mDNS requests use ID 0.
 		RecursionDesired(false).
 		Question(wire.NewQuestion(name, rrtype.PTR)).

@@ -34,7 +34,7 @@ func TestBuilderQuery(t *testing.T) {
 	t.Parallel()
 
 	q := wire.NewQuestion(wirebb.MustParse("example.com"), rrtype.A)
-	m, err := wire.NewBuilder().
+	m, err := wire.NewMessageBuilder().
 		ID(0x1234).
 		RecursionDesired(true).
 		Question(q).
@@ -50,7 +50,7 @@ func TestRoundTripQuery(t *testing.T) {
 	t.Parallel()
 
 	q := wire.NewQuestion(wirebb.MustParse("example.com"), rrtype.A)
-	m, err := wire.NewBuilder().
+	m, err := wire.NewMessageBuilder().
 		ID(0xabcd).
 		RecursionDesired(true).
 		Question(q).
@@ -81,7 +81,7 @@ func TestRoundTripResponse(t *testing.T) {
 	mx := wire.NewRecord(name, 600*time.Second,
 		rdata.MustNewMX(10, wirebb.MustParse("mail.example.com")))
 
-	m, err := wire.NewBuilder().
+	m, err := wire.NewMessageBuilder().
 		ID(1).
 		Response(true).
 		RecursionDesired(true).
@@ -125,7 +125,7 @@ func TestUnmarshalRealResponse(t *testing.T) {
 		86400*time.Second,
 		rdata.MustNewA(netip.MustParseAddr("93.184.216.34")),
 	)
-	out, err := wire.NewBuilder().
+	out, err := wire.NewMessageBuilder().
 		ID(0x4242).
 		Response(true).
 		RecursionDesired(true).

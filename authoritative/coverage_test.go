@@ -141,7 +141,7 @@ func TestCNAMEChainExceedsMaxDepth(t *testing.T) {
 func TestEmptyQuestionsFormErr(t *testing.T) {
 	t.Parallel()
 	a := newAuth(t)
-	q, err := wire.NewBuilder().ID(7).Build()
+	q, err := wire.NewMessageBuilder().ID(7).Build()
 	require.NoError(t, err)
 	w := &inProcWriter{}
 	a.ServeDNS(t.Context(), w, q)
@@ -153,7 +153,7 @@ func TestEmptyQuestionsFormErr(t *testing.T) {
 func TestAXFRAtNonApexNotAuth(t *testing.T) {
 	t.Parallel()
 	a := newAuth(t)
-	q, err := wire.NewBuilder().
+	q, err := wire.NewMessageBuilder().
 		ID(1).
 		Question(wire.NewQuestion(wire.MustParseName("www.example.com"), rrtype.AXFR)).
 		Build()
@@ -167,7 +167,7 @@ func TestAXFRAtNonApexNotAuth(t *testing.T) {
 func TestIXFRFallsBackToAXFR(t *testing.T) {
 	t.Parallel()
 	a := newAuth(t)
-	q, err := wire.NewBuilder().
+	q, err := wire.NewMessageBuilder().
 		ID(1).
 		Question(wire.NewQuestion(wire.MustParseName("example.com"), rrtype.IXFR)).
 		Build()
@@ -229,7 +229,7 @@ func TestAXFRMultiMessageFlush(t *testing.T) {
 
 	ex, err := acidns.NewTCPExchanger(ctrl.Addr())
 	require.NoError(t, err)
-	q, _ := wire.NewBuilder().
+	q, _ := wire.NewMessageBuilder().
 		ID(0xb160).
 		Question(wire.NewQuestion(wire.MustParseName("big.example"), rrtype.AXFR)).
 		Build()
@@ -261,7 +261,7 @@ func itoa(i int) string {
 func TestNotifyEmptyQuestionsFormErr(t *testing.T) {
 	t.Parallel()
 	a := newAuth(t)
-	q, err := wire.NewBuilder().
+	q, err := wire.NewMessageBuilder().
 		ID(1).
 		Opcode(wire.OpcodeNotify).
 		Build()
@@ -276,7 +276,7 @@ func TestNotifyEmptyQuestionsFormErr(t *testing.T) {
 func TestUpdateEmptyQuestionsFormErr(t *testing.T) {
 	t.Parallel()
 	a := newAuth(t)
-	q, err := wire.NewBuilder().
+	q, err := wire.NewMessageBuilder().
 		ID(1).
 		Opcode(wire.OpcodeUpdate).
 		Build()
@@ -291,7 +291,7 @@ func TestUpdateEmptyQuestionsFormErr(t *testing.T) {
 func TestUpdateZoneNotSOA(t *testing.T) {
 	t.Parallel()
 	a := newAuth(t)
-	q, err := wire.NewBuilder().
+	q, err := wire.NewMessageBuilder().
 		ID(1).
 		Opcode(wire.OpcodeUpdate).
 		Question(wire.NewQuestion(wire.MustParseName("example.com"), rrtype.A)).
@@ -407,7 +407,7 @@ func TestUpdateDeleteAllAtName(t *testing.T) {
 	require.Equal(t, wire.RCODENoError, resp.Flags().RCODE())
 
 	// www should now NXDOMAIN/NODATA for A.
-	q, _ := wire.NewBuilder().
+	q, _ := wire.NewMessageBuilder().
 		ID(33).
 		Question(wire.NewQuestion(wire.MustParseName("www.example.com"), rrtype.A)).
 		Build()
@@ -445,7 +445,7 @@ func TestUpdateDeleteRecordSpecific(t *testing.T) {
 	require.Equal(t, wire.RCODENoError, resp.Flags().RCODE())
 
 	// Verify only the 198.51.100.10 record remains.
-	q, _ := wire.NewBuilder().
+	q, _ := wire.NewMessageBuilder().
 		ID(44).
 		Question(wire.NewQuestion(wire.MustParseName("www.example.com"), rrtype.A)).
 		Build()
@@ -504,7 +504,7 @@ func TestUpdateDeleteRecordRemovesLast(t *testing.T) {
 	require.Equal(t, wire.RCODENoError, resp.Flags().RCODE())
 
 	// solo.example.com should now be gone.
-	q, _ := wire.NewBuilder().
+	q, _ := wire.NewMessageBuilder().
 		ID(77).
 		Question(wire.NewQuestion(wire.MustParseName("solo.example.com"), rrtype.A)).
 		Build()
@@ -572,7 +572,7 @@ func TestUpdateDeleteOneRRsetKeepsOthers(t *testing.T) {
 	require.Equal(t, wire.RCODENoError, resp.Flags().RCODE())
 
 	// Confirm TXT still resolves.
-	q, _ := wire.NewBuilder().
+	q, _ := wire.NewMessageBuilder().
 		ID(55).
 		Question(wire.NewQuestion(wire.MustParseName("www.example.com"), rrtype.TXT)).
 		Build()
@@ -599,7 +599,7 @@ func TestUpdateDeleteRecordNoMatch(t *testing.T) {
 	require.Equal(t, wire.RCODENoError, resp.Flags().RCODE())
 
 	// www's original A must still be there.
-	q, _ := wire.NewBuilder().
+	q, _ := wire.NewMessageBuilder().
 		ID(66).
 		Question(wire.NewQuestion(wire.MustParseName("www.example.com"), rrtype.A)).
 		Build()

@@ -53,7 +53,7 @@ func PadEncrypted(m Message) Message {
 		}
 		eb = eb.Option(pad)
 
-		b := NewBuilder().ID(m.ID()).Flags(m.Flags())
+		b := NewMessageBuilder().ID(m.ID()).Flags(m.Flags())
 		for _, q := range m.Questions() {
 			b = b.Question(q)
 		}

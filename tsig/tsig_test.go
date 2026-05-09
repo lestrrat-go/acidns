@@ -21,7 +21,7 @@ func mkSecret(t *testing.T, n int) []byte {
 
 func mkMessage(t *testing.T) []byte {
 	t.Helper()
-	m, err := wire.NewBuilder().
+	m, err := wire.NewMessageBuilder().
 		ID(0xabcd).
 		RecursionDesired(true).
 		Question(wire.NewQuestion(wire.MustParseName("example.com"), rrtype.A)).

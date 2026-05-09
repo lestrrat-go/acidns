@@ -337,7 +337,7 @@ func addrsContain(haystack []netip.Addr, needle netip.Addr) bool {
 // proposed records in the AUTHORITY section so other responders can
 // detect conflicts during tie-breaking.
 func buildProbe(p Publication) (wire.Message, error) {
-	b := wire.NewBuilder().
+	b := wire.NewMessageBuilder().
 		ID(0).
 		Question(wire.NewQuestionClass(p.instance, rrtype.ANY, rrtype.ClassIN)).
 		Question(wire.NewQuestionClass(p.host, rrtype.ANY, rrtype.ClassIN))
@@ -350,7 +350,7 @@ func buildProbe(p Publication) (wire.Message, error) {
 // buildAnnouncement builds an unsolicited response (RFC 6762 §8.3) with
 // the cache-flush bit set on every owned record.
 func buildAnnouncement(p Publication) (wire.Message, error) {
-	b := wire.NewBuilder().
+	b := wire.NewMessageBuilder().
 		ID(0).
 		Response(true).
 		Authoritative(true)

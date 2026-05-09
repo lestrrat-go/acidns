@@ -213,7 +213,7 @@ func TestConflictsWithSRVBranches(t *testing.T) {
 	)
 	require.NoError(t, err)
 
-	conflict, _ := wire.NewBuilder().
+	conflict, _ := wire.NewMessageBuilder().
 		Response(true).
 		Authoritative(true).
 		Answer(wire.NewRecord(
@@ -239,7 +239,7 @@ func TestConflictsWithSRVNonconflicting(t *testing.T) {
 	require.NoError(t, err)
 
 	// Same Instance, same target+port — NOT a conflict.
-	matching, _ := wire.NewBuilder().
+	matching, _ := wire.NewMessageBuilder().
 		Response(true).
 		Authoritative(true).
 		Answer(wire.NewRecord(
@@ -274,7 +274,7 @@ func TestConflictsWithAAAA(t *testing.T) {
 	require.NoError(t, err)
 
 	// AAAA at the host name with an address we don't own.
-	conflict, _ := wire.NewBuilder().
+	conflict, _ := wire.NewMessageBuilder().
 		Response(true).
 		Authoritative(true).
 		Answer(wire.NewRecord(
@@ -308,7 +308,7 @@ func TestConflictsWithAAAANonconflicting(t *testing.T) {
 	require.NoError(t, err)
 
 	v6 := netip.MustParseAddr("2001:db8::1")
-	matching, _ := wire.NewBuilder().
+	matching, _ := wire.NewMessageBuilder().
 		Response(true).
 		Authoritative(true).
 		Answer(wire.NewRecord(
@@ -405,7 +405,7 @@ func TestParseBrowseResponsePTRWithoutSRV(t *testing.T) {
 	t.Parallel()
 	svcType := wire.MustParseName("_http._tcp.local")
 	instance := wire.MustParseName("Lonely._http._tcp.local")
-	resp, err := wire.NewBuilder().
+	resp, err := wire.NewMessageBuilder().
 		ID(0).
 		Response(true).
 		// PTR but no matching SRV → service should be skipped.
@@ -425,7 +425,7 @@ func TestParseBrowseResponseAAAAFromAdditional(t *testing.T) {
 	srv := rdata.MustNewSRV(0, 0, 8080, host)
 	v6 := rdata.MustNewAAAA(netip.MustParseAddr("2001:db8::1"))
 
-	resp, err := wire.NewBuilder().
+	resp, err := wire.NewMessageBuilder().
 		ID(0).
 		Response(true).
 		Answer(wire.NewRecord(svcType, time.Minute, rdata.MustNewPTR(instance))).
@@ -452,7 +452,7 @@ func TestParseTXTBareKeyAndEmpty(t *testing.T) {
 	txt, err := rdata.NewTXT("flag", "key=value", "")
 	require.NoError(t, err)
 
-	resp, err := wire.NewBuilder().
+	resp, err := wire.NewMessageBuilder().
 		ID(0).
 		Response(true).
 		Answer(wire.NewRecord(svcType, time.Minute, rdata.MustNewPTR(instance))).

@@ -35,7 +35,7 @@ func startEcho(t *testing.T) netip.AddrPort {
 			}
 			ans := wire.NewRecord(req.Questions()[0].Name(), 60*time.Second,
 				rdata.MustNewA(netip.MustParseAddr("203.0.113.1")))
-			resp, err := wire.NewBuilder().
+			resp, err := wire.NewMessageBuilder().
 				ID(req.ID()).
 				Response(true).
 				RecursionDesired(req.Flags().RecursionDesired()).
@@ -65,7 +65,7 @@ func TestExchange(t *testing.T) {
 	ex, err := acidns.NewUDPExchanger(addr)
 	require.NoError(t, err)
 
-	q, err := wire.NewBuilder().
+	q, err := wire.NewMessageBuilder().
 		ID(0xbeef).
 		RecursionDesired(true).
 		Question(wire.NewQuestion(wire.MustParseName("example.com"), rrtype.A)).
@@ -96,7 +96,7 @@ func TestExchangeContextCancelled(t *testing.T) {
 	ex, err := acidns.NewUDPExchanger(addr)
 	require.NoError(t, err)
 
-	q, _ := wire.NewBuilder().
+	q, _ := wire.NewMessageBuilder().
 		ID(1).
 		Question(wire.NewQuestion(wire.MustParseName("example.com"), rrtype.A)).
 		Build()
@@ -127,7 +127,7 @@ func TestExchangeMismatchedID(t *testing.T) {
 			return
 		}
 		// Spoof: respond with a different ID first, then with the correct one.
-		bad, _ := wire.NewBuilder().
+		bad, _ := wire.NewMessageBuilder().
 			ID(req.ID() ^ 0xffff).
 			Response(true).
 			Question(req.Questions()[0]).
@@ -135,7 +135,7 @@ func TestExchangeMismatchedID(t *testing.T) {
 		bw, _ := wire.Marshal(bad)
 		_, _ = pc.WriteTo(bw, src)
 
-		good, _ := wire.NewBuilder().
+		good, _ := wire.NewMessageBuilder().
 			ID(req.ID()).
 			Response(true).
 			Question(req.Questions()[0]).
@@ -148,7 +148,7 @@ func TestExchangeMismatchedID(t *testing.T) {
 
 	ex, err := acidns.NewUDPExchanger(addr, acidns.WithUDPTimeout(2*time.Second))
 	require.NoError(t, err)
-	q, _ := wire.NewBuilder().
+	q, _ := wire.NewMessageBuilder().
 		ID(0x1234).
 		RecursionDesired(true).
 		Question(wire.NewQuestion(wire.MustParseName("example.com"), rrtype.A)).

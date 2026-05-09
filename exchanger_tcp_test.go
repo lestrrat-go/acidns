@@ -43,7 +43,7 @@ func startTCPEcho(t *testing.T) netip.AddrPort {
 				if err != nil {
 					return
 				}
-				resp, err := wire.NewBuilder().
+				resp, err := wire.NewMessageBuilder().
 					ID(req.ID()).
 					Response(true).
 					RecursionAvailable(true).
@@ -75,7 +75,7 @@ func TestTCPExchange(t *testing.T) {
 	ex, err := acidns.NewTCPExchanger(addr)
 	require.NoError(t, err)
 
-	q, err := wire.NewBuilder().
+	q, err := wire.NewMessageBuilder().
 		ID(0xfeed).
 		RecursionDesired(true).
 		Question(wire.NewQuestion(wire.MustParseName("example.com"), rrtype.A)).
@@ -99,7 +99,7 @@ func TestTCPContextDeadline(t *testing.T) {
 	ex, err := acidns.NewTCPExchanger(netip.AddrPortFrom(netip.MustParseAddr("127.0.0.1"), uint16(a.Port)))
 	require.NoError(t, err)
 
-	q, _ := wire.NewBuilder().
+	q, _ := wire.NewMessageBuilder().
 		ID(1).
 		Question(wire.NewQuestion(wire.MustParseName("example.com"), rrtype.A)).
 		Build()

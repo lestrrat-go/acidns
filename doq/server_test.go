@@ -67,7 +67,7 @@ func (h *echoHandler) ServeDNS(_ context.Context, w acidns.ResponseWriter, q wir
 		return
 	}
 	qq := q.Questions()[0]
-	resp, _ := wire.NewBuilder().
+	resp, _ := wire.NewMessageBuilder().
 		ID(q.ID()).
 		Response(true).
 		Question(qq).
@@ -99,7 +99,7 @@ func TestServerRoundTrip(t *testing.T) {
 	)
 	require.NoError(t, err)
 
-	q, err := wire.NewBuilder().
+	q, err := wire.NewMessageBuilder().
 		ID(0xa1f1).
 		RecursionDesired(true).
 		Question(wire.NewQuestion(wire.MustParseName("a.test."), rrtype.A)).

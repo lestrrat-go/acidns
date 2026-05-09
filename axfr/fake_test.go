@@ -88,7 +88,7 @@ func aRec(t *testing.T, name string, addr string) wire.Record {
 
 func answerMsg(t *testing.T, recs ...wire.Record) wire.Message {
 	t.Helper()
-	b := wire.NewBuilder().Response(true).RCODE(wire.RCODENoError)
+	b := wire.NewMessageBuilder().Response(true).RCODE(wire.RCODENoError)
 	for _, r := range recs {
 		b = b.Answer(r)
 	}
@@ -129,7 +129,7 @@ func TestStartLeadingNonSOA(t *testing.T) {
 
 func TestStartFirstMessageRCODEError(t *testing.T) {
 	t.Parallel()
-	bad := mustBuild(t, wire.NewBuilder().Response(true).RCODE(wire.RCODERefused))
+	bad := mustBuild(t, wire.NewMessageBuilder().Response(true).RCODE(wire.RCODERefused))
 	stream := &fakeStream{msgs: []wire.Message{bad}}
 	ex := &fakeStreamEx{stream: stream}
 	_, err := axfr.Start(t.Context(), ex, wire.MustParseName("example.com"))

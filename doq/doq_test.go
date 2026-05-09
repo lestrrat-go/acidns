@@ -99,7 +99,7 @@ func startDoQ(t *testing.T) (netip.AddrPort, *tls.Config) {
 				if err != nil {
 					return
 				}
-				resp, _ := wire.NewBuilder().
+				resp, _ := wire.NewMessageBuilder().
 					ID(req.ID()).
 					Response(true).
 					Question(req.Questions()[0]).
@@ -125,7 +125,7 @@ func TestDoQExchange(t *testing.T) {
 	ex, err := doq.New(addr, doq.WithTLSConfig(cfg))
 	require.NoError(t, err)
 
-	q, _ := wire.NewBuilder().
+	q, _ := wire.NewMessageBuilder().
 		ID(0xc0ff).
 		RecursionDesired(true).
 		Question(wire.NewQuestion(wire.MustParseName("example.com"), rrtype.A)).
@@ -151,7 +151,7 @@ func TestDoQContextCancel(t *testing.T) {
 	ex, err := doq.New(addr, doq.WithServerName("127.0.0.1"))
 	require.NoError(t, err)
 
-	q, _ := wire.NewBuilder().
+	q, _ := wire.NewMessageBuilder().
 		ID(1).
 		Question(wire.NewQuestion(wire.MustParseName("example.com"), rrtype.A)).
 		Build()

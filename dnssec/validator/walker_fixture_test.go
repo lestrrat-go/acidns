@@ -45,7 +45,7 @@ func (s *fixtureSource) Lookup(_ context.Context, qname wire.Name, qtype rrtype.
 		zone = s.findZone(qname)
 	}
 	if zone == nil {
-		return wire.NewBuilder().
+		return wire.NewMessageBuilder().
 			ID(1).
 			Response(true).
 			RCODE(wire.RCODENXDomain).
@@ -195,7 +195,7 @@ func (z *signedZone) nameExists(name wire.Name) bool {
 // originating at a child apex, this is invoked on the PARENT zone.
 func (z *signedZone) buildAnswer(qname wire.Name, qtype rrtype.Type, rrs []wire.Record) (wire.Message, error) {
 	sig := z.signRRset(rrs)
-	b := wire.NewBuilder().
+	b := wire.NewMessageBuilder().
 		ID(1).
 		Response(true).
 		RCODE(wire.RCODENoError).
@@ -234,7 +234,7 @@ func (z *signedZone) buildNoDataNSEC(qname wire.Name, qtype rrtype.Type) (wire.M
 	rec := wire.NewRecord(qname, time.Hour, nsec)
 	sig := z.signRRset([]wire.Record{rec})
 
-	return wire.NewBuilder().
+	return wire.NewMessageBuilder().
 		ID(1).
 		Response(true).
 		RCODE(wire.RCODENoError).
@@ -251,7 +251,7 @@ func (z *signedZone) buildNXDOMAIN(qname wire.Name, qtype rrtype.Type) (wire.Mes
 	nsec := rdata.NewNSEC(next, types)
 	rec := wire.NewRecord(owner, time.Hour, nsec)
 	sig := z.signRRset([]wire.Record{rec})
-	return wire.NewBuilder().
+	return wire.NewMessageBuilder().
 		ID(1).
 		Response(true).
 		RCODE(wire.RCODENXDomain).

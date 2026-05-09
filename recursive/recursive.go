@@ -308,7 +308,7 @@ func (d defaultDialer) Exchange(ctx context.Context, server netip.AddrPort, q wi
 
 // ServeDNS implements acidns.Handler.
 func (r *Recursive) ServeDNS(ctx context.Context, w acidns.ResponseWriter, q wire.Message) {
-	b := wire.NewBuilder().
+	b := wire.NewMessageBuilder().
 		ID(q.ID()).
 		Response(true).
 		RecursionDesired(q.Flags().RecursionDesired()).
@@ -380,7 +380,7 @@ func (r *Recursive) ServeDNS(ctx context.Context, w acidns.ResponseWriter, q wir
 
 func must(m wire.Message, err error) wire.Message {
 	if err != nil {
-		fb, _ := wire.NewBuilder().Response(true).RCODE(wire.RCODEServFail).Build()
+		fb, _ := wire.NewMessageBuilder().Response(true).RCODE(wire.RCODEServFail).Build()
 		return fb
 	}
 	return m
@@ -746,7 +746,7 @@ func (r *Recursive) queryAny(ctx context.Context, servers []netip.AddrPort, name
 		if err != nil {
 			return wire.Message{}, netip.AddrPort{}, err
 		}
-		q, err := wire.NewBuilder().
+		q, err := wire.NewMessageBuilder().
 			ID(id).
 			Question(wire.NewQuestion(name, t)).
 			EDNS(ed).

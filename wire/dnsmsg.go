@@ -9,7 +9,7 @@ import (
 
 // Message is a DNS protocol message. Value type — copy-friendly,
 // returned by value from [Unmarshal] and [Builder.Build]. Construct
-// via [NewBuilder] so callers do not depend on field layout.
+// via [NewMessageBuilder] so callers do not depend on field layout.
 type Message struct {
 	id          uint16
 	flags       Flags
