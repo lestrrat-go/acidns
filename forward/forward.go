@@ -182,43 +182,58 @@ func (h *Handler) ServeDNS(ctx context.Context, w acidns.ResponseWriter, q wire.
 
 // exchangeSingleflight wraps the upstream Exchange call with
 // per-(name,type,class) coalescing so concurrent cache misses don't
-// multiply outbound query traffic. The leader's response (and error)
-// is shared with all waiters.
+// multiply outbound query traffic. Every caller — including the one
+// that allocated the inflight entry — is a waiter on call.done, and
+// a dedicated goroutine drives the upstream Exchange under a context
+// detached from any individual caller. This keeps follower waiters
+// from being orphaned when the leader's request ctx fires before the
+// upstream answer arrives, and gives the leader the same prompt-
+// cancel semantics the followers already enjoyed.
 func (h *Handler) exchangeSingleflight(ctx context.Context, in wire.Message, qq wire.Question) (wire.Message, error) {
 	key := singleflightKey(qq, edsoDOBit(in))
 
 	h.inflightMu.Lock()
-	if call, ok := h.inflight[key]; ok {
-		h.inflightMu.Unlock()
-		select {
-		case <-call.done:
-			return call.resp, call.err
-		case <-ctx.Done():
-			return nil, ctx.Err()
-		}
+	call, ok := h.inflight[key]
+	if !ok {
+		call = &inflightCall{done: make(chan struct{})}
+		h.inflight[key] = call
+		h.startExchange(call, key, in)
 	}
-	call := &inflightCall{done: make(chan struct{})}
-	h.inflight[key] = call
 	h.inflightMu.Unlock()
 
-	defer func() {
-		h.inflightMu.Lock()
-		delete(h.inflight, key)
-		h.inflightMu.Unlock()
-		close(call.done)
-	}()
-
-	fwd := buildForwardQuery(in)
-	exchangeCtx := ctx
-	if _, ok := ctx.Deadline(); !ok && h.cfg.queryTimeout > 0 {
-		var cancel context.CancelFunc
-		exchangeCtx, cancel = context.WithTimeout(ctx, h.cfg.queryTimeout)
-		defer cancel()
+	select {
+	case <-call.done:
+		return call.resp, call.err
+	case <-ctx.Done():
+		return nil, ctx.Err()
 	}
-	resp, err := h.cfg.upstream.Exchange(exchangeCtx, fwd)
-	call.resp = resp
-	call.err = err
-	return resp, err
+}
+
+// startExchange spawns the upstream Exchange goroutine for the given
+// inflight call. The goroutine's context is derived from
+// [context.Background] (with [context.WithoutCancel] applied to the
+// caller's ctx so caller-installed values are preserved for any
+// observers down the upstream stack) so a cancelled leader does not
+// abort an in-flight upstream call that other waiters still need.
+// The exchange is bounded by queryTimeout when configured.
+func (h *Handler) startExchange(call *inflightCall, key string, in wire.Message) {
+	go func() {
+		defer func() {
+			h.inflightMu.Lock()
+			delete(h.inflight, key)
+			h.inflightMu.Unlock()
+			close(call.done)
+		}()
+		exchangeCtx, cancel := context.WithCancel(context.Background())
+		defer cancel()
+		if h.cfg.queryTimeout > 0 {
+			var c2 context.CancelFunc
+			exchangeCtx, c2 = context.WithTimeout(exchangeCtx, h.cfg.queryTimeout)
+			defer c2()
+		}
+		fwd := buildForwardQuery(in)
+		call.resp, call.err = h.cfg.upstream.Exchange(exchangeCtx, fwd)
+	}()
 }
 
 // singleflightKey identifies a coalescable upstream call. Includes
