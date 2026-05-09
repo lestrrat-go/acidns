@@ -207,7 +207,7 @@ Status legend: **Implemented** = working code with tests; **Partial** = document
 | Optional DNSSEC validation via `recursive.WithValidator` (bogus → SERVFAIL+EDE6) | Implemented |
 | Per-query timeout (`WithQueryTimeout`) | Implemented |
 | QNAME minimisation (RFC 7816 / 9156) | Implemented (default on; `WithoutQNameMinimisation` opt-out; relaxed fallback on intermediate NXDOMAIN/SERVFAIL/non-conformant responses per §2.4) |
-| Aggressive NSEC caching (RFC 8198) | Partial (NSEC NXDOMAIN synthesis from validated cache; opt-in via `WithAggressiveNSEC`, requires `WithValidator`. NSEC3 hash-space lookup, NSEC NoData type-bitmap inspection, and wildcard interaction not yet covered.) |
+| Aggressive NSEC caching (RFC 8198) | Implemented (NSEC and NSEC3, NXDOMAIN and NoData. Closest-encloser proof from cached NSEC3, opt-out enforcement per §5.6, wildcard-denial requirement per §5.5. Opt-in via `WithAggressiveNSEC`, requires `WithValidator`.) |
 | Parallel A/AAAA address resolution | Out of scope |
 | Per-upstream rate limiting / priming refresh | Out of scope |
 

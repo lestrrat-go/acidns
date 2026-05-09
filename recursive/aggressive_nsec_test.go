@@ -46,8 +46,12 @@ func TestAggressiveNSECSynthesisesNXDOMAIN(t *testing.T) {
 			question := q.Questions()[0]
 			qname := question.Name()
 
-			// First query (priming): respond NXDOMAIN with a covering
-			// NSEC + an SOA. The resolver caches the NSEC.
+			// First query (priming): respond NXDOMAIN with the
+			// complete proof set per RFC 4035 §5.4 — an NSEC
+			// covering qname AND an NSEC denying any wildcard
+			// match — plus the zone's SOA. The aggressive cache
+			// requires the wildcard-denying NSEC to be present
+			// before it will synthesize for other names.
 			soa := wire.NewRecord(wire.MustParseName("example."), 5*time.Minute,
 				rdata.NewSOA(
 					wire.MustParseName("ns.example."),
@@ -56,15 +60,20 @@ func TestAggressiveNSECSynthesisesNXDOMAIN(t *testing.T) {
 				))
 			nsec := wire.NewRecord(wire.MustParseName("a.example."), 5*time.Minute,
 				rdata.NewNSEC(wire.MustParseName("d.example."), nil))
+			// Wildcard-denying NSEC: covers *.example.
+			wildcardNSEC := wire.NewRecord(wire.MustParseName("example."), 5*time.Minute,
+				rdata.NewNSEC(wire.MustParseName("a.example."), nil))
 
 			if qname.Equal(wire.MustParseName("c.example.")) {
 				// Priming query: the response proves c.example doesn't
-				// exist via the NSEC interval [a, d).
+				// exist via the NSEC interval [a, d) and proves no
+				// wildcard match via the NSEC at example. itself.
 				return mkResp(t, q, func(b *wire.Builder) *wire.Builder {
 					return b.Authoritative(true).
 						RCODE(wire.RCODENXDomain).
 						Authority(soa).
-						Authority(nsec)
+						Authority(nsec).
+						Authority(wildcardNSEC)
 				}), nil
 			}
 			// Any other query: this should never run for b.example

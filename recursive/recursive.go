@@ -101,6 +101,11 @@ type recursive struct {
 	// itself requires a validator).
 	nsecIdx *nsecIndex
 
+	// nsec3Idx is the NSEC3 counterpart — per-zone hash-space
+	// indexes used to assemble the §5.3 closest-encloser proof
+	// from cached NSEC3 records.
+	nsec3Idx *nsec3Index
+
 	inflightMu sync.Mutex
 	inflight   map[string]*inflightCall
 
@@ -175,6 +180,7 @@ func New(opts ...Option) Recursive {
 	}
 	if r.aggressiveNSEC {
 		r.nsecIdx = newNSECIndex()
+		r.nsec3Idx = newNSEC3Index()
 	}
 	return r
 }
@@ -324,17 +330,21 @@ func (r *recursive) Resolve(ctx context.Context, name wire.Name, t rrtype.Type) 
 			entry.AD = true
 		}
 	}
-	// RFC 8198: harvest NSEC records from a validated negative
-	// response into the aggressive index. Only enter this branch
-	// when aggressive use is enabled (which itself implies a
-	// validator was configured), the answer was validated as
-	// Secure (entry.AD), and the response was negative (NXDOMAIN
-	// with no answers — NoData synthesis is not yet implemented).
-	if r.aggressiveNSEC && entry.AD &&
-		entry.RCODE == wire.RCODENXDomain && len(entry.Answer) == 0 {
+	// RFC 8198: harvest NSEC and NSEC3 records from a validated
+	// negative response into the aggressive indexes. Both NXDOMAIN
+	// (RCODE=3 with no answers) and NoData (RCODE=0 with no answers
+	// and an SOA in authority) populate them.
+	if r.aggressiveNSEC && entry.AD && len(entry.Answer) == 0 &&
+		(entry.RCODE == wire.RCODENXDomain || entry.RCODE == wire.RCODENoError) {
 		now := time.Now()
 		for _, ne := range extractValidatedNSECs(entry.Authority, now) {
 			r.nsecIdx.Insert(ne)
+		}
+		zoneApex, params, n3 := extractValidatedNSEC3s(entry.Authority, now)
+		if zoneApex.IsValid() {
+			for _, e := range n3 {
+				r.nsec3Idx.Insert(zoneApex, params, e)
+			}
 		}
 	}
 	return entry, nil
@@ -437,6 +447,10 @@ func (r *recursive) resolveDepth(ctx context.Context, name wire.Name, t rrtype.T
 	// synthesised entry is also written to the regular cache so the
 	// next lookup hits the standard fast path above.
 	if e, ok := r.synthesiseFromNSEC(name, t); ok {
+		r.cache.Put(name, t, e)
+		return e, nil
+	}
+	if e, ok := r.synthesiseFromNSEC3(name, t); ok {
 		r.cache.Put(name, t, e)
 		return e, nil
 	}

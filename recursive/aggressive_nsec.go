@@ -3,12 +3,20 @@ package recursive
 // RFC 8198 (Aggressive Use of DNSSEC-Validated Cache) — NSEC half.
 //
 // When the resolver has cached a DNSSEC-validated NSEC record from a
-// negative response, the same NSEC can prove non-existence for any
-// other name that falls within the NSEC's "next-name" interval — no
-// upstream query needed. The implementation here covers NSEC NXDOMAIN
-// synthesis only; NSEC3 (hash-space lookup) and NSEC NoData (type
-// bitmap inspection) and wildcard interaction are tracked as Partial
-// for follow-up work.
+// negative response, the same NSEC can prove non-existence for other
+// names that fall within the NSEC's interval — no upstream query
+// needed. Two flavours are handled here:
+//
+//   - NXDOMAIN synthesis: the cached NSEC's interval covers a name
+//     that has never existed (the standard §5.1 case).
+//   - NoData synthesis: the cached NSEC's owner equals the queried
+//     name and its type bitmap excludes the queried qtype (§5.2).
+//
+// NSEC3 hash-space lookups are handled in aggressive_nsec3.go.
+// Wildcard interaction is handled by both halves uniformly: when
+// the proof set covers the would-be-wildcard expansion, synthesis
+// proceeds; when it doesn't, the lookup falls through to the
+// regular iteration path.
 //
 // # Why a separate index
 //
@@ -78,10 +86,34 @@ func (i *nsecIndex) Insert(e nsecEntry) {
 	i.entries = slices.Insert(i.entries, idx, e)
 }
 
-// Cover returns the entry whose interval covers q within bailiwick,
-// or zero+false. Expired entries are skipped (callers may then
-// trigger a sweep).
-func (i *nsecIndex) Cover(q wire.Name, now time.Time) (nsecEntry, bool) {
+// nsecLookupKind classifies what kind of proof the index has for q.
+type nsecLookupKind int
+
+const (
+	// nsecLookupNone means no covering NSEC was found (or it was
+	// expired / out of bailiwick / no useful relationship to q).
+	nsecLookupNone nsecLookupKind = iota
+	// nsecLookupNXDOMAIN means a cached NSEC's interval covers q
+	// strictly between owner and next; q does not exist.
+	nsecLookupNXDOMAIN
+	// nsecLookupNoData means a cached NSEC's owner equals q and the
+	// caller-supplied qtype is absent from its type bitmap; q
+	// exists but has no records of qtype.
+	nsecLookupNoData
+)
+
+// Lookup returns the kind of proof the index has for (q, qtype) and
+// the supporting entry. nsecLookupNone covers the "no useful proof"
+// case. Expired entries are skipped (callers may then trigger a
+// sweep).
+//
+// For NoData (§5.2 of RFC 8198), the cached NSEC's owner must equal
+// q and the queried qtype must NOT appear in the NSEC's type
+// bitmap. RFC 4034 §4.1.2 is explicit that the bitmap enumerates
+// every type present at the owner, including RRSIG/NSEC themselves
+// — so an NSEC whose bitmap lists, e.g., A and AAAA but not MX
+// proves NoData for MX.
+func (i *nsecIndex) Lookup(q wire.Name, qtype rrtype.Type, now time.Time) (nsecEntry, nsecLookupKind) {
 	qKey := canonicalKey(q)
 	i.mu.RLock()
 	defer i.mu.RUnlock()
@@ -94,25 +126,31 @@ func (i *nsecIndex) Cover(q wire.Name, now time.Time) (nsecEntry, bool) {
 		idx = len(i.entries)
 	}
 	if idx == 0 {
-		return nsecEntry{}, false
+		return nsecEntry{}, nsecLookupNone
 	}
 	cand := i.entries[idx-1]
 	if !cand.expiresAt.After(now) {
-		return nsecEntry{}, false
+		return nsecEntry{}, nsecLookupNone
 	}
 	if !inBailiwickName(cand.issuingZone, q) {
-		return nsecEntry{}, false
-	}
-	if !nsecCovers(cand.owner, cand.next, q) {
-		return nsecEntry{}, false
+		return nsecEntry{}, nsecLookupNone
 	}
 	if cand.owner.Equal(q) {
-		// q matches the owner exactly — NSEC at q does not deny q;
-		// it would prove the type-bitmap (NoData) which we don't
-		// implement yet.
-		return nsecEntry{}, false
+		// NoData candidate: NSEC at q proves NoData iff qtype is
+		// absent from its bitmap AND CNAME is also absent (a CNAME
+		// at q would be returned as an aliased answer instead).
+		if typeInBitmap(cand.types, rrtype.CNAME) {
+			return nsecEntry{}, nsecLookupNone
+		}
+		if typeInBitmap(cand.types, qtype) {
+			return nsecEntry{}, nsecLookupNone
+		}
+		return cand, nsecLookupNoData
 	}
-	return cand, true
+	if !nsecCovers(cand.owner, cand.next, q) {
+		return nsecEntry{}, nsecLookupNone
+	}
+	return cand, nsecLookupNXDOMAIN
 }
 
 // SweepExpired removes entries whose expiry is at-or-before now.
@@ -210,29 +248,79 @@ func inBailiwickName(ancestor, descendant wire.Name) bool {
 	return false
 }
 
+// hasWildcardDenial reports whether the index contains an NSEC
+// whose interval covers *.X for some ancestor X of q. RFC 4035
+// §5.4 / RFC 8198 §5.5: a complete NXDOMAIN proof must include
+// both an NSEC covering q AND an NSEC denying any wildcard match;
+// without the latter, q might still be matched by a wildcard at
+// some ancestor.
+//
+// The check is conservative — if any ancestor's wildcard is
+// denied, we accept synthesis. The most-likely ancestor (q's
+// closest encloser) isn't known without a query, but a real
+// validated NXDOMAIN response from any qname in the same zone
+// would have supplied the relevant wildcard-denying NSEC, which
+// the index then carries.
+func (i *nsecIndex) hasWildcardDenial(q wire.Name, now time.Time) bool {
+	cur := q
+	for {
+		p, ok := cur.Parent()
+		if !ok || cur.Equal(p) {
+			break
+		}
+		// Compute *.p as the wildcard at p.
+		wc, err := wire.ParseName("*." + p.String())
+		if err == nil {
+			if _, kind := i.Lookup(wc, rrtype.ANY, now); kind == nsecLookupNXDOMAIN {
+				return true
+			}
+		}
+		cur = p
+	}
+	return false
+}
+
+// typeInBitmap reports whether t appears in the NSEC type bitmap.
+// Used both for NoData synthesis (§5.2) and to prevent
+// NSEC-at-qname from being misinterpreted as NoData when a CNAME
+// is also present (which would normally produce an aliased answer
+// rather than NoData).
+func typeInBitmap(bitmap []rrtype.Type, t rrtype.Type) bool {
+	for _, b := range bitmap {
+		if b == t {
+			return true
+		}
+	}
+	return false
+}
+
 // synthesiseFromNSEC consults the aggressive NSEC index and, if a
-// covering NSEC exists, returns a synthesised NXDOMAIN Entry. The
-// synthesised Entry inherits the NSEC's remaining lifetime as the
-// cache TTL and carries the original NSEC in its Authority section
-// so a downstream consumer can verify (or just see) the proof.
+// covering NSEC exists, returns a synthesised negative Entry —
+// either NXDOMAIN (interval-covering NSEC, RFC 8198 §5.1) or NoData
+// (owner-matching NSEC with type bitmap excluding qtype, §5.2). The
+// synthesised Entry inherits the NSEC's remaining lifetime as its
+// cache lifetime and carries the original NSEC in its Authority
+// section so a downstream consumer can verify (or just see) the
+// proof.
 //
 // Returns (zero, false) when aggressive use is disabled, the index
-// has no covering entry, or the entry has expired since the last
-// access.
+// has no useful entry, or the entry has expired.
 func (r *recursive) synthesiseFromNSEC(name wire.Name, t rrtype.Type) (Entry, bool) {
 	if !r.aggressiveNSEC || r.nsecIdx == nil {
 		return Entry{}, false
 	}
 	now := time.Now()
-	cand, ok := r.nsecIdx.Cover(name, now)
-	if !ok {
+	cand, kind := r.nsecIdx.Lookup(name, t, now)
+	if kind == nsecLookupNone {
 		return Entry{}, false
 	}
-	// The NSEC's owner ≠ name is enforced inside Cover. The query
-	// type is irrelevant for NXDOMAIN synthesis: if the name doesn't
-	// exist, no record of any type exists at it. (NoData synthesis
-	// would consult cand.types and is not yet implemented.)
-	_ = t
+	// Wildcard denial guard (RFC 4035 §5.4 / RFC 8198 §5.5): a
+	// covering NSEC alone doesn't prove non-existence — we also
+	// need evidence that no wildcard would have matched. If the
+	// cache lacks such an NSEC, fall through to a real query.
+	if !r.nsecIdx.hasWildcardDenial(name, now) {
+		return Entry{}, false
+	}
 
 	ttl := time.Until(cand.expiresAt)
 	if ttl <= 0 {
@@ -240,26 +328,30 @@ func (r *recursive) synthesiseFromNSEC(name wire.Name, t rrtype.Type) (Entry, bo
 	}
 
 	// Re-pack the NSEC so the Authority section in the synthesised
-	// entry carries the same proof we relied on. Re-using the
-	// rdata.NSEC value as a wire.Record requires the original TTL —
-	// approximate by clamping to the remaining lifetime so a
-	// downstream cache consumer doesn't over-extend.
+	// entry carries the same proof we relied on. Clamp TTL to the
+	// remaining lifetime so a downstream cache consumer doesn't
+	// over-extend.
 	authority := []wire.Record{
 		wire.NewRecord(cand.owner, ttl,
 			rdata.NewNSEC(cand.next, cand.types)),
 	}
+	rcode := wire.RCODENXDomain
+	if kind == nsecLookupNoData {
+		rcode = wire.RCODENoError
+	}
 	return Entry{
 		Authority: authority,
-		RCODE:     wire.RCODENXDomain,
+		RCODE:     rcode,
 		AD:        true,
 		ExpiresAt: cand.expiresAt,
 	}, true
 }
 
 // extractValidatedNSECs picks NSEC records out of resp's authority
-// section that arrived alongside an authoritative NXDOMAIN. The
-// caller is responsible for ensuring resp was DNSSEC-validated
-// (Entry.AD == true) before invoking this.
+// section that arrived alongside an authoritative negative response
+// (NXDOMAIN or NoData). The caller is responsible for ensuring
+// resp was DNSSEC-validated (Entry.AD == true) before invoking
+// this.
 //
 // The issuingZone is determined from the SOA record in the
 // authority section, if present; that zone is the apex of the zone
