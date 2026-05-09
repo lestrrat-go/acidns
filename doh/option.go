@@ -1,13 +1,20 @@
 package doh
 
-import "net/http"
+import (
+	"net/http"
+
+	"github.com/lestrrat-go/option/v3"
+)
 
 // Option configures a DoH Exchanger.
-type Option interface{ applyDoH(*config) }
+type Option interface {
+	option.Interface
+	dohOption()
+}
 
-type optionFunc func(*config)
+type dohOption struct{ option.Interface }
 
-func (f optionFunc) applyDoH(c *config) { f(c) }
+func (dohOption) dohOption() {}
 
 type config struct {
 	client    *http.Client
@@ -16,6 +23,12 @@ type config struct {
 	padding   bool
 	insecure  bool
 }
+
+type identHTTPClient struct{}
+type identMethod struct{}
+type identUserAgent struct{}
+type identPadding struct{}
+type identInsecure struct{}
 
 // WithHTTPClient overrides the default *http.Client.
 //
@@ -35,17 +48,17 @@ type config struct {
 // Callers needing a proxy or custom verification logic should supply
 // a Transport whose type is not *http.Transport (e.g. a wrapper).
 func WithHTTPClient(hc *http.Client) Option {
-	return optionFunc(func(c *config) { c.client = hc })
+	return dohOption{option.New(identHTTPClient{}, hc)}
 }
 
 // WithMethod selects POST (default) or GET.
 func WithMethod(m Method) Option {
-	return optionFunc(func(c *config) { c.method = m })
+	return dohOption{option.New(identMethod{}, m)}
 }
 
 // WithUserAgent sets the User-Agent header on outgoing requests.
 func WithUserAgent(ua string) Option {
-	return optionFunc(func(c *config) { c.userAgent = ua })
+	return dohOption{option.New(identUserAgent{}, ua)}
 }
 
 // WithPadding toggles RFC 8467 §4.1 block-padding. Default is true:
@@ -53,7 +66,7 @@ func WithUserAgent(ua string) Option {
 // HTTP/2 frame's size cannot leak the queried name. Pass false to
 // disable padding.
 func WithPadding(v bool) Option {
-	return optionFunc(func(c *config) { c.padding = v })
+	return dohOption{option.New(identPadding{}, v)}
 }
 
 // WithInsecure permits a plaintext "http://" endpoint. By default
@@ -63,5 +76,5 @@ func WithPadding(v bool) Option {
 // loopback server (e.g. httptest.NewServer). Pass true to allow
 // plaintext, false to enforce HTTPS (the default).
 func WithInsecure(v bool) Option {
-	return optionFunc(func(c *config) { c.insecure = v })
+	return dohOption{option.New(identInsecure{}, v)}
 }

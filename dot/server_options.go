@@ -3,18 +3,21 @@ package dot
 import (
 	"crypto/tls"
 	"time"
+
+	"github.com/lestrrat-go/option/v3"
 )
 
 // ServerOption configures a DoT [Server] at construction. The shape
 // mirrors [acidns.TCPListenerOption] one-for-one so a caller already
 // familiar with the TCP server can map across.
 type ServerOption interface {
-	applyDoTServer(*serverConfig)
+	option.Interface
+	dotServerOption()
 }
 
-type serverOptionFunc func(*serverConfig)
+type dotServerOption struct{ option.Interface }
 
-func (f serverOptionFunc) applyDoTServer(c *serverConfig) { f(c) }
+func (dotServerOption) dotServerOption() {}
 
 type serverConfig struct {
 	tlsConfig         *tls.Config
@@ -28,6 +31,16 @@ type serverConfig struct {
 	maxInflightPer    int
 }
 
+type identServerTLSConfig struct{}
+type identServerHandshakeTimeout struct{}
+type identServerIdleTimeout struct{}
+type identServerWriteTimeout struct{}
+type identServerMaxConnections struct{}
+type identServerMaxMessageSize struct{}
+type identServerMaxQueriesPerConn struct{}
+type identServerMaxConnLifetime struct{}
+type identServerMaxInflightPerConn struct{}
+
 // WithServerTLSConfig installs the TLS configuration used to serve
 // connections. The supplied config MUST carry at least one
 // Certificate (typical) or a GetCertificate callback (for SNI-based
@@ -40,7 +53,7 @@ type serverConfig struct {
 //
 // This option is required — [NewServer] returns an error otherwise.
 func WithServerTLSConfig(tc *tls.Config) ServerOption {
-	return serverOptionFunc(func(c *serverConfig) { c.tlsConfig = tc })
+	return dotServerOption{option.New(identServerTLSConfig{}, tc)}
 }
 
 // WithServerHandshakeTimeout caps how long the TLS handshake may
@@ -49,7 +62,7 @@ func WithServerTLSConfig(tc *tls.Config) ServerOption {
 // simultaneously widening the peer-stalls-on-ClientHello window.
 // Defaults to 10s; non-positive disables.
 func WithServerHandshakeTimeout(d time.Duration) ServerOption {
-	return serverOptionFunc(func(c *serverConfig) { c.handshakeTimeout = d })
+	return dotServerOption{option.New(identServerHandshakeTimeout{}, d)}
 }
 
 // WithServerIdleTimeout sets how long an idle connection is kept
@@ -57,14 +70,14 @@ func WithServerHandshakeTimeout(d time.Duration) ServerOption {
 // RFC 7858). Defaults to 10s. A non-positive value disables the
 // idle timeout.
 func WithServerIdleTimeout(d time.Duration) ServerOption {
-	return serverOptionFunc(func(c *serverConfig) { c.idleTimeout = d })
+	return dotServerOption{option.New(identServerIdleTimeout{}, d)}
 }
 
 // WithServerWriteTimeout caps how long a single response write may
 // take. Without a write deadline a slow-read attacker can pin a
 // server goroutine indefinitely. Default 5s; non-positive disables.
 func WithServerWriteTimeout(d time.Duration) ServerOption {
-	return serverOptionFunc(func(c *serverConfig) { c.writeTimeout = d })
+	return dotServerOption{option.New(identServerWriteTimeout{}, d)}
 }
 
 // WithServerMaxConnections caps the number of concurrent TLS
@@ -72,7 +85,7 @@ func WithServerWriteTimeout(d time.Duration) ServerOption {
 // a slot frees, providing natural backpressure via the kernel listen
 // backlog. A non-positive value disables the cap. Defaults to 1024.
 func WithServerMaxConnections(n int) ServerOption {
-	return serverOptionFunc(func(c *serverConfig) { c.maxConnections = n })
+	return dotServerOption{option.New(identServerMaxConnections{}, n)}
 }
 
 // WithServerMaxMessageSize caps the length-prefixed body the server
@@ -81,26 +94,26 @@ func WithServerMaxConnections(n int) ServerOption {
 // client can force the server to allocate a 64 KiB buffer per
 // connection. Default 16 KiB. A non-positive value disables the cap.
 func WithServerMaxMessageSize(n int) ServerOption {
-	return serverOptionFunc(func(c *serverConfig) { c.maxMessageSize = n })
+	return dotServerOption{option.New(identServerMaxMessageSize{}, n)}
 }
 
 // WithServerMaxQueriesPerConn caps the total queries served on a
 // single connection before it is closed. A non-positive value
 // disables the cap. Defaults to 0 (no cap).
 func WithServerMaxQueriesPerConn(n int) ServerOption {
-	return serverOptionFunc(func(c *serverConfig) { c.maxQueriesPerConn = n })
+	return dotServerOption{option.New(identServerMaxQueriesPerConn{}, n)}
 }
 
 // WithServerMaxConnLifetime caps wall-clock time a single connection
 // may remain open. Backstop for misbehaving peers and a way to cycle
 // TLS session state on a sane cadence. A non-positive value disables.
 func WithServerMaxConnLifetime(d time.Duration) ServerOption {
-	return serverOptionFunc(func(c *serverConfig) { c.maxConnLifetime = d })
+	return dotServerOption{option.New(identServerMaxConnLifetime{}, d)}
 }
 
 // WithServerMaxInflightPerConn caps the number of concurrently-running
 // handler goroutines per connection. Defaults to 32; a non-positive
 // value disables pipelining (handlers run serially).
 func WithServerMaxInflightPerConn(n int) ServerOption {
-	return serverOptionFunc(func(c *serverConfig) { c.maxInflightPer = n })
+	return dotServerOption{option.New(identServerMaxInflightPerConn{}, n)}
 }

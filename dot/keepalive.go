@@ -12,16 +12,18 @@ import (
 	"github.com/lestrrat-go/acidns"
 	"github.com/lestrrat-go/acidns/internal/streamframe"
 	"github.com/lestrrat-go/acidns/wire"
+	"github.com/lestrrat-go/option/v3"
 )
 
 // KeepAliveOption configures a DoT keep-alive Exchanger.
 type KeepAliveOption interface {
-	applyDoTKeepAlive(*kaConfig)
+	option.Interface
+	dotKeepAliveOption()
 }
 
-type kaOptionFunc func(*kaConfig)
+type dotKeepAliveOption struct{ option.Interface }
 
-func (f kaOptionFunc) applyDoTKeepAlive(c *kaConfig) { f(c) }
+func (dotKeepAliveOption) dotKeepAliveOption() {}
 
 type kaConfig struct {
 	timeout      time.Duration
@@ -32,11 +34,18 @@ type kaConfig struct {
 	padding      bool
 }
 
+type identKATimeout struct{}
+type identKAIdle struct{}
+type identKAAdvertise struct{}
+type identKATLSConfig struct{}
+type identKAServerName struct{}
+type identKAPadding struct{}
+
 // WithKeepAliveTimeout sets the per-exchange I/O timeout used when the
 // caller's context has no deadline. Defaults to 10 seconds — TLS
 // handshake plus query/response.
 func WithKeepAliveTimeout(d time.Duration) KeepAliveOption {
-	return kaOptionFunc(func(c *kaConfig) { c.timeout = d })
+	return dotKeepAliveOption{option.New(identKATimeout{}, d)}
 }
 
 // WithKeepAliveIdle sets the local fallback idle window used when the
@@ -44,19 +53,19 @@ func WithKeepAliveTimeout(d time.Duration) KeepAliveOption {
 // elapses since the last completed exchange the cached TLS connection
 // is closed and the next Exchange dials fresh. Defaults to 30 seconds.
 func WithKeepAliveIdle(d time.Duration) KeepAliveOption {
-	return kaOptionFunc(func(c *kaConfig) { c.idleFallback = d })
+	return dotKeepAliveOption{option.New(identKAIdle{}, d)}
 }
 
 // WithKeepAliveAdvertise controls whether outgoing queries are augmented
 // with an empty edns-tcp-keepalive option (RFC 7828 §3.1). Defaults to
 // true. RFC 7858 §3.4 explicitly endorses RFC 7828 over DoT.
 func WithKeepAliveAdvertise(v bool) KeepAliveOption {
-	return kaOptionFunc(func(c *kaConfig) { c.advertise = v })
+	return dotKeepAliveOption{option.New(identKAAdvertise{}, v)}
 }
 
 // WithKeepAliveTLSConfig overrides the default *tls.Config (cloned).
 func WithKeepAliveTLSConfig(tc *tls.Config) KeepAliveOption {
-	return kaOptionFunc(func(c *kaConfig) { c.tlsConfig = tc.Clone() })
+	return dotKeepAliveOption{option.New(identKATLSConfig{}, tc.Clone())}
 }
 
 // WithKeepAliveServerName sets the SNI / certificate verification name.
@@ -64,13 +73,13 @@ func WithKeepAliveTLSConfig(tc *tls.Config) KeepAliveOption {
 // pre-supplied *tls.Config — the exchanger refuses construction
 // otherwise (see [New] for the same rule).
 func WithKeepAliveServerName(name string) KeepAliveOption {
-	return kaOptionFunc(func(c *kaConfig) { c.serverName = name })
+	return dotKeepAliveOption{option.New(identKAServerName{}, name)}
 }
 
 // WithKeepAlivePadding toggles RFC 8467 §4.1 query padding. Defaults to
 // true.
 func WithKeepAlivePadding(v bool) KeepAliveOption {
-	return kaOptionFunc(func(c *kaConfig) { c.padding = v })
+	return dotKeepAliveOption{option.New(identKAPadding{}, v)}
 }
 
 // NewKeepAliveExchanger returns an Exchanger that maintains a single
@@ -93,7 +102,20 @@ func NewKeepAliveExchanger(addr netip.AddrPort, opts ...KeepAliveOption) (acidns
 		padding:      true,
 	}
 	for _, o := range opts {
-		o.applyDoTKeepAlive(&c)
+		switch o.Ident() {
+		case identKATimeout{}:
+			c.timeout = option.MustGet[time.Duration](o)
+		case identKAIdle{}:
+			c.idleFallback = option.MustGet[time.Duration](o)
+		case identKAAdvertise{}:
+			c.advertise = option.MustGet[bool](o)
+		case identKATLSConfig{}:
+			c.tlsConfig = option.MustGet[*tls.Config](o)
+		case identKAServerName{}:
+			c.serverName = option.MustGet[string](o)
+		case identKAPadding{}:
+			c.padding = option.MustGet[bool](o)
+		}
 	}
 
 	var tcfg *tls.Config

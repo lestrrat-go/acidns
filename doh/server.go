@@ -66,6 +66,7 @@ import (
 	"github.com/lestrrat-go/acidns"
 	"github.com/lestrrat-go/acidns/internal/serverctl"
 	"github.com/lestrrat-go/acidns/wire"
+	"github.com/lestrrat-go/option/v3"
 )
 
 // ErrServerClosed is recorded on the [Controller] after a clean
@@ -91,7 +92,10 @@ func NewHandler(h acidns.Handler, opts ...HandlerOption) http.Handler {
 	}
 	c := handlerConfig{maxRequestBytes: MaxRequestBytes}
 	for _, o := range opts {
-		o.applyDoHHandler(&c)
+		switch o.Ident() {
+		case identHandlerMaxRequestBytes{}:
+			c.maxRequestBytes = option.MustGet[int](o)
+		}
 	}
 	if c.maxRequestBytes <= 0 {
 		c.maxRequestBytes = MaxRequestBytes
@@ -276,7 +280,26 @@ func NewServer(addr netip.AddrPort, h acidns.Handler, opts ...ServerOption) (*Se
 		maxConcurrentStreams: 100,
 	}
 	for _, o := range opts {
-		o.applyDoHServer(&cfg)
+		switch o.Ident() {
+		case identServerTLSConfig{}:
+			cfg.tlsConfig = option.MustGet[*tls.Config](o)
+		case identServerPath{}:
+			cfg.path = option.MustGet[string](o)
+		case identServerMaxRequestBytes{}:
+			cfg.maxRequestBytes = option.MustGet[int](o)
+		case identServerReadHeaderTimeout{}:
+			cfg.readHeaderTimeout = option.MustGet[time.Duration](o)
+		case identServerReadTimeout{}:
+			cfg.readTimeout = option.MustGet[time.Duration](o)
+		case identServerWriteTimeout{}:
+			cfg.writeTimeout = option.MustGet[time.Duration](o)
+		case identServerIdleTimeout{}:
+			cfg.idleTimeout = option.MustGet[time.Duration](o)
+		case identServerMaxConnections{}:
+			cfg.maxConnections = option.MustGet[int](o)
+		case identServerMaxConcurrentStreams{}:
+			cfg.maxConcurrentStreams = option.MustGet[uint32](o)
+		}
 	}
 	if cfg.tlsConfig == nil {
 		return nil, fmt.Errorf("doh: WithServerTLSConfig is required")

@@ -5,16 +5,19 @@ package doq
 import (
 	"crypto/tls"
 	"time"
+
+	"github.com/lestrrat-go/option/v3"
 )
 
 // ServerOption configures a DoQ [Server].
 type ServerOption interface {
-	applyDoQServer(*serverConfig)
+	option.Interface
+	doqServerOption()
 }
 
-type serverOptionFunc func(*serverConfig)
+type doqServerOption struct{ option.Interface }
 
-func (f serverOptionFunc) applyDoQServer(c *serverConfig) { f(c) }
+func (doqServerOption) doqServerOption() {}
 
 type serverConfig struct {
 	tlsConfig         *tls.Config
@@ -27,12 +30,21 @@ type serverConfig struct {
 	maxConnLifetime   time.Duration
 }
 
+type identServerTLSConfig struct{}
+type identServerIdleTimeout struct{}
+type identServerStreamReadTimeout struct{}
+type identServerWriteTimeout struct{}
+type identServerMaxMessageSize struct{}
+type identServerMaxStreamsPer struct{}
+type identServerMaxConnections struct{}
+type identServerMaxConnLifetime struct{}
+
 // WithServerTLSConfig installs the TLS configuration used during the
 // QUIC handshake. Required: a DoQ server without TLS isn't DoQ.
 // MinVersion is raised to TLS 1.3 if unset; "doq" is appended to
 // NextProtos when missing.
 func WithServerTLSConfig(tc *tls.Config) ServerOption {
-	return serverOptionFunc(func(c *serverConfig) { c.tlsConfig = tc })
+	return doqServerOption{option.New(identServerTLSConfig{}, tc)}
 }
 
 // WithServerIdleTimeout caps how long a QUIC connection can be idle
@@ -42,7 +54,7 @@ func WithServerTLSConfig(tc *tls.Config) ServerOption {
 // knob — for the per-stream read deadline that bounds how long the
 // server waits for a query body, see [WithServerStreamReadTimeout].
 func WithServerIdleTimeout(d time.Duration) ServerOption {
-	return serverOptionFunc(func(c *serverConfig) { c.idleTimeout = d })
+	return doqServerOption{option.New(identServerIdleTimeout{}, d)}
 }
 
 // WithServerStreamReadTimeout caps how long the server waits for a
@@ -52,13 +64,13 @@ func WithServerIdleTimeout(d time.Duration) ServerOption {
 // value here protects against a slow-write peer pinning per-stream
 // state without yet sending any wire data.
 func WithServerStreamReadTimeout(d time.Duration) ServerOption {
-	return serverOptionFunc(func(c *serverConfig) { c.streamReadTimeout = d })
+	return doqServerOption{option.New(identServerStreamReadTimeout{}, d)}
 }
 
 // WithServerWriteTimeout caps how long a single response write may
 // take on a stream. Defaults to 5 seconds; non-positive disables.
 func WithServerWriteTimeout(d time.Duration) ServerOption {
-	return serverOptionFunc(func(c *serverConfig) { c.writeTimeout = d })
+	return doqServerOption{option.New(identServerWriteTimeout{}, d)}
 }
 
 // WithServerMaxMessageSize caps the length-prefixed body the server
@@ -66,7 +78,7 @@ func WithServerWriteTimeout(d time.Duration) ServerOption {
 // 16-bit length prefix permits up to 65535 bytes when uncapped.
 // A non-positive value disables the cap.
 func WithServerMaxMessageSize(n int) ServerOption {
-	return serverOptionFunc(func(c *serverConfig) { c.maxMessageSize = n })
+	return doqServerOption{option.New(identServerMaxMessageSize{}, n)}
 }
 
 // WithServerMaxStreamsPerConn caps the number of concurrent
@@ -74,7 +86,7 @@ func WithServerMaxMessageSize(n int) ServerOption {
 // to 256 — generous for any real client and tight enough that a
 // hostile peer cannot exhaust per-connection state.
 func WithServerMaxStreamsPerConn(n int) ServerOption {
-	return serverOptionFunc(func(c *serverConfig) { c.maxStreamsPer = n })
+	return doqServerOption{option.New(identServerMaxStreamsPer{}, n)}
 }
 
 // WithServerMaxConnections caps the number of concurrent QUIC
@@ -82,7 +94,7 @@ func WithServerMaxStreamsPerConn(n int) ServerOption {
 // peers are closed with the doq "excessive load" error code per
 // RFC 9250 §4.3. Defaults to 256; non-positive disables.
 func WithServerMaxConnections(n int) ServerOption {
-	return serverOptionFunc(func(c *serverConfig) { c.maxConnections = n })
+	return doqServerOption{option.New(identServerMaxConnections{}, n)}
 }
 
 // WithServerMaxConnLifetime caps the wall-clock lifetime of a single
@@ -92,5 +104,5 @@ func WithServerMaxConnections(n int) ServerOption {
 // lifetime streams. Defaults to 1 hour, matching the TCP and DoT
 // defaults. A non-positive value disables the cap.
 func WithServerMaxConnLifetime(d time.Duration) ServerOption {
-	return serverOptionFunc(func(c *serverConfig) { c.maxConnLifetime = d })
+	return doqServerOption{option.New(identServerMaxConnLifetime{}, d)}
 }

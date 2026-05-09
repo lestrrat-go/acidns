@@ -46,6 +46,7 @@ import (
 	"github.com/lestrrat-go/acidns"
 	"github.com/lestrrat-go/acidns/internal/streamframe"
 	"github.com/lestrrat-go/acidns/wire"
+	"github.com/lestrrat-go/option/v3"
 )
 
 type exchanger struct {
@@ -64,7 +65,16 @@ func New(addr netip.AddrPort, opts ...Option) (acidns.Exchanger, error) {
 	}
 	c := config{timeout: 10 * time.Second, padding: true}
 	for _, o := range opts {
-		o.applyDoT(&c)
+		switch o.Ident() {
+		case identTimeout{}:
+			c.timeout = option.MustGet[time.Duration](o)
+		case identTLSConfig{}:
+			c.tlsConfig = option.MustGet[*tls.Config](o)
+		case identServerName{}:
+			c.serverName = option.MustGet[string](o)
+		case identPadding{}:
+			c.padding = option.MustGet[bool](o)
+		}
 	}
 
 	var tcfg *tls.Config

@@ -30,6 +30,7 @@ import (
 
 	"github.com/lestrrat-go/acidns"
 	"github.com/lestrrat-go/acidns/wire"
+	"github.com/lestrrat-go/option/v3"
 )
 
 // alpn is the ALPN identifier registered for DoQ.
@@ -68,7 +69,18 @@ func New(addr netip.AddrPort, opts ...Option) (acidns.Exchanger, error) {
 	}
 	c := config{timeout: 10 * time.Second, padding: true, maxResponseBytes: DefaultMaxResponseBytes}
 	for _, o := range opts {
-		o.applyDoQ(&c)
+		switch o.Ident() {
+		case identTimeout{}:
+			c.timeout = option.MustGet[time.Duration](o)
+		case identTLSConfig{}:
+			c.tlsConfig = option.MustGet[*tls.Config](o)
+		case identServerName{}:
+			c.serverName = option.MustGet[string](o)
+		case identPadding{}:
+			c.padding = option.MustGet[bool](o)
+		case identMaxResponseBytes{}:
+			c.maxResponseBytes = option.MustGet[int](o)
+		}
 	}
 
 	var tcfg *tls.Config

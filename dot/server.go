@@ -44,6 +44,7 @@ import (
 	"github.com/lestrrat-go/acidns"
 	"github.com/lestrrat-go/acidns/internal/serverctl"
 	"github.com/lestrrat-go/acidns/wire"
+	"github.com/lestrrat-go/option/v3"
 )
 
 // ErrServerClosed is recorded on the [Controller] after a clean
@@ -82,7 +83,26 @@ func NewServer(addr netip.AddrPort, h acidns.Handler, opts ...ServerOption) (*Se
 		maxConnLifetime:   time.Hour,
 	}
 	for _, o := range opts {
-		o.applyDoTServer(&cfg)
+		switch o.Ident() {
+		case identServerTLSConfig{}:
+			cfg.tlsConfig = option.MustGet[*tls.Config](o)
+		case identServerHandshakeTimeout{}:
+			cfg.handshakeTimeout = option.MustGet[time.Duration](o)
+		case identServerIdleTimeout{}:
+			cfg.idleTimeout = option.MustGet[time.Duration](o)
+		case identServerWriteTimeout{}:
+			cfg.writeTimeout = option.MustGet[time.Duration](o)
+		case identServerMaxConnections{}:
+			cfg.maxConnections = option.MustGet[int](o)
+		case identServerMaxMessageSize{}:
+			cfg.maxMessageSize = option.MustGet[int](o)
+		case identServerMaxQueriesPerConn{}:
+			cfg.maxQueriesPerConn = option.MustGet[int](o)
+		case identServerMaxConnLifetime{}:
+			cfg.maxConnLifetime = option.MustGet[time.Duration](o)
+		case identServerMaxInflightPerConn{}:
+			cfg.maxInflightPer = option.MustGet[int](o)
+		}
 	}
 	if cfg.tlsConfig == nil {
 		return nil, fmt.Errorf("dot: WithServerTLSConfig is required (DoT cannot run without TLS)")

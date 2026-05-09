@@ -48,6 +48,7 @@ import (
 
 	"github.com/lestrrat-go/acidns"
 	"github.com/lestrrat-go/acidns/wire"
+	"github.com/lestrrat-go/option/v3"
 )
 
 const contentType = "application/dns-message"
@@ -124,7 +125,18 @@ func New(endpoint string, opts ...Option) (acidns.Exchanger, error) {
 	}
 	c := config{method: MethodPOST, userAgent: "acidns-doh/0.1", padding: true}
 	for _, o := range opts {
-		o.applyDoH(&c)
+		switch o.Ident() {
+		case identHTTPClient{}:
+			c.client = option.MustGet[*http.Client](o)
+		case identMethod{}:
+			c.method = option.MustGet[Method](o)
+		case identUserAgent{}:
+			c.userAgent = option.MustGet[string](o)
+		case identPadding{}:
+			c.padding = option.MustGet[bool](o)
+		case identInsecure{}:
+			c.insecure = option.MustGet[bool](o)
+		}
 	}
 	switch u.Scheme {
 	case "https":

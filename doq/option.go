@@ -5,14 +5,19 @@ package doq
 import (
 	"crypto/tls"
 	"time"
+
+	"github.com/lestrrat-go/option/v3"
 )
 
 // Option configures a DoQ Exchanger.
-type Option interface{ applyDoQ(*config) }
+type Option interface {
+	option.Interface
+	doqOption()
+}
 
-type optionFunc func(*config)
+type doqOption struct{ option.Interface }
 
-func (f optionFunc) applyDoQ(c *config) { f(c) }
+func (doqOption) doqOption() {}
 
 // DefaultMaxResponseBytes caps the body of a DoQ response a client
 // will allocate per stream. The wire prefix is uint16 so the absolute
@@ -29,30 +34,36 @@ type config struct {
 	maxResponseBytes int
 }
 
+type identTimeout struct{}
+type identTLSConfig struct{}
+type identServerName struct{}
+type identPadding struct{}
+type identMaxResponseBytes struct{}
+
 // WithTimeout sets a per-exchange timeout used when ctx has no deadline.
 func WithTimeout(d time.Duration) Option {
-	return optionFunc(func(c *config) { c.timeout = d })
+	return doqOption{option.New(identTimeout{}, d)}
 }
 
 // WithTLSConfig overrides the default TLS configuration. The "doq" ALPN
 // is added automatically if absent.
 func WithTLSConfig(tc *tls.Config) Option {
-	return optionFunc(func(c *config) { c.tlsConfig = tc.Clone() })
+	return doqOption{option.New(identTLSConfig{}, tc.Clone())}
 }
 
 // WithServerName overrides SNI / certificate verification name.
 func WithServerName(name string) Option {
-	return optionFunc(func(c *config) { c.serverName = name })
+	return doqOption{option.New(identServerName{}, name)}
 }
 
 // WithPadding toggles RFC 8467 §4.1 block-padding. Default is true.
 func WithPadding(v bool) Option {
-	return optionFunc(func(c *config) { c.padding = v })
+	return doqOption{option.New(identPadding{}, v)}
 }
 
 // WithMaxResponseBytes caps how many response bytes the client will
 // allocate per stream. A non-positive value falls back to
 // [DefaultMaxResponseBytes].
 func WithMaxResponseBytes(n int) Option {
-	return optionFunc(func(c *config) { c.maxResponseBytes = n })
+	return doqOption{option.New(identMaxResponseBytes{}, n)}
 }
