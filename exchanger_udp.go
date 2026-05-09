@@ -41,9 +41,9 @@ func WithUDPTimeout(d time.Duration) UDPExchangerOption {
 	return udpExchangerOptionFunc(func(c *udpExchangerConfig) { c.timeout = d })
 }
 
-// WithUDPReadBufferSize sets the size of the UDP read buffer in bytes. Defaults
+// WithUDPExchangerBufferSize sets the size of the UDP read buffer in bytes. Defaults
 // to 4096, which fits a typical EDNS-extended response.
-func WithUDPReadBufferSize(n int) UDPExchangerOption {
+func WithUDPExchangerBufferSize(n int) UDPExchangerOption {
 	return udpExchangerOptionFunc(func(c *udpExchangerConfig) { c.bufferSize = n })
 }
 
