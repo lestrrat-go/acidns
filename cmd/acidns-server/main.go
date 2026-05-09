@@ -168,7 +168,7 @@ func buildForward(o opts) (acidns.Handler, error) {
 		}
 		opts = append(opts, forward.WithUDPUpstream(ap))
 	}
-	return forward.NewForwarder(opts...)
+	return forward.New(opts...)
 }
 
 func buildAuthoritative(files []string) (acidns.Handler, error) {

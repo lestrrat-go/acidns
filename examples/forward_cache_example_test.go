@@ -46,7 +46,7 @@ func Example_forward_cache() {
 	// fully in-process. The first query is forwarded; the second is a
 	// cache hit, evidenced by the upstream call counter staying at 1.
 	upstream := &stubUpstream{}
-	h, err := forward.NewForwarder(forward.WithUpstream(upstream))
+	h, err := forward.New(forward.WithUpstream(upstream))
 	if err != nil {
 		fmt.Println("forward:", err)
 		return

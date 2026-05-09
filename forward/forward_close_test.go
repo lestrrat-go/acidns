@@ -36,7 +36,7 @@ func (plainUpstream) Exchange(_ context.Context, q wire.Message) (wire.Message, 
 func TestHandler_Close_PropagatesToUpstream(t *testing.T) {
 	t.Parallel()
 	up := &closableUpstream{}
-	h, err := forward.NewForwarder(forward.WithUpstream(up))
+	h, err := forward.New(forward.WithUpstream(up))
 	require.NoError(t, err)
 
 	require.NoError(t, h.Close())
@@ -47,7 +47,7 @@ func TestHandler_Close_PropagatesError(t *testing.T) {
 	t.Parallel()
 	wantErr := errors.New("upstream gone")
 	up := &closableUpstream{closeErr: wantErr}
-	h, err := forward.NewForwarder(forward.WithUpstream(up))
+	h, err := forward.New(forward.WithUpstream(up))
 	require.NoError(t, err)
 
 	require.ErrorIs(t, h.Close(), wantErr)
@@ -55,7 +55,7 @@ func TestHandler_Close_PropagatesError(t *testing.T) {
 
 func TestHandler_Close_NopUpstream(t *testing.T) {
 	t.Parallel()
-	h, err := forward.NewForwarder(forward.WithUpstream(plainUpstream{}))
+	h, err := forward.New(forward.WithUpstream(plainUpstream{}))
 	require.NoError(t, err)
 
 	require.NoError(t, h.Close())
