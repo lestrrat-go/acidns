@@ -80,20 +80,26 @@ type Dialer interface {
 }
 
 type recursive struct {
-	roots         []netip.AddrPort
-	cache         Cache
-	stats         ServerStats
-	maxIterations int
-	maxDepth      int
-	maxCNAMEs     int
-	dialer        Dialer
-	validator     Validator
-	queryTimeout  time.Duration
-	maxNegTTL     time.Duration
-	resolveBudget time.Duration
-	allowNoRD     bool
-	caseRandom    bool
-	qnameMin      bool
+	roots          []netip.AddrPort
+	cache          Cache
+	stats          ServerStats
+	maxIterations  int
+	maxDepth       int
+	maxCNAMEs      int
+	dialer         Dialer
+	validator      Validator
+	queryTimeout   time.Duration
+	maxNegTTL      time.Duration
+	resolveBudget  time.Duration
+	allowNoRD      bool
+	caseRandom     bool
+	qnameMin       bool
+	aggressiveNSEC bool
+
+	// nsecIdx caches DNSSEC-validated NSEC records for RFC 8198
+	// aggressive synthesis. nil unless aggressiveNSEC is on (which
+	// itself requires a validator).
+	nsecIdx *nsecIndex
 
 	inflightMu sync.Mutex
 	inflight   map[string]*inflightCall
@@ -148,24 +154,29 @@ func New(opts ...Option) Recursive {
 		// is responsible for its own 0x20 verification.
 		c.dialer = defaultDialer{use0x20: c.caseRandom}
 	}
-	return &recursive{
-		roots:         append([]netip.AddrPort(nil), c.roots...),
-		cache:         c.cache,
-		stats:         c.stats,
-		maxIterations: c.maxIterations,
-		maxDepth:      c.maxDepth,
-		maxCNAMEs:     c.maxCNAMEs,
-		dialer:        c.dialer,
-		validator:     c.validator,
-		queryTimeout:  c.queryTimeout,
-		maxNegTTL:     c.maxNegTTL,
-		resolveBudget: c.resolveBudget,
-		allowNoRD:     c.allowNoRD,
-		caseRandom:    c.caseRandom,
-		qnameMin:      c.qnameMin,
-		inflight:      make(map[string]*inflightCall),
-		nsInProgress:  make(map[string]struct{}),
+	r := &recursive{
+		roots:          append([]netip.AddrPort(nil), c.roots...),
+		cache:          c.cache,
+		stats:          c.stats,
+		maxIterations:  c.maxIterations,
+		maxDepth:       c.maxDepth,
+		maxCNAMEs:      c.maxCNAMEs,
+		dialer:         c.dialer,
+		validator:      c.validator,
+		queryTimeout:   c.queryTimeout,
+		maxNegTTL:      c.maxNegTTL,
+		resolveBudget:  c.resolveBudget,
+		allowNoRD:      c.allowNoRD,
+		caseRandom:     c.caseRandom,
+		qnameMin:       c.qnameMin,
+		aggressiveNSEC: c.aggressiveNSEC && c.validator != nil,
+		inflight:       make(map[string]*inflightCall),
+		nsInProgress:   make(map[string]struct{}),
 	}
+	if r.aggressiveNSEC {
+		r.nsecIdx = newNSECIndex()
+	}
+	return r
 }
 
 // DefaultDialer returns the built-in Dialer.
@@ -313,6 +324,19 @@ func (r *recursive) Resolve(ctx context.Context, name wire.Name, t rrtype.Type) 
 			entry.AD = true
 		}
 	}
+	// RFC 8198: harvest NSEC records from a validated negative
+	// response into the aggressive index. Only enter this branch
+	// when aggressive use is enabled (which itself implies a
+	// validator was configured), the answer was validated as
+	// Secure (entry.AD), and the response was negative (NXDOMAIN
+	// with no answers — NoData synthesis is not yet implemented).
+	if r.aggressiveNSEC && entry.AD &&
+		entry.RCODE == wire.RCODENXDomain && len(entry.Answer) == 0 {
+		now := time.Now()
+		for _, ne := range extractValidatedNSECs(entry.Authority, now) {
+			r.nsecIdx.Insert(ne)
+		}
+	}
 	return entry, nil
 }
 
@@ -404,6 +428,16 @@ func (r *recursive) resolveDepth(ctx context.Context, name wire.Name, t rrtype.T
 		return Entry{}, fmt.Errorf("recursive: depth limit reached for %s", name)
 	}
 	if e, ok := r.cache.Get(name, t); ok {
+		return e, nil
+	}
+	// RFC 8198 aggressive NSEC: before going to the network, check
+	// whether a previously-validated NSEC in the index already
+	// proves NXDOMAIN for this name. If yes, synthesise the answer
+	// locally — no upstream traffic, no information leak. The
+	// synthesised entry is also written to the regular cache so the
+	// next lookup hits the standard fast path above.
+	if e, ok := r.synthesiseFromNSEC(name, t); ok {
+		r.cache.Put(name, t, e)
 		return e, nil
 	}
 
@@ -837,6 +871,19 @@ func (r *recursive) entryFromResponse(qname wire.Name, resp wire.Message) Entry 
 	}
 }
 
+// isDNSSECDenialType reports whether t is a record type that
+// participates in a denial-of-existence proof and is expected to
+// appear with owner names spanning the signed zone — not just
+// at-or-above the qname. RRSIG carries a signature over an NSEC or
+// NSEC3 RRset; its owner mirrors the covered RRset's owner.
+func isDNSSECDenialType(t rrtype.Type) bool {
+	switch t {
+	case rrtype.NSEC, rrtype.NSEC3, rrtype.RRSIG:
+		return true
+	}
+	return false
+}
+
 // bailiwickFilter sanitises a terminal response before it is cached or
 // returned to the caller. It enforces RFC 5452 §6: a malicious upstream
 // must not be able to insert records for unrelated owners by stuffing the
@@ -887,9 +934,28 @@ func bailiwickFilter(qname wire.Name, resp wire.Message) (answers, authority, ad
 		}
 	}
 
+	// The SOA owner in the authority section names the signed zone.
+	// DNSSEC denial-of-existence proofs (NSEC, NSEC3, and their
+	// covering RRSIGs) are owned by names anywhere within that zone,
+	// including siblings of qname — that's the whole point of an
+	// NSEC interval. Treat those record types as legitimate when
+	// they fall at-or-below the SOA owner; the strict
+	// "ancestor-of-qname" check would otherwise drop the very NSEC
+	// that proves the response.
+	var soaOwner wire.Name
+	for _, r := range resp.Authorities() {
+		if r.Type() == rrtype.SOA {
+			soaOwner = r.Name()
+			break
+		}
+	}
 	authority = make([]wire.Record, 0, len(resp.Authorities()))
 	for _, r := range resp.Authorities() {
 		if inBailiwick(r.Name(), qname) {
+			authority = append(authority, r)
+			continue
+		}
+		if soaOwner.IsValid() && isDNSSECDenialType(r.Type()) && inBailiwick(soaOwner, r.Name()) {
 			authority = append(authority, r)
 		}
 	}

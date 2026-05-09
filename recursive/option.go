@@ -13,20 +13,21 @@ type optionFunc func(*config)
 func (f optionFunc) applyRecursive(c *config) { f(c) }
 
 type config struct {
-	roots         []netip.AddrPort
-	cache         Cache
-	stats         ServerStats
-	maxIterations int
-	maxDepth      int
-	maxCNAMEs     int
-	dialer        Dialer
-	validator     Validator
-	queryTimeout  time.Duration
-	maxNegTTL     time.Duration
-	resolveBudget time.Duration
-	allowNoRD     bool
-	caseRandom    bool
-	qnameMin      bool
+	roots          []netip.AddrPort
+	cache          Cache
+	stats          ServerStats
+	maxIterations  int
+	maxDepth       int
+	maxCNAMEs      int
+	dialer         Dialer
+	validator      Validator
+	queryTimeout   time.Duration
+	maxNegTTL      time.Duration
+	resolveBudget  time.Duration
+	allowNoRD      bool
+	caseRandom     bool
+	qnameMin       bool
+	aggressiveNSEC bool
 }
 
 // WithRoots overrides the default root server list.
@@ -111,6 +112,27 @@ func WithMaxNegativeTTL(d time.Duration) Option {
 // risk is contained at the transport layer.
 func WithAllowNoRD() Option {
 	return optionFunc(func(c *config) { c.allowNoRD = true })
+}
+
+// WithAggressiveNSEC enables RFC 8198 Aggressive Use of
+// DNSSEC-Validated Cache. When the resolver has a DNSSEC-validated
+// NSEC record cached from a prior negative response, it can use
+// that NSEC to synthesise NXDOMAIN locally for any other name that
+// falls within the NSEC's interval, without contacting an
+// authoritative server.
+//
+// Requires [WithValidator] — without DNSSEC validation, an
+// attacker could poison the cache with fake NSECs to suppress
+// resolution of arbitrary names. Setting this option without a
+// validator is a no-op.
+//
+// Off by default. The current implementation covers NSEC-based
+// NXDOMAIN synthesis; NSEC3 (hash-space lookup), NSEC NoData
+// (type-bitmap inspection), and wildcard interaction are not yet
+// covered — affected queries fall through to the regular iteration
+// path.
+func WithAggressiveNSEC() Option {
+	return optionFunc(func(c *config) { c.aggressiveNSEC = true })
 }
 
 // WithoutQNameMinimisation turns off RFC 9156 / 7816 QNAME
