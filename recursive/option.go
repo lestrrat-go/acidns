@@ -159,23 +159,22 @@ func WithoutQNameMinimisation() Option {
 	return optionFunc(func(c *config) { c.qnameMin = false })
 }
 
-// WithCaseRandomization enables RFC 5452 §9.3 0x20 hardening: the
-// resolver randomly toggles the case of ASCII letters in the QNAME
-// of every outbound query, then verifies the response's question
-// section matches case-exactly. A spoofer that guesses the
-// 16-bit transaction ID still has to also reproduce the case-pattern
-// the resolver chose, multiplying the spoofing search space by 2^N
-// for an N-letter qname.
+// WithoutCaseRandomization disables RFC 5452 §9.3 0x20 hardening.
+// 0x20 randomly toggles the case of ASCII letters in the QNAME of
+// every outbound query and verifies the response's question section
+// matches case-exactly, multiplying the off-path spoofing search
+// space by 2^N for an N-letter qname.
 //
-// Defaults to off because some old or buggy authoritative servers
-// silently lowercase the qname in their response, and rejecting
-// those would lose resolution for the affected zones. Operators
-// confident in their upstream's RFC 4343 compliance can opt in.
+// Defaults to ON: the spoofing-resistance benefit is large and
+// modern authoritative servers preserve case per RFC 4343. Disable
+// only when targeting an upstream known to silently lowercase the
+// qname in responses (rare, but rejection would lose resolution for
+// the affected zones).
 //
 // Only the default Dialer honors this option; a caller-supplied
 // custom Dialer is responsible for its own 0x20 implementation.
-func WithCaseRandomization() Option {
-	return optionFunc(func(c *config) { c.caseRandom = true })
+func WithoutCaseRandomization() Option {
+	return optionFunc(func(c *config) { c.caseRandom = false })
 }
 
 // WithUpstreamRateLimit caps the outbound query rate per upstream

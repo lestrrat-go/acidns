@@ -45,20 +45,19 @@ func WithUDPReadBufferSize(n int) UDPExchangerOption {
 	return udpExchangerOptionFunc(func(c *udpExchangerConfig) { c.bufferSize = n })
 }
 
-// WithUDP0x20 enables RFC 5452 §9.3 0x20 hardening: the exchanger
+// WithUDP0x20 toggles RFC 5452 §9.3 0x20 hardening: the exchanger
 // randomly toggles the case of ASCII letters in the QNAME of every
 // outbound query, then verifies the response's question section
 // matches case-exactly. A spoofer that guesses the 16-bit
 // transaction ID still has to reproduce the case-pattern, raising
 // the per-query search space by 2^N for an N-letter qname.
 //
-// Defaults to false: some old or buggy authoritative servers
-// silently lowercase the qname in their response, which would fail
-// case-sensitive verification and lose resolution for the affected
-// zones. Operators confident in their upstream's RFC 4343 case
-// preservation can opt in. The recursive resolver wires this
-// through automatically when [recursive.WithCaseRandomization] is
-// set.
+// Defaults to false at this raw-exchanger level so explicit callers
+// can mix-and-match policies per server. The convenience
+// constructors ([NewResolver] with [WithServers], [recursive.New])
+// flip this on by default and expose a Without* opt-out for
+// upstreams known to silently lowercase the qname in responses
+// (rare).
 func WithUDP0x20(v bool) UDPExchangerOption {
 	return udpExchangerOptionFunc(func(c *udpExchangerConfig) { c.use0x20 = v })
 }

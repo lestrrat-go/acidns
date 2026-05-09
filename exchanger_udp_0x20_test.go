@@ -125,25 +125,22 @@ func startCaseEchoServer(t *testing.T, preserveCase bool) netip.AddrPort {
 				continue
 			}
 			qq := req.Questions()[0]
+			// In the case-mangling branch we must construct a fresh
+			// Question so the builder packs the canonical lowercase
+			// form rather than echoing the original mixed-case wire
+			// bytes the unmarshaller now preserves.
+			respQ := qq
+			if !preserveCase {
+				respQ = wire.NewQuestionClass(qq.Name(), qq.Type(), qq.Class())
+			}
 			respMsg, _ := wire.NewBuilder().
 				ID(req.ID()).
 				Response(true).
-				Question(qq).
+				Question(respQ).
 				Answer(wire.NewRecord(qq.Name(), time.Minute,
 					rdata.NewA(netip.MustParseAddr("203.0.113.1")))).
 				Build()
 			respBytes, _ := wire.Marshal(respMsg)
-
-			if preserveCase {
-				// Replace the marshaled response's question section
-				// with the request's bytes (which include the case the
-				// requester sent).
-				if rqs := questionSpan(body); rqs > 12 {
-					if rps := questionSpan(respBytes); rps == rqs {
-						copy(respBytes[12:rqs], body[12:rqs])
-					}
-				}
-			}
 			_, _ = pc.WriteTo(respBytes, src)
 		}
 	}()

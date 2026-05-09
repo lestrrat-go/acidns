@@ -170,6 +170,7 @@ func New(opts ...Option) Recursive {
 		maxNegTTL:     time.Hour,
 		resolveBudget: 30 * time.Second,
 		qnameMin:      true, // RFC 9156 recommended for production resolvers
+		caseRandom:    true, // RFC 5452 §9.3 spoofing defence; opt out via WithoutCaseRandomization
 	}
 	for _, o := range opts {
 		o.applyRecursive(&c)
@@ -233,8 +234,8 @@ func DefaultDialer() Dialer { return defaultDialer{} }
 // stateless (no connection reuse) and constructs a fresh UDP
 // exchanger on every Exchange call. use0x20 toggles RFC 5452 §9.3
 // case randomization + verification on the UDP exchanger; the
-// recursive resolver sets it to true when WithCaseRandomization is
-// enabled.
+// recursive resolver defaults it on and the caller can opt out via
+// [WithoutCaseRandomization].
 type defaultDialer struct {
 	use0x20 bool
 }

@@ -96,6 +96,7 @@ type resolverConfig struct {
 	ndots             int
 	ndotsSet          bool
 	disableSpecialUse bool
+	disable0x20       bool
 	logger            *slog.Logger
 	systemErr         error
 }
@@ -166,6 +167,20 @@ func WithSystemResolvers() ResolverOption {
 	})
 }
 
+// WithoutCaseRandomization disables RFC 5452 §9.3 0x20 hardening on
+// the UDP exchangers built from [WithServers]. 0x20 is on by default
+// because it materially raises the off-path spoofing search space at
+// no operational cost against modern authoritatives. Disable only
+// when targeting an upstream known to silently lowercase the qname
+// in responses.
+//
+// The option has no effect when [WithExchanger] is supplied — a
+// caller-built Exchanger applies whatever 0x20 policy its own
+// constructor was given.
+func WithoutCaseRandomization() ResolverOption {
+	return resolverOptionFunc(func(c *resolverConfig) { c.disable0x20 = true })
+}
+
 // WithSpecialUse toggles the RFC 6761 short-circuits applied to names like
 // localhost., *.invalid., and *.onion. Default is true — pass false for
 // tooling that needs to interrogate a DNS server about how it handles those
@@ -226,7 +241,7 @@ func NewResolver(opts ...ResolverOption) (Resolver, error) {
 
 	ex := c.exchanger
 	if ex == nil {
-		built, err := buildFallover(c.servers, c.attempts, c.perAttempt)
+		built, err := buildFallover(c.servers, c.attempts, c.perAttempt, !c.disable0x20)
 		if err != nil {
 			return nil, err
 		}
@@ -448,10 +463,10 @@ func randomID() (uint16, error) {
 	return binary.BigEndian.Uint16(b[:]), nil
 }
 
-func buildFallover(servers []netip.AddrPort, attempts int, perAttempt time.Duration) (Exchanger, error) {
+func buildFallover(servers []netip.AddrPort, attempts int, perAttempt time.Duration, use0x20 bool) (Exchanger, error) {
 	exs := make([]Exchanger, 0, len(servers))
 	for _, s := range servers {
-		uex, err := NewUDPExchanger(s)
+		uex, err := NewUDPExchanger(s, WithUDP0x20(use0x20))
 		if err != nil {
 			return nil, err
 		}
