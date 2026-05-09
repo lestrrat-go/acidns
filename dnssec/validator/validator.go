@@ -123,11 +123,11 @@ func WithValidatorClock(now func() time.Time) ValidatorOption {
 	return validatorOptionFunc(func(c *validatorConfig) { c.now = now })
 }
 
-// WithValidatorSkew widens the RRSIG inception/expiration window by
+// WithValidatorClockSkew widens the RRSIG inception/expiration window by
 // skew on each side. Production deployments typically pick 5–15
 // minutes; the default of 0 is the conservative reading of RFC 4035
 // §5.3. Mirrors the walker's WithWalkerClockSkew.
-func WithValidatorSkew(skew time.Duration) ValidatorOption {
+func WithValidatorClockSkew(skew time.Duration) ValidatorOption {
 	return validatorOptionFunc(func(c *validatorConfig) {
 		if skew >= 0 {
 			c.skew = skew

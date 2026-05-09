@@ -460,11 +460,11 @@ func WithServerMaxAge(d time.Duration) ServerOption {
 	})
 }
 
-// WithMaxFutureSkew sets how far in the future a cookie's embedded
+// WithClockSkew sets how far in the future a cookie's embedded
 // timestamp may be before Validate returns ErrCookieExpired. Operators
 // who want stricter clock alignment can pass a smaller value (e.g.
 // 30 s); pass 0 to keep the default of [DefaultMaxFutureSkew].
-func WithMaxFutureSkew(d time.Duration) ServerOption {
+func WithClockSkew(d time.Duration) ServerOption {
 	return serverOptionFunc(func(c *serverConfig) {
 		if d > 0 {
 			c.maxFutureSkew = d
@@ -474,7 +474,7 @@ func WithMaxFutureSkew(d time.Duration) ServerOption {
 
 // NewServer returns a [Server] backed by pool. By default the cookie
 // acceptance window is 1 hour and the future-skew tolerance is
-// [DefaultMaxFutureSkew]; pass [WithServerMaxAge] / [WithMaxFutureSkew]
+// [DefaultMaxFutureSkew]; pass [WithServerMaxAge] / [WithClockSkew]
 // to override.
 func NewServer(pool SecretPool, opts ...ServerOption) (Server, error) {
 	cfg := serverConfig{maxAge: time.Hour, maxFutureSkew: DefaultMaxFutureSkew}

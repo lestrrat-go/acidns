@@ -184,7 +184,7 @@ func TestWalkerFix3IANARootAnchorOptInExposesAnchor(t *testing.T) {
 	require.NotEqual(t, validator.Indeterminate, ans.Result())
 }
 
-// Fix 4 regression: Validator.ValidateRRset honours WithValidatorSkew.
+// Fix 4 regression: Validator.ValidateRRset honours WithValidatorClockSkew.
 func TestValidatorFix4SkewTolerance(t *testing.T) {
 	t.Parallel()
 	priv, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
@@ -229,7 +229,7 @@ func TestValidatorFix4SkewTolerance(t *testing.T) {
 	t.Run("skew=1m accepts future inception", func(t *testing.T) {
 		v, err := validator.New(
 			validator.WithValidatorClock(func() time.Time { return now }),
-			validator.WithValidatorSkew(time.Minute),
+			validator.WithValidatorClockSkew(time.Minute),
 		)
 		require.NoError(t, err)
 		res, _, err := v.ValidateRRset(set, []rdata.RRSIG{sig}, []rdata.DNSKEY{key})
