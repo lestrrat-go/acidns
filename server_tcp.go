@@ -24,13 +24,15 @@ type tcpListenerOptionFunc func(*tcpListenerConfig)
 func (f tcpListenerOptionFunc) applyTCPServer(c *tcpListenerConfig) { f(c) }
 
 type tcpListenerConfig struct {
-	idleTimeout       time.Duration
-	writeTimeout      time.Duration
-	maxConnections    int
-	maxMessageSize    int
-	maxQueriesPerConn int
-	maxConnLifetime   time.Duration
-	maxInflightPer    int
+	idleTimeout        time.Duration
+	writeTimeout       time.Duration
+	messageReadTimeout time.Duration
+	maxConnections     int
+	maxConnsPerSource  int
+	maxMessageSize     int
+	maxQueriesPerConn  int
+	maxConnLifetime    time.Duration
+	maxInflightPer     int
 }
 
 // WithTCPIdleTimeout sets how long an idle connection is kept open between
@@ -54,6 +56,20 @@ func WithTCPWriteTimeout(d time.Duration) TCPListenerOption {
 // A non-positive value disables the cap. Defaults to 1024.
 func WithTCPMaxConnections(n int) TCPListenerOption {
 	return tcpListenerOptionFunc(func(c *tcpListenerConfig) { c.maxConnections = n })
+}
+
+// WithTCPMaxConnsPerSource caps the number of concurrent TCP
+// connections originating from a single remote IP (canonicalised via
+// netip.Addr.Unmap so v4-mapped v6 addresses share a bucket with their
+// v4 counterpart). Without this cap a single peer can occupy every slot
+// permitted by [WithTCPMaxConnections] and starve all other sources.
+// On exceeding the cap the new connection is closed immediately and the
+// accept loop continues. A non-positive value disables the per-source
+// cap. Defaults to 32 — high enough that a well-behaved client running
+// many parallel queries from one host is never affected, low enough
+// that a hostile peer cannot starve the listener.
+func WithTCPMaxConnsPerSource(n int) TCPListenerOption {
+	return tcpListenerOptionFunc(func(c *tcpListenerConfig) { c.maxConnsPerSource = n })
 }
 
 // WithTCPMaxMessageSize caps the length-prefixed body the server is
@@ -86,6 +102,20 @@ func WithTCPMaxQueriesPerConn(n int) TCPListenerOption {
 // rely on multi-hour streams (e.g. long-lived internal AXFR mirrors).
 func WithTCPMaxConnLifetime(d time.Duration) TCPListenerOption {
 	return tcpListenerOptionFunc(func(c *tcpListenerConfig) { c.maxConnLifetime = d })
+}
+
+// WithTCPMessageReadTimeout caps how long the server will wait for the
+// body bytes of a single message after the 2-byte length prefix has
+// arrived. The idle timeout ([WithTCPIdleTimeout]) governs the wait
+// between messages; once a length prefix is in hand the peer is
+// committed to delivering the body promptly, so this deadline is
+// tighter. Without this distinction a peer that sends the prefix and
+// then drips body bytes just under the idle interval can pin a slot
+// for hours (idle * maxQueriesPerConn). Default 5s; non-positive
+// disables the per-message deadline (falls back to the idle timeout
+// for the body read as well).
+func WithTCPMessageReadTimeout(d time.Duration) TCPListenerOption {
+	return tcpListenerOptionFunc(func(c *tcpListenerConfig) { c.messageReadTimeout = d })
 }
 
 // WithTCPMaxInflightPerConn caps the number of concurrently-running
@@ -122,13 +152,15 @@ func NewTCPServer(addr netip.AddrPort, h Handler, opts ...TCPListenerOption) (*T
 		return nil, fmt.Errorf("acidns: invalid bind address")
 	}
 	cfg := tcpListenerConfig{
-		idleTimeout:       10 * time.Second,
-		writeTimeout:      5 * time.Second,
-		maxConnections:    1024,
-		maxMessageSize:    16 * 1024,
-		maxInflightPer:    32,
-		maxQueriesPerConn: 10000,
-		maxConnLifetime:   time.Hour,
+		idleTimeout:        10 * time.Second,
+		writeTimeout:       5 * time.Second,
+		messageReadTimeout: 5 * time.Second,
+		maxConnections:     1024,
+		maxConnsPerSource:  32,
+		maxMessageSize:     16 * 1024,
+		maxInflightPer:     32,
+		maxQueriesPerConn:  10000,
+		maxConnLifetime:    time.Hour,
 	}
 	for _, o := range opts {
 		o.applyTCPServer(&cfg)
@@ -194,6 +226,48 @@ type tcpLoop struct {
 	sem      chan struct{}
 	wg       sync.WaitGroup
 	bodyPool sync.Pool
+
+	// perSourceMu guards perSource. Keyed on netip.Addr.Unmap so a
+	// v4-mapped v6 client shares a bucket with its v4 form.
+	perSourceMu sync.Mutex
+	perSource   map[netip.Addr]int
+}
+
+// reservePerSource increments the per-source counter if the cap permits
+// and returns true. When the cap would be exceeded it returns false and
+// the caller must close the connection without spawning a goroutine.
+func (l *tcpLoop) reservePerSource(addr netip.Addr) bool {
+	if l.cfg.maxConnsPerSource <= 0 {
+		return true
+	}
+	addr = addr.Unmap()
+	l.perSourceMu.Lock()
+	defer l.perSourceMu.Unlock()
+	if l.perSource[addr] >= l.cfg.maxConnsPerSource {
+		return false
+	}
+	if l.perSource == nil {
+		l.perSource = make(map[netip.Addr]int)
+	}
+	l.perSource[addr]++
+	return true
+}
+
+// releasePerSource decrements the counter for addr; the entry is
+// removed when the count reaches zero so the map does not grow without
+// bound across the lifetime of the listener.
+func (l *tcpLoop) releasePerSource(addr netip.Addr) {
+	if l.cfg.maxConnsPerSource <= 0 {
+		return
+	}
+	addr = addr.Unmap()
+	l.perSourceMu.Lock()
+	defer l.perSourceMu.Unlock()
+	if l.perSource[addr] <= 1 {
+		delete(l.perSource, addr)
+		return
+	}
+	l.perSource[addr]--
 }
 
 func (l *tcpLoop) run(ctx context.Context) error {
@@ -252,16 +326,25 @@ func (l *tcpLoop) run(ctx context.Context) error {
 			return fmt.Errorf("acidns: tcp accept: %w", err)
 		}
 		tempBackoff = 0
+		remote := remoteAddrFromConn(conn)
+		if !l.reservePerSource(remote.Addr()) {
+			_ = conn.Close()
+			if l.sem != nil {
+				<-l.sem
+			}
+			continue
+		}
 		l.wg.Add(1)
-		go func(c net.Conn) {
+		go func(c net.Conn, src netip.Addr) {
 			defer func() {
+				l.releasePerSource(src)
 				if l.sem != nil {
 					<-l.sem
 				}
 				l.wg.Done()
 			}()
 			l.serveConn(ctx, c)
-		}(conn)
+		}(conn, remote.Addr())
 	}
 }
 
@@ -363,6 +446,22 @@ func (l *tcpLoop) serveConn(ctx context.Context, conn net.Conn) {
 			return
 		}
 
+		// Once the length prefix has arrived, the peer is committed to
+		// delivering the body promptly. Tighten the read deadline to
+		// messageReadTimeout so a peer cannot drip body bytes at the
+		// idle-interval cadence and pin a slot for hours. Still respect
+		// the lifetime cap.
+		bodyDeadline := time.Time{}
+		if l.cfg.messageReadTimeout > 0 {
+			bodyDeadline = time.Now().Add(l.cfg.messageReadTimeout)
+		}
+		if !lifetimeDeadline.IsZero() && (bodyDeadline.IsZero() || lifetimeDeadline.Before(bodyDeadline)) {
+			bodyDeadline = lifetimeDeadline
+		}
+		if !bodyDeadline.IsZero() {
+			_ = conn.SetReadDeadline(bodyDeadline)
+		}
+
 		bufp, _ := l.bodyPool.Get().(*[]byte)
 		body := (*bufp)[:n]
 		if _, err := io.ReadFull(conn, body); err != nil {
@@ -404,7 +503,7 @@ func (l *tcpLoop) serveConn(ctx context.Context, conn net.Conn) {
 			case PreflightDrop:
 				return
 			case PreflightReply:
-					_ = w.WriteMsg(reply)
+				_ = w.WriteMsg(reply)
 				return
 			}
 			l.handler.ServeDNS(contextWithRawRequest(connCtx, body), w, q)

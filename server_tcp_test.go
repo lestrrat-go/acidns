@@ -154,6 +154,87 @@ func TestTCPServerCancelsHandlerOnShutdown(t *testing.T) {
 	}
 }
 
+// TestTCPServerMaxConnsPerSource verifies that connections from a
+// single source above WithTCPMaxConnsPerSource are closed promptly so
+// one peer cannot occupy every slot allowed by WithTCPMaxConnections.
+func TestTCPServerMaxConnsPerSource(t *testing.T) {
+	t.Parallel()
+	const limit = 4
+	h := acidns.HandlerFunc(func(_ context.Context, _ acidns.ResponseWriter, _ wire.Message) {})
+	ctrl := startTCP(t, h,
+		acidns.WithTCPMaxConnsPerSource(limit),
+		acidns.WithTCPMaxConnections(64),
+	)
+
+	// Open `limit` connections and hold them open. They must stay alive.
+	held := make([]net.Conn, 0, limit)
+	defer func() {
+		for _, c := range held {
+			_ = c.Close()
+		}
+	}()
+	for range limit {
+		c, err := net.Dial("tcp", ctrl.Addr().String())
+		require.NoError(t, err)
+		held = append(held, c)
+	}
+	// All `limit` held conns should remain readable (no immediate EOF).
+	for i, c := range held {
+		_ = c.SetReadDeadline(time.Now().Add(100 * time.Millisecond))
+		var buf [1]byte
+		_, err := c.Read(buf[:])
+		require.Error(t, err, "held conn %d should be idle (timeout), not closed", i)
+		var ne net.Error
+		require.ErrorAs(t, err, &ne)
+		require.True(t, ne.Timeout(), "held conn %d expected timeout, got %v", i, err)
+		_ = c.SetReadDeadline(time.Time{})
+	}
+
+	// The (limit+1)-th conn from the same source must be closed quickly.
+	extra, err := net.Dial("tcp", ctrl.Addr().String())
+	require.NoError(t, err)
+	defer extra.Close()
+	_ = extra.SetReadDeadline(time.Now().Add(2 * time.Second))
+	var buf [1]byte
+	_, err = extra.Read(buf[:])
+	require.ErrorIs(t, err, io.EOF, "extra conn must be closed by the server")
+}
+
+// TestTCPServerMessageReadTimeout verifies that once the 2-byte length
+// prefix has arrived, the body must be delivered within
+// WithTCPMessageReadTimeout regardless of the (longer) idle timeout.
+func TestTCPServerMessageReadTimeout(t *testing.T) {
+	t.Parallel()
+	const msgTO = 200 * time.Millisecond
+	h := acidns.HandlerFunc(func(_ context.Context, _ acidns.ResponseWriter, _ wire.Message) {})
+	ctrl := startTCP(t, h,
+		acidns.WithTCPIdleTimeout(10*time.Second),
+		acidns.WithTCPMessageReadTimeout(msgTO),
+	)
+
+	c, err := net.Dial("tcp", ctrl.Addr().String())
+	require.NoError(t, err)
+	defer c.Close()
+
+	// Announce a 16-byte body, then drip one byte and stop.
+	var hdr [2]byte
+	binary.BigEndian.PutUint16(hdr[:], 16)
+	_, err = c.Write(hdr[:])
+	require.NoError(t, err)
+	_, err = c.Write([]byte{0x00})
+	require.NoError(t, err)
+
+	// Server must close the conn within roughly msgTO; allow generous slack.
+	deadline := time.Now().Add(msgTO + 2*time.Second)
+	_ = c.SetReadDeadline(deadline)
+	start := time.Now()
+	var buf [1]byte
+	_, err = c.Read(buf[:])
+	elapsed := time.Since(start)
+	require.ErrorIs(t, err, io.EOF, "server must close after per-message timeout")
+	require.Less(t, elapsed, msgTO+2*time.Second, "close took too long: %s", elapsed)
+}
+
 func TestTCPServerNoTruncation(t *testing.T) {
 	t.Parallel()
 
