@@ -208,8 +208,9 @@ Status legend: **Implemented** = working code with tests; **Partial** = document
 | Per-query timeout (`WithQueryTimeout`) | Implemented |
 | QNAME minimisation (RFC 7816 / 9156) | Implemented (default on; `WithoutQNameMinimisation` opt-out; relaxed fallback on intermediate NXDOMAIN/SERVFAIL/non-conformant responses per §2.4) |
 | Aggressive NSEC caching (RFC 8198) | Implemented (NSEC and NSEC3, NXDOMAIN and NoData. Closest-encloser proof from cached NSEC3, opt-out enforcement per §5.6, wildcard-denial requirement per §5.5. Opt-in via `WithAggressiveNSEC`, requires `WithValidator`.) |
-| Parallel A/AAAA address resolution | Out of scope |
-| Per-upstream rate limiting / priming refresh | Out of scope |
+| Parallel A/AAAA address resolution | Implemented (NS-target glue resolution fans out A and AAAA concurrently per target while preserving result ordering) |
+| Per-upstream rate limiting | Implemented (`WithUpstreamRateLimit(qps, burst)`; per-AddrPort token bucket; rate-limited candidates skipped, all-limited surfaces `ErrUpstreamRateLimited`) |
+| Root priming + refresh (RFC 8109) | Implemented (`Prime(ctx)` one-shot + `Run(ctx)` background loop; opt-in via `WithRootPriming(refresh)`, default cadence 24 h) |
 
 ### Out of scope
 

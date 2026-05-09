@@ -47,6 +47,17 @@ var ErrUpstreamRateLimited = errors.New("recursive: all upstream servers rate-li
 type Recursive interface {
 	acidns.Handler
 	Resolve(ctx context.Context, name wire.Name, t rrtype.Type) (Entry, error)
+	// Prime issues an NS . query against the configured roots and
+	// replaces the in-memory root list with the authoritative reply
+	// (RFC 8109). It is safe to call concurrently with Resolve. A
+	// failed prime leaves the existing roots untouched.
+	Prime(ctx context.Context) error
+	// Run drives background maintenance tasks (currently root
+	// priming when enabled via [WithRootPriming]) until ctx is
+	// canceled. Returns ctx.Err() on cancellation, or nil
+	// immediately when no background work is configured. Resolve
+	// does not require Run to have been called.
+	Run(ctx context.Context) error
 }
 
 // Validator is the contract recursive expects from a DNSSEC validator.
@@ -85,6 +96,7 @@ type Dialer interface {
 }
 
 type recursive struct {
+	rootsMu        sync.RWMutex
 	roots          []netip.AddrPort
 	cache          Cache
 	stats          ServerStats
@@ -114,6 +126,12 @@ type recursive struct {
 	// upstreamLim caps the per-AddrPort outbound query rate when
 	// [WithUpstreamRateLimit] was supplied. nil disables.
 	upstreamLim *upstreamLimiter
+
+	// rootPriming and rootRefresh drive RFC 8109 root priming. When
+	// rootPriming is true Run() performs an initial prime and then
+	// refreshes on the rootRefresh cadence.
+	rootPriming bool
+	rootRefresh time.Duration
 
 	inflightMu sync.Mutex
 	inflight   map[string]*inflightCall
@@ -197,6 +215,13 @@ func New(opts ...Option) Recursive {
 			burst = c.upstreamQPS
 		}
 		r.upstreamLim = newUpstreamLimiter(c.upstreamQPS, burst, nil)
+	}
+	if c.rootPriming {
+		r.rootPriming = true
+		r.rootRefresh = c.rootRefresh
+		if r.rootRefresh <= 0 {
+			r.rootRefresh = defaultRootRefreshInterval
+		}
 	}
 	return r
 }
@@ -500,7 +525,7 @@ func (r *recursive) resolveDepth(ctx context.Context, name wire.Name, t rrtype.T
 }
 
 func (r *recursive) resolveDepthInner(ctx context.Context, target wire.Name, t rrtype.Type, depth int) (Entry, error) {
-	servers := append([]netip.AddrPort(nil), r.roots...)
+	servers := r.currentRoots()
 	// closestZone tracks the deepest known authoritative zone the
 	// resolver has confirmed via referral. Starts at the root and
 	// advances on each referral (or each authoritative ENT at a
