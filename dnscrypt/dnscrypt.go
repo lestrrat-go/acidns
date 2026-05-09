@@ -21,6 +21,7 @@ import (
 	"context"
 	"crypto/ed25519"
 	"crypto/rand"
+	"crypto/subtle"
 	"encoding/binary"
 	"errors"
 	"fmt"
@@ -60,6 +61,11 @@ var (
 	ErrResponseMagic        = errors.New("dnscrypt: bad resolver magic in response")
 	ErrPlainTextTooShort    = errors.New("dnscrypt: response too short")
 	ErrCertUnverified       = errors.New("dnscrypt: cert not verified — call Cert.Verify first")
+	// ErrLowOrderPoint indicates the X25519 shared-secret derivation
+	// produced an all-zero output, which means the peer supplied a
+	// Curve25519 low-order point. Accepting such a key would AEAD
+	// with a known-constant secret.
+	ErrLowOrderPoint = errors.New("dnscrypt: x25519 low-order point: shared secret is all zero")
 )
 
 // Cert is a parsed DNSCrypt certificate (124 bytes on the wire). The
@@ -256,7 +262,9 @@ func Decrypt(c *Cert, clientSK [32]byte, clientNonce [12]byte, packet []byte) ([
 	if !bytes.Equal(packet[0:8], resolverMagic[:]) {
 		return nil, ErrResponseMagic
 	}
-	if !bytes.Equal(packet[8:20], clientNonce[:]) {
+	// Constant-time on the client-nonce echo so that response forgery
+	// attempts cannot use prefix-match timing as an oracle.
+	if subtle.ConstantTimeCompare(packet[8:20], clientNonce[:]) != 1 {
 		return nil, fmt.Errorf("dnscrypt: client nonce mismatch")
 	}
 	var fullNonce [24]byte
@@ -282,6 +290,12 @@ func Decrypt(c *Cert, clientSK [32]byte, clientNonce [12]byte, packet []byte) ([
 // the raw 32-byte shared secret used as the symmetric key. (DNSCrypt v2
 // uses the raw X25519 output as the XChaCha20-Poly1305 key — no further
 // KDF is applied.)
+//
+// A peer supplying one of the documented Curve25519 low-order points
+// produces an all-zero shared secret. Go's curve25519.X25519 already
+// returns ErrInvalidScalar for the most common low-order inputs, but
+// the family is broader than that single check; we additionally reject
+// any all-zero output via constant-time compare to close the gap.
 func sharedKey(resolverPK, clientSK [32]byte) ([32]byte, error) {
 	out, err := curve25519.X25519(clientSK[:], resolverPK[:])
 	if err != nil {
@@ -289,6 +303,10 @@ func sharedKey(resolverPK, clientSK [32]byte) ([32]byte, error) {
 	}
 	var k [32]byte
 	copy(k[:], out)
+	var zero [32]byte
+	if subtle.ConstantTimeCompare(k[:], zero[:]) == 1 {
+		return [32]byte{}, ErrLowOrderPoint
+	}
 	return k, nil
 }
 

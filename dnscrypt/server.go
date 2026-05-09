@@ -26,10 +26,10 @@ package dnscrypt
 // graceful key roll is the operator's responsibility.
 
 import (
-	"bytes"
 	"context"
 	"crypto/cipher"
 	"crypto/rand"
+	"crypto/subtle"
 	"errors"
 	"fmt"
 	"net"
@@ -297,7 +297,10 @@ func (l *serverLoop) handlePacket(ctx context.Context, body []byte, src netip.Ad
 	if mat == nil {
 		return
 	}
-	if !bytes.Equal(body[0:8], mat.cert.clientMagic[:]) {
+	// Constant-time: ClientMagic is the secret-ish discriminator that
+	// gates whether to spend X25519+AEAD work on a packet; a timing
+	// oracle on the prefix would let an attacker iteratively learn it.
+	if subtle.ConstantTimeCompare(body[0:8], mat.cert.clientMagic[:]) != 1 {
 		return
 	}
 	var clientPK [32]byte

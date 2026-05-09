@@ -105,6 +105,13 @@ var ErrBadSignature = errors.New("tsig: bad signature")
 // algorithm's full output length, whichever is greater.
 var ErrBadTruncation = errors.New("tsig: MAC shorter than allowed")
 
+// ErrUnsupportedAlgorithm is returned when a TSIG operation is asked
+// to sign or verify under an algorithm this package does not implement.
+// Treating unknown algorithms as fail-closed prevents a peer from
+// passing verification with a generic short-MAC floor against an
+// algorithm the verifier cannot actually compute.
+var ErrUnsupportedAlgorithm = errors.New("tsig: unsupported algorithm")
+
 const (
 	tsigType  uint16 = 250
 	tsigClass uint16 = 255 // ANY
@@ -279,7 +286,15 @@ func verifyWithPrefix(msg []byte, key Key, priorMAC []byte, timersOnly bool, now
 	if !tsig.algorithm.Equal(wire.MustParseName(string(key.algorithm))) {
 		return nil, nil, time.Time{}, fmt.Errorf("tsig: algorithm mismatch")
 	}
-	if floor := minMACSize(key.algorithm); len(tsig.mac) < floor {
+	floor, ok := minMACSize(key.algorithm)
+	if !ok {
+		// Refuse unknown algorithms outright. Allowing them through to
+		// the prefix-MAC compare with a generic 10-byte floor would let
+		// a peer that lies about the algorithm pass with a 10-byte tag
+		// matched against an HMAC the verifier cannot actually produce.
+		return nil, nil, time.Time{}, fmt.Errorf("%w: %s", ErrUnsupportedAlgorithm, key.algorithm)
+	}
+	if len(tsig.mac) < floor {
 		return nil, nil, time.Time{}, fmt.Errorf("%w: got %d bytes, need at least %d for %s",
 			ErrBadTruncation, len(tsig.mac), floor, key.algorithm)
 	}
@@ -316,20 +331,25 @@ func verifyWithPrefix(msg []byte, key Key, priorMAC []byte, timersOnly bool, now
 }
 
 // minMACSize returns the per-algorithm minimum MAC length per RFC 8945
-// §5.2.2.1: "The truncated MAC SHALL NOT be less than 10 octets and at
-// least half of the length of the full MAC."
-func minMACSize(alg Algorithm) int {
+// §5.2.2.1 ("The truncated MAC SHALL NOT be less than 10 octets and at
+// least half of the length of the full MAC") and whether the algorithm
+// is known. Unknown algorithms return ok=false; callers MUST treat
+// that as fail-closed — a generic 10-byte floor here would let a peer
+// who advertises an unsupported algorithm pass verification with a
+// 10-byte tag that cannot be reproduced from any key the verifier
+// actually holds.
+func minMACSize(alg Algorithm) (int, bool) {
 	switch alg {
 	case HMACSHA1:
-		return 10 // sha1=20, half=10
+		return 10, true // sha1=20, half=10
 	case HMACSHA256:
-		return 16
+		return 16, true
 	case HMACSHA384:
-		return 24
+		return 24, true
 	case HMACSHA512:
-		return 32
+		return 32, true
 	default:
-		return 10
+		return 0, false
 	}
 }
 
@@ -346,7 +366,7 @@ func computeHMAC(key Key, payload []byte) ([]byte, error) {
 	case HMACSHA512:
 		h = hmac.New(sha512.New, key.secret)
 	default:
-		return nil, fmt.Errorf("tsig: unsupported algorithm %q", key.algorithm)
+		return nil, fmt.Errorf("%w: %q", ErrUnsupportedAlgorithm, key.algorithm)
 	}
 	h.Write(payload)
 	return h.Sum(nil), nil
