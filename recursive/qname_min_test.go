@@ -67,7 +67,7 @@ func TestQNameMinimisationSendsMinimisedQueries(t *testing.T) {
 		},
 	}
 
-	r := mustRecursive(t, 
+	r := mustRecursive(t,
 		recursive.WithRoots(netip.MustParseAddrPort("127.0.0.1:1")),
 		recursive.WithDialer(dialer),
 	)
@@ -130,7 +130,7 @@ func TestQNameMinimisationDisabled(t *testing.T) {
 		},
 	}
 
-	r := mustRecursive(t, 
+	r := mustRecursive(t,
 		recursive.WithRoots(netip.MustParseAddrPort("127.0.0.1:1")),
 		recursive.WithDialer(dialer),
 		recursive.WithQNameMinimisation(false),
@@ -176,7 +176,7 @@ func TestQNameMinimisationFallsBackOnNXDOMAIN(t *testing.T) {
 		},
 	}
 
-	r := mustRecursive(t, 
+	r := mustRecursive(t,
 		recursive.WithRoots(netip.MustParseAddrPort("127.0.0.1:1")),
 		recursive.WithDialer(dialer),
 	)

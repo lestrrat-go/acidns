@@ -112,7 +112,7 @@ www IN  A    192.0.2.55
 		},
 	}
 
-	r := mustRecursive(t, 
+	r := mustRecursive(t,
 		recursive.WithRoots(rootCtrl.Addr()),
 		recursive.WithDialer(dialer),
 	)

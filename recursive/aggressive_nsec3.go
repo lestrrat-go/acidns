@@ -147,7 +147,7 @@ func (i *nsec3Index) sweepExpiredLocked(now time.Time) {
 // did not free space.
 func (i *nsec3Index) evictSoonestLocked() {
 	var soonestZone string
-	var soonestIdx int = -1
+	soonestIdx := -1
 	var soonestAt time.Time
 	for k, z := range i.zones {
 		for j, e := range z.entries {

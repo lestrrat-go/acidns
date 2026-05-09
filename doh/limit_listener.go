@@ -13,6 +13,7 @@ import (
 // from indirect to direct.
 type limitListener struct {
 	net.Listener
+
 	sem  chan struct{}
 	once sync.Once
 	done chan struct{}
@@ -56,6 +57,7 @@ func (l *limitListener) Close() error {
 
 type limitConn struct {
 	net.Conn
+
 	once    sync.Once
 	release func()
 }

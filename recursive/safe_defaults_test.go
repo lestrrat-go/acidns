@@ -45,7 +45,7 @@ func TestServeDNSRefusedWithoutRD(t *testing.T) {
 // only that REFUSED is no longer the response.
 func TestServeDNSAllowNoRDOptIn(t *testing.T) {
 	t.Parallel()
-	r := mustRecursive(t, 
+	r := mustRecursive(t,
 		recursive.WithRoots(netip.MustParseAddrPort("127.0.0.1:1")),
 		recursive.WithMaxIterations(1),
 		recursive.WithAllowNoRD(),

@@ -85,7 +85,7 @@ func TestAggressiveNSECSynthesisesNXDOMAIN(t *testing.T) {
 		},
 	}
 
-	r := mustRecursive(t, 
+	r := mustRecursive(t,
 		recursive.WithRoots(netip.MustParseAddrPort("127.0.0.1:1")),
 		recursive.WithDialer(dialer),
 		recursive.WithQNameMinimisation(false),
@@ -138,7 +138,7 @@ func TestAggressiveNSECDisabledByDefault(t *testing.T) {
 		},
 	}
 
-	r := mustRecursive(t, 
+	r := mustRecursive(t,
 		recursive.WithRoots(netip.MustParseAddrPort("127.0.0.1:1")),
 		recursive.WithDialer(dialer),
 		recursive.WithQNameMinimisation(false),

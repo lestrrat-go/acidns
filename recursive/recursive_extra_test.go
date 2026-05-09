@@ -128,7 +128,7 @@ www IN  A    192.0.2.43
 		target:   bad,
 	}
 
-	r := mustRecursive(t, 
+	r := mustRecursive(t,
 		recursive.WithRoots(bad, good),
 		recursive.WithDialer(servfail),
 	)
@@ -191,7 +191,7 @@ $TTL 30
 ns1 IN  A    192.0.2.10
 www IN  A    192.0.2.42
 `)
-	r := mustRecursive(t, 
+	r := mustRecursive(t,
 		recursive.WithRoots(addr),
 		recursive.WithValidator(validatorStub{status: recursive.StatusBogus}),
 	)
@@ -210,7 +210,7 @@ $TTL 30
 ns1 IN  A    192.0.2.10
 www IN  A    192.0.2.42
 `)
-	r := mustRecursive(t, 
+	r := mustRecursive(t,
 		recursive.WithRoots(addr),
 		recursive.WithValidator(validatorStub{status: recursive.StatusSecure}),
 	)
@@ -231,7 +231,7 @@ ns1 IN  A    192.0.2.10
 www IN  A    192.0.2.42
 `)
 	stats := recursive.NewMemoryStats()
-	r := mustRecursive(t, 
+	r := mustRecursive(t,
 		recursive.WithRoots(addr),
 		recursive.WithServerStats(stats),
 	)
@@ -266,7 +266,7 @@ func TestQueryTimeoutSurvivesContextRespect(t *testing.T) {
 
 	require.NoError(t, err)
 
-	r := mustRecursive(t, 
+	r := mustRecursive(t,
 		recursive.WithRoots(ctrl.Addr()),
 		recursive.WithQueryTimeout(20*time.Millisecond),
 		recursive.WithMaxIterations(2),

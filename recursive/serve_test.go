@@ -25,7 +25,7 @@ ns1 IN  A    192.0.2.10
 www IN  A    192.0.2.42
 `)
 	cache := recursive.NewMemoryCache()
-	r := mustRecursive(t, 
+	r := mustRecursive(t,
 		recursive.WithRoots(authAddr),
 		recursive.WithCache(cache),
 		recursive.WithMaxIterations(50),
@@ -81,7 +81,7 @@ func TestServeDNSFormErrOnEmptyQuestion(t *testing.T) {
 func TestServeDNSServFailOnUnreachable(t *testing.T) {
 	t.Parallel()
 	// Roots that immediately refuse — quick error path through Resolve.
-	r := mustRecursive(t, 
+	r := mustRecursive(t,
 		recursive.WithRoots(netip.MustParseAddrPort("127.0.0.1:1")),
 		recursive.WithMaxIterations(1),
 	)
