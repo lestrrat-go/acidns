@@ -122,21 +122,20 @@ func WithMaxPositiveTTL(d time.Duration) Option {
 	return optionFunc(func(c *config) { c.maxPosTTL = d })
 }
 
-// WithAllowNoRD removes the safe default of refusing queries whose
+// WithAllowNoRD toggles the safe default of refusing queries whose
 // header has the Recursion Desired (RD) bit clear. Recursive
 // resolvers that answer RD=0 queries are amplification primitives:
 // any source can elicit large answers from cached zones without
 // proving they want recursion, which is the classic open-resolver
-// reflection vector. By default the resolver returns REFUSED to
-// such queries.
+// reflection vector. Default: refuse RD=0.
 //
-// Set this only when the resolver is deployed as a cache-only
-// "stub responder" intentionally serving the cache to non-recursive
-// peers (e.g. an internal DNS appliance), and only after gating the
-// listener with an ACL or rate limit middleware so the open-resolver
-// risk is contained at the transport layer.
-func WithAllowNoRD() Option {
-	return optionFunc(func(c *config) { c.allowNoRD = true })
+// Pass enable=true only when the resolver is deployed as a
+// cache-only "stub responder" intentionally serving the cache to
+// non-recursive peers (e.g. an internal DNS appliance), and only
+// after gating the listener with an ACL or rate limit middleware so
+// the open-resolver risk is contained at the transport layer.
+func WithAllowNoRD(enable bool) Option {
+	return optionFunc(func(c *config) { c.allowNoRD = enable })
 }
 
 // WithAggressiveNSEC enables RFC 8198 Aggressive Use of

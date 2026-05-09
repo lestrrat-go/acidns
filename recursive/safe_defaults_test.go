@@ -48,7 +48,7 @@ func TestServeDNSAllowNoRDOptIn(t *testing.T) {
 	r := mustRecursive(t,
 		recursive.WithRoots(netip.MustParseAddrPort("127.0.0.1:1")),
 		recursive.WithMaxIterations(1),
-		recursive.WithAllowNoRD(),
+		recursive.WithAllowNoRD(true),
 	)
 	q, err := wire.NewBuilder().
 		ID(2).

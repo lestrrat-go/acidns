@@ -153,16 +153,18 @@ func WithLogger(l *slog.Logger) Option {
 	return optionFunc(func(c *config) { c.logger = l })
 }
 
-// WithAllowNoRD removes the safe default of refusing inbound queries
-// whose header has the Recursion Desired (RD) bit clear. A
-// caching forwarder that answers RD=0 from cache is an open
-// amplification source: any peer can elicit cached records without
-// proving they wanted recursion, the same risk the recursive
-// resolver closes by default.
+// WithAllowNoRD toggles the safe default of refusing inbound queries
+// whose header has the Recursion Desired (RD) bit clear. A caching
+// forwarder that answers RD=0 from cache is an open amplification
+// source: any peer can elicit cached records without proving they
+// wanted recursion, the same risk the recursive resolver closes by
+// default.
 //
-// Set this only when the forwarder is deployed inside a trust
-// boundary where every peer is intentionally allowed to read the
-// cache, and ideally only after gating the listener with an ACL.
-func WithAllowNoRD() Option {
-	return optionFunc(func(c *config) { c.allowNoRD = true })
+// Default: refuse RD=0. Pass enable=true only when the forwarder is
+// deployed inside a trust boundary where every peer is intentionally
+// allowed to read the cache, and ideally only after gating the
+// listener with an ACL. The bool form lets a layered config opt back
+// in to the safe default after a profile enabled it.
+func WithAllowNoRD(enable bool) Option {
+	return optionFunc(func(c *config) { c.allowNoRD = enable })
 }
