@@ -24,6 +24,7 @@ type serverConfig struct {
 	maxMessageSize    int
 	maxStreamsPer     int
 	maxConnections    int
+	maxConnLifetime   time.Duration
 }
 
 // WithServerTLSConfig installs the TLS configuration used during the
@@ -82,4 +83,14 @@ func WithServerMaxStreamsPerConn(n int) ServerOption {
 // RFC 9250 §4.3. Defaults to 256; non-positive disables.
 func WithServerMaxConnections(n int) ServerOption {
 	return serverOptionFunc(func(c *serverConfig) { c.maxConnections = n })
+}
+
+// WithServerMaxConnLifetime caps the wall-clock lifetime of a single
+// QUIC connection. Without it a hostile peer can keep a connection
+// alive indefinitely by re-opening streams just under the idle window
+// — [WithServerMaxStreamsPerConn] caps simultaneous streams but not
+// lifetime streams. Defaults to 1 hour, matching the TCP and DoT
+// defaults. A non-positive value disables the cap.
+func WithServerMaxConnLifetime(d time.Duration) ServerOption {
+	return serverOptionFunc(func(c *serverConfig) { c.maxConnLifetime = d })
 }

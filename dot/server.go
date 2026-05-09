@@ -75,6 +75,11 @@ func NewServer(addr netip.AddrPort, h acidns.Handler, opts ...ServerOption) (*Se
 		maxConnections:   1024,
 		maxMessageSize:   16 * 1024,
 		maxInflightPer:   32,
+		// Match TCP defaults — DoT amortises TLS state across many
+		// queries on a long-lived connection, so an unbounded
+		// per-connection budget is at least as risky here as on TCP.
+		maxQueriesPerConn: 10000,
+		maxConnLifetime:   time.Hour,
 	}
 	for _, o := range opts {
 		o.applyDoTServer(&cfg)

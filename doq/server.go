@@ -68,6 +68,7 @@ func NewServer(addr netip.AddrPort, h acidns.Handler, opts ...ServerOption) (*Se
 		maxMessageSize:    16 * 1024,
 		maxStreamsPer:     256,
 		maxConnections:    256,
+		maxConnLifetime:   time.Hour,
 	}
 	for _, o := range opts {
 		o.applyDoQServer(&cfg)
@@ -224,15 +225,25 @@ func (l *serverLoop) serveConn(ctx context.Context, conn *quic.Conn) {
 	var streamWg sync.WaitGroup
 	defer streamWg.Wait()
 
+	// Bound the connection lifetime so a hostile peer cannot pin per-
+	// connection state forever by re-opening streams under the idle
+	// window. The QUIC idle timer only catches genuine inactivity.
+	connCtx := ctx
+	if l.cfg.maxConnLifetime > 0 {
+		var cancel context.CancelFunc
+		connCtx, cancel = context.WithTimeout(ctx, l.cfg.maxConnLifetime)
+		defer cancel()
+	}
+
 	for {
-		stream, err := conn.AcceptStream(ctx)
+		stream, err := conn.AcceptStream(connCtx)
 		if err != nil {
 			return
 		}
 		streamWg.Add(1)
 		go func(s *quic.Stream) {
 			defer streamWg.Done()
-			l.serveStream(ctx, s, remote)
+			l.serveStream(connCtx, s, remote)
 		}(stream)
 	}
 }
