@@ -18,6 +18,8 @@ jobs:
         target:
           - { pkg: ./wire, name: FuzzUnmarshal }
           - { pkg: ./wire/wirebb, name: FuzzDecodeWire }
+          - { pkg: ./wire/rdata, name: FuzzUnpackTyped }
+          - { pkg: ./internal/streamframe, name: FuzzReadFrame }
           - { pkg: ./zonefile, name: FuzzParse }
     steps:
       - name: Checkout repository
