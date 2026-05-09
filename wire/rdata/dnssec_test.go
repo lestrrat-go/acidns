@@ -65,7 +65,7 @@ func TestNSEC3(t *testing.T) {
 	salt := []byte{0xde, 0xad, 0xbe, 0xef}
 	hash := []byte{1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20}
 	types := []rrtype.Type{rrtype.A, rrtype.RRSIG}
-	r := rdata.NewNSEC3(1, 0, 100, salt, hash, types)
+	r := rdata.MustNewNSEC3(1, 0, 100, salt, hash, types)
 
 	got := packUnpack(t, r).(rdata.NSEC3)
 	require.Equal(t, salt, got.Salt())

@@ -88,7 +88,7 @@ func TestSSHFP(t *testing.T) {
 func TestNSEC3PARAM(t *testing.T) {
 	t.Parallel()
 	salt := []byte{0xca, 0xfe, 0xba, 0xbe}
-	r := rdata.NewNSEC3PARAM(1, 0, 100, salt)
+	r := rdata.MustNewNSEC3PARAM(1, 0, 100, salt)
 	got := packUnpack(t, r).(rdata.NSEC3PARAM)
 	require.Equal(t, salt, got.Salt())
 	require.Equal(t, uint16(100), got.Iterations())

@@ -199,7 +199,7 @@ func TestAggressiveNSEC3NoData(t *testing.T) {
 	nsec3Match := wire.NewRecord(
 		nsec3OwnerName(matchHash, zoneApex),
 		5*time.Minute,
-		rdata.NewNSEC3(1 /*sha1*/, 0 /*flags*/, 0 /*iterations*/, salt,
+		rdata.MustNewNSEC3(1 /*sha1*/, 0 /*flags*/, 0 /*iterations*/, salt,
 			apexHash, // any plausible next-hash, doesn't matter for NoData
 			[]rrtype.Type{rrtype.AAAA, rrtype.TXT}),
 	)

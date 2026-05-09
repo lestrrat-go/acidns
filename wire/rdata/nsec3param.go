@@ -1,6 +1,7 @@
 package rdata
 
 import (
+	"fmt"
 	"slices"
 
 	"github.com/lestrrat-go/acidns/wire/rrtype"
@@ -29,10 +30,24 @@ func (n NSEC3PARAM) Pack(p *wirebb.Packer) {
 	p.Raw(n.salt)
 }
 
-// NewNSEC3PARAM returns an NSEC3PARAM rdata.
-func NewNSEC3PARAM(alg, flags uint8, iter uint16, salt []byte) NSEC3PARAM {
+// NewNSEC3PARAM returns an NSEC3PARAM rdata. Returns [ErrInvalidRData]
+// when salt exceeds 255 bytes (RFC 5155 §4.1: salt-length is wire
+// uint8). The previous shape silently truncated via uint8(len(...)).
+func NewNSEC3PARAM(alg, flags uint8, iter uint16, salt []byte) (NSEC3PARAM, error) {
+	if len(salt) > 255 {
+		return NSEC3PARAM{}, fmt.Errorf("%w: NSEC3PARAM salt %d bytes exceeds 255-byte limit", ErrInvalidRData, len(salt))
+	}
 	cp := append([]byte(nil), salt...)
-	return NSEC3PARAM{alg: alg, flags: flags, iter: iter, salt: cp}
+	return NSEC3PARAM{alg: alg, flags: flags, iter: iter, salt: cp}, nil
+}
+
+// MustNewNSEC3PARAM is the panic-on-error variant of [NewNSEC3PARAM].
+func MustNewNSEC3PARAM(alg, flags uint8, iter uint16, salt []byte) NSEC3PARAM {
+	n, err := NewNSEC3PARAM(alg, flags, iter, salt)
+	if err != nil {
+		panic(err)
+	}
+	return n
 }
 
 func unpackNSEC3PARAM(u *wirebb.Unpacker) (NSEC3PARAM, error) {

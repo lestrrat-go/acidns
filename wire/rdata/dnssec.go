@@ -440,15 +440,34 @@ func (n NSEC3) Pack(p *wirebb.Packer) {
 	encodeTypeBitmap(p, n.types)
 }
 
-// NewNSEC3 returns an NSEC3 rdata.
-func NewNSEC3(hashAlg, flags uint8, iterations uint16, salt, nextOwner []byte, types []rrtype.Type) NSEC3 {
+// NewNSEC3 returns an NSEC3 rdata. Returns [ErrInvalidRData] when
+// salt or nextOwner exceeds 255 bytes (RFC 5155 §3.1: both lengths
+// are wire-encoded as uint8). The previous shape silently truncated
+// via uint8(len(...)) at Pack time, corrupting the rdata.
+func NewNSEC3(hashAlg, flags uint8, iterations uint16, salt, nextOwner []byte, types []rrtype.Type) (NSEC3, error) {
+	if len(salt) > 255 {
+		return NSEC3{}, fmt.Errorf("%w: NSEC3 salt %d bytes exceeds 255-byte limit", ErrInvalidRData, len(salt))
+	}
+	if len(nextOwner) > 255 {
+		return NSEC3{}, fmt.Errorf("%w: NSEC3 next-hashed-owner %d bytes exceeds 255-byte limit", ErrInvalidRData, len(nextOwner))
+	}
 	saltCp := append([]byte(nil), salt...)
 	nextCp := append([]byte(nil), nextOwner...)
 	tCp := append([]rrtype.Type(nil), types...)
 	return NSEC3{
 		hashAlg: hashAlg, flags: flags, iterations: iterations,
 		salt: saltCp, nextOwner: nextCp, types: tCp,
+	}, nil
+}
+
+// MustNewNSEC3 is the panic-on-error variant of [NewNSEC3], for
+// static fixtures and tests.
+func MustNewNSEC3(hashAlg, flags uint8, iterations uint16, salt, nextOwner []byte, types []rrtype.Type) NSEC3 {
+	n, err := NewNSEC3(hashAlg, flags, iterations, salt, nextOwner, types)
+	if err != nil {
+		panic(err)
 	}
+	return n
 }
 
 func unpackNSEC3(u *wirebb.Unpacker, rdlen int) (NSEC3, error) {

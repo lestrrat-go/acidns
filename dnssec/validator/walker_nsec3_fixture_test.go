@@ -115,7 +115,7 @@ func (s *nsec3Source) buildNoDataNSEC3(z *signedZone, qname wire.Name, qtype rrt
 		flags |= 0x01
 	}
 	rec := wire.NewRecord(owner, time.Hour,
-		rdata.NewNSEC3(1, flags, s.mode.iterations, s.mode.salt, next, types))
+		rdata.MustNewNSEC3(1, flags, s.mode.iterations, s.mode.salt, next, types))
 	sig := z.signRRset([]wire.Record{rec})
 	return wire.NewBuilder().
 		ID(1).
@@ -151,7 +151,7 @@ func (s *nsec3Source) buildNXDOMAINNSEC3(z *signedZone, qname wire.Name, qtype r
 		encTypes = append(encTypes, rrtype.RRSIG)
 	}
 	encRec := wire.NewRecord(encOwner, time.Hour,
-		rdata.NewNSEC3(1, flags, s.mode.iterations, s.mode.salt,
+		rdata.MustNewNSEC3(1, flags, s.mode.iterations, s.mode.salt,
 			bumpHash(s.hash(encloser)), encTypes))
 	encSig := z.signRRset([]wire.Record{encRec})
 
@@ -192,7 +192,7 @@ func (s *nsec3Source) coveringNSEC3(z *signedZone, name wire.Name, flags uint8) 
 	nextHash := bumpHash(target)
 	owner := s.synthOwner(z, ownerHash)
 	rec := wire.NewRecord(owner, time.Hour,
-		rdata.NewNSEC3(1, flags, s.mode.iterations, s.mode.salt, nextHash, nil))
+		rdata.MustNewNSEC3(1, flags, s.mode.iterations, s.mode.salt, nextHash, nil))
 	return owner, rec
 }
 

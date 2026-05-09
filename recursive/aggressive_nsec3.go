@@ -495,9 +495,17 @@ func (r *Recursive) synthesiseFromNSEC3(name wire.Name, t rrtype.Type) (Entry, b
 		if e.optOut {
 			flags = 0x01
 		}
-		authority = append(authority, wire.NewRecord(ownerName, ttl,
-			rdata.NewNSEC3(zoneAuth.params.alg, flags, zoneAuth.params.iterations,
-				zoneAuth.params.salt, e.nextHash, e.types)))
+		// salt and nextHash come from previously-validated NSEC3
+		// records whose own decoder enforced the 255-byte cap, so
+		// NewNSEC3 cannot fail here in practice — surface the error
+		// loudly anyway so a future change that loosens the input
+		// gates fails fast.
+		n3, err := rdata.NewNSEC3(zoneAuth.params.alg, flags, zoneAuth.params.iterations,
+			zoneAuth.params.salt, e.nextHash, e.types)
+		if err != nil {
+			return Entry{}, false
+		}
+		authority = append(authority, wire.NewRecord(ownerName, ttl, n3))
 	}
 	rcode := wire.RCODENXDomain
 	if kind == nsecLookupNoData {

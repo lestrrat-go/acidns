@@ -253,6 +253,9 @@ func MustNewHTTPS(priority uint16, target wirebb.Name, params ...SVCBParam) HTTP
 }
 
 func newSvcbBody(priority uint16, target wirebb.Name, params []SVCBParam) (svcbBody, error) {
+	if !target.IsValid() {
+		return svcbBody{}, fmt.Errorf("%w: SVCB target name is invalid", ErrInvalidRData)
+	}
 	cp := slices.Clone(params)
 	sort.SliceStable(cp, func(i, j int) bool { return cp[i].key < cp[j].key })
 	for i := 1; i < len(cp); i++ {
