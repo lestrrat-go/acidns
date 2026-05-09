@@ -44,8 +44,8 @@ func IsRejectedAlgorithm(alg rdata.DNSSECAlgorithm) bool {
 }
 
 // validateDNSKEY enforces the structural preconditions that RFC 4034
-// §2.1.2 (Protocol == 3) and RFC 5011 §2.1 (Revoke flag) place on
-// every DNSKEY used to validate.
+// §2.1.1 (Zone-Key bit), §2.1.2 (Protocol == 3) and RFC 5011 §2.1
+// (Revoke flag) place on every DNSKEY used to validate.
 func validateDNSKEY(key rdata.DNSKEY) error {
 	if key.Protocol() != 3 {
 		return fmt.Errorf("%w: protocol=%d (RFC 4034 §2.1.2 requires 3)",
@@ -53,6 +53,15 @@ func validateDNSKEY(key rdata.DNSKEY) error {
 	}
 	if key.Flags()&rdata.DNSKEYFlagRevoke != 0 {
 		return fmt.Errorf("%w: REVOKE flag set (RFC 5011 §2.1)", ErrInvalidKey)
+	}
+	// RFC 4034 §2.1.1: "If bit 7 has value 0, then the DNSKEY record
+	// holds some other type of DNS public key and MUST NOT be used to
+	// verify RRSIGs that cover RRsets." A non-Zone DNSKEY (e.g. an
+	// application key co-located in DNS) must never authenticate a
+	// zone signature even if the owner publishes one with a matching
+	// algorithm and key-tag.
+	if key.Flags()&rdata.DNSKEYFlagZone == 0 {
+		return fmt.Errorf("%w: Zone-Key flag clear (RFC 4034 §2.1.1)", ErrInvalidKey)
 	}
 	return nil
 }

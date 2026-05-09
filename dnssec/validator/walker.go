@@ -227,6 +227,19 @@ func (w *walker) Resolve(ctx context.Context, qname wire.Name, qtype rrtype.Type
 		if err != nil {
 			return w.bogus(qname, qtype, chain, fmt.Errorf("validator: answer rrsig: %w", err))
 		}
+		// RFC 4035 §5.3.4: when the answer was synthesised from a
+		// wildcard (RRSIG.Labels < owner.NumLabels), the responder MUST
+		// also supply an NSEC/NSEC3 proof that qname does not exist
+		// directly in the zone. Without this check, an attacker holding
+		// a single valid wildcard signature can fabricate Secure
+		// answers for any non-existent name in that subtree —
+		// re-signing isn't required because the wildcard's RRSIG itself
+		// authenticates the synthesised owner.
+		if encloserLabels, wildcard := wildcardSynthLabels(qname, sigs); wildcard {
+			if err := w.validateWildcardNextCloser(qname, encloserLabels, parentKeys, msg); err != nil {
+				return w.bogus(qname, qtype, chain, fmt.Errorf("validator: wildcard next-closer: %w", err))
+			}
+		}
 		return &answer{
 			result:  Secure,
 			records: matching,
@@ -342,11 +355,16 @@ func (w *walker) fetchAndVerifyDNSKEY(ctx context.Context, zone wire.Name, dss [
 		if !ok {
 			return nil, fmt.Errorf("validator: bad DNSKEY rdata at %s", zone)
 		}
-		// RFC 4034 §2.1.2 + RFC 5011 §2.1: a key with Protocol != 3 or
-		// the REVOKE flag set MUST NOT be used to validate. Skip rather
-		// than error so a zone publishing a single revoked key alongside
-		// live ones still validates against the live keys.
+		// RFC 4034 §2.1.1 (Zone-Key flag), §2.1.2 (Protocol == 3) and
+		// RFC 5011 §2.1 (Revoke flag) gate which DNSKEYs may
+		// authenticate RRsets. Skip rather than error so a zone
+		// publishing a single revoked or non-Zone key alongside live
+		// ones still validates against the live keys; rejecting all
+		// would deny service during a legitimate rollover.
 		if k.Protocol() != 3 || k.Flags()&rdata.DNSKEYFlagRevoke != 0 {
+			continue
+		}
+		if k.Flags()&rdata.DNSKEYFlagZone == 0 {
 			continue
 		}
 		keys = append(keys, k)
@@ -701,6 +719,89 @@ func (w *walker) validateNSECNXDomain(qname wire.Name, parentKeys []rdata.DNSKEY
 	return fmt.Errorf("validator: no NSEC covers wildcard %s for closest encloser %s", wildcard, encloser)
 }
 
+// wildcardSynthLabels reports whether sigs indicates the answer was
+// synthesised from a wildcard. RFC 4034 §3.1.3 — the RRSIG Labels
+// field counts the labels of the original RRSIG owner (the wildcard),
+// not counting the null root label nor the leading "*" label. So
+// sig.Labels() < qname.NumLabels() is the wildcard signal; the
+// difference identifies the closest-encloser label count. When more
+// than one sig matches, the smallest Labels() value identifies the
+// shallowest wildcard in play (an attacker can't downgrade the proof
+// requirement by also stuffing a non-wildcard sig into the answer
+// section, because we still need the proof for the wildcard sig).
+func wildcardSynthLabels(qname wire.Name, sigs []rdata.RRSIG) (encloserLabels int, wildcard bool) {
+	encloserLabels = -1
+	for _, sig := range sigs {
+		l := int(sig.Labels())
+		if l < qname.NumLabels() {
+			if !wildcard || l < encloserLabels {
+				encloserLabels = l
+				wildcard = true
+			}
+		}
+	}
+	return encloserLabels, wildcard
+}
+
+// validateWildcardNextCloser implements the RFC 4035 §5.3.4
+// requirement that a wildcard-synthesised positive answer be
+// accompanied by NSEC or NSEC3 proving qname does not exist directly
+// in the zone.
+//
+//   - NSEC: any NSEC whose interval covers qname suffices (qname is
+//     proven non-existent at its own label count, which forces
+//     wildcard synthesis as the only legitimate response shape).
+//   - NSEC3: a covering NSEC3 for the next-closer name (qname
+//     truncated to encloserLabels+1) per §5.3.4 read in conjunction
+//     with RFC 5155 §7.2.6.
+func (w *walker) validateWildcardNextCloser(qname wire.Name, encloserLabels int, parentKeys []rdata.DNSKEY, msg wire.Message) error {
+	nsecRRs := allNSEC(msg.Authorities())
+	nsec3RRs := recordsOfType3(msg.Authorities())
+	if len(nsecRRs) == 0 && len(nsec3RRs) == 0 {
+		return fmt.Errorf("no NSEC or NSEC3 in authority")
+	}
+	if len(nsecRRs) > 0 {
+		groups := validatorbb.GroupRecordsByOwner(nsecRRs)
+		allSigs := extractRRSIGs(msg.Authorities())
+		for _, set := range groups {
+			owner := set[0].Name()
+			sigs := rrsigsForTypeAndOwner(allSigs, rrtype.NSEC, owner)
+			if len(sigs) == 0 {
+				return fmt.Errorf("NSEC at %s lacks RRSIG", owner)
+			}
+			if err := w.verifyRRsetWithKeys(set, sigs, parentKeys); err != nil {
+				return fmt.Errorf("NSEC rrsig at %s: %w", owner, err)
+			}
+		}
+		for _, r := range nsecRRs {
+			nsec, ok := wire.RDataAs[rdata.NSEC](r)
+			if !ok {
+				continue
+			}
+			if validatorbb.NameCoveredBy(qname, r.Name(), nsec.NextDomainName()) {
+				return nil
+			}
+		}
+		return fmt.Errorf("no NSEC covers qname %s", qname)
+	}
+	if err := w.verifyNSEC3Set(nsec3RRs, msg.Authorities(), parentKeys); err != nil {
+		return fmt.Errorf("NSEC3 rrsig: %w", err)
+	}
+	params, ok := extractNSEC3Params(nsec3RRs)
+	if !ok {
+		return fmt.Errorf("inconsistent NSEC3 params")
+	}
+	nextCloserLabels := encloserLabels + 1
+	if nextCloserLabels > qname.NumLabels() {
+		return fmt.Errorf("encloser deeper than qname (%d > %d)", encloserLabels, qname.NumLabels())
+	}
+	nextCloser := validatorbb.TruncateNameTo(qname, nextCloserLabels)
+	if _, covered := nsec3Cover(nextCloser, params, nsec3RRs); !covered {
+		return fmt.Errorf("no NSEC3 covers next-closer %s", nextCloser)
+	}
+	return nil
+}
+
 // validateNoData returns Secure with empty records when a NoData answer is
 // validly proven by NSEC or NSEC3; Bogus otherwise.
 func (w *walker) validateNoData(qname wire.Name, qtype rrtype.Type, parentKeys []rdata.DNSKEY, msg wire.Message, chain []ChainStep) (Answer, error) {
@@ -790,8 +891,20 @@ func (w *walker) validateNoDataNSEC3(qname wire.Name, qtype rrtype.Type, parentK
 	if err := w.verifyNSEC3Set(nsec3RRs, msg.Authorities(), parentKeys); err != nil {
 		return nil, false
 	}
-	zone := validatorbb.SignerOf(msg.Authorities())
+	// The zone for closest-encloser hashing must come from the
+	// validated chain — not from the response's RRSIG signer. A
+	// hostile authoritative for an unrelated signed zone could
+	// otherwise craft a NoData response whose NSEC3 records hash
+	// names under that other zone's apex; nsec3ProveDenial would
+	// "find" matching hashes for the wrong namespace and report
+	// Secure NoData. validateNegative already gets this right; the
+	// NoData path was the asymmetric gap.
+	zone := deepestSecureZone(chain)
 	if !zone.IsValid() {
+		return nil, false
+	}
+	respSigner := validatorbb.SignerOf(msg.Authorities())
+	if respSigner.IsValid() && !validatorbb.NameSuffixEqualOrSubdomain(zone, respSigner) && !respSigner.Equal(zone) {
 		return nil, false
 	}
 	res := nsec3ProveDenial(qname, qtype, zone, nsec3RRs)
