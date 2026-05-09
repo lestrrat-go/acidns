@@ -36,6 +36,13 @@ var ErrAllServersLame = errors.New("recursive: all candidate servers lame")
 // stripped DNSSEC RRSIGs.
 var ErrTruncatedAfterTCPFail = errors.New("recursive: TC=1 with TCP fallback failure")
 
+// ErrInflightFull is returned when a cache miss arrives while the
+// configured WithMaxInflight cap is saturated. Surfaces as SERVFAIL
+// to clients via the ServeDNS handler. RFC 1035 doesn't define a
+// specific RCODE for resource exhaustion; SERVFAIL matches operator
+// expectations.
+var ErrInflightFull = errors.New("recursive: max inflight cache-miss queries reached")
+
 // ErrUpstreamRateLimited is returned when every candidate upstream
 // server has been rate-limited by [WithUpstreamRateLimit] and there
 // were no remaining unrestricted servers to try.
@@ -137,6 +144,13 @@ type Recursive struct {
 	inflightMu sync.Mutex
 	inflight   map[string]*inflightCall
 
+	// inflightSem caps the number of distinct concurrent cache-miss
+	// resolutions. nil when WithMaxInflight ≤ 0. Acquisition is
+	// non-blocking: a saturated semaphore surfaces [ErrInflightFull]
+	// so callers can shed load (typically as SERVFAIL) rather than
+	// queueing — queuing lets an attacker pin deeper resource pools.
+	inflightSem chan struct{}
+
 	// nsInProgressMu guards a Resolver-wide set of NS targets that
 	// any goroutine is currently chasing. Sharing the set across
 	// concurrent Resolves prevents the amplification an attacker
@@ -175,6 +189,7 @@ func New(opts ...Option) (*Recursive, error) {
 		maxIterations: 30,
 		maxDepth:      8,
 		maxCNAMEs:     8,
+		maxInflight:   1024,
 		queryTimeout:  4 * time.Second,
 		maxNegTTL:     time.Hour,
 		maxPosTTL:     24 * time.Hour,
@@ -219,6 +234,9 @@ func New(opts ...Option) (*Recursive, error) {
 		aggressiveNSEC: c.aggressiveNSEC,
 		inflight:       make(map[string]*inflightCall),
 		nsInProgress:   make(map[string]struct{}),
+	}
+	if c.maxInflight > 0 {
+		r.inflightSem = make(chan struct{}, c.maxInflight)
 	}
 	if r.aggressiveNSEC {
 		r.nsecIdx = newNSECIndex()
@@ -303,6 +321,17 @@ func (r *Recursive) ServeDNS(ctx context.Context, w acidns.ResponseWriter, q wir
 	question := q.Questions()[0]
 	b = b.Question(question)
 
+	// The recursive resolver only operates on class IN. Hard-coding IN
+	// throughout the iterative path means a non-IN question (e.g. CHAOS
+	// id.server, RFC 4892) would be silently mistyped as IN at every
+	// cache lookup and put. Refuse non-IN at the door with NOTIMP per
+	// RFC 1035 §6.1.1; operators serving CHAOS should compose
+	// chaos.NewHandler ahead of this resolver in the middleware chain.
+	if question.Class() != rrtype.ClassIN {
+		_ = w.WriteMsg(must(b.RCODE(wire.RCODENotImp).Build()))
+		return
+	}
+
 	// A recursive resolver that answers queries without the RD bit is
 	// an amplification primitive: any peer can elicit cached answers
 	// without proving they wanted recursion, the classic open-resolver
@@ -368,6 +397,16 @@ func (r *Recursive) Resolve(ctx context.Context, name wire.Name, t rrtype.Type) 
 		ctx, cancel = context.WithTimeout(ctx, r.resolveBudget)
 		defer cancel()
 	}
+	// Top-level cache hit: the entry has already been through the
+	// validator (if any) on the resolution that populated it, and
+	// carries the resulting AD bit. Returning it directly avoids
+	// re-walking the validator on every repeated query — without this
+	// short-circuit the cache becomes a bookkeeping detail rather than
+	// a latency optimisation under DNSSEC, and a chained validator
+	// implementation can amplify the per-cache-hit cost arbitrarily.
+	if e, ok := r.cache.Get(name, rrtype.ClassIN, t); ok {
+		return e, nil
+	}
 	// In-progress NS-resolution detection now lives on the Resolver
 	// itself (see r.nsInProgress / r.markNSInProgress). The set is
 	// shared across concurrent Resolve calls so an attacker cannot
@@ -379,9 +418,6 @@ func (r *Recursive) Resolve(ctx context.Context, name wire.Name, t rrtype.Type) 
 		return Entry{}, err
 	}
 	if r.validator != nil {
-		// Run validation on the leaf answer. We do NOT re-validate cache
-		// hits separately: the cache stores Entry which carries AD; if AD
-		// is set the upstream answer is trustworthy.
 		res, err := r.validator.Resolve(ctx, name, t)
 		if err != nil {
 			return Entry{}, err
@@ -530,6 +566,18 @@ func (r *Recursive) resolveDepth(ctx context.Context, name wire.Name, t rrtype.T
 			return Entry{}, ctx.Err()
 		}
 	}
+	// Try to acquire a slot in the inflight semaphore before publishing
+	// a new call entry. Followers (the same key) pay no slot — they
+	// share the leader's. Distinct cache-miss keys each cost a slot;
+	// saturation surfaces ErrInflightFull so callers can shed load.
+	if r.inflightSem != nil {
+		select {
+		case r.inflightSem <- struct{}{}:
+		default:
+			r.inflightMu.Unlock()
+			return Entry{}, ErrInflightFull
+		}
+	}
 	call := &inflightCall{done: make(chan struct{})}
 	r.inflight[key] = call
 	r.inflightMu.Unlock()
@@ -537,6 +585,9 @@ func (r *Recursive) resolveDepth(ctx context.Context, name wire.Name, t rrtype.T
 		r.inflightMu.Lock()
 		delete(r.inflight, key)
 		r.inflightMu.Unlock()
+		if r.inflightSem != nil {
+			<-r.inflightSem
+		}
 		close(call.done)
 	}()
 
@@ -1071,6 +1122,17 @@ func bailiwickFilter(qname wire.Name, resp wire.Message) (answers, authority, ad
 			soaOwner = r.Name()
 			break
 		}
+	}
+	// The SOA owner only earns the right to gate denial records when
+	// it is itself an ancestor of qname. Without this, a hostile
+	// authoritative for a sibling zone could attach a SOA owned at a
+	// parent of an unrelated victim zone (e.g. SOA for .tld plus
+	// crafted NSECs covering bank.tld) and the filter would admit the
+	// crafted denial records into the cached authority section.
+	// Validation downstream catches this when DNSSEC is on, but a
+	// validator-off path then surfaces the records to callers.
+	if soaOwner.IsValid() && !inBailiwick(soaOwner, qname) {
+		soaOwner = wire.Name{}
 	}
 	authority = make([]wire.Record, 0, len(resp.Authorities()))
 	for _, r := range resp.Authorities() {

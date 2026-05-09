@@ -19,6 +19,7 @@ type config struct {
 	maxIterations      int
 	maxDepth           int
 	maxCNAMEs          int
+	maxInflight        int
 	dialer             Dialer
 	validator          Validator
 	queryTimeout       time.Duration
@@ -231,6 +232,21 @@ func WithUpstreamRateLimitMaxKeys(n int) Option {
 		c.upstreamMaxKeys = n
 		c.upstreamMaxKeysSet = true
 	})
+}
+
+// WithMaxInflight caps the number of concurrent distinct cache-miss
+// queries the resolver will dispatch. The existing single-flight map
+// already coalesces concurrent queries for the same (qname, qtype),
+// but does not cap the number of distinct outstanding entries; a
+// random-subdomain attack flooding distinct names spawns one
+// goroutine per unique key with no cap.
+//
+// When the cap is reached, further cache-miss queries fail fast with
+// [ErrInflightFull] (callers see SERVFAIL); the cap rejects load the
+// resolver cannot serve rather than queueing it. A non-positive value
+// disables the cap. Defaults to 1024, matching the forward handler.
+func WithMaxInflight(n int) Option {
+	return optionFunc(func(c *config) { c.maxInflight = n })
 }
 
 // WithRootPriming enables RFC 8109 root server priming: at startup
