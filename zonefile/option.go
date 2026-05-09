@@ -1,25 +1,34 @@
 package zonefile
 
-import "github.com/lestrrat-go/acidns/wire"
+import (
+	"github.com/lestrrat-go/acidns/wire"
+	"github.com/lestrrat-go/option/v3"
+)
 
 // Option configures a parse.
-type Option interface{ applyZone(*config) }
+type Option interface {
+	option.Interface
+	zonefileOption()
+}
 
-type optionFunc func(*config)
+type zonefileOption struct{ option.Interface }
 
-func (f optionFunc) applyZone(c *config) { f(c) }
+func (zonefileOption) zonefileOption() {}
 
 type config struct {
 	origin     wire.Name
 	defaultTTL int64 // seconds, -1 = unset
 }
 
+type identOrigin struct{}
+type identDefaultTTL struct{}
+
 // WithOrigin sets the initial origin used until $ORIGIN appears.
 func WithOrigin(n wire.Name) Option {
-	return optionFunc(func(c *config) { c.origin = n })
+	return zonefileOption{option.New(identOrigin{}, n)}
 }
 
 // WithDefaultTTL sets the initial TTL used until $TTL appears.
 func WithDefaultTTL(seconds int) Option {
-	return optionFunc(func(c *config) { c.defaultTTL = int64(seconds) })
+	return zonefileOption{option.New(identDefaultTTL{}, seconds)}
 }

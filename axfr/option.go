@@ -4,14 +4,18 @@ import (
 	"time"
 
 	"github.com/lestrrat-go/acidns/tsig"
+	"github.com/lestrrat-go/option/v3"
 )
 
 // Option configures a Start call.
-type Option interface{ applyAXFR(*config) }
+type Option interface {
+	option.Interface
+	axfrOption()
+}
 
-type optionFunc func(*config)
+type axfrOption struct{ option.Interface }
 
-func (f optionFunc) applyAXFR(c *config) { f(c) }
+func (axfrOption) axfrOption() {}
 
 type config struct {
 	timeout   time.Duration
@@ -20,10 +24,15 @@ type config struct {
 	tsigFudge time.Duration
 }
 
+type identTimeout struct{}
+type identTSIGKey struct{}
+type identTSIGFudge struct{}
+type identTSIGClock struct{}
+
 // WithTimeout sets the per-stream-message read timeout used when ctx has
 // no deadline. Defaults to 30 seconds.
 func WithTimeout(d time.Duration) Option {
-	return optionFunc(func(c *config) { c.timeout = d })
+	return axfrOption{option.New(identTimeout{}, d)}
 }
 
 // WithTSIGKey signs the outgoing AXFR query with the supplied key
@@ -39,17 +48,17 @@ func WithTimeout(d time.Duration) Option {
 // MAC is threaded through across all signed envelopes so out-of-order
 // or tampered envelopes fail verification at the next signed boundary.
 func WithTSIGKey(key *tsig.Key) Option {
-	return optionFunc(func(c *config) { c.tsigKey = key })
+	return axfrOption{option.New(identTSIGKey{}, key)}
 }
 
 // WithTSIGFudge sets the clock-skew window. Defaults to 5 minutes.
 // Only takes effect with [WithTSIGKey].
 func WithTSIGFudge(d time.Duration) Option {
-	return optionFunc(func(c *config) { c.tsigFudge = d })
+	return axfrOption{option.New(identTSIGFudge{}, d)}
 }
 
 // WithTSIGClock injects a clock for tests. Only takes effect with
 // [WithTSIGKey].
 func WithTSIGClock(now func() time.Time) Option {
-	return optionFunc(func(c *config) { c.tsigNow = now })
+	return axfrOption{option.New(identTSIGClock{}, now)}
 }

@@ -33,6 +33,7 @@ import (
 	"github.com/lestrrat-go/acidns/wire"
 	"github.com/lestrrat-go/acidns/wire/rdata"
 	"github.com/lestrrat-go/acidns/wire/rrtype"
+	"github.com/lestrrat-go/option/v3"
 )
 
 // ErrEmptyResponse is returned when the server's first response
@@ -149,7 +150,16 @@ func (e diffEvent) Added() []wire.Record   { return e.added }
 func Start(ctx context.Context, ex acidns.StreamExchanger, zone wire.Name, clientSOA rdata.SOA, opts ...Option) (Transfer, error) {
 	c := config{timeout: 30 * time.Second, tsigFudge: 5 * time.Minute, tsigNow: time.Now}
 	for _, o := range opts {
-		o.applyIXFR(&c)
+		switch o.Ident() {
+		case identTimeout{}:
+			c.timeout = option.MustGet[time.Duration](o)
+		case identTSIGKey{}:
+			c.tsigKey = option.MustGet[*tsig.Key](o)
+		case identTSIGFudge{}:
+			c.tsigFudge = option.MustGet[time.Duration](o)
+		case identTSIGClock{}:
+			c.tsigNow = option.MustGet[func() time.Time](o)
+		}
 	}
 
 	id, err := randomID()

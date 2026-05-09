@@ -20,7 +20,9 @@ import (
 	"github.com/lestrrat-go/acidns"
 	"github.com/lestrrat-go/acidns/tsig"
 	"github.com/lestrrat-go/acidns/wire"
+	"github.com/lestrrat-go/acidns/wire/rdata"
 	"github.com/lestrrat-go/acidns/wire/rrtype"
+	"github.com/lestrrat-go/option/v3"
 )
 
 // ErrTSIGVerify is returned when the response's TSIG signature fails
@@ -31,7 +33,19 @@ var ErrTSIGVerify = errors.New("notify: TSIG verification failed")
 func Send(ctx context.Context, ex acidns.Exchanger, zone wire.Name, opts ...Option) (wire.Message, error) {
 	c := config{timeout: 5 * time.Second, tsigFudge: 5 * time.Minute, tsigNow: time.Now}
 	for _, o := range opts {
-		o.applyNotify(&c)
+		switch o.Ident() {
+		case identTimeout{}:
+			c.timeout = option.MustGet[time.Duration](o)
+		case identSOA{}:
+			c.soa = option.MustGet[rdata.SOA](o)
+			c.hasSOA = true
+		case identTSIGKey{}:
+			c.tsigKey = option.MustGet[*tsig.Key](o)
+		case identTSIGFudge{}:
+			c.tsigFudge = option.MustGet[time.Duration](o)
+		case identTSIGClock{}:
+			c.tsigNow = option.MustGet[func() time.Time](o)
+		}
 	}
 	id, err := randomID()
 	if err != nil {

@@ -17,6 +17,7 @@ import (
 
 	"github.com/lestrrat-go/acidns/wire"
 	"github.com/lestrrat-go/acidns/wire/rdata"
+	"github.com/lestrrat-go/option/v3"
 )
 
 // ErrParse is returned when a master file fails to parse.
@@ -50,7 +51,12 @@ func (z *zone) SOA() (rdata.SOA, wire.Record, bool) {
 func Parse(r io.Reader, opts ...Option) (Zone, error) {
 	c := config{defaultTTL: -1}
 	for _, o := range opts {
-		o.applyZone(&c)
+		switch o.Ident() {
+		case identOrigin{}:
+			c.origin = option.MustGet[wire.Name](o)
+		case identDefaultTTL{}:
+			c.defaultTTL = int64(option.MustGet[int](o))
+		}
 	}
 	p := newParser(r, c)
 	if err := p.run(); err != nil {
