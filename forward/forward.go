@@ -318,11 +318,24 @@ func edsoDOBit(q wire.Message) bool {
 // DNSSEC-relevant EDNS state (DO bit, UDPSize, version) is preserved so
 // DNSSEC-aware clients continue to receive RRSIGs from the upstream.
 //
-// Privacy-sensitive EDNS options that disclose the original client
-// (e.g. RFC 7871 EDNS Client Subnet) are stripped — RFC 7871 §7.1.2
-// explicitly recommends recursive-style intermediaries strip ECS unless
-// the operator opted in. Cookies are also stripped because the inbound
-// client cookie was minted against this forwarder, not the upstream.
+// EDNS handling on the inbound→upstream path is allow-list-by-default:
+// only options known to be safe to forward are passed through. Every
+// other option is stripped because a permissive deny-list (the previous
+// "strip ECS and Cookie, forward everything else" shape) becomes a
+// privacy regression every time IANA registers a new identifying
+// option (RFC 7871 §7.1.2 nominates ECS specifically; the same logic
+// applies to any future option that carries client-installed state).
+//
+// The default safe set is the protocol-mechanical options whose
+// content does not identify the inbound client:
+//
+//   - Padding (RFC 7830 — covering message length)
+//   - Edns-TCP-Keepalive (RFC 7828 — TCP-channel signalling)
+//   - DAU/DHU/N3U (RFC 6975 — DNSSEC algorithm signalling)
+//   - Extended DNS Errors (RFC 8914 — diagnostic; received from upstream)
+//
+// Cookies are minted per-channel and not forwarded; ECS is stripped
+// per RFC 7871 §7.1.2.
 func buildForwardQuery(q wire.Message) wire.Message {
 	id, _ := newID()
 	b := wire.NewBuilder().
@@ -339,8 +352,7 @@ func buildForwardQuery(q wire.Message) wire.Message {
 			Version(e.Version()).
 			DO(e.DO())
 		for _, o := range e.Options() {
-			switch o.Code() {
-			case wire.EDNSOptionClientSubnet, wire.EDNSOptionCookie:
+			if !isForwardSafeEDNSOption(o.Code()) {
 				continue
 			}
 			eb = eb.Option(o)
@@ -352,6 +364,22 @@ func buildForwardQuery(q wire.Message) wire.Message {
 	}
 	m, _ := b.Build()
 	return m
+}
+
+// isForwardSafeEDNSOption reports whether an inbound EDNS option may
+// flow through to the upstream resolver. Allow-list rather than
+// deny-list — see [buildForwardQuery] doc.
+func isForwardSafeEDNSOption(code uint16) bool {
+	switch code {
+	case wire.EDNSOptionPadding,
+		wire.EDNSOptionTCPKeepalive,
+		wire.EDNSOptionDAU,
+		wire.EDNSOptionDHU,
+		wire.EDNSOptionN3U,
+		wire.EDNSOptionExtendedDNS:
+		return true
+	}
+	return false
 }
 
 // rebuildForClient stamps the upstream response with the inbound query's
