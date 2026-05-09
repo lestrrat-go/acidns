@@ -551,7 +551,7 @@ func (z *syntheticZone) SOA() (rdata.SOA, wire.Record, bool) {
 			return r.RData().(rdata.SOA), r, true
 		}
 	}
-	return rdata.SOA{}, nil, false
+	return rdata.SOA{}, wire.Record{}, false
 }
 
 func parseAddr(t *testing.T, s string) netip.Addr {

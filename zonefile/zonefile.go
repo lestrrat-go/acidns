@@ -43,7 +43,7 @@ func (z *zone) SOA() (rdata.SOA, wire.Record, bool) {
 			return soa, r, true
 		}
 	}
-	return rdata.SOA{}, nil, false
+	return rdata.SOA{}, wire.Record{}, false
 }
 
 // Parse parses a master file from r.

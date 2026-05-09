@@ -635,7 +635,7 @@ func (z *zoneIndex) findDNAMEAncestor(qname wire.Name) (wire.Record, wire.Name, 
 	for {
 		parent, ok := cur.Parent()
 		if !ok {
-			return nil, wire.Name{}, false
+			return wire.Record{}, wire.Name{}, false
 		}
 		cur = parent
 		recs, has := z.byName[nameKey(cur)]
@@ -649,7 +649,7 @@ func (z *zoneIndex) findDNAMEAncestor(qname wire.Name) (wire.Record, wire.Name, 
 			}
 			synth, ok := substituteSuffix(qname, cur, d.Target())
 			if !ok {
-				return nil, wire.Name{}, false
+				return wire.Record{}, wire.Name{}, false
 			}
 			return r, synth, true
 		}

@@ -24,21 +24,6 @@ func (e *errResolver) Resolve(_ context.Context, _ wire.Name, _ rrtype.Type) (*a
 	return nil, e.err
 }
 
-// fakeRecord is a wire.Record implementation that lets tests force a
-// mismatch between the reported Type() and the dynamic type of RData().
-type fakeRecord struct {
-	name  wire.Name
-	typ   rrtype.Type
-	class rrtype.Class
-	ttl   time.Duration
-	rd    rdata.RData
-}
-
-func (r fakeRecord) Name() wire.Name     { return r.name }
-func (r fakeRecord) Type() rrtype.Type   { return r.typ }
-func (r fakeRecord) Class() rrtype.Class { return r.class }
-func (r fakeRecord) TTL() time.Duration  { return r.ttl }
-func (r fakeRecord) RData() rdata.RData  { return r.rd }
 
 func TestDiscover_ResolverError(t *testing.T) {
 	t.Parallel()
@@ -55,16 +40,6 @@ func TestDiscover_SkipsNonSVCB(t *testing.T) {
 	aRec := wire.NewRecord(ddr.ResolverDomain(), 60*time.Second,
 		rdata.MustNewA(netip.MustParseAddr("192.0.2.42")))
 
-	// A SVCB rrtype slot whose RData is NOT an rdata.SVCB — exercise the
-	// "type assertion failed" guard inside Discover.
-	mismatched := fakeRecord{
-		name:  ddr.ResolverDomain(),
-		typ:   rrtype.SVCB,
-		class: rrtype.ClassIN,
-		ttl:   60 * time.Second,
-		rd:    rdata.NewUnknown(rrtype.SVCB, []byte{0x00}),
-	}
-
 	// AliasMode SVCB (priority 0) — must be filtered.
 	alias := rdata.MustNewSVCB(0, wire.MustParseName("alias.example.net"))
 	aliasRec := wire.NewRecord(ddr.ResolverDomain(), 60*time.Second, alias)
@@ -77,7 +52,7 @@ func TestDiscover_SkipsNonSVCB(t *testing.T) {
 	goodRec := wire.NewRecord(ddr.ResolverDomain(), 60*time.Second, good)
 
 	r := &fakeResolver{answer: newFakeAnswer(wire.Question{}, []wire.Record{
-		aRec, mismatched, aliasRec, goodRec,
+		aRec, aliasRec, goodRec,
 	})}
 	endpoints, err := ddr.Discover(t.Context(), r)
 	require.NoError(t, err)

@@ -31,19 +31,6 @@ func (f *fakeResolver) Resolve(_ context.Context, _ wire.Name, _ rrtype.Type) (*
 	return acidns.NewAnswer(wire.Question{}, f.records, raw), nil
 }
 
-// mismatchRecord pretends to be a SRV-typed record while carrying an
-// rdata payload that is NOT rdata.SRV. This lets us exercise the type
-// assertion miss inside Discover.
-type mismatchRecord struct {
-	name wirebb.Name
-	rd   rdata.RData
-}
-
-func (r mismatchRecord) Name() wirebb.Name   { return r.name }
-func (r mismatchRecord) Type() rrtype.Type   { return rrtype.SRV }
-func (r mismatchRecord) Class() rrtype.Class { return rrtype.ClassIN }
-func (r mismatchRecord) TTL() time.Duration  { return time.Minute }
-func (r mismatchRecord) RData() rdata.RData  { return r.rd }
 
 func TestDiscoveryName(t *testing.T) {
 	t.Parallel()
@@ -122,15 +109,16 @@ func TestDiscover_FiltersNonSRV(t *testing.T) {
 
 func TestDiscover_FiltersTypeMismatch(t *testing.T) {
 	t.Parallel()
-	// Record advertises Type()==SRV but its RData is rdata.Unknown.
-	// Discover must skip the record without panicking.
-	bogus := mismatchRecord{
-		name: wire.MustParseName("_amt._udp.example.com"),
-		rd:   rdata.NewUnknown(rrtype.SRV, []byte{0, 1, 2, 3}),
-	}
+	// Records of types other than SRV — Discover must skip them
+	// without panicking. (The previous test used a fake Record that
+	// lied about its Type(); wire.Record is now a struct whose Type()
+	// derives from the rdata, so the lie shape is no longer
+	// expressible.)
+	a, err := rdata.NewA(netip.MustParseAddr("198.51.100.1"))
+	require.NoError(t, err)
 	r := &fakeResolver{
 		records: []wire.Record{
-			bogus,
+			wire.NewRecord(wire.MustParseName("_amt._udp.example.com"), 60*time.Second, a),
 			wire.NewRecord(wire.MustParseName("_amt._udp.example.com"), 60*time.Second,
 				rdata.MustNewSRV(1, 0, 2268, wire.MustParseName("relay.example.com"))),
 		},

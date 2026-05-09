@@ -191,22 +191,22 @@ func (rr *recReader) Read(ctx context.Context) (wire.Record, error) {
 			return rec, nil
 		}
 		if rr.msgEOF {
-			return nil, io.EOF
+			return wire.Record{}, io.EOF
 		}
 		msg, err := rr.stream.Next(ctx)
 		if err != nil {
 			if errors.Is(err, io.EOF) {
 				rr.msgEOF = true
-				return nil, io.EOF
+				return wire.Record{}, io.EOF
 			}
-			return nil, err
+			return wire.Record{}, err
 		}
 		if rcode := msg.Flags().RCODE(); rcode != wire.RCODENoError {
-			return nil, fmt.Errorf("%w: %s", ErrRCODE, rcode)
+			return wire.Record{}, fmt.Errorf("%w: %s", ErrRCODE, rcode)
 		}
 		if rr.verifier != nil {
 			if err := rr.verifier.verify(msg); err != nil {
-				return nil, err
+				return wire.Record{}, err
 			}
 		}
 		rr.curMsg = msg

@@ -130,5 +130,5 @@ func findRR(rrs []wire.Record, name string, t rrtype.Type) (wire.Record, bool) {
 			return r, true
 		}
 	}
-	return nil, false
+	return wire.Record{}, false
 }

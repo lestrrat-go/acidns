@@ -10,25 +10,19 @@ import (
 	"github.com/lestrrat-go/acidns/wire/wirebb"
 )
 
-// RRset is a resource record set per RFC 2181 §5: the set of records sharing
-// the same owner name, class, and type. A well-formed RRset has all members
-// agree on TTL (RFC 2181 §5.2 — receivers MUST treat the lowest TTL as the
-// authoritative one); the type allows construction of mixed-TTL sets but
-// NormalizeTTL exposes the harmonised value.
+// RRset is a resource record set per RFC 2181 §5: the set of records
+// sharing the same owner name, class, and type. A well-formed RRset
+// has all members agree on TTL (RFC 2181 §5.2 — receivers MUST treat
+// the lowest TTL as the authoritative one); the type allows
+// construction of mixed-TTL sets but the harmonised TTL is exposed
+// via [RRset.TTL].
 //
-// RRset members preserve insertion order. Order has no protocol significance
-// inside an RRset (RFC 2181 §5.1) but is preserved so callers retain
-// stable iteration.
-type RRset interface {
-	Name() wirebb.Name
-	Type() rrtype.Type
-	Class() rrtype.Class
-	TTL() time.Duration
-	Records() []Record
-	Len() int
-}
-
-type rrset struct {
+// RRset members preserve insertion order. Order has no protocol
+// significance inside an RRset (RFC 2181 §5.1) but is preserved so
+// callers retain stable iteration.
+//
+// Value type — copy-friendly, returned by value from [GroupRecords].
+type RRset struct {
 	name    wirebb.Name
 	typ     rrtype.Type
 	class   rrtype.Class
@@ -36,12 +30,23 @@ type rrset struct {
 	records []Record
 }
 
-func (s rrset) Name() wirebb.Name   { return s.name }
-func (s rrset) Type() rrtype.Type   { return s.typ }
-func (s rrset) Class() rrtype.Class { return s.class }
-func (s rrset) TTL() time.Duration  { return s.ttl }
-func (s rrset) Records() []Record   { return slices.Clone(s.records) }
-func (s rrset) Len() int            { return len(s.records) }
+// Name returns the owner name shared by all members.
+func (s RRset) Name() wirebb.Name { return s.name }
+
+// Type returns the RR type shared by all members.
+func (s RRset) Type() rrtype.Type { return s.typ }
+
+// Class returns the class shared by all members.
+func (s RRset) Class() rrtype.Class { return s.class }
+
+// TTL returns the harmonised TTL (the minimum of all members' TTLs).
+func (s RRset) TTL() time.Duration { return s.ttl }
+
+// Records returns a copy of the member records.
+func (s RRset) Records() []Record { return slices.Clone(s.records) }
+
+// Len reports the number of member records.
+func (s RRset) Len() int { return len(s.records) }
 
 // NewRRset returns an RRset built from the supplied records. All records
 // must share owner name (case-insensitive equality), class, and type. The
@@ -49,20 +54,20 @@ func (s rrset) Len() int            { return len(s.records) }
 // input is rejected.
 func NewRRset(records ...Record) (RRset, error) {
 	if len(records) == 0 {
-		return nil, fmt.Errorf("%w: RRset requires at least one record", ErrInvalidMessage)
+		return RRset{}, fmt.Errorf("%w: RRset requires at least one record", ErrInvalidMessage)
 	}
 	first := records[0]
 	minTTL := first.TTL()
 	for i, r := range records[1:] {
 		if !first.Name().Equal(r.Name()) {
-			return nil, fmt.Errorf("%w: RRset record %d name mismatch (%s vs %s)",
+			return RRset{}, fmt.Errorf("%w: RRset record %d name mismatch (%s vs %s)",
 				ErrInvalidMessage, i+1, first.Name(), r.Name())
 		}
 		if first.Class() != r.Class() {
-			return nil, fmt.Errorf("%w: RRset record %d class mismatch", ErrInvalidMessage, i+1)
+			return RRset{}, fmt.Errorf("%w: RRset record %d class mismatch", ErrInvalidMessage, i+1)
 		}
 		if first.Type() != r.Type() {
-			return nil, fmt.Errorf("%w: RRset record %d type mismatch (%s vs %s)",
+			return RRset{}, fmt.Errorf("%w: RRset record %d type mismatch (%s vs %s)",
 				ErrInvalidMessage, i+1, first.Type(), r.Type())
 		}
 		if r.TTL() < minTTL {
@@ -71,7 +76,7 @@ func NewRRset(records ...Record) (RRset, error) {
 	}
 	cp := make([]Record, len(records))
 	copy(cp, records)
-	return rrset{
+	return RRset{
 		name:    first.Name(),
 		typ:     first.Type(),
 		class:   first.Class(),
@@ -80,23 +85,23 @@ func NewRRset(records ...Record) (RRset, error) {
 	}, nil
 }
 
-// NewRRsetFromRDatas is a convenience constructor that builds an RRset from
-// a list of rdata payloads sharing a common owner name, class, type, and
-// TTL.
+// NewRRsetFromRDatas is a convenience constructor that builds an RRset
+// from a list of rdata payloads sharing a common owner name, class,
+// type, and TTL.
 func NewRRsetFromRDatas(name wirebb.Name, class rrtype.Class, ttl time.Duration, rds ...rdata.RData) (RRset, error) {
 	if len(rds) == 0 {
-		return nil, fmt.Errorf("%w: RRset requires at least one rdata", ErrInvalidMessage)
+		return RRset{}, fmt.Errorf("%w: RRset requires at least one rdata", ErrInvalidMessage)
 	}
 	typ := rds[0].Type()
 	records := make([]Record, len(rds))
 	for i, rd := range rds {
 		if rd.Type() != typ {
-			return nil, fmt.Errorf("%w: RRset rdata %d type mismatch (%s vs %s)",
+			return RRset{}, fmt.Errorf("%w: RRset rdata %d type mismatch (%s vs %s)",
 				ErrInvalidMessage, i, typ, rd.Type())
 		}
 		records[i] = NewRecordClass(name, class, ttl, rd)
 	}
-	return rrset{name: name, typ: typ, class: class, ttl: ttl, records: records}, nil
+	return RRset{name: name, typ: typ, class: class, ttl: ttl, records: records}, nil
 }
 
 // GroupRecords partitions records into RRsets keyed by (name, class, type).
