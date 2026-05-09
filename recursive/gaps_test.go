@@ -46,9 +46,8 @@ func TestCacheGetExpired(t *testing.T) {
 	t.Parallel()
 	c := recursive.NewMemoryCache()
 	name := wire.MustParseName("expired.example.")
-	c.Put(name, rrtype.A, recursive.Entry{
-		ExpiresAt: time.Now().Add(-1 * time.Second),
-	})
+	c.Put(name, rrtype.A, mustEntry(t, recursive.NewEntryBuilder().
+		ExpiresAt(time.Now().Add(-1*time.Second))))
 	_, ok := c.Get(name, rrtype.A)
 	require.False(t, ok, "expired entry should be evicted")
 
@@ -72,9 +71,8 @@ func TestMemoryCacheBoundedByMaxSize(t *testing.T) {
 
 	for i := range 4 * limit {
 		name := wire.MustParseName(fmt.Sprintf("n%d.example.", i))
-		c.Put(name, rrtype.A, recursive.Entry{
-			ExpiresAt: time.Now().Add(time.Duration(i+1) * time.Minute),
-		})
+		c.Put(name, rrtype.A, mustEntry(t, recursive.NewEntryBuilder().
+			ExpiresAt(time.Now().Add(time.Duration(i+1)*time.Minute))))
 	}
 	require.LessOrEqual(t, c.Len(), ceiling,
 		"MemoryCache must respect per-shard cap; got %d entries, ceiling %d",
@@ -208,8 +206,8 @@ func TestUnglueOutOfBailiwickReferral(t *testing.T) {
 	defer cancel()
 	entry, err := r.Resolve(rctx, wire.MustParseName("www.example."), rrtype.A)
 	require.NoError(t, err)
-	require.Equal(t, 1, len(entry.Answer))
-	require.Equal(t, "192.0.2.55", entry.Answer[0].RData().(rdata.A).Addr().String())
+	require.Equal(t, 1, len(entry.Answer()))
+	require.Equal(t, "192.0.2.55", entry.Answer()[0].RData().(rdata.A).Addr().String())
 }
 
 // TestGlueAAAA exercises glueFor's AAAA branch.
@@ -252,7 +250,7 @@ func TestGlueAAAA(t *testing.T) {
 	defer cancel()
 	entry, err := r.Resolve(rctx, wire.MustParseName("www.example."), rrtype.A)
 	require.NoError(t, err)
-	require.Equal(t, 1, len(entry.Answer))
+	require.Equal(t, 1, len(entry.Answer()))
 }
 
 // TestEmptyReferral covers the empty-referral failure path.
@@ -332,7 +330,7 @@ func TestRefusedTreatedAsLame(t *testing.T) {
 	defer cancel()
 	entry, err := r.Resolve(rctx, wire.MustParseName("www.example."), rrtype.A)
 	require.NoError(t, err)
-	require.Equal(t, 1, len(entry.Answer))
+	require.Equal(t, 1, len(entry.Answer()))
 }
 
 // TestQueryAnyAllError exercises the queryAny path where every server errors.
@@ -625,8 +623,8 @@ func TestNonAAResponseTreatedAsAuthoritative(t *testing.T) {
 	defer cancel()
 	entry, err := r.Resolve(rctx, wire.MustParseName("www.example."), rrtype.A)
 	require.NoError(t, err)
-	require.Equal(t, 1, len(entry.Answer))
-	require.False(t, entry.AA)
+	require.Equal(t, 1, len(entry.Answer()))
+	require.False(t, entry.AA())
 }
 
 // TestResolveCNAMEDirectly exercises the resolveDepthFollow path where the
@@ -652,8 +650,8 @@ func TestResolveCNAMEDirectly(t *testing.T) {
 	defer cancel()
 	entry, err := r.Resolve(rctx, wire.MustParseName("www.example."), rrtype.CNAME)
 	require.NoError(t, err)
-	require.Equal(t, 1, len(entry.Answer))
-	require.Equal(t, rrtype.CNAME, entry.Answer[0].Type())
+	require.Equal(t, 1, len(entry.Answer()))
+	require.Equal(t, rrtype.CNAME, entry.Answer()[0].Type())
 }
 
 // TestNegativeCacheTTLTakesRecordTTLWhenSmaller exercises the
@@ -682,9 +680,9 @@ func TestNegativeCacheTTLTakesRecordTTLWhenSmaller(t *testing.T) {
 	defer cancel()
 	entry, err := r.Resolve(rctx, wire.MustParseName("nope.example."), rrtype.A)
 	require.NoError(t, err)
-	require.Equal(t, wire.RCODENXDomain, entry.RCODE)
+	require.Equal(t, wire.RCODENXDomain, entry.RCODE())
 	// Expires within ~6s (record TTL 5s).
-	require.LessOrEqual(t, time.Until(entry.ExpiresAt), 7*time.Second)
+	require.LessOrEqual(t, time.Until(entry.ExpiresAt()), 7*time.Second)
 }
 
 // TestHasAnswerForCNAMEAtOwner exercises hasAnswerFor's CNAME branch when
@@ -719,7 +717,7 @@ func TestHasAnswerForCNAMEAtOwner(t *testing.T) {
 	defer cancel()
 	entry, err := r.Resolve(rctx, wire.MustParseName("www.example."), rrtype.A)
 	require.NoError(t, err)
-	require.GreaterOrEqual(t, len(entry.Answer), 1)
+	require.GreaterOrEqual(t, len(entry.Answer()), 1)
 }
 
 // TestIterationLimitReached covers the path where successive non-terminal

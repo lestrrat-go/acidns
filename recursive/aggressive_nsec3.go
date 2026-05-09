@@ -510,10 +510,10 @@ func (r *recursive) synthesiseFromNSEC3(name wire.Name, t rrtype.Type) (Entry, b
 		}
 	}
 	return Entry{
-		Authority: authority,
-		RCODE:     rcode,
-		AD:        true,
-		ExpiresAt: earliest,
+		authority: authority,
+		rcode:     rcode,
+		ad:        true,
+		expiresAt: earliest,
 	}, true
 }
 

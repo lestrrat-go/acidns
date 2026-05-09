@@ -65,9 +65,9 @@ func Example_recursive_resolve() {
 		return
 	}
 
-	fmt.Println("rcode:", entry.RCODE)
-	fmt.Println("authoritative:", entry.AA)
-	for _, rec := range entry.Answer {
+	fmt.Println("rcode:", entry.RCODE())
+	fmt.Println("authoritative:", entry.AA())
+	for _, rec := range entry.Answer() {
 		if a, ok := wire.RDataAs[rdata.A](rec); ok {
 			fmt.Println("A:", a.Addr())
 		}

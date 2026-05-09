@@ -325,19 +325,19 @@ func (r *recursive) ServeDNS(ctx context.Context, w acidns.ResponseWriter, q wir
 		_ = w.WriteMsg(must(b.RCODE(wire.RCODEServFail).Build()))
 		return
 	}
-	for _, rec := range entry.Answer {
+	for _, rec := range entry.answer {
 		b = b.Answer(rec)
 	}
-	for _, rec := range entry.Authority {
+	for _, rec := range entry.authority {
 		b = b.Authority(rec)
 	}
-	for _, rec := range entry.Additional {
+	for _, rec := range entry.additional {
 		b = b.Additional(rec)
 	}
-	if entry.RCODE != wire.RCODENoError {
-		b = b.RCODE(entry.RCODE)
+	if entry.rcode != wire.RCODENoError {
+		b = b.RCODE(entry.rcode)
 	}
-	if entry.AD {
+	if entry.ad {
 		b = b.AuthenticData(true)
 	}
 	_ = w.WriteMsg(must(b.Build()))
@@ -384,20 +384,20 @@ func (r *recursive) Resolve(ctx context.Context, name wire.Name, t rrtype.Type) 
 		case StatusBogus:
 			return Entry{}, errBogusAnswer
 		case StatusSecure:
-			entry.AD = true
+			entry.ad = true
 		}
 	}
 	// RFC 8198: harvest NSEC and NSEC3 records from a validated
 	// negative response into the aggressive indexes. Both NXDOMAIN
 	// (RCODE=3 with no answers) and NoData (RCODE=0 with no answers
 	// and an SOA in authority) populate them.
-	if r.aggressiveNSEC && entry.AD && len(entry.Answer) == 0 &&
-		(entry.RCODE == wire.RCODENXDomain || entry.RCODE == wire.RCODENoError) {
+	if r.aggressiveNSEC && entry.ad && len(entry.answer) == 0 &&
+		(entry.rcode == wire.RCODENXDomain || entry.rcode == wire.RCODENoError) {
 		now := time.Now()
-		for _, ne := range extractValidatedNSECs(entry.Authority, now) {
+		for _, ne := range extractValidatedNSECs(entry.authority, now) {
 			r.nsecIdx.Insert(ne)
 		}
-		zoneApex, params, n3 := extractValidatedNSEC3s(entry.Authority, now)
+		zoneApex, params, n3 := extractValidatedNSEC3s(entry.authority, now)
 		if zoneApex.IsValid() {
 			for _, e := range n3 {
 				r.nsec3Idx.Insert(zoneApex, params, e)
@@ -440,17 +440,17 @@ func (r *recursive) resolveDepthFollow(ctx context.Context, name wire.Name, t rr
 		// section would otherwise see the forged A flow into the
 		// aggregated result. The next leg of the chase re-resolves the
 		// CNAME target from roots, getting the legitimate records.
-		legAnswers := recordsAt(entry.Answer, cur)
-		if len(aggregated.Answer) == 0 && len(aggregated.Authority) == 0 {
+		legAnswers := recordsAt(entry.answer, cur)
+		if len(aggregated.answer) == 0 && len(aggregated.authority) == 0 {
 			aggregated = entry
-			aggregated.Answer = legAnswers
+			aggregated.answer = legAnswers
 		} else {
-			aggregated.Answer = append(aggregated.Answer, legAnswers...)
-			if entry.RCODE != wire.RCODENoError {
-				aggregated.RCODE = entry.RCODE
+			aggregated.answer = append(aggregated.answer, legAnswers...)
+			if entry.rcode != wire.RCODENoError {
+				aggregated.rcode = entry.rcode
 			}
-			if entry.ExpiresAt.Before(aggregated.ExpiresAt) {
-				aggregated.ExpiresAt = entry.ExpiresAt
+			if entry.expiresAt.Before(aggregated.expiresAt) {
+				aggregated.expiresAt = entry.expiresAt
 			}
 		}
 
@@ -458,13 +458,13 @@ func (r *recursive) resolveDepthFollow(ctx context.Context, name wire.Name, t rr
 		if curT == rrtype.CNAME {
 			return aggregated, nil
 		}
-		target, ok := pickCNAMETarget(entry.Answer, cur)
+		target, ok := pickCNAMETarget(entry.answer, cur)
 		if !ok {
 			return aggregated, nil
 		}
 		// Did we already see qtype answers at the previous owner? If yes,
 		// we're done.
-		if hasTypeAt(entry.Answer, cur, curT) {
+		if hasTypeAt(entry.answer, cur, curT) {
 			return aggregated, nil
 		}
 		cnameDepth++
@@ -799,7 +799,7 @@ func (r *recursive) serversFromReferral(ctx context.Context, resp wire.Message, 
 			if err != nil {
 				return
 			}
-			for _, rec := range a4Entry.Answer {
+			for _, rec := range a4Entry.answer {
 				if a, ok := wire.RDataAs[rdata.A](rec); ok {
 					a4Addrs = append(a4Addrs, netip.AddrPortFrom(a.Addr(), 53))
 				}
@@ -811,7 +811,7 @@ func (r *recursive) serversFromReferral(ctx context.Context, resp wire.Message, 
 			if err != nil {
 				return
 			}
-			for _, rec := range a6Entry.Answer {
+			for _, rec := range a6Entry.answer {
 				if aaaa, ok := wire.RDataAs[rdata.AAAA](rec); ok {
 					a6Addrs = append(a6Addrs, netip.AddrPortFrom(aaaa.Addr(), 53))
 				}
@@ -978,13 +978,13 @@ func (r *recursive) entryFromResponse(qname wire.Name, resp wire.Message) Entry 
 	}
 	answers, authority, additional := bailiwickFilter(qname, resp)
 	return Entry{
-		Answer:     answers,
-		Authority:  authority,
-		Additional: additional,
-		RCODE:      resp.Flags().RCODE(),
-		AA:         resp.Flags().Authoritative(),
-		AD:         resp.Flags().AuthenticData(),
-		ExpiresAt:  time.Now().Add(ttl),
+		answer:     answers,
+		authority:  authority,
+		additional: additional,
+		rcode:      resp.Flags().RCODE(),
+		aa:         resp.Flags().Authoritative(),
+		ad:         resp.Flags().AuthenticData(),
+		expiresAt:  time.Now().Add(ttl),
 	}
 }
 

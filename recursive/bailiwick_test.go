@@ -102,7 +102,7 @@ func TestEntryFromResponseCapsNegativeTTL(t *testing.T) {
 
 	before := time.Now()
 	entry := r.entryFromResponse(wire.MustParseName("ghost.evil.example."), resp)
-	require.LessOrEqual(t, entry.ExpiresAt.Sub(before), time.Hour+time.Second,
+	require.LessOrEqual(t, entry.ExpiresAt().Sub(before), time.Hour+time.Second,
 		"negative TTL must be clamped to maxNegTTL regardless of SOA MINIMUM")
 }
 

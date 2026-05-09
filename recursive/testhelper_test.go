@@ -16,3 +16,12 @@ func mustRecursive(t *testing.T, opts ...recursive.Option) recursive.Recursive {
 	require.NoError(t, err)
 	return r
 }
+
+// mustEntry resolves the (Entry, error) return shape of
+// EntryBuilder.Build for tests that build well-formed entries.
+func mustEntry(t *testing.T, b *recursive.EntryBuilder) recursive.Entry {
+	t.Helper()
+	e, err := b.Build()
+	require.NoError(t, err)
+	return e
+}

@@ -69,7 +69,7 @@ func TestCNAMEChainFollowed(t *testing.T) {
 	require.NoError(t, err)
 	// Walk the answer set: should contain the CNAME and the A.
 	var sawA, sawCNAME bool
-	for _, rec := range entry.Answer {
+	for _, rec := range entry.Answer() {
 		switch rec.Type() {
 		case rrtype.A:
 			sawA = true
@@ -218,7 +218,7 @@ www IN  A    192.0.2.42
 	defer rcancel()
 	entry, err := r.Resolve(rctx, wire.MustParseName("www.example.com"), rrtype.A)
 	require.NoError(t, err)
-	require.True(t, entry.AD)
+	require.True(t, entry.AD())
 }
 
 func TestServerStatsTracksRTT(t *testing.T) {

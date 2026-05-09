@@ -22,24 +22,25 @@ func TestCacheGetReturnsCopy(t *testing.T) {
 	name := wire.MustParseName("a.test.")
 	rec := wire.NewRecord(name, time.Hour,
 		rdata.NewA(netip.MustParseAddr("192.0.2.1")))
-	c.Put(name, rrtype.A, recursive.Entry{
-		Answer:    []wire.Record{rec},
-		ExpiresAt: time.Now().Add(time.Hour),
-	})
+	c.Put(name, rrtype.A, mustEntry(t, recursive.NewEntryBuilder().
+		Answer([]wire.Record{rec}).
+		ExpiresAt(time.Now().Add(time.Hour))))
 
 	first, ok := c.Get(name, rrtype.A)
 	require.True(t, ok)
-	require.Equal(t, 1, len(first.Answer))
+	firstAnswer := first.Answer()
+	require.Equal(t, 1, len(firstAnswer))
 
 	// Mutate the slice we got back. A second Get must see the
 	// original record, not our perturbation.
-	first.Answer[0] = wire.NewRecord(name, time.Hour,
+	firstAnswer[0] = wire.NewRecord(name, time.Hour,
 		rdata.NewA(netip.MustParseAddr("198.51.100.99")))
 
 	second, ok := c.Get(name, rrtype.A)
 	require.True(t, ok)
-	require.Equal(t, 1, len(second.Answer))
-	a, ok := wire.RDataAs[rdata.A](second.Answer[0])
+	secondAnswer := second.Answer()
+	require.Equal(t, 1, len(secondAnswer))
+	a, ok := wire.RDataAs[rdata.A](secondAnswer[0])
 	require.True(t, ok)
 	require.Equal(t, "192.0.2.1", a.Addr().String())
 }
@@ -55,10 +56,9 @@ func TestCachePutSnapshotsCaller(t *testing.T) {
 		wire.NewRecord(name, time.Hour,
 			rdata.NewA(netip.MustParseAddr("192.0.2.1"))),
 	}
-	c.Put(name, rrtype.A, recursive.Entry{
-		Answer:    answer,
-		ExpiresAt: time.Now().Add(time.Hour),
-	})
+	c.Put(name, rrtype.A, mustEntry(t, recursive.NewEntryBuilder().
+		Answer(answer).
+		ExpiresAt(time.Now().Add(time.Hour))))
 
 	// Mutate after Put.
 	answer[0] = wire.NewRecord(name, time.Hour,
@@ -66,7 +66,7 @@ func TestCachePutSnapshotsCaller(t *testing.T) {
 
 	got, ok := c.Get(name, rrtype.A)
 	require.True(t, ok)
-	a, ok := wire.RDataAs[rdata.A](got.Answer[0])
+	a, ok := wire.RDataAs[rdata.A](got.Answer()[0])
 	require.True(t, ok)
 	require.Equal(t, "192.0.2.1", a.Addr().String(),
 		"cache must snapshot the caller's slice on Put")

@@ -18,27 +18,86 @@ type Cache interface {
 	Put(name wire.Name, t rrtype.Type, e Entry)
 }
 
-// Entry is the cached form of an authoritative result.
-//
-// The fields are exported for ergonomic access by callers that want
-// to inspect the parsed answer without going through accessors.
-// Callers MUST NOT mutate the fields after retrieval — the slice
-// fields are freshly cloned by [MemoryCache.Get] but a custom
-// [Cache] implementation that forgets to clone would alias storage
-// shared with concurrent readers. NOTE: a future API break may move
-// to unexported fields plus accessors per the project's style rule;
-// the exported-field shape is retained today only because the cost
-// of converting ~200 call sites outweighs the marginal safety win
-// while [MemoryCache] is the only shipped Cache.
+// Entry is the cached form of an authoritative result. Fields are
+// unexported per the project's style rule that parsed-record
+// carriers expose accessors rather than fields — a Cache
+// implementation that forgets to clone Entry's slice fields cannot
+// poison readers, and callers cannot mutate the returned value to
+// shift its semantics (e.g. zeroing ExpiresAt would mark the entry
+// expired). Construct via [NewEntryBuilder].
 type Entry struct {
-	Answer     []wire.Record
-	Authority  []wire.Record
-	Additional []wire.Record
-	RCODE      wire.RCODE
-	AA         bool
-	AD         bool
-	ExpiresAt  time.Time
+	answer     []wire.Record
+	authority  []wire.Record
+	additional []wire.Record
+	rcode      wire.RCODE
+	aa         bool
+	ad         bool
+	expiresAt  time.Time
 }
+
+// Answer returns the answer-section records.
+func (e Entry) Answer() []wire.Record { return e.answer }
+
+// Authority returns the authority-section records.
+func (e Entry) Authority() []wire.Record { return e.authority }
+
+// Additional returns the additional-section records.
+func (e Entry) Additional() []wire.Record { return e.additional }
+
+// RCODE returns the response code carried by the cached answer.
+func (e Entry) RCODE() wire.RCODE { return e.rcode }
+
+// AA reports whether the cached answer was returned by an
+// authoritative server.
+func (e Entry) AA() bool { return e.aa }
+
+// AD reports whether the cached answer's authentic-data bit was set.
+func (e Entry) AD() bool { return e.ad }
+
+// ExpiresAt is the absolute time at which the cached entry should
+// no longer be returned.
+func (e Entry) ExpiresAt() time.Time { return e.expiresAt }
+
+// EntryBuilder constructs an [Entry]. Like other builders in the
+// codebase it is owned by a single goroutine; the returned Entry is
+// immutable and may be shared.
+type EntryBuilder struct{ e Entry }
+
+// NewEntryBuilder returns a fresh EntryBuilder with the zero value.
+func NewEntryBuilder() *EntryBuilder { return &EntryBuilder{} }
+
+// Answer sets the answer-section records.
+func (b *EntryBuilder) Answer(r []wire.Record) *EntryBuilder { b.e.answer = r; return b }
+
+// Authority sets the authority-section records.
+func (b *EntryBuilder) Authority(r []wire.Record) *EntryBuilder {
+	b.e.authority = r
+	return b
+}
+
+// Additional sets the additional-section records.
+func (b *EntryBuilder) Additional(r []wire.Record) *EntryBuilder {
+	b.e.additional = r
+	return b
+}
+
+// RCODE sets the cached response code.
+func (b *EntryBuilder) RCODE(c wire.RCODE) *EntryBuilder { b.e.rcode = c; return b }
+
+// AA sets the authoritative-answer bit.
+func (b *EntryBuilder) AA(v bool) *EntryBuilder { b.e.aa = v; return b }
+
+// AD sets the authentic-data bit.
+func (b *EntryBuilder) AD(v bool) *EntryBuilder { b.e.ad = v; return b }
+
+// ExpiresAt sets the absolute expiry instant.
+func (b *EntryBuilder) ExpiresAt(t time.Time) *EntryBuilder { b.e.expiresAt = t; return b }
+
+// Build returns the constructed Entry. Currently infallible; the
+// (Entry, error) shape matches the rest of the builder family in
+// this module so future validation can be added without an API
+// break.
+func (b *EntryBuilder) Build() (Entry, error) { return b.e, nil }
 
 // DefaultMemoryCacheSize is the default upper bound on the number of
 // entries [MemoryCache] retains across all internal shards; new
@@ -146,7 +205,7 @@ func (c *MemoryCache) Get(name wire.Name, t rrtype.Type) (Entry, bool) {
 	if !ok {
 		return Entry{}, false
 	}
-	if time.Now().After(e.ExpiresAt) {
+	if time.Now().After(e.expiresAt) {
 		sh.mu.Lock()
 		delete(sh.entries, k)
 		sh.mu.Unlock()
@@ -177,13 +236,13 @@ func (c *MemoryCache) Put(name wire.Name, t rrtype.Type, e Entry) {
 // allocated. Records are value types and need no deep copy.
 func cloneEntry(e Entry) Entry {
 	return Entry{
-		Answer:     cloneRecords(e.Answer),
-		Authority:  cloneRecords(e.Authority),
-		Additional: cloneRecords(e.Additional),
-		RCODE:      e.RCODE,
-		AA:         e.AA,
-		AD:         e.AD,
-		ExpiresAt:  e.ExpiresAt,
+		answer:     cloneRecords(e.answer),
+		authority:  cloneRecords(e.authority),
+		additional: cloneRecords(e.additional),
+		rcode:      e.rcode,
+		aa:         e.aa,
+		ad:         e.ad,
+		expiresAt:  e.expiresAt,
 	}
 }
 
@@ -197,31 +256,31 @@ func cloneRecords(s []wire.Record) []wire.Record {
 }
 
 // capEntryRecords trims an Entry's record slices so the sum across
-// Answer/Authority/Additional does not exceed limit. Trimming favours
-// dropping Additional first (least operationally important), then
-// Authority, then Answer — keeping the answer path intact for as long
+// answer/authority/additional does not exceed limit. Trimming favours
+// dropping additional first (least operationally important), then
+// authority, then answer — keeping the answer path intact for as long
 // as possible.
 func capEntryRecords(e Entry, limit int) Entry {
-	total := len(e.Answer) + len(e.Authority) + len(e.Additional)
+	total := len(e.answer) + len(e.authority) + len(e.additional)
 	if total <= limit {
 		return e
 	}
 	trim := total - limit
-	if n := len(e.Additional); n > 0 {
+	if n := len(e.additional); n > 0 {
 		drop := min(n, trim)
-		e.Additional = e.Additional[:n-drop]
+		e.additional = e.additional[:n-drop]
 		trim -= drop
 	}
-	if trim > 0 && len(e.Authority) > 0 {
-		n := len(e.Authority)
+	if trim > 0 && len(e.authority) > 0 {
+		n := len(e.authority)
 		drop := min(n, trim)
-		e.Authority = e.Authority[:n-drop]
+		e.authority = e.authority[:n-drop]
 		trim -= drop
 	}
-	if trim > 0 && len(e.Answer) > 0 {
-		n := len(e.Answer)
+	if trim > 0 && len(e.answer) > 0 {
+		n := len(e.answer)
 		drop := min(n, trim)
-		e.Answer = e.Answer[:n-drop]
+		e.answer = e.answer[:n-drop]
 	}
 	return e
 }
@@ -232,7 +291,7 @@ func capEntryRecords(e Entry, limit int) Entry {
 // Caller holds sh.mu in write mode.
 func (c *MemoryCache) evictLocked(sh *memoryCacheShard, now time.Time) {
 	for k, e := range sh.entries {
-		if !e.ExpiresAt.After(now) {
+		if !e.expiresAt.After(now) {
 			delete(sh.entries, k)
 		}
 	}
@@ -243,9 +302,9 @@ func (c *MemoryCache) evictLocked(sh *memoryCacheShard, now time.Time) {
 	var soonestTime time.Time
 	first := true
 	for k, e := range sh.entries {
-		if first || e.ExpiresAt.Before(soonestTime) {
+		if first || e.expiresAt.Before(soonestTime) {
 			soonestKey = k
-			soonestTime = e.ExpiresAt
+			soonestTime = e.expiresAt
 			first = false
 		}
 	}

@@ -99,16 +99,16 @@ func TestAggressiveNSECNoDataSynthesis(t *testing.T) {
 	defer cancel()
 	prime, err := r.Resolve(ctx, wire.MustParseName("a.example."), rrtype.MX)
 	require.NoError(t, err)
-	require.Equal(t, wire.RCODENoError, prime.RCODE)
-	require.Empty(t, prime.Answer)
+	require.Equal(t, wire.RCODENoError, prime.RCODE())
+	require.Empty(t, prime.Answer())
 	priming := upstreamCalls.Load()
 
 	// Re-query the same name + qtype — must hit the regular cache,
 	// upstream untouched.
 	again, err := r.Resolve(ctx, wire.MustParseName("a.example."), rrtype.MX)
 	require.NoError(t, err)
-	require.Equal(t, wire.RCODENoError, again.RCODE)
-	require.Empty(t, again.Answer)
+	require.Equal(t, wire.RCODENoError, again.RCODE())
+	require.Empty(t, again.Answer())
 	require.Equal(t, priming, upstreamCalls.Load(),
 		"NoData answer must be served from cache without upstream")
 }
@@ -233,14 +233,14 @@ func TestAggressiveNSEC3NoData(t *testing.T) {
 	defer cancel()
 	prime, err := r.Resolve(ctx, qname, rrtype.A)
 	require.NoError(t, err)
-	require.Equal(t, wire.RCODENoError, prime.RCODE)
-	require.Empty(t, prime.Answer)
+	require.Equal(t, wire.RCODENoError, prime.RCODE())
+	require.Empty(t, prime.Answer())
 	primed := upstreamCalls.Load()
 
 	// Same name + same type → cached entry serves it.
 	again, err := r.Resolve(ctx, qname, rrtype.A)
 	require.NoError(t, err)
-	require.Equal(t, wire.RCODENoError, again.RCODE)
-	require.Empty(t, again.Answer)
+	require.Equal(t, wire.RCODENoError, again.RCODE())
+	require.Empty(t, again.Answer())
 	require.Equal(t, primed, upstreamCalls.Load())
 }

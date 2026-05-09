@@ -374,10 +374,10 @@ func (r *recursive) synthesiseFromNSEC(name wire.Name, t rrtype.Type) (Entry, bo
 		rcode = wire.RCODENoError
 	}
 	return Entry{
-		Authority: authority,
-		RCODE:     rcode,
-		AD:        true,
-		ExpiresAt: cand.expiresAt,
+		authority: authority,
+		rcode:     rcode,
+		ad:        true,
+		expiresAt: cand.expiresAt,
 	}, true
 }
 

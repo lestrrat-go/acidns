@@ -76,7 +76,7 @@ func TestQNameMinimisationSendsMinimisedQueries(t *testing.T) {
 	defer cancel()
 	entry, err := r.Resolve(ctx, wire.MustParseName("www.example.com."), rrtype.A)
 	require.NoError(t, err)
-	require.Equal(t, 1, len(entry.Answer))
+	require.Equal(t, 1, len(entry.Answer()))
 
 	mu.Lock()
 	defer mu.Unlock()

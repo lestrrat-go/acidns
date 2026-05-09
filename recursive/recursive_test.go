@@ -56,10 +56,10 @@ www IN  A    192.0.2.42
 	defer cancel()
 	entry, err := r.Resolve(ctx, wire.MustParseName("www.example.com"), rrtype.A)
 	require.NoError(t, err)
-	require.Equal(t, wire.RCODENoError, entry.RCODE)
-	require.True(t, entry.AA)
-	require.Equal(t, 1, len(entry.Answer))
-	a := entry.Answer[0].RData().(rdata.A)
+	require.Equal(t, wire.RCODENoError, entry.RCODE())
+	require.True(t, entry.AA())
+	require.Equal(t, 1, len(entry.Answer()))
+	a := entry.Answer()[0].RData().(rdata.A)
 	require.Equal(t, "192.0.2.42", a.Addr().String())
 }
 
@@ -120,10 +120,10 @@ www IN  A    192.0.2.55
 	defer cancel()
 	entry, err := r.Resolve(ctx, wire.MustParseName("www.example.com"), rrtype.A)
 	require.NoError(t, err)
-	require.Equal(t, wire.RCODENoError, entry.RCODE)
-	require.True(t, entry.AA)
-	require.Equal(t, 1, len(entry.Answer))
-	require.Equal(t, "192.0.2.55", entry.Answer[0].RData().(rdata.A).Addr().String())
+	require.Equal(t, wire.RCODENoError, entry.RCODE())
+	require.True(t, entry.AA())
+	require.Equal(t, 1, len(entry.Answer()))
+	require.Equal(t, "192.0.2.55", entry.Answer()[0].RData().(rdata.A).Addr().String())
 }
 
 type portRewriteDialer struct {
@@ -154,7 +154,7 @@ www IN  A    192.0.2.42
 	require.NoError(t, err)
 	b, err := r.Resolve(ctx, wire.MustParseName("www.example.com"), rrtype.A)
 	require.NoError(t, err)
-	require.Equal(t, a.ExpiresAt, b.ExpiresAt, "second lookup must come from cache")
+	require.Equal(t, a.ExpiresAt(), b.ExpiresAt(), "second lookup must come from cache")
 }
 
 func TestNXDOMAINCached(t *testing.T) {
@@ -170,9 +170,9 @@ ns1 IN  A    192.0.2.10
 	defer cancel()
 	entry, err := r.Resolve(ctx, wire.MustParseName("nope.example.com"), rrtype.A)
 	require.NoError(t, err)
-	require.Equal(t, wire.RCODENXDomain, entry.RCODE)
+	require.Equal(t, wire.RCODENXDomain, entry.RCODE())
 	// SOA MINIMUM is 5s, the smallest cap so negative TTL must be ≤ 5s.
-	require.LessOrEqual(t, time.Until(entry.ExpiresAt), 5*time.Second+time.Second)
+	require.LessOrEqual(t, time.Until(entry.ExpiresAt()), 5*time.Second+time.Second)
 }
 
 func TestNODATACachedRespectsSOAMinimum(t *testing.T) {
@@ -191,7 +191,7 @@ www  IN A   192.0.2.20
 	// cache TTL even though everything else (TTL=600) is much higher.
 	entry, err := r.Resolve(ctx, wire.MustParseName("www.example.com"), rrtype.AAAA)
 	require.NoError(t, err)
-	require.Equal(t, wire.RCODENoError, entry.RCODE)
-	require.Equal(t, 0, len(entry.Answer))
-	require.LessOrEqual(t, time.Until(entry.ExpiresAt), 8*time.Second)
+	require.Equal(t, wire.RCODENoError, entry.RCODE())
+	require.Equal(t, 0, len(entry.Answer()))
+	require.LessOrEqual(t, time.Until(entry.ExpiresAt()), 8*time.Second)
 }
