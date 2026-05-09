@@ -1,0 +1,1 @@
+NS for example.com -> ns1, ns2

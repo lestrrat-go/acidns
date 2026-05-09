@@ -1,0 +1,1 @@
+TXT query for example.com -> v=spf1 -all

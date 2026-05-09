@@ -1,0 +1,1 @@
+PTR 1.0.0.127.in-addr.arpa -> www.example.com
