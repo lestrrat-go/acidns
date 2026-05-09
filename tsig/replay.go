@@ -2,6 +2,7 @@ package tsig
 
 import (
 	"encoding/hex"
+	"errors"
 	"strconv"
 	"sync"
 	"time"
@@ -116,11 +117,7 @@ type MemoryReplayCache struct {
 
 // ErrReplay is returned by [VerifyWithReplay] when the message's MAC
 // has already been observed within the cache window.
-var ErrReplay = errReplay{}
-
-type errReplay struct{}
-
-func (errReplay) Error() string { return "tsig: signature replay" }
+var ErrReplay = errors.New("tsig: replay detected")
 
 // VerifyWithReplay is the canonical "verify then check replay" wrapper.
 // It first calls [VerifyMAC]; if that returns nil it consults cache for

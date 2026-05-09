@@ -46,19 +46,40 @@ func (a *authoritative) serveUpdate(ctx context.Context, w acidns.ResponseWriter
 		return
 	}
 
-	a.mu.Lock()
+	// Prerequisite scan under a read lock so concurrent queries continue
+	// during the (potentially expensive) check. A *zoneIndex is treated
+	// as immutable once published, so a snapshot taken under RLock
+	// remains a self-consistent view even after the lock is released.
+	a.mu.RLock()
 	zone, ok := a.zones[nameKey(zoneQ.Name())]
 	if !ok {
-		a.mu.Unlock()
+		a.mu.RUnlock()
 		_ = w.WriteMsg(mustBuild(setRCODE(b, q, wire.RCODENotAuth), q))
 		return
 	}
-
-	// Prerequisites — RFC 2136 §3.2. Run against the existing snapshot;
-	// a prereq failure must not leave a partially-mutated zone behind.
 	for _, p := range q.Answers() {
 		if rcode := zone.checkPrereq(p); rcode != wire.RCODENoError {
-			a.mu.Unlock()
+			a.mu.RUnlock()
+			_ = w.WriteMsg(mustBuild(setRCODE(b, q, rcode), q))
+			return
+		}
+	}
+	a.mu.RUnlock()
+
+	// Promote to write lock. The published *zoneIndex may have been
+	// swapped between RUnlock and Lock by a competing UPDATE, so we
+	// re-fetch the current pointer and re-validate the prerequisites
+	// against it. Without the recheck, a racing UPDATE that satisfied
+	// or invalidated a prerequisite could be papered over by this one.
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	zone, ok = a.zones[nameKey(zoneQ.Name())]
+	if !ok {
+		_ = w.WriteMsg(mustBuild(setRCODE(b, q, wire.RCODENotAuth), q))
+		return
+	}
+	for _, p := range q.Answers() {
+		if rcode := zone.checkPrereq(p); rcode != wire.RCODENoError {
 			_ = w.WriteMsg(mustBuild(setRCODE(b, q, rcode), q))
 			return
 		}
@@ -74,7 +95,6 @@ func (a *authoritative) serveUpdate(ctx context.Context, w acidns.ResponseWriter
 		newZone.applyUpdate(u)
 	}
 	a.zones[nameKey(zoneQ.Name())] = newZone
-	a.mu.Unlock()
 	_ = w.WriteMsg(mustBuild(echoEDNS(b, q), q))
 }
 

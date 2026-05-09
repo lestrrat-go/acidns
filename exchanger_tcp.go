@@ -45,7 +45,7 @@ type tcpExchanger struct {
 // NewTCPExchanger returns an Exchanger that talks TCP to addr.
 func NewTCPExchanger(addr netip.AddrPort, opts ...TCPExchangerOption) (Exchanger, error) {
 	if !addr.IsValid() {
-		return nil, fmt.Errorf("tcp: invalid server address")
+		return nil, fmt.Errorf("acidns: invalid server address")
 	}
 	c := tcpExchangerConfig{timeout: 5 * time.Second}
 	for _, o := range opts {
@@ -58,7 +58,7 @@ func (e *tcpExchanger) Exchange(ctx context.Context, q wire.Message) (wire.Messa
 	var d net.Dialer
 	conn, err := d.DialContext(ctx, "tcp", e.addr.String())
 	if err != nil {
-		return nil, fmt.Errorf("tcp: dial %s: %w", e.addr, err)
+		return nil, fmt.Errorf("acidns: dial %s: %w", e.addr, err)
 	}
 	return streamframe.Exchange(ctx, conn, q, e.timeout)
 }
@@ -70,11 +70,11 @@ func (e *tcpExchanger) Stream(ctx context.Context, q wire.Message) (MessageStrea
 	var d net.Dialer
 	conn, err := d.DialContext(ctx, "tcp", e.addr.String())
 	if err != nil {
-		return nil, fmt.Errorf("tcp: dial %s: %w", e.addr, err)
+		return nil, fmt.Errorf("acidns: dial %s: %w", e.addr, err)
 	}
 	s, err := streamframe.NewConnStream(ctx, conn, q, e.timeout)
 	if err != nil {
-		return nil, fmt.Errorf("tcp: %w", err)
+		return nil, fmt.Errorf("acidns: %w", err)
 	}
 	return s, nil
 }

@@ -27,11 +27,16 @@ var ErrNoUpstream = errors.New("forward: no upstream configured")
 // to the inbound peer.
 var ErrInflightFull = errors.New("forward: max inflight upstream calls reached")
 
-// Handler is the caching forwarder. It is safe for concurrent use by
+// Compile-time assertion that *Forwarder satisfies acidns.Handler.
+// Renamed from Handler to Forwarder so the type does not shadow the
+// root package's Handler interface at use sites.
+var _ acidns.Handler = (*Forwarder)(nil)
+
+// Forwarder is the caching forwarder. It is safe for concurrent use by
 // multiple goroutines: ServeDNS serialises cache reads/writes internally
 // and the configured upstream Exchanger is required to be concurrency-safe
 // (see acidns.Exchanger).
-type Handler struct {
+type Forwarder struct {
 	cfg   config
 	cache *cache
 
@@ -61,9 +66,9 @@ type inflightCall struct {
 	err  error
 }
 
-// New returns a Handler. Exactly one of WithUpstream, WithUDPUpstream,
+// New returns a Forwarder. Exactly one of WithUpstream, WithUDPUpstream,
 // or WithDoTUpstream must be supplied.
-func New(opts ...Option) (*Handler, error) {
+func New(opts ...Option) (*Forwarder, error) {
 	c := config{
 		cacheSize:    4096,
 		minTTL:       0,
@@ -85,7 +90,7 @@ func New(opts ...Option) (*Handler, error) {
 	if c.logger == nil {
 		c.logger = slog.New(slog.DiscardHandler)
 	}
-	h := &Handler{cfg: c, cache: newCache(c.cacheSize), inflight: make(map[string]*inflightCall)}
+	h := &Forwarder{cfg: c, cache: newCache(c.cacheSize), inflight: make(map[string]*inflightCall)}
 	if c.maxInflight > 0 {
 		h.inflightSem = make(chan struct{}, c.maxInflight)
 	}
@@ -94,10 +99,10 @@ func New(opts ...Option) (*Handler, error) {
 
 // UpstreamName reports a human-readable description of the configured
 // upstream — useful for startup logs and metrics labels.
-func (h *Handler) UpstreamName() string { return h.cfg.upstreamName }
+func (h *Forwarder) UpstreamName() string { return h.cfg.upstreamName }
 
 // CacheSize returns the current number of entries in the cache.
-func (h *Handler) CacheSize() int { return h.cache.len() }
+func (h *Forwarder) CacheSize() int { return h.cache.len() }
 
 // Close drops the cache and, if the configured upstream Exchanger
 // implements io.Closer, propagates the Close call to it. Subsequent
@@ -108,7 +113,7 @@ func (h *Handler) CacheSize() int { return h.cache.len() }
 //
 // Close is idempotent — repeated calls return the same upstream
 // Close error (nil if the upstream does not implement io.Closer).
-func (h *Handler) Close() error {
+func (h *Forwarder) Close() error {
 	h.closeOnce.Do(func() {
 		h.closed.Store(true)
 		h.cache.clear()
@@ -121,7 +126,7 @@ func (h *Handler) Close() error {
 
 // ServeDNS answers q by serving from cache when fresh, otherwise by
 // forwarding to the configured upstream and caching the result.
-func (h *Handler) ServeDNS(ctx context.Context, w acidns.ResponseWriter, q wire.Message) {
+func (h *Forwarder) ServeDNS(ctx context.Context, w acidns.ResponseWriter, q wire.Message) {
 	start := time.Now()
 	if h.closed.Load() {
 		_ = w.WriteMsg(buildErrorResponse(q, wire.RCODEServFail))
@@ -222,7 +227,7 @@ func (h *Handler) ServeDNS(ctx context.Context, w acidns.ResponseWriter, q wire.
 // from being orphaned when the leader's request ctx fires before the
 // upstream answer arrives, and gives the leader the same prompt-
 // cancel semantics the followers already enjoyed.
-func (h *Handler) exchangeSingleflight(ctx context.Context, in wire.Message, qq wire.Question) (wire.Message, error) {
+func (h *Forwarder) exchangeSingleflight(ctx context.Context, in wire.Message, qq wire.Question) (wire.Message, error) {
 	key := singleflightKey(qq, edsoDOBit(in))
 
 	h.inflightMu.Lock()
@@ -261,7 +266,7 @@ func (h *Handler) exchangeSingleflight(ctx context.Context, in wire.Message, qq 
 // while preserving caller-installed values — slog correlation ids,
 // trace spans, etc. — for observers down the upstream stack. The
 // exchange is bounded by queryTimeout when configured.
-func (h *Handler) startExchange(callerCtx context.Context, call *inflightCall, key string, in wire.Message) {
+func (h *Forwarder) startExchange(callerCtx context.Context, call *inflightCall, key string, in wire.Message) {
 	go func() {
 		defer func() {
 			h.inflightMu.Lock()

@@ -23,6 +23,7 @@ type serverConfig struct {
 	writeTimeout      time.Duration
 	maxMessageSize    int
 	maxStreamsPer     int
+	maxConnections    int
 }
 
 // WithServerTLSConfig installs the TLS configuration used during the
@@ -73,4 +74,12 @@ func WithServerMaxMessageSize(n int) ServerOption {
 // hostile peer cannot exhaust per-connection state.
 func WithServerMaxStreamsPerConn(n int) ServerOption {
 	return serverOptionFunc(func(c *serverConfig) { c.maxStreamsPer = n })
+}
+
+// WithServerMaxConnections caps the number of concurrent QUIC
+// connections the server accepts. Once the cap is reached additional
+// peers are closed with the doq "excessive load" error code per
+// RFC 9250 §4.3. Defaults to 256; non-positive disables.
+func WithServerMaxConnections(n int) ServerOption {
+	return serverOptionFunc(func(c *serverConfig) { c.maxConnections = n })
 }

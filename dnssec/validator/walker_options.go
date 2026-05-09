@@ -7,11 +7,28 @@ type walkerOptionFunc func(*walker)
 func (f walkerOptionFunc) applyWalker(w *walker) { f(w) }
 
 // WithWalkerAnchors configures one or more trust anchors. The walker
-// selects the closest covering anchor for each query. If unset,
-// IANARootAnchor() is used.
+// selects the closest covering anchor for each query. An unconfigured
+// walker returns [ErrNoTrustAnchor] — pass this option (or
+// [WithWalkerIANARootAnchor]) explicitly.
 func WithWalkerAnchors(anchors ...Anchor) WalkerOption {
 	return walkerOptionFunc(func(w *walker) {
 		w.anchors = append(w.anchors[:0], anchors...)
+	})
+}
+
+// WithWalkerIANARootAnchor opts in to the embedded IANA root KSK trust
+// anchor (see [IANARootAnchor]). The pinned KSK digests will need to
+// be refreshed at each ICANN KSK rollover; production deployments
+// SHOULD instead manage their own RFC 5011 trust-anchor file and pass
+// it via [WithWalkerAnchors].
+//
+// BREAKING: prior versions auto-installed IANARootAnchor when no
+// anchor was configured; that default was removed because "I forgot to
+// configure" should not silently look like "I want IANA root with a
+// frozen-in-binary digest."
+func WithWalkerIANARootAnchor() WalkerOption {
+	return walkerOptionFunc(func(w *walker) {
+		w.anchors = append(w.anchors, IANARootAnchor())
 	})
 }
 

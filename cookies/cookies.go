@@ -29,8 +29,10 @@ import (
 	"encoding/binary"
 	"errors"
 	"fmt"
+	"log"
 	"net/netip"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/lestrrat-go/acidns/wire"
@@ -75,6 +77,13 @@ type Client interface {
 	// cookie the cache is updated and ok=true. The caller should then
 	// rebuild and resend the query.
 	Retry(server netip.AddrPort, resp wire.Message) (ok bool, err error)
+	// RNGFailures returns the cumulative number of times Apply could
+	// not draw fresh entropy for a client cookie and fell back to
+	// emitting the query without a cookie option. A non-zero value is
+	// a strong signal the host's CSPRNG is wedged (entropy starvation
+	// on a freshly-booted VM, broken kernel RNG, etc.); operators
+	// should alert on it.
+	RNGFailures() uint64
 }
 
 // DefaultClientMaxEntries caps the number of distinct servers a Client
@@ -135,11 +144,15 @@ type clientEntry struct {
 }
 
 type client struct {
-	mu         sync.Mutex
-	cache      map[netip.AddrPort]clientEntry
-	maxEntries int
-	now        func() time.Time
+	mu          sync.Mutex
+	cache       map[netip.AddrPort]clientEntry
+	maxEntries  int
+	now         func() time.Time
+	rngFailures atomic.Uint64
+	rngLogged   atomic.Bool
 }
+
+func (c *client) RNGFailures() uint64 { return c.rngFailures.Load() }
 
 func (c *client) Apply(server netip.AddrPort, b *wire.EDNSBuilder) *wire.EDNSBuilder {
 	c.mu.Lock()
@@ -156,6 +169,10 @@ func (c *client) Apply(server netip.AddrPort, b *wire.EDNSBuilder) *wire.EDNSBui
 			// HMAC; an all-zero value would let many failing-RNG clients
 			// share a cookie identity with each other.
 			c.mu.Unlock()
+			c.rngFailures.Add(1)
+			if c.rngLogged.CompareAndSwap(false, true) {
+				log.Printf("cookies: rand.Read failed: %v; falling back to cookieless queries (further RNG failures will be silent — see Client.RNGFailures())", err)
+			}
 			return b
 		}
 		if c.maxEntries > 0 && len(c.cache) >= c.maxEntries {

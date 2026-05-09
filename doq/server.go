@@ -67,6 +67,7 @@ func NewServer(addr netip.AddrPort, h acidns.Handler, opts ...ServerOption) (*Se
 		writeTimeout:      5 * time.Second,
 		maxMessageSize:    16 * 1024,
 		maxStreamsPer:     256,
+		maxConnections:    256,
 	}
 	for _, o := range opts {
 		o.applyDoQServer(&cfg)
@@ -113,6 +114,9 @@ func (s *Server) Run(ctx context.Context) (*Controller, error) {
 		addr:    bound,
 		handler: s.handler,
 		cfg:     s.cfg,
+	}
+	if s.cfg.maxConnections > 0 {
+		loop.sem = make(chan struct{}, s.cfg.maxConnections)
 	}
 	ctrl := &Controller{addr: bound, done: make(chan struct{})}
 	go func() {
@@ -163,6 +167,7 @@ type serverLoop struct {
 	addr    netip.AddrPort
 	handler acidns.Handler
 	cfg     serverConfig
+	sem     chan struct{}
 	wg      sync.WaitGroup
 }
 
@@ -187,16 +192,33 @@ func (l *serverLoop) run(ctx context.Context) error {
 			}
 			return fmt.Errorf("doq: accept: %w", err)
 		}
+		// Per-listener connection cap. Refuse with the RFC 9250 §4.3
+		// "excessive load" code rather than blocking accept — QUIC
+		// listeners have no equivalent of a kernel listen-backlog to
+		// throttle into.
+		if l.sem != nil {
+			select {
+			case l.sem <- struct{}{}:
+			default:
+				_ = conn.CloseWithError(doqExcessiveLoad, "max connections reached")
+				continue
+			}
+		}
 		l.wg.Add(1)
 		go func(c *quic.Conn) {
-			defer l.wg.Done()
+			defer func() {
+				if l.sem != nil {
+					<-l.sem
+				}
+				l.wg.Done()
+			}()
 			l.serveConn(ctx, c)
 		}(conn)
 	}
 }
 
 func (l *serverLoop) serveConn(ctx context.Context, conn *quic.Conn) {
-	defer func() { _ = conn.CloseWithError(0, "") }()
+	defer func() { _ = conn.CloseWithError(doqNoError, "") }()
 
 	remote := remoteAddrFromConn(conn)
 	var streamWg sync.WaitGroup
@@ -236,7 +258,7 @@ func (l *serverLoop) serveStream(ctx context.Context, stream *quic.Stream, remot
 	}
 	n := int(binary.BigEndian.Uint16(hdr[:]))
 	if l.cfg.maxMessageSize > 0 && n > l.cfg.maxMessageSize {
-		stream.CancelRead(0)
+		stream.CancelRead(doqStreamProtocolError)
 		return
 	}
 	body := make([]byte, n)
@@ -252,7 +274,7 @@ func (l *serverLoop) serveStream(ctx context.Context, stream *quic.Stream, remot
 	// than reply with FORMERR — a non-zero ID is a strong signal of
 	// a misbehaving or wrong-protocol client.
 	if q.ID() != 0 {
-		stream.CancelRead(0)
+		stream.CancelRead(doqStreamProtocolError)
 		return
 	}
 

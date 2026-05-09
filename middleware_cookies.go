@@ -41,13 +41,38 @@ type cookieOptionFunc func(*cookieConfig)
 func (f cookieOptionFunc) applyCookies(c *cookieConfig) { f(c) }
 
 type cookieConfig struct {
-	now func() time.Time
+	now              func() time.Time
+	requireForLarge  bool
+	largeRespMaxSize int
 }
 
 // WithClock injects a custom clock. Test-only — production code
 // should leave this unset and rely on time.Now.
 func WithClock(now func() time.Time) CookieOption {
 	return cookieOptionFunc(func(c *cookieConfig) { c.now = now })
+}
+
+// WithRequireCookieForLargeResponse enables RFC 7873 §1's amplification
+// defence: an inbound UDP query that lacks a valid client/server cookie
+// receives a TC=1 truncated reply when the inner handler's response
+// would exceed maxBytes, forcing the client to retry over TCP (where
+// the 3-way handshake provides a path-validated channel that cannot be
+// spoofed). TCP queries pass through unchanged. A non-positive maxBytes
+// falls back to 512 (the classic pre-EDNS DNS UDP message ceiling).
+//
+// Default: off. Cookie middleware on its own attaches a cookie to the
+// response and short-circuits BADCOOKIE; this option additionally gates
+// large responses to non-cookie clients to bound a spoofed source's
+// amplification factor.
+func WithRequireCookieForLargeResponse(maxBytes int) CookieOption {
+	return cookieOptionFunc(func(c *cookieConfig) {
+		c.requireForLarge = true
+		if maxBytes > 0 {
+			c.largeRespMaxSize = maxBytes
+		} else {
+			c.largeRespMaxSize = 512
+		}
+	})
 }
 
 // NewCookies wraps inner with EDNS-Cookie processing backed by srv.
@@ -74,42 +99,131 @@ func NewCookies(inner Handler, srv cookies.Server, opts ...CookieOption) Handler
 	for _, o := range opts {
 		o.applyCookies(&c)
 	}
-	return &cookiesMW{inner: inner, srv: srv, now: c.now}
+	return &cookiesMW{
+		inner:            inner,
+		srv:              srv,
+		now:              c.now,
+		requireForLarge:  c.requireForLarge,
+		largeRespMaxSize: c.largeRespMaxSize,
+	}
 }
 
 type cookiesMW struct {
-	inner Handler
-	srv   cookies.Server
-	now   func() time.Time
+	inner            Handler
+	srv              cookies.Server
+	now              func() time.Time
+	requireForLarge  bool
+	largeRespMaxSize int
 }
 
 func (m *cookiesMW) ServeDNS(ctx context.Context, w ResponseWriter, q wire.Message) {
 	cc, sc, hasCookie := extractCookies(q)
-	if !hasCookie {
-		m.inner.ServeDNS(ctx, w, q)
+	hasValidCookie := false
+	if hasCookie {
+		addr := w.RemoteAddr().Addr()
+		now := m.now()
+
+		if len(sc) >= 8 {
+			if _, err := m.srv.Validate(sc, cc, addr, now); err != nil {
+				// Invalid server cookie → BADCOOKIE response. Mint a fresh
+				// one so the client can retry, and short-circuit the inner
+				// handler entirely.
+				fresh := m.srv.Make(cc, addr, now)
+				_ = w.WriteMsg(buildBadCookieResponse(q, cc, fresh))
+				return
+			}
+			hasValidCookie = true
+		}
+
+		// Either client-only (first contact) or valid client+server: in
+		// both cases mint a fresh server cookie and attach it to the
+		// response.
+		fresh := m.srv.Make(cc, addr, now)
+		cw := &cookiesWriter{ResponseWriter: w, cc: cc, sc: fresh}
+		// If the cookie is only client-side (first contact), the response
+		// is not yet path-validated either — apply the large-response
+		// gate just as if the request had no cookie option at all.
+		if m.requireForLarge && !hasValidCookie && isUDPNetwork(w.Network()) {
+			gw := &cookieSizeGate{ResponseWriter: cw, q: q, maxBytes: m.largeRespMaxSize}
+			m.inner.ServeDNS(ctx, gw, q)
+			return
+		}
+		m.inner.ServeDNS(ctx, cw, q)
 		return
 	}
 
-	addr := w.RemoteAddr().Addr()
-	now := m.now()
-
-	if len(sc) >= 8 {
-		if _, err := m.srv.Validate(sc, cc, addr, now); err != nil {
-			// Invalid server cookie → BADCOOKIE response. Mint a fresh
-			// one so the client can retry, and short-circuit the inner
-			// handler entirely.
-			fresh := m.srv.Make(cc, addr, now)
-			_ = w.WriteMsg(buildBadCookieResponse(q, cc, fresh))
-			return
-		}
+	// No cookie option at all. Optionally apply the amplification gate.
+	if m.requireForLarge && isUDPNetwork(w.Network()) {
+		gw := &cookieSizeGate{ResponseWriter: w, q: q, maxBytes: m.largeRespMaxSize}
+		m.inner.ServeDNS(ctx, gw, q)
+		return
 	}
+	m.inner.ServeDNS(ctx, w, q)
+}
 
-	// Either client-only (first contact) or valid client+server: in
-	// both cases mint a fresh server cookie and attach it to the
-	// response.
-	fresh := m.srv.Make(cc, addr, now)
-	cw := &cookiesWriter{ResponseWriter: w, cc: cc, sc: fresh}
-	m.inner.ServeDNS(ctx, cw, q)
+// isUDPNetwork reports whether the writer's transport label denotes a
+// UDP-shaped datagram protocol, where amplification defence applies.
+// "udp" is the canonical label for the bundled UDP server; "dnscrypt"
+// also runs over UDP and is included for the same reason. Stream
+// transports (tcp, dot, doq) are 3-way-handshake validated and don't
+// need this defence.
+func isUDPNetwork(net string) bool {
+	switch net {
+	case "udp", "dnscrypt":
+		return true
+	}
+	return false
+}
+
+// cookieSizeGate intercepts the inner handler's WriteMsg, measures the
+// serialised response, and substitutes a TC=1 stub when the response
+// exceeds the configured ceiling for cookieless UDP queries.
+type cookieSizeGate struct {
+	ResponseWriter
+
+	q        wire.Message
+	maxBytes int
+	wrote    bool
+}
+
+func (g *cookieSizeGate) WriteMsg(m wire.Message) error {
+	if g.wrote {
+		return g.ResponseWriter.WriteMsg(m)
+	}
+	g.wrote = true
+	buf, err := wire.Marshal(m)
+	if err == nil && len(buf) <= g.maxBytes {
+		return g.ResponseWriter.WriteMsg(m)
+	}
+	return g.ResponseWriter.WriteMsg(truncateForCookieGate(m, g.q))
+}
+
+// truncateForCookieGate builds the slip reply for the
+// large-response-without-cookie case: header + question, OPT echoed if
+// present, TC=1 set so the client retries over TCP. Mirrors the RRL
+// truncate helper but lives here so the cookies middleware does not
+// leak through the rrl writer abstraction.
+func truncateForCookieGate(m wire.Message, q wire.Message) wire.Message {
+	b := wire.NewBuilder().
+		ID(m.ID()).
+		Flags(m.Flags().WithTruncated(true).WithResponse(true))
+	if qs := m.Questions(); len(qs) > 0 {
+		b = b.Question(qs[0])
+	} else if qs := q.Questions(); len(qs) > 0 {
+		b = b.Question(qs[0])
+	}
+	if e, ok := m.EDNS(); ok && e != nil {
+		b = b.EDNS(e)
+	} else if e, ok := q.EDNS(); ok && e != nil {
+		// Echo the requestor's EDNS so the truncated reply still
+		// advertises a sensible UDP payload size to the client's stack.
+		b = b.EDNS(e)
+	}
+	out, err := b.Build()
+	if err != nil {
+		return m
+	}
+	return out
 }
 
 // cookiesWriter wraps the inner handler's writer and rewrites the
@@ -171,8 +285,17 @@ func extractCookies(q wire.Message) (cc [8]byte, sc []byte, ok bool) {
 func buildBadCookieResponse(q wire.Message, cc [8]byte, sc []byte) wire.Message {
 	cookieOpt, _ := wire.NewClientServerCookie(cc, sc)
 	const badCookie = 23
+	// Echo the requestor's advertised UDP payload size when present.
+	// Hardcoding 1232 here would push an off-path advertised size onto
+	// clients that asked for a smaller envelope (and into operator
+	// heuristics that key on the OPT UDPSize being whatever the client
+	// negotiated).
+	udpSize := uint16(1232)
+	if e, ok := q.EDNS(); ok && e != nil && e.UDPSize() != 0 {
+		udpSize = e.UDPSize()
+	}
 	eb := wire.NewEDNSBuilder().
-		UDPSize(1232).
+		UDPSize(udpSize).
 		ExtendedRCODE(badCookie >> 4).
 		Option(cookieOpt)
 

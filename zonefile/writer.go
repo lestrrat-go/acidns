@@ -115,7 +115,7 @@ func formatRDataPresentation(rd rdata.RData, _ wire.Name) (string, error) {
 		b := v.Bytes()
 		return fmt.Sprintf("\\# %d %s", len(b), hex.EncodeToString(b)), nil
 	default:
-		return "", fmt.Errorf("dnszone: cannot present rdata of type %s", rd.Type())
+		return "", fmt.Errorf("zonefile: cannot present rdata of type %s", rd.Type())
 	}
 }
 

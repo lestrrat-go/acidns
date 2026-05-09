@@ -10,7 +10,7 @@ import (
 	"github.com/lestrrat-go/acidns/dot"
 )
 
-// Option configures a forward Handler.
+// Option configures a forward Forwarder.
 type Option interface {
 	applyForward(*config)
 }

@@ -43,6 +43,7 @@ import (
 	"net"
 	"net/http"
 	"net/url"
+	"strings"
 	"time"
 
 	"github.com/lestrrat-go/acidns"
@@ -149,6 +150,18 @@ func New(endpoint string, opts ...Option) (acidns.Exchanger, error) {
 	clientCopy.CheckRedirect = func(*http.Request, []*http.Request) error {
 		return http.ErrUseLastResponse
 	}
+	if ht, ok := clientCopy.Transport.(*http.Transport); ok {
+		if ht.TLSClientConfig != nil && ht.TLSClientConfig.InsecureSkipVerify {
+			return nil, fmt.Errorf("doh: WithHTTPClient transport has InsecureSkipVerify enabled; refusing to silently disable certificate verification")
+		}
+		// Scrub Proxy on a copy of the transport so $HTTPS_PROXY cannot
+		// silently route DoH queries (and the queried name) elsewhere
+		// than the configured endpoint. The caller's transport is left
+		// untouched.
+		tCopy := ht.Clone()
+		tCopy.Proxy = nil
+		clientCopy.Transport = tCopy
+	}
 	return &exchanger{endpoint: endpoint, client: &clientCopy, method: c.method, userAgent: c.userAgent, padding: c.padding}, nil
 }
 
@@ -227,11 +240,8 @@ func (e *exchanger) buildRequest(ctx context.Context, msg []byte) (*http.Request
 	case MethodGET:
 		// RFC 8484 §4.1: dns parameter, base64url-encoded, no padding.
 		dnsParam := base64.RawURLEncoding.EncodeToString(msg)
-		u, _ := url.Parse(e.endpoint)
-		qry := u.Query()
-		qry.Set("dns", dnsParam)
-		u.RawQuery = qry.Encode()
-		req, err := http.NewRequestWithContext(ctx, http.MethodGet, u.String(), nil)
+		target := expandDNSTemplate(e.endpoint, dnsParam)
+		req, err := http.NewRequestWithContext(ctx, http.MethodGet, target, nil)
 		if err != nil {
 			return nil, err
 		}
@@ -252,4 +262,35 @@ func (e *exchanger) buildRequest(ctx context.Context, msg []byte) (*http.Request
 		}
 		return req, nil
 	}
+}
+
+// expandDNSTemplate handles RFC 8484 §3 / RFC 6570 §3.2.8 form-style
+// query expansion for the single-variable {dns} / {?dns} case. RFC 9461
+// makes templates the canonical SVCB advertisement form, so an
+// endpoint like "https://example.net/dns{?dns}" must not be issued as
+// a literal-path GET. Falls back to the legacy append-?dns=... form
+// for templates that do not declare {dns}.
+func expandDNSTemplate(endpoint, dnsParam string) string {
+	const formExpr = "{?dns}"
+	const pathExpr = "{dns}"
+	if i := strings.Index(endpoint, formExpr); i >= 0 {
+		base := endpoint[:i] + endpoint[i+len(formExpr):]
+		return appendDNSParam(base, dnsParam)
+	}
+	if i := strings.Index(endpoint, pathExpr); i >= 0 {
+		// base64url already uses URL-safe alphabet; no further encoding.
+		return endpoint[:i] + dnsParam + endpoint[i+len(pathExpr):]
+	}
+	return appendDNSParam(endpoint, dnsParam)
+}
+
+func appendDNSParam(endpoint, dnsParam string) string {
+	u, err := url.Parse(endpoint)
+	if err != nil {
+		return endpoint
+	}
+	qry := u.Query()
+	qry.Set("dns", dnsParam)
+	u.RawQuery = qry.Encode()
+	return u.String()
 }

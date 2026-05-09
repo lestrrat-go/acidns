@@ -18,6 +18,7 @@ type cookieWriter struct {
 	src      netip.AddrPort
 	captured wire.Message
 	written  bool
+	network  string
 }
 
 func (w *cookieWriter) WriteMsg(m wire.Message) error {
@@ -27,7 +28,12 @@ func (w *cookieWriter) WriteMsg(m wire.Message) error {
 }
 func (w *cookieWriter) RemoteAddr() netip.AddrPort { return w.src }
 func (*cookieWriter) LocalAddr() netip.AddrPort    { return netip.AddrPort{} }
-func (*cookieWriter) Network() string              { return netUDP }
+func (w *cookieWriter) Network() string {
+	if w.network == "" {
+		return netUDP
+	}
+	return w.network
+}
 
 func cookieMkInner() acidns.Handler {
 	return acidns.HandlerFunc(func(_ context.Context, w acidns.ResponseWriter, q wire.Message) {
@@ -172,4 +178,132 @@ func TestCookiesRejectsInvalidServerCookieWithBADCOOKIE(t *testing.T) {
 	gotCC, gotSC := extractCookieOpt(t, w.captured)
 	require.Equal(t, cc, gotCC)
 	require.Len(t, gotSC, 16)
+}
+
+// largeAnswerInner emits a response well above 512 bytes by stuffing
+// many TXT additionals onto the reply.
+func largeAnswerInner() acidns.Handler {
+	return acidns.HandlerFunc(func(_ context.Context, w acidns.ResponseWriter, q wire.Message) {
+		qq := q.Questions()[0]
+		bldr := wire.NewBuilder().
+			ID(q.ID()).
+			Response(true).
+			Question(qq)
+		// 16 × ~80-byte TXT records = ~1280 bytes of rdata, plus
+		// owner-name overhead — comfortably above the 512-byte gate.
+		filler := make([]byte, 80)
+		for i := range filler {
+			filler[i] = 'a'
+		}
+		txt, _ := rdata.NewTXT(string(filler))
+		for i := 0; i < 16; i++ {
+			bldr = bldr.Answer(wire.NewRecord(qq.Name(), 60*time.Second, txt))
+		}
+		resp, _ := bldr.Build()
+		_ = w.WriteMsg(resp)
+	})
+}
+
+func TestCookiesLargeResponseGateUDPTruncates(t *testing.T) {
+	t.Parallel()
+	srv := newCookiesServer(t)
+	h := acidns.NewCookies(largeAnswerInner(), srv,
+		acidns.WithRequireCookieForLargeResponse(512))
+
+	q, err := wire.NewBuilder().
+		ID(10).
+		Question(wire.NewQuestion(wire.MustParseName("example.com"), rrtype.TXT)).
+		Build()
+	require.NoError(t, err)
+
+	w := &cookieWriter{src: netip.MustParseAddrPort("198.51.100.10:1")}
+	h.ServeDNS(context.Background(), w, q)
+
+	require.True(t, w.captured.Flags().Truncated(), "cookieless UDP large response must be TC=1")
+	buf, err := wire.Marshal(w.captured)
+	require.NoError(t, err)
+	require.LessOrEqual(t, len(buf), 512)
+	require.Equal(t, 0, len(w.captured.Answers()),
+		"truncated reply must drop the answer section")
+}
+
+func TestCookiesLargeResponseGateTCPPassesThrough(t *testing.T) {
+	t.Parallel()
+	srv := newCookiesServer(t)
+	h := acidns.NewCookies(largeAnswerInner(), srv,
+		acidns.WithRequireCookieForLargeResponse(512))
+
+	q, err := wire.NewBuilder().
+		ID(11).
+		Question(wire.NewQuestion(wire.MustParseName("example.com"), rrtype.TXT)).
+		Build()
+	require.NoError(t, err)
+
+	w := &cookieWriter{
+		src:     netip.MustParseAddrPort("198.51.100.11:1"),
+		network: "tcp",
+	}
+	h.ServeDNS(context.Background(), w, q)
+
+	require.False(t, w.captured.Flags().Truncated(),
+		"TCP large responses pass through unchanged regardless of cookie")
+	require.Equal(t, 16, len(w.captured.Answers()))
+}
+
+func TestCookiesLargeResponseGateValidCookieAllowsLarge(t *testing.T) {
+	t.Parallel()
+	srv := newCookiesServer(t)
+	h := acidns.NewCookies(largeAnswerInner(), srv,
+		acidns.WithRequireCookieForLargeResponse(512))
+
+	addr := netip.MustParseAddr("198.51.100.12")
+	cc := [8]byte{2, 2, 2, 2, 2, 2, 2, 2}
+	sc := srv.Make(cc, addr, time.Now())
+	cookieOpt, err := wire.NewClientServerCookie(cc, sc)
+	require.NoError(t, err)
+
+	q, err := wire.NewBuilder().
+		ID(12).
+		Question(wire.NewQuestion(wire.MustParseName("example.com"), rrtype.TXT)).
+		EDNS(mustEDNS(t, wire.NewEDNSBuilder().Option(cookieOpt))).
+		Build()
+	require.NoError(t, err)
+
+	w := &cookieWriter{src: netip.AddrPortFrom(addr, 1)}
+	h.ServeDNS(context.Background(), w, q)
+
+	require.False(t, w.captured.Flags().Truncated(),
+		"valid server cookie bypasses the amplification gate")
+	require.Equal(t, 16, len(w.captured.Answers()))
+}
+
+// TestCookiesBadCookieEchoesRequestorUDPSize confirms the BADCOOKIE
+// response reflects the client's advertised UDP payload size rather
+// than hardcoding 1232.
+func TestCookiesBadCookieEchoesRequestorUDPSize(t *testing.T) {
+	t.Parallel()
+	srv := newCookiesServer(t)
+	h := acidns.NewCookies(cookieMkInner(), srv)
+
+	cc := [8]byte{3, 3, 3, 3, 3, 3, 3, 3}
+	bogus := make([]byte, 16)
+	bogus[0] = 1
+	cookieOpt, err := wire.NewClientServerCookie(cc, bogus)
+	require.NoError(t, err)
+
+	const requestedUDPSize uint16 = 4096
+	q, err := wire.NewBuilder().
+		ID(13).
+		Question(wire.NewQuestion(wire.MustParseName("example.com"), rrtype.A)).
+		EDNS(mustEDNS(t, wire.NewEDNSBuilder().UDPSize(requestedUDPSize).Option(cookieOpt))).
+		Build()
+	require.NoError(t, err)
+
+	w := &cookieWriter{src: netip.MustParseAddrPort("198.51.100.13:1")}
+	h.ServeDNS(context.Background(), w, q)
+
+	e, ok := w.captured.EDNS()
+	require.True(t, ok)
+	require.Equal(t, requestedUDPSize, e.UDPSize(),
+		"BADCOOKIE must echo the requestor's advertised UDPSize")
 }

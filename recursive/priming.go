@@ -31,10 +31,17 @@ import (
 const defaultRootRefreshInterval = 24 * time.Hour
 
 // currentRoots returns a snapshot of the live root server list under
-// the rootsMu read lock.
+// the rootsMu read lock. When the in-memory list is empty — neither
+// [WithRoots] supplied a list nor a successful prime has populated
+// one — the IANA snapshot in [iANARootHints] is returned so an
+// operator who calls [New] with no options still gets working
+// recursion out of the box.
 func (r *recursive) currentRoots() []netip.AddrPort {
 	r.rootsMu.RLock()
 	defer r.rootsMu.RUnlock()
+	if len(r.roots) == 0 {
+		return append([]netip.AddrPort(nil), iANARootHints...)
+	}
 	return append([]netip.AddrPort(nil), r.roots...)
 }
 

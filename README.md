@@ -96,9 +96,9 @@ h := acidns.HandlerFunc(func(ctx context.Context, w acidns.ResponseWriter, q wir
     resp, _ := wire.NewBuilder().ID(q.ID()).Response(true).Build()
     _ = w.WriteMsg(resp)
 })
-srv, err := acidns.ListenUDP(netip.MustParseAddrPort("127.0.0.1:5353"), h)
+srv, err := acidns.NewUDPServer(netip.MustParseAddrPort("127.0.0.1:5353"), h)
 if err != nil { panic(err) }
-_ = srv.Serve(ctx)
+_ = srv.Run(ctx)
 ```
 
 The `forward/` package is a caching forwarder; `authoritative/` serves a

@@ -19,6 +19,7 @@ import (
 	"time"
 
 	"github.com/lestrrat-go/acidns"
+	"github.com/lestrrat-go/acidns/tsig"
 	"github.com/lestrrat-go/acidns/wire"
 	"github.com/lestrrat-go/acidns/wire/rdata"
 	"github.com/lestrrat-go/acidns/wire/rrtype"
@@ -56,14 +57,17 @@ var ErrMissingLeadingSOA = errors.New("axfr: stream must begin with SOA")
 // generic case and unwrap to inspect the value.
 var ErrRCODE = errors.New("axfr: server returned error rcode")
 
+// ErrTSIGVerify is returned when a stream envelope's TSIG signature
+// fails to verify against the key supplied via [WithTSIGKey].
+var ErrTSIGVerify = errors.New("axfr: TSIG verification failed")
+
 // Start sends an AXFR query for zone over ex and returns a Transfer
 // iterator positioned just past the leading SOA.
 func Start(ctx context.Context, ex acidns.StreamExchanger, zone wire.Name, opts ...Option) (Transfer, error) {
-	c := config{timeout: 30 * time.Second}
+	c := config{timeout: 30 * time.Second, tsigFudge: 5 * time.Minute, tsigNow: time.Now}
 	for _, o := range opts {
 		o.applyAXFR(&c)
 	}
-	_ = c // reserved
 
 	id, err := randomID()
 	if err != nil {
@@ -76,6 +80,34 @@ func Start(ctx context.Context, ex acidns.StreamExchanger, zone wire.Name, opts 
 	if err != nil {
 		return nil, err
 	}
+	if c.tsigKey != nil {
+		signed, err := tsig.SignMessage(q, *c.tsigKey, c.tsigNow(), c.tsigFudge)
+		if err != nil {
+			return nil, fmt.Errorf("axfr: TSIG sign: %w", err)
+		}
+		// Capture the request MAC so we can chain MAC verification on
+		// the response envelopes per RFC 8945 §5.3.1.
+		_, mac, _, err := tsig.VerifyMAC(signed, *c.tsigKey, c.tsigNow(), c.tsigFudge)
+		if err != nil {
+			return nil, fmt.Errorf("axfr: TSIG extract MAC: %w", err)
+		}
+		q, err = wire.Unmarshal(signed)
+		if err != nil {
+			return nil, fmt.Errorf("axfr: re-parse signed query: %w", err)
+		}
+		stream, err := ex.Stream(ctx, q)
+		if err != nil {
+			return nil, fmt.Errorf("axfr: open stream: %w", err)
+		}
+		reader := &recReader{stream: stream, verifier: newTSIGVerifier(*c.tsigKey, mac, c.tsigNow, c.tsigFudge)}
+		t := &transfer{stream: stream, reader: reader}
+		if err := t.init(ctx); err != nil {
+			_ = stream.Close()
+			return nil, err
+		}
+		return t, nil
+	}
+
 	stream, err := ex.Stream(ctx, q)
 	if err != nil {
 		return nil, fmt.Errorf("axfr: open stream: %w", err)
@@ -143,6 +175,7 @@ type recReader struct {
 	curIdx   int
 	pushback []wire.Record
 	msgEOF   bool
+	verifier *tsigVerifier
 }
 
 func (rr *recReader) Read(ctx context.Context) (wire.Record, error) {
@@ -170,6 +203,11 @@ func (rr *recReader) Read(ctx context.Context) (wire.Record, error) {
 		}
 		if rcode := msg.Flags().RCODE(); rcode != wire.RCODENoError {
 			return nil, fmt.Errorf("%w: %s", ErrRCODE, rcode)
+		}
+		if rr.verifier != nil {
+			if err := rr.verifier.verify(msg); err != nil {
+				return nil, err
+			}
 		}
 		rr.curMsg = msg
 		rr.curIdx = 0

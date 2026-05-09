@@ -10,8 +10,23 @@ type serverOptionFunc func(*serverConfig)
 func (f serverOptionFunc) applyDNSCryptServer(c *serverConfig) { f(c) }
 
 type serverConfig struct {
-	bufferSize  int
-	maxInflight int
+	bufferSize    int
+	maxInflight   int
+	resolverSK    [32]byte
+	resolverSKSet bool
+}
+
+// WithResolverSecretKey supplies the X25519 32-byte resolver short-term
+// private key whose public form is bound into the cert. Required —
+// [NewServer] returns an error if this option is omitted or if the
+// supplied value is the zero key. The key MUST match the cert's
+// ResolverPK; the package cannot verify this binding (signed material
+// is opaque) so a mismatch silently produces undecryptable responses.
+func WithResolverSecretKey(sk [32]byte) ServerOption {
+	return serverOptionFunc(func(c *serverConfig) {
+		c.resolverSK = sk
+		c.resolverSKSet = true
+	})
 }
 
 // WithServerBufferSize sets the size of the per-packet read buffer.

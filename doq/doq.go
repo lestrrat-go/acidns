@@ -35,6 +35,24 @@ import (
 // alpn is the ALPN identifier registered for DoQ.
 const alpn = "doq"
 
+// RFC 9250 §4.3 error codes. The same numeric space is used for QUIC
+// connection-level (ApplicationErrorCode) and stream-level
+// (StreamErrorCode) closes; quic-go gives them distinct Go types so we
+// declare each set separately.
+const (
+	doqNoError          quic.ApplicationErrorCode = 0x0
+	doqInternalError    quic.ApplicationErrorCode = 0x1
+	doqProtocolError    quic.ApplicationErrorCode = 0x2
+	doqRequestCancelled quic.ApplicationErrorCode = 0x3
+	doqExcessiveLoad    quic.ApplicationErrorCode = 0x4
+	doqUnspecifiedError quic.ApplicationErrorCode = 0x5
+)
+
+const (
+	doqStreamProtocolError    quic.StreamErrorCode = 0x2
+	doqStreamRequestCancelled quic.StreamErrorCode = 0x3
+)
+
 type exchanger struct {
 	addr             netip.AddrPort
 	timeout          time.Duration
@@ -111,11 +129,15 @@ func (e *exchanger) Exchange(ctx context.Context, q wire.Message) (wire.Message,
 
 	conn, err := quic.DialAddr(ctx, e.addr.String(), e.tlsConfig, &quic.Config{
 		MaxIdleTimeout: 30 * time.Second,
+		// RFC 9250 §4.5 forbids 0-RTT for DNS UPDATE; even for queries the
+		// replay surface (cache-bust, amplification) is undesirable. Disable
+		// explicitly so an upstream quic-go default flip cannot enable it.
+		Allow0RTT: false,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("doq: dial %s: %w", e.addr, err)
 	}
-	defer func() { _ = conn.CloseWithError(0, "") }()
+	defer func() { _ = conn.CloseWithError(doqNoError, "") }()
 
 	stream, err := conn.OpenStreamSync(ctx)
 	if err != nil {
@@ -189,13 +211,14 @@ func (e *exchanger) Stream(ctx context.Context, q wire.Message) (acidns.MessageS
 	}
 	conn, err := quic.DialAddr(dialCtx, e.addr.String(), e.tlsConfig, &quic.Config{
 		MaxIdleTimeout: 30 * time.Second,
+		Allow0RTT:      false,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("doq: dial %s: %w", e.addr, err)
 	}
 	stream, err := conn.OpenStreamSync(dialCtx)
 	if err != nil {
-		_ = conn.CloseWithError(0, "")
+		_ = conn.CloseWithError(doqInternalError, "")
 		return nil, fmt.Errorf("doq: open stream: %w", err)
 	}
 	// Force ID=0 per RFC 9250 §4.2.1 by re-marshalling and patching the
@@ -203,7 +226,7 @@ func (e *exchanger) Stream(ctx context.Context, q wire.Message) (acidns.MessageS
 	// would marshal q's original ID.
 	qBytes, err := wire.Marshal(q)
 	if err != nil {
-		_ = conn.CloseWithError(0, "")
+		_ = conn.CloseWithError(doqInternalError, "")
 		return nil, fmt.Errorf("doq: marshal: %w", err)
 	}
 	qBytes[0] = 0
@@ -211,17 +234,17 @@ func (e *exchanger) Stream(ctx context.Context, q wire.Message) (acidns.MessageS
 	var hdr [2]byte
 	binary.BigEndian.PutUint16(hdr[:], uint16(len(qBytes)))
 	if _, err := stream.Write(hdr[:]); err != nil {
-		_ = conn.CloseWithError(0, "")
+		_ = conn.CloseWithError(doqInternalError, "")
 		return nil, fmt.Errorf("doq: write length: %w", err)
 	}
 	if _, err := stream.Write(qBytes); err != nil {
-		_ = conn.CloseWithError(0, "")
+		_ = conn.CloseWithError(doqInternalError, "")
 		return nil, fmt.Errorf("doq: write body: %w", err)
 	}
 	// RFC 9250 §4.2: client MUST send the FIN after the query body. The
 	// server then writes responses on the same stream until it FINs.
 	if err := stream.Close(); err != nil {
-		_ = conn.CloseWithError(0, "")
+		_ = conn.CloseWithError(doqInternalError, "")
 		return nil, fmt.Errorf("doq: close write side: %w", err)
 	}
 	return &doqStream{conn: conn, stream: stream, query: q}, nil
@@ -279,8 +302,8 @@ func readDoQFrameBytes(r io.Reader) ([]byte, error) {
 
 func (s *doqStream) Close() error {
 	s.closeOnce.Do(func() {
-		s.stream.CancelRead(0)
-		_ = s.conn.CloseWithError(0, "")
+		s.stream.CancelRead(doqStreamRequestCancelled)
+		_ = s.conn.CloseWithError(doqNoError, "")
 	})
 	return nil
 }

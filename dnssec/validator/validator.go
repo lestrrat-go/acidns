@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/lestrrat-go/acidns/dnssec"
+	"github.com/lestrrat-go/acidns/dnssec/validator/validatorbb"
 	"github.com/lestrrat-go/acidns/wire"
 	"github.com/lestrrat-go/acidns/wire/rdata"
 )
@@ -97,6 +98,7 @@ type validatorConfig struct {
 	ntas        *NTAStore
 	bogusPolicy BogusPolicy
 	now         func() time.Time
+	skew        time.Duration
 }
 
 // WithValidatorNTAStore installs a Negative Trust Anchor store on
@@ -119,6 +121,18 @@ func WithValidatorBogusPolicy(p BogusPolicy) ValidatorOption {
 // matches the Walker's WithNow.
 func WithValidatorNow(now func() time.Time) ValidatorOption {
 	return validatorOptionFunc(func(c *validatorConfig) { c.now = now })
+}
+
+// WithValidatorSkew widens the RRSIG inception/expiration window by
+// skew on each side. Production deployments typically pick 5–15
+// minutes; the default of 0 is the conservative reading of RFC 4035
+// §5.3. Mirrors the walker's WithWalkerClockSkew.
+func WithValidatorSkew(skew time.Duration) ValidatorOption {
+	return validatorOptionFunc(func(c *validatorConfig) {
+		if skew >= 0 {
+			c.skew = skew
+		}
+	})
 }
 
 // Validator wraps the dnssec verification primitives with NTA support and
@@ -172,7 +186,7 @@ func (v *Validator) ValidateRRset(set []wire.Record, rrsigs []rdata.RRSIG, keys 
 	now := v.cfg.now()
 	var lastErr error
 	for _, sig := range rrsigs {
-		if !rrsigValidNow(sig, now) {
+		if !validatorbb.RRSIGValidNowWithSkew(sig, now, v.cfg.skew) {
 			lastErr = fmt.Errorf("validator: RRSIG inception/expiration outside now")
 			continue
 		}
@@ -213,18 +227,6 @@ func (v *Validator) VerifyDelegation(owner wire.Name, dsRecords []rdata.DS, keys
 		}
 	}
 	return Bogus, fmt.Errorf("validator: no DS matched any DNSKEY for %s", owner)
-}
-
-func rrsigValidNow(sig rdata.RRSIG, now time.Time) bool {
-	// Permit small clock skew either side; in practice the right place
-	// for skew tolerance is a per-deployment knob, not here.
-	if now.Before(sig.SignatureInception()) {
-		return false
-	}
-	if now.After(sig.SignatureExpiration()) {
-		return false
-	}
-	return true
 }
 
 func findMatchingKey(keys []rdata.DNSKEY, sig rdata.RRSIG) (rdata.DNSKEY, bool) {

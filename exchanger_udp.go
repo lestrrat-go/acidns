@@ -74,7 +74,7 @@ type udpExchanger struct {
 // NewUDPExchanger returns an Exchanger that talks UDP to addr.
 func NewUDPExchanger(addr netip.AddrPort, opts ...UDPExchangerOption) (Exchanger, error) {
 	if !addr.IsValid() {
-		return nil, fmt.Errorf("udp: invalid server address")
+		return nil, fmt.Errorf("acidns: invalid server address")
 	}
 	c := udpExchangerConfig{timeout: 5 * time.Second, bufferSize: 4096}
 	for _, o := range opts {
@@ -86,7 +86,7 @@ func NewUDPExchanger(addr netip.AddrPort, opts ...UDPExchangerOption) (Exchanger
 func (e *udpExchanger) Exchange(ctx context.Context, q wire.Message) (wire.Message, error) {
 	msg, err := wire.Marshal(q)
 	if err != nil {
-		return nil, fmt.Errorf("udp: marshal query: %w", err)
+		return nil, fmt.Errorf("acidns: marshal query: %w", err)
 	}
 	// Pre-extract the sent question section so we can byte-compare
 	// against the response's question section when 0x20 is on. The
@@ -97,13 +97,13 @@ func (e *udpExchanger) Exchange(ctx context.Context, q wire.Message) (wire.Messa
 	if e.use0x20 {
 		qs, qerr := questionSectionBytes(msg)
 		if qerr != nil {
-			return nil, fmt.Errorf("udp: extract sent question: %w", qerr)
+			return nil, fmt.Errorf("acidns: extract sent question: %w", qerr)
 		}
 		// Randomize case in-place on the qname portion of msg, then
 		// snapshot the resulting question bytes so the inbound check
 		// has the exact pattern we sent.
 		if err := randomizeQNameCase(msg[12 : 12+len(qs)-4]); err != nil {
-			return nil, fmt.Errorf("udp: 0x20 randomness: %w", err)
+			return nil, fmt.Errorf("acidns: 0x20 randomness: %w", err)
 		}
 		sentQuestion = append([]byte(nil), msg[12:12+len(qs)]...)
 	}
@@ -111,7 +111,7 @@ func (e *udpExchanger) Exchange(ctx context.Context, q wire.Message) (wire.Messa
 	var d net.Dialer
 	conn, err := d.DialContext(ctx, "udp", e.addr.String())
 	if err != nil {
-		return nil, fmt.Errorf("udp: dial %s: %w", e.addr, err)
+		return nil, fmt.Errorf("acidns: dial %s: %w", e.addr, err)
 	}
 	defer func() { _ = conn.Close() }()
 
@@ -133,7 +133,7 @@ func (e *udpExchanger) Exchange(ctx context.Context, q wire.Message) (wire.Messa
 	}()
 
 	if _, err := conn.Write(msg); err != nil {
-		return nil, fmt.Errorf("udp: write: %w", err)
+		return nil, fmt.Errorf("acidns: write: %w", err)
 	}
 
 	buf := make([]byte, e.bufsize)
@@ -153,7 +153,7 @@ func (e *udpExchanger) Exchange(ctx context.Context, q wire.Message) (wire.Messa
 			if cerr := ctx.Err(); cerr != nil {
 				return nil, cerr
 			}
-			return nil, fmt.Errorf("udp: read: %w", err)
+			return nil, fmt.Errorf("acidns: read: %w", err)
 		}
 		// Re-check ctx after a successful read so a flood of bogus
 		// datagrams cannot keep the loop alive past cancellation.
@@ -166,14 +166,14 @@ func (e *udpExchanger) Exchange(ctx context.Context, q wire.Message) (wire.Messa
 			// (server is misbehaving) — but only up to the spurious cap.
 			spurious++
 			if spurious >= maxSpurious {
-				return nil, fmt.Errorf("udp: spurious-datagram budget exhausted: %w", err)
+				return nil, fmt.Errorf("acidns: spurious-datagram budget exhausted: %w", err)
 			}
 			continue
 		}
 		if resp.ID() != q.ID() {
 			spurious++
 			if spurious >= maxSpurious {
-				return nil, fmt.Errorf("udp: spurious-datagram budget exhausted on id mismatch")
+				return nil, fmt.Errorf("acidns: spurious-datagram budget exhausted on id mismatch")
 			}
 			continue
 		}
@@ -183,7 +183,7 @@ func (e *udpExchanger) Exchange(ctx context.Context, q wire.Message) (wire.Messa
 			// for a legit response.
 			spurious++
 			if spurious >= maxSpurious {
-				return nil, fmt.Errorf("udp: spurious-datagram budget exhausted on question mismatch")
+				return nil, fmt.Errorf("acidns: spurious-datagram budget exhausted on question mismatch")
 			}
 			continue
 		}
@@ -194,7 +194,7 @@ func (e *udpExchanger) Exchange(ctx context.Context, q wire.Message) (wire.Messa
 				// match what we sent. Treat as forgery; keep waiting.
 				spurious++
 				if spurious >= maxSpurious {
-					return nil, fmt.Errorf("udp: spurious-datagram budget exhausted on 0x20 mismatch")
+					return nil, fmt.Errorf("acidns: spurious-datagram budget exhausted on 0x20 mismatch")
 				}
 				continue
 			}

@@ -27,5 +27,5 @@
 //
 // recursive.Resolver satisfies acidns.Resolver. Drop it into any caller
 // that takes that interface — the LookupHost / ResolveAs[T] helpers in
-// the root acidns package, or as the upstream of a forward.Handler.
+// the root acidns package, or as the upstream of a forward.Forwarder.
 package recursive

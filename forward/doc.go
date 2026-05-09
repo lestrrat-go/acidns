@@ -1,4 +1,4 @@
-// Package forward implements a caching DNS forwarder. A forward.Handler
+// Package forward implements a caching DNS forwarder. A forward.Forwarder
 // answers queries by relaying them to a configured upstream Exchanger
 // (UDP-with-TCP-fallback, DoT, or any custom transport — DoH and DoQ
 // are wired the same way through WithUpstream) and caches both
@@ -7,10 +7,10 @@
 //
 // # Composition
 //
-// The forwarder is a Handler — drop it into a UDP and a TCP listener
-// from the acidns root package to expose it on the network. It does
-// not implement DNSSEC validation; if the upstream sets AD on the
-// response, AD is propagated, otherwise it is cleared.
+// The forwarder satisfies acidns.Handler — drop it into a UDP and a
+// TCP listener from the acidns root package to expose it on the
+// network. It does not implement DNSSEC validation; if the upstream
+// sets AD on the response, AD is propagated, otherwise it is cleared.
 //
 // # Cache
 //
@@ -23,10 +23,10 @@
 //
 // # Lifecycle
 //
-// Handler.Close() drops all cached entries and propagates Close to the
+// Forwarder.Close() drops all cached entries and propagates Close to the
 // upstream Exchanger when it implements io.Closer (e.g. a DoT
 // keep-alive transport). Callers SHOULD stop sending queries through
-// the handler before calling Close — in-flight ServeDNS goroutines
+// the forwarder before calling Close — in-flight ServeDNS goroutines
 // continue using the now-closed upstream until they exit.
 //
 // # Observability

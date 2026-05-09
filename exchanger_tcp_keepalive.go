@@ -61,7 +61,7 @@ func WithTCPKeepAliveAdvertise(v bool) TCPKeepAliveOption {
 // exchanges over the single connection (no pipelining).
 func NewTCPKeepAliveExchanger(addr netip.AddrPort, opts ...TCPKeepAliveOption) (Exchanger, error) {
 	if !addr.IsValid() {
-		return nil, fmt.Errorf("tcp-keepalive: invalid server address")
+		return nil, fmt.Errorf("acidns: invalid server address")
 	}
 	c := tcpKAConfig{
 		timeout:      5 * time.Second,
@@ -178,7 +178,7 @@ func (e *tcpKAExchanger) acquireConn(ctx context.Context) (net.Conn, error) {
 		close(done)
 
 		if dialErr != nil {
-			return nil, fmt.Errorf("tcp-keepalive: dial %s: %w", e.addr, dialErr)
+			return nil, fmt.Errorf("acidns: dial %s: %w", e.addr, dialErr)
 		}
 	}
 }

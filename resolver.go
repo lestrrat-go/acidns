@@ -147,9 +147,14 @@ func WithPerAttemptTimeout(d time.Duration) ResolverOption {
 }
 
 // WithSystemResolvers loads /etc/resolv.conf and uses its nameservers,
-// search list, and ndots, equivalent to WithServers + WithSearchList +
-// WithNdots sourced from the system file. Returns an error from New if no
-// nameserver entries are found.
+// search list, ndots, per-attempt timeout, and attempt count —
+// equivalent to WithServers + WithSearchList + WithNdots +
+// WithPerAttemptTimeout + WithAttempts sourced from the system file.
+// Returns an error from New if no nameserver entries are found.
+//
+// The timeout/attempts mapping is clamped to defensive bounds so a
+// malformed or hostile resolv.conf cannot pin a multi-minute attempt
+// or hundreds of retries.
 func WithSystemResolvers() ResolverOption {
 	return resolverOptionFunc(func(c *resolverConfig) {
 		cfg, err := resolvconf.Load("")
@@ -161,11 +166,37 @@ func WithSystemResolvers() ResolverOption {
 			c.systemErr = resolvconf.ErrNoNameserver
 			return
 		}
-		c.servers = append(c.servers[:0], cfg.Nameservers...)
-		c.searchList = append(c.searchList[:0], cfg.Search...)
-		c.ndots = cfg.Ndots
-		c.ndotsSet = true
+		applyResolvconfToConfig(c, cfg)
 	})
+}
+
+// applyResolvconfToConfig copies a parsed resolv.conf into a
+// resolverConfig. Extracted so test helpers can drive the same
+// pipeline against a temp resolv.conf without depending on the real
+// /etc/resolv.conf being present.
+func applyResolvconfToConfig(c *resolverConfig, cfg *resolvconf.Config) {
+	c.servers = append(c.servers[:0], cfg.Nameservers...)
+	c.searchList = append(c.searchList[:0], cfg.Search...)
+	c.ndots = cfg.Ndots
+	c.ndotsSet = true
+	const (
+		maxResolvconfTimeout  = 30 * time.Second
+		maxResolvconfAttempts = 10
+	)
+	if cfg.Timeout > 0 {
+		t := cfg.Timeout
+		if t > maxResolvconfTimeout {
+			t = maxResolvconfTimeout
+		}
+		c.perAttempt = t
+	}
+	if cfg.Attempts > 0 {
+		a := cfg.Attempts
+		if a > maxResolvconfAttempts {
+			a = maxResolvconfAttempts
+		}
+		c.attempts = a
+	}
 }
 
 // WithCaseRandomization toggles RFC 5452 §9.3 0x20 hardening on the

@@ -33,7 +33,7 @@ func (s *stubUpstream) Exchange(_ context.Context, q wire.Message) (wire.Message
 }
 
 // captureWriter is a minimal acidns.ResponseWriter for in-process
-// Handler invocation.
+// Forwarder invocation.
 type forwardCaptureWriter struct{ got wire.Message }
 
 func (c *forwardCaptureWriter) WriteMsg(m wire.Message) error { c.got = m; return nil }
@@ -42,7 +42,7 @@ func (c *forwardCaptureWriter) LocalAddr() netip.AddrPort     { return netip.Add
 func (c *forwardCaptureWriter) Network() string               { return "udp" }
 
 func Example_forward_cache() {
-	// Wire a forward.Handler over a stub upstream so the example is
+	// Wire a forward.Forwarder over a stub upstream so the example is
 	// fully in-process. The first query is forwarded; the second is a
 	// cache hit, evidenced by the upstream call counter staying at 1.
 	upstream := &stubUpstream{}

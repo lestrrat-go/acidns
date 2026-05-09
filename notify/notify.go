@@ -13,17 +13,23 @@ import (
 	"context"
 	"crypto/rand"
 	"encoding/binary"
+	"errors"
 	"fmt"
 	"time"
 
 	"github.com/lestrrat-go/acidns"
+	"github.com/lestrrat-go/acidns/tsig"
 	"github.com/lestrrat-go/acidns/wire"
 	"github.com/lestrrat-go/acidns/wire/rrtype"
 )
 
+// ErrTSIGVerify is returned when the response's TSIG signature fails
+// to verify against the key supplied via [WithTSIGKey].
+var ErrTSIGVerify = errors.New("notify: TSIG verification failed")
+
 // Send transmits a NOTIFY for zone over ex and waits for the ACK.
 func Send(ctx context.Context, ex acidns.Exchanger, zone wire.Name, opts ...Option) (wire.Message, error) {
-	c := config{timeout: 5 * time.Second}
+	c := config{timeout: 5 * time.Second, tsigFudge: 5 * time.Minute, tsigNow: time.Now}
 	for _, o := range opts {
 		o.applyNotify(&c)
 	}
@@ -44,12 +50,79 @@ func Send(ctx context.Context, ex acidns.Exchanger, zone wire.Name, opts ...Opti
 		return nil, err
 	}
 
+	if c.tsigKey != nil {
+		signed, requestMAC, err := signMessage(q, *c.tsigKey, c.tsigNow(), c.tsigFudge)
+		if err != nil {
+			return nil, fmt.Errorf("notify: TSIG sign: %w", err)
+		}
+		q, err = wire.Unmarshal(signed)
+		if err != nil {
+			return nil, fmt.Errorf("notify: re-parse signed query: %w", err)
+		}
+		if _, ok := ctx.Deadline(); !ok && c.timeout > 0 {
+			var cancel context.CancelFunc
+			ctx, cancel = context.WithTimeout(ctx, c.timeout)
+			defer cancel()
+		}
+		resp, err := ex.Exchange(ctx, q)
+		if err != nil {
+			return nil, err
+		}
+		if err := verifyResponseIfTSIG(resp, *c.tsigKey, requestMAC, c.tsigNow(), c.tsigFudge); err != nil {
+			return nil, err
+		}
+		return resp, nil
+	}
+
 	if _, ok := ctx.Deadline(); !ok && c.timeout > 0 {
 		var cancel context.CancelFunc
 		ctx, cancel = context.WithTimeout(ctx, c.timeout)
 		defer cancel()
 	}
 	return ex.Exchange(ctx, q)
+}
+
+// signMessage marshals m, signs it with key, and returns the signed
+// bytes plus the request MAC for response binding.
+func signMessage(m wire.Message, key tsig.Key, now time.Time, fudge time.Duration) ([]byte, []byte, error) {
+	signed, err := tsig.SignMessage(m, key, now, fudge)
+	if err != nil {
+		return nil, nil, err
+	}
+	_, mac, _, err := tsig.VerifyMAC(signed, key, now, fudge)
+	if err != nil {
+		return nil, nil, fmt.Errorf("extract MAC: %w", err)
+	}
+	return signed, mac, nil
+}
+
+// verifyResponseIfTSIG verifies the response's TSIG MAC against the
+// request MAC. If the response carries no TSIG, this is a no-op (some
+// secondaries — and most error paths — answer unsigned).
+func verifyResponseIfTSIG(resp wire.Message, key tsig.Key, requestMAC []byte, now time.Time, fudge time.Duration) error {
+	raw, err := wire.Marshal(resp)
+	if err != nil {
+		return fmt.Errorf("%w: marshal response: %w", ErrTSIGVerify, err)
+	}
+	if !hasTSIG(resp) {
+		return nil
+	}
+	if _, _, _, err := tsig.VerifyResponse(raw, key, requestMAC, now, fudge); err != nil {
+		return fmt.Errorf("%w: %w", ErrTSIGVerify, err)
+	}
+	return nil
+}
+
+// hasTSIG reports whether m carries a TSIG RR (type 250) in its
+// additional section. The wire encoder treats TSIG as an unknown
+// RR type since this package never registered a typed rdata for it.
+func hasTSIG(m wire.Message) bool {
+	for _, r := range m.Additionals() {
+		if uint16(r.Type()) == 250 {
+			return true
+		}
+	}
+	return false
 }
 
 // Result captures one secondary's response from Broadcast.

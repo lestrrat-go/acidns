@@ -33,8 +33,8 @@ acidns/                root: high-level convenience layer + UDP/TCP exchangers +
   exchanger_udp.go     NewUDPExchanger, WithUDPTimeout, WithUDPReadBufferSize
   exchanger_tcp.go     NewTCPExchanger, WithTCPTimeout
   server.go            Server, Handler, HandlerFunc, ResponseWriter
-  server_udp.go        ListenUDP, UDPListenerOption
-  server_tcp.go        ListenTCP, TCPListenerOption
+  server_udp.go        NewUDPServer (returns *UDPServer; bind on Run), UDPListenerOption
+  server_tcp.go        NewTCPServer (returns *TCPServer; bind on Run), TCPListenerOption
   middleware_acl.go    NewACL, WithACLAllow, WithACLDeny
   middleware_ratelimit.go  NewRateLimit, WithRateLimitQPS, ...
 

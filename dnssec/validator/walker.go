@@ -127,10 +127,11 @@ type walker struct {
 	maxKeys int
 }
 
-// NewWalker constructs a Walker. A Source is required; any other option may
-// be omitted to take its default. The default trust anchor is the IANA
-// root KSK (see IANARootAnchor); production callers should override with
-// their own RFC 5011 trust-anchor file.
+// NewWalker constructs a Walker. A Source is required, and at least one
+// trust anchor must be configured via [WithWalkerAnchors] or
+// [WithWalkerIANARootAnchor]. An unconfigured walker returns
+// [ErrNoTrustAnchor] from Resolve so callers cannot accidentally rely
+// on an embedded root anchor that ages with each ICANN KSK rollover.
 func NewWalker(source Source, opts ...WalkerOption) (Walker, error) {
 	if source == nil {
 		return nil, fmt.Errorf("validator: NewWalker requires a non-nil Source")
@@ -148,9 +149,6 @@ func NewWalker(source Source, opts ...WalkerOption) (Walker, error) {
 	}
 	for _, o := range opts {
 		o.applyWalker(w)
-	}
-	if len(w.anchors) == 0 {
-		w.anchors = []Anchor{IANARootAnchor()}
 	}
 	return w, nil
 }
@@ -951,12 +949,14 @@ func (w *walker) verifyRRsetAllAlgs(set []wire.Record, sigs []rdata.RRSIG, keys 
 // keytag drives `outer_sigs × N` Verify calls per signed RRset (cf.
 // CVE-2023-50387 KeyTrap). The maxKeys cap on the DNSKEY rrset bounds
 // N; this counter bounds the cross-product anyway.
+//
+// The cap is enforced as a budget on attempted Verify calls, NOT by
+// pre-truncating sigs: pre-truncation silently drops a strong-algorithm
+// RRSIG if many weak/invalid sigs sort before it (RFC 6840 §5.11
+// algorithm-completeness for DNSKEY/DS internal callers).
 func (w *walker) verifyRRsetWithKeys(set []wire.Record, sigs []rdata.RRSIG, keys []rdata.DNSKEY) error {
 	if len(set) == 0 {
 		return fmt.Errorf("validator: empty rrset")
-	}
-	if len(sigs) > w.maxRRSIGsTry {
-		sigs = sigs[:w.maxRRSIGsTry]
 	}
 	now := w.now()
 	var lastErr error
@@ -983,6 +983,9 @@ func (w *walker) verifyRRsetWithKeys(set []wire.Record, sigs []rdata.RRSIG, keys
 			}
 			lastErr = err
 		}
+		if tries > w.maxRRSIGsTry {
+			break
+		}
 	}
 	if lastErr == nil {
 		lastErr = fmt.Errorf("no RRSIG matched any key")
@@ -999,9 +1002,13 @@ func (w *walker) indeterminate(_ wire.Name, _ rrtype.Type, err error, note strin
 }
 
 func (w *walker) bogus(_ wire.Name, _ rrtype.Type, chain []ChainStep, err error) (Answer, error) {
-	a := &answer{result: Bogus, chain: chain, reason: err}
+	// Wrap with ErrBogus so callers can branch on the umbrella sentinel
+	// while errors.Is on the concrete underlying reason still works
+	// (Go 1.20+ multi-%w preserves both chains).
+	wrapped := fmt.Errorf("%w: %w", ErrBogus, err)
+	a := &answer{result: Bogus, chain: chain, reason: wrapped}
 	if w.bogusPolicy == BogusReturnAnswer {
 		return a, nil
 	}
-	return a, err
+	return a, wrapped
 }

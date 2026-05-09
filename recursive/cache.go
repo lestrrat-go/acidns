@@ -143,6 +143,7 @@ const numCacheShards = 64
 type MemoryCache struct {
 	maxSize           int // per-shard cap (config / numCacheShards)
 	maxRecordsPerEntr int
+	now               func() time.Time
 	seed              maphash.Seed
 	shards            [numCacheShards]*memoryCacheShard
 }
@@ -162,6 +163,7 @@ func (f memoryCacheOptionFunc) applyMemoryCache(c *memoryCacheConfig) { f(c) }
 type memoryCacheConfig struct {
 	maxSize           int
 	maxRecordsPerEntr int
+	now               func() time.Time
 }
 
 // WithMemoryCacheSize sets the upper bound on total entries across all
@@ -179,6 +181,14 @@ func WithMemoryCacheMaxRecordsPerEntry(n int) MemoryCacheOption {
 	return memoryCacheOptionFunc(func(c *memoryCacheConfig) { c.maxRecordsPerEntr = n })
 }
 
+// WithMemoryCacheClock injects the clock used by [MemoryCache.Get]
+// to compute remaining TTL on cache hits and to detect expiry. The
+// default is [time.Now]; tests pass a controllable clock to verify
+// TTL decrement without sleeping in real time.
+func WithMemoryCacheClock(now func() time.Time) MemoryCacheOption {
+	return memoryCacheOptionFunc(func(c *memoryCacheConfig) { c.now = now })
+}
+
 // NewMemoryCache returns an empty MemoryCache. With no options the
 // cache is bounded at [DefaultMemoryCacheSize] entries and
 // [DefaultMaxRecordsPerEntry] records per entry.
@@ -190,8 +200,13 @@ func NewMemoryCache(opts ...MemoryCacheOption) *MemoryCache {
 	for _, o := range opts {
 		o.applyMemoryCache(&c)
 	}
+	now := c.now
+	if now == nil {
+		now = time.Now
+	}
 	mc := &MemoryCache{
 		maxRecordsPerEntr: c.maxRecordsPerEntr,
+		now:               now,
 		seed:              maphash.MakeSeed(),
 	}
 	if c.maxSize > 0 {
@@ -214,6 +229,12 @@ func (c *MemoryCache) shardFor(k string) *memoryCacheShard {
 // caller code may mutate the returned slices without poisoning other
 // readers. Records themselves are concrete value types and may be
 // shared.
+//
+// Each returned record's TTL is decremented by the time elapsed since
+// the entry was inserted, so downstream callers see the remaining
+// lifetime rather than the original full TTL. An entry whose remaining
+// TTL has reached zero is treated as expired and removed from the
+// shard, even if the periodic eviction sweep has not yet visited it.
 func (c *MemoryCache) Get(name wire.Name, cl rrtype.Class, t rrtype.Type) (Entry, bool) {
 	k := key(name, cl, t)
 	sh := c.shardFor(k)
@@ -223,13 +244,15 @@ func (c *MemoryCache) Get(name wire.Name, cl rrtype.Class, t rrtype.Type) (Entry
 	if !ok {
 		return Entry{}, false
 	}
-	if time.Now().After(e.expiresAt) {
+	now := c.now()
+	remaining := e.expiresAt.Sub(now)
+	if remaining <= 0 {
 		sh.mu.Lock()
 		delete(sh.entries, k)
 		sh.mu.Unlock()
 		return Entry{}, false
 	}
-	return cloneEntry(e), true
+	return cloneEntryWithTTL(e, remaining), true
 }
 
 // Put stores e in the cache. The slice fields of e are copied so a
@@ -264,12 +287,39 @@ func cloneEntry(e Entry) Entry {
 	}
 }
 
+// cloneEntryWithTTL returns a copy of e with each record's TTL
+// replaced by remaining. Used by [MemoryCache.Get] so cache hits
+// surface the time left on the entry rather than the original TTL
+// the upstream advertised at insertion time.
+func cloneEntryWithTTL(e Entry, remaining time.Duration) Entry {
+	return Entry{
+		answer:     cloneRecordsWithTTL(e.answer, remaining),
+		authority:  cloneRecordsWithTTL(e.authority, remaining),
+		additional: cloneRecordsWithTTL(e.additional, remaining),
+		rcode:      e.rcode,
+		aa:         e.aa,
+		ad:         e.ad,
+		expiresAt:  e.expiresAt,
+	}
+}
+
 func cloneRecords(s []wire.Record) []wire.Record {
 	if len(s) == 0 {
 		return nil
 	}
 	out := make([]wire.Record, len(s))
 	copy(out, s)
+	return out
+}
+
+func cloneRecordsWithTTL(s []wire.Record, ttl time.Duration) []wire.Record {
+	if len(s) == 0 {
+		return nil
+	}
+	out := make([]wire.Record, len(s))
+	for i, r := range s {
+		out[i] = wire.NewRecordClass(r.Name(), r.Class(), ttl, r.RData())
+	}
 	return out
 }
 

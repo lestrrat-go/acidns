@@ -54,6 +54,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"mime"
 	"net"
 	"net/http"
 	"net/netip"
@@ -147,7 +148,11 @@ func (h *dohHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 func (h *dohHandler) readRequest(r *http.Request) ([]byte, error) {
 	switch r.Method {
 	case http.MethodPost:
-		if ct := r.Header.Get("Content-Type"); ct != contentType {
+		// RFC 8484 §6 permits parameters on Content-Type
+		// (e.g. "application/dns-message; charset=utf-8"); a raw string
+		// compare against the canonical form would 415 those.
+		mt, _, err := mime.ParseMediaType(r.Header.Get("Content-Type"))
+		if err != nil || mt != contentType {
 			return nil, &httpProblem{status: http.StatusUnsupportedMediaType, msg: "doh: Content-Type must be " + contentType}
 		}
 		// Refuse oversized advertised bodies before reading.

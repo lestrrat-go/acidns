@@ -69,7 +69,11 @@ func WithTCPMaxMessageSize(n int) TCPListenerOption {
 // WithTCPMaxQueriesPerConn caps the total queries served on a single
 // connection before it is closed. Mitigates a peer that holds a slot
 // indefinitely at idle-timeout cadence. A non-positive value disables
-// the cap. Defaults to 0 (no cap).
+// the cap. Defaults to 10000 — high enough that a well-behaved RFC
+// 7766 client reusing the connection is never affected, low enough
+// that a peer cannot pin a slot through arbitrarily many trickled
+// queries. Operators MUST tune this for unusual workloads (long-lived
+// internal mirrors, AXFR-heavy backplanes).
 func WithTCPMaxQueriesPerConn(n int) TCPListenerOption {
 	return tcpListenerOptionFunc(func(c *tcpListenerConfig) { c.maxQueriesPerConn = n })
 }
@@ -77,7 +81,8 @@ func WithTCPMaxQueriesPerConn(n int) TCPListenerOption {
 // WithTCPMaxConnLifetime caps wall-clock time a single connection may
 // remain open. Backstop for misbehaving peers and a way to cycle TLS
 // session state on a sane cadence. A non-positive value disables the
-// cap. Defaults to 0 (no cap).
+// cap. Defaults to 1 hour. Operators MUST tune this for workloads that
+// rely on multi-hour streams (e.g. long-lived internal AXFR mirrors).
 func WithTCPMaxConnLifetime(d time.Duration) TCPListenerOption {
 	return tcpListenerOptionFunc(func(c *tcpListenerConfig) { c.maxConnLifetime = d })
 }
@@ -116,11 +121,13 @@ func NewTCPServer(addr netip.AddrPort, h Handler, opts ...TCPListenerOption) (*T
 		return nil, fmt.Errorf("acidns: invalid bind address")
 	}
 	cfg := tcpListenerConfig{
-		idleTimeout:    10 * time.Second,
-		writeTimeout:   5 * time.Second,
-		maxConnections: 1024,
-		maxMessageSize: 16 * 1024,
-		maxInflightPer: 32,
+		idleTimeout:       10 * time.Second,
+		writeTimeout:      5 * time.Second,
+		maxConnections:    1024,
+		maxMessageSize:    16 * 1024,
+		maxInflightPer:    32,
+		maxQueriesPerConn: 10000,
+		maxConnLifetime:   time.Hour,
 	}
 	for _, o := range opts {
 		o.applyTCPServer(&cfg)

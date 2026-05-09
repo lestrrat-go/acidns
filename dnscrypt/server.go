@@ -64,11 +64,14 @@ type Server struct {
 // pass the result to [Server.Run] to start serving.
 //
 // The supplied cert MUST already be signed (via [SignCert]) — the
-// server does not re-sign it. resolverSK MUST be the X25519 scalar
-// whose public form is cert.ResolverPK; the package cannot verify
-// this binding (signed material is opaque) so a mismatch silently
-// produces undecryptable responses.
-func NewServer(addr netip.AddrPort, h acidns.Handler, cert *Cert, resolverSK [32]byte, opts ...ServerOption) (*Server, error) {
+// server does not re-sign it. The resolver short-term private key is
+// supplied via [WithResolverSecretKey] and is required; NewServer
+// returns an error when the option is omitted or set to the zero
+// value. The key MUST be the X25519 scalar whose public form is
+// cert.ResolverPK; the package cannot verify this binding (signed
+// material is opaque) so a mismatch silently produces undecryptable
+// responses.
+func NewServer(addr netip.AddrPort, h acidns.Handler, cert *Cert, opts ...ServerOption) (*Server, error) {
 	if h == nil {
 		return nil, fmt.Errorf("dnscrypt: handler is nil")
 	}
@@ -85,11 +88,18 @@ func NewServer(addr netip.AddrPort, h acidns.Handler, cert *Cert, resolverSK [32
 	for _, o := range opts {
 		o.applyDNSCryptServer(&cfg)
 	}
+	if !cfg.resolverSKSet {
+		return nil, fmt.Errorf("dnscrypt: NewServer requires WithResolverSecretKey")
+	}
+	var zero [32]byte
+	if subtle.ConstantTimeCompare(cfg.resolverSK[:], zero[:]) == 1 {
+		return nil, fmt.Errorf("dnscrypt: resolver secret key is zero")
+	}
 	return &Server{
 		addr:       addr,
 		handler:    h,
 		cert:       cert,
-		resolverSK: resolverSK,
+		resolverSK: cfg.resolverSK,
 		cfg:        cfg,
 	}, nil
 }

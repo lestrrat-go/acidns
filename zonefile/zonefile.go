@@ -20,7 +20,7 @@ import (
 )
 
 // ErrParse is returned when a master file fails to parse.
-var ErrParse = errors.New("dnszone: parse error")
+var ErrParse = errors.New("zonefile: parse error")
 
 // Zone is a parsed master file.
 type Zone interface {

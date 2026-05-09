@@ -84,7 +84,7 @@ func TestServerRoundTrip(t *testing.T) {
 	h := &echoHandler{}
 	srv, err := dnscrypt.NewServer(
 		netip.MustParseAddrPort("127.0.0.1:0"), h,
-		fx.cert, fx.resolverSK,
+		fx.cert, dnscrypt.WithResolverSecretKey(fx.resolverSK),
 	)
 	require.NoError(t, err)
 	ctx, cancel := context.WithCancel(t.Context())
@@ -122,7 +122,7 @@ func TestServerDropsWrongClientMagic(t *testing.T) {
 	h := &echoHandler{}
 	srv, err := dnscrypt.NewServer(
 		netip.MustParseAddrPort("127.0.0.1:0"), h,
-		fx.cert, fx.resolverSK,
+		fx.cert, dnscrypt.WithResolverSecretKey(fx.resolverSK),
 	)
 	require.NoError(t, err)
 	ctx, cancel := context.WithCancel(t.Context())
@@ -166,7 +166,7 @@ func TestNewServerRejectsNilHandler(t *testing.T) {
 	fx := mkFixture(t)
 	_, err := dnscrypt.NewServer(
 		netip.MustParseAddrPort("127.0.0.1:0"), nil,
-		fx.cert, fx.resolverSK,
+		fx.cert, dnscrypt.WithResolverSecretKey(fx.resolverSK),
 	)
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "handler is nil")
@@ -177,10 +177,32 @@ func TestNewServerRejectsNilCert(t *testing.T) {
 	fx := mkFixture(t)
 	_, err := dnscrypt.NewServer(
 		netip.MustParseAddrPort("127.0.0.1:0"), &echoHandler{},
-		nil, fx.resolverSK,
+		nil, dnscrypt.WithResolverSecretKey(fx.resolverSK),
 	)
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "cert is nil")
+}
+
+func TestNewServerRejectsMissingResolverSecretKey(t *testing.T) {
+	t.Parallel()
+	fx := mkFixture(t)
+	_, err := dnscrypt.NewServer(
+		netip.MustParseAddrPort("127.0.0.1:0"), &echoHandler{},
+		fx.cert,
+	)
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "WithResolverSecretKey")
+}
+
+func TestNewServerRejectsZeroResolverSecretKey(t *testing.T) {
+	t.Parallel()
+	fx := mkFixture(t)
+	_, err := dnscrypt.NewServer(
+		netip.MustParseAddrPort("127.0.0.1:0"), &echoHandler{},
+		fx.cert, dnscrypt.WithResolverSecretKey([32]byte{}),
+	)
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "zero")
 }
 
 // TestRunRejectsExpiredCert verifies Run refuses to start with a
@@ -198,7 +220,7 @@ func TestRunRejectsExpiredCert(t *testing.T) {
 	require.NoError(t, err)
 	srv, err := dnscrypt.NewServer(
 		netip.MustParseAddrPort("127.0.0.1:0"), &echoHandler{},
-		expired, fx.resolverSK,
+		expired, dnscrypt.WithResolverSecretKey(fx.resolverSK),
 	)
 	require.NoError(t, err)
 	_, err = srv.Run(t.Context())
@@ -217,7 +239,7 @@ func TestServerRotate(t *testing.T) {
 	h := &echoHandler{}
 	srv, err := dnscrypt.NewServer(
 		netip.MustParseAddrPort("127.0.0.1:0"), h,
-		first.cert, first.resolverSK,
+		first.cert, dnscrypt.WithResolverSecretKey(first.resolverSK),
 	)
 	require.NoError(t, err)
 	ctx, cancel := context.WithCancel(t.Context())
@@ -276,7 +298,7 @@ func TestServerRotateRejectsExpired(t *testing.T) {
 	fx := mkFixture(t)
 	srv, err := dnscrypt.NewServer(
 		netip.MustParseAddrPort("127.0.0.1:0"), &echoHandler{},
-		fx.cert, fx.resolverSK,
+		fx.cert, dnscrypt.WithResolverSecretKey(fx.resolverSK),
 	)
 	require.NoError(t, err)
 	ctx, cancel := context.WithCancel(t.Context())
@@ -301,7 +323,7 @@ func TestServerRotateRejectsNil(t *testing.T) {
 	fx := mkFixture(t)
 	srv, err := dnscrypt.NewServer(
 		netip.MustParseAddrPort("127.0.0.1:0"), &echoHandler{},
-		fx.cert, fx.resolverSK,
+		fx.cert, dnscrypt.WithResolverSecretKey(fx.resolverSK),
 	)
 	require.NoError(t, err)
 	ctx, cancel := context.WithCancel(t.Context())
@@ -319,7 +341,7 @@ func TestServerLifecycle(t *testing.T) {
 	fx := mkFixture(t)
 	srv, err := dnscrypt.NewServer(
 		netip.MustParseAddrPort("127.0.0.1:0"), &echoHandler{},
-		fx.cert, fx.resolverSK,
+		fx.cert, dnscrypt.WithResolverSecretKey(fx.resolverSK),
 	)
 	require.NoError(t, err)
 

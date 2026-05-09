@@ -184,6 +184,12 @@ type inflightCall struct {
 // New returns a Recursive resolver. Returns an error when option
 // invariants are violated (e.g. WithAggressiveNSEC without
 // WithValidator).
+//
+// When no [WithRoots] is supplied the resolver falls back to the
+// IANA root server snapshot bundled with the package, so a
+// zero-config New(...) works out of the box. Long-running daemons
+// SHOULD pair this with [WithRootPriming] so the live list stays
+// current as IANA reorganises operators.
 func New(opts ...Option) (Recursive, error) {
 	c := config{
 		maxIterations: 30,

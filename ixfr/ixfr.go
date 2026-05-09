@@ -29,6 +29,7 @@ import (
 	"time"
 
 	"github.com/lestrrat-go/acidns"
+	"github.com/lestrrat-go/acidns/tsig"
 	"github.com/lestrrat-go/acidns/wire"
 	"github.com/lestrrat-go/acidns/wire/rdata"
 	"github.com/lestrrat-go/acidns/wire/rrtype"
@@ -68,6 +69,10 @@ var ErrMissingSubDiffSOA = errors.New("ixfr: expected SOA at sub-diff boundary")
 // ErrRCODE wraps a non-NOERROR server response. errors.Is(err, ErrRCODE)
 // matches the generic case; unwrap for the specific RCODE text.
 var ErrRCODE = errors.New("ixfr: server returned error rcode")
+
+// ErrTSIGVerify is returned when a stream envelope's TSIG signature
+// fails to verify against the key supplied via [WithTSIGKey].
+var ErrTSIGVerify = errors.New("ixfr: TSIG verification failed")
 
 // Kind describes the shape of an IXFR response, queryable on the Transfer
 // once Start has read the first message.
@@ -142,11 +147,10 @@ func (e diffEvent) Added() []wire.Record   { return e.added }
 // Serial field is interpreted by the server, but the full SOA RR is what
 // the wire requires.
 func Start(ctx context.Context, ex acidns.StreamExchanger, zone wire.Name, clientSOA rdata.SOA, opts ...Option) (Transfer, error) {
-	c := config{timeout: 30 * time.Second}
+	c := config{timeout: 30 * time.Second, tsigFudge: 5 * time.Minute, tsigNow: time.Now}
 	for _, o := range opts {
 		o.applyIXFR(&c)
 	}
-	_ = c // reserved for future per-stream options
 
 	id, err := randomID()
 	if err != nil {
@@ -160,11 +164,27 @@ func Start(ctx context.Context, ex acidns.StreamExchanger, zone wire.Name, clien
 	if err != nil {
 		return nil, err
 	}
+	var verifier *tsigVerifier
+	if c.tsigKey != nil {
+		signed, err := tsig.SignMessage(q, *c.tsigKey, c.tsigNow(), c.tsigFudge)
+		if err != nil {
+			return nil, fmt.Errorf("ixfr: TSIG sign: %w", err)
+		}
+		_, mac, _, err := tsig.VerifyMAC(signed, *c.tsigKey, c.tsigNow(), c.tsigFudge)
+		if err != nil {
+			return nil, fmt.Errorf("ixfr: TSIG extract MAC: %w", err)
+		}
+		q, err = wire.Unmarshal(signed)
+		if err != nil {
+			return nil, fmt.Errorf("ixfr: re-parse signed query: %w", err)
+		}
+		verifier = newTSIGVerifier(*c.tsigKey, mac, c.tsigNow, c.tsigFudge)
+	}
 	stream, err := ex.Stream(ctx, q)
 	if err != nil {
 		return nil, fmt.Errorf("ixfr: open stream: %w", err)
 	}
-	t := &transfer{stream: stream, reader: &recReader{stream: stream}}
+	t := &transfer{stream: stream, reader: &recReader{stream: stream, verifier: verifier}}
 	if err := t.init(ctx, clientSOA.Serial()); err != nil {
 		_ = stream.Close()
 		return nil, err
@@ -347,6 +367,7 @@ type recReader struct {
 	curIdx   int
 	pushback []wire.Record
 	msgEOF   bool
+	verifier *tsigVerifier
 }
 
 func (rr *recReader) Read(ctx context.Context) (wire.Record, error) {
@@ -374,6 +395,11 @@ func (rr *recReader) Read(ctx context.Context) (wire.Record, error) {
 		}
 		if rcode := msg.Flags().RCODE(); rcode != wire.RCODENoError {
 			return nil, fmt.Errorf("%w: %s", ErrRCODE, rcode)
+		}
+		if rr.verifier != nil {
+			if err := rr.verifier.verify(msg); err != nil {
+				return nil, err
+			}
 		}
 		rr.curMsg = msg
 		rr.curIdx = 0

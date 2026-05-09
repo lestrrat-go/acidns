@@ -24,6 +24,10 @@
 //
 // # TLS
 //
+// The TLS floor is TLS 1.3 (RFC 7858 §9 SHOULD use 1.3). A
+// caller-supplied tls.Config whose MinVersion is unset or set below
+// 1.3 is silently raised to 1.3.
+//
 // Use WithTLSConfig to pin certificate roots, supply a session-resume
 // cache, or enable mTLS. Use WithServerName to set the SNI / cert
 // verification name when targeting an IP literal whose certificate is
@@ -69,19 +73,12 @@ func New(addr netip.AddrPort, opts ...Option) (acidns.Exchanger, error) {
 	} else {
 		tcfg = &tls.Config{MinVersion: tls.VersionTLS13}
 	}
-	// MinVersion handling:
-	//   - Default (caller passed no tls.Config): TLS 1.3 — set above.
-	//   - Caller passed a config with MinVersion=0 (Go default): raise
-	//     to TLS 1.3. RFC 7858 §9 SHOULD use TLS 1.3, and an unset
-	//     MinVersion means the caller didn't explicitly opt into
-	//     anything older.
-	//   - Caller explicitly set MinVersion to TLS 1.0 or 1.1: floor at
-	//     TLS 1.2. Go still permits 1.0/1.1 but no DoT operator should.
-	switch {
-	case tcfg.MinVersion == 0:
+	// RFC 7858 §9 SHOULD use TLS 1.3. Any caller-supplied lower floor
+	// (including the explicit TLS 1.2 case) is silently raised — DoT is
+	// privacy-by-encryption and the older AEAD-less ciphersuites are not
+	// fit for that use.
+	if tcfg.MinVersion < tls.VersionTLS13 {
 		tcfg.MinVersion = tls.VersionTLS13
-	case tcfg.MinVersion < tls.VersionTLS12:
-		tcfg.MinVersion = tls.VersionTLS12
 	}
 	if c.serverName != "" {
 		tcfg.ServerName = c.serverName
