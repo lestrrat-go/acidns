@@ -294,18 +294,18 @@ func extractCookieFromMsg(msg wire.Message) ([8]byte, []byte, bool) {
 // cookies. The library generates 32-byte secrets by default.
 type Secret []byte
 
-// SecretPool manages the live + previous server-cookie secrets and
-// rotates them on a timer. Operators may override the rotation policy by
-// calling Rotate manually.
+// SecretPool manages the live + previous server-cookie secrets. The
+// concrete pool returned by [NewSecretPool] additionally exposes a
+// Rotate method for tests and admin tooling, but the SecretPool
+// interface intentionally omits it: a misbehaving caller holding the
+// pool could otherwise force an out-of-cycle rotation and instantly
+// invalidate every in-flight client cookie.
 type SecretPool interface {
 	// Current returns the secret used to mint new cookies.
 	Current() Secret
 	// All returns all valid secrets (current + recently rotated). Use
 	// for validation: a cookie counts as valid if any secret accepts it.
 	All() []Secret
-	// Rotate generates a fresh current secret, demoting the prior
-	// current to the second slot and discarding any older secret.
-	Rotate() error
 	// Close stops the rotation goroutine if [WithPoolRotateEvery] was
 	// supplied. Safe to call when no rotation goroutine is running
 	// and idempotent on repeated calls.
@@ -332,17 +332,22 @@ func WithPoolRotateEvery(d time.Duration) PoolOption {
 	return poolOptionFunc(func(c *poolConfig) { c.rotateEvery = d })
 }
 
-// NewSecretPool returns a [SecretPool] with a freshly-minted random
-// secret. With [WithPoolRotateEvery] the pool spawns a background
-// goroutine that periodically rotates the current secret; the
-// goroutine is shut down by [SecretPool.Close]. An error is returned
-// if the initial random-secret generation fails.
-func NewSecretPool(opts ...PoolOption) (SecretPool, error) {
+// NewSecretPool returns a [MemorySecretPool] with a freshly-minted
+// random secret. With [WithPoolRotateEvery] the pool spawns a
+// background goroutine that periodically rotates the current secret;
+// the goroutine is shut down by [MemorySecretPool.Close]. An error is
+// returned if the initial random-secret generation fails.
+//
+// The returned concrete type satisfies [SecretPool] and additionally
+// exposes Rotate for tests and admin tooling. Callers that store the
+// pool as a SecretPool interface lose the Rotate method by design —
+// see the [SecretPool] doc.
+func NewSecretPool(opts ...PoolOption) (*MemorySecretPool, error) {
 	cfg := poolConfig{}
 	for _, o := range opts {
 		o.applyPool(&cfg)
 	}
-	p := &secretPool{}
+	p := &MemorySecretPool{}
 	if err := p.Rotate(); err != nil {
 		return nil, err
 	}
@@ -364,7 +369,9 @@ func NewSecretPool(opts ...PoolOption) (SecretPool, error) {
 	return p, nil
 }
 
-type secretPool struct {
+// MemorySecretPool is the in-process [SecretPool] implementation.
+// Construct via [NewSecretPool].
+type MemorySecretPool struct {
 	mu       sync.RWMutex
 	current  Secret
 	previous Secret
@@ -372,20 +379,20 @@ type secretPool struct {
 	stopOnce sync.Once
 }
 
-func (p *secretPool) Close() {
+func (p *MemorySecretPool) Close() {
 	if p.stop == nil {
 		return
 	}
 	p.stopOnce.Do(func() { close(p.stop) })
 }
 
-func (p *secretPool) Current() Secret {
+func (p *MemorySecretPool) Current() Secret {
 	p.mu.RLock()
 	defer p.mu.RUnlock()
 	return append(Secret(nil), p.current...)
 }
 
-func (p *secretPool) All() []Secret {
+func (p *MemorySecretPool) All() []Secret {
 	p.mu.RLock()
 	defer p.mu.RUnlock()
 	out := make([]Secret, 0, 2)
@@ -398,7 +405,7 @@ func (p *secretPool) All() []Secret {
 	return out
 }
 
-func (p *secretPool) Rotate() error {
+func (p *MemorySecretPool) Rotate() error {
 	fresh := make(Secret, 32)
 	if _, err := rand.Read(fresh); err != nil {
 		return fmt.Errorf("cookies: rotate: %w", err)
