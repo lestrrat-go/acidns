@@ -156,7 +156,7 @@ func canonicalBrowseResponse(t *testing.T) []byte {
 
 	txt, err := rdata.NewTXT("foo=bar")
 	require.NoError(t, err)
-	srv := rdata.NewSRV(0, 0, 80, host)
+	srv := rdata.MustNewSRV(0, 0, 80, host)
 	a := rdata.MustNewA(netip.MustParseAddr("192.0.2.10"))
 
 	resp, err := wire.NewBuilder().

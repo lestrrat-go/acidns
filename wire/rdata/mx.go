@@ -1,6 +1,8 @@
 package rdata
 
 import (
+	"fmt"
+
 	"github.com/lestrrat-go/acidns/wire/rrtype"
 	"github.com/lestrrat-go/acidns/wire/wirebb"
 )
@@ -20,9 +22,24 @@ func (m MX) Pack(p *wirebb.Packer) {
 	p.Name(m.exchange)
 }
 
-// NewMX returns an MX rdata.
-func NewMX(pref uint16, exchange wirebb.Name) MX {
-	return MX{pref: pref, exchange: exchange}
+// NewMX returns an MX rdata. Returns [ErrInvalidRData] when exchange
+// is the zero name; callers building a record from parsed configuration
+// should propagate the error rather than silently emitting a record
+// pointing at the root.
+func NewMX(pref uint16, exchange wirebb.Name) (MX, error) {
+	if !exchange.IsValid() {
+		return MX{}, fmt.Errorf("%w: MX exchange name is invalid", ErrInvalidRData)
+	}
+	return MX{pref: pref, exchange: exchange}, nil
+}
+
+// MustNewMX is the panic-on-error variant of [NewMX].
+func MustNewMX(pref uint16, exchange wirebb.Name) MX {
+	m, err := NewMX(pref, exchange)
+	if err != nil {
+		panic(err)
+	}
+	return m
 }
 
 func unpackMX(u *wirebb.Unpacker) (MX, error) {

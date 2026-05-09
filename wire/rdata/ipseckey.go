@@ -92,11 +92,25 @@ func NewIPSECKEYAddr(prec uint8, alg IPSECKEYAlgorithm, addr netip.Addr, pubkey 
 	return IPSECKEY{prec: prec, gt: gt, alg: alg, gwAddr: addr, pubkey: cp}, nil
 }
 
-// NewIPSECKEYName returns an IPSECKEY rdata whose gateway is a domain name.
-func NewIPSECKEYName(prec uint8, alg IPSECKEYAlgorithm, name wirebb.Name, pubkey []byte) IPSECKEY {
+// NewIPSECKEYName returns an IPSECKEY rdata whose gateway is a domain
+// name. Returns [ErrInvalidRData] when name is the zero name; mirrors
+// [NewIPSECKEYAddr]'s validation surface.
+func NewIPSECKEYName(prec uint8, alg IPSECKEYAlgorithm, name wirebb.Name, pubkey []byte) (IPSECKEY, error) {
+	if !name.IsValid() {
+		return IPSECKEY{}, fmt.Errorf("%w: IPSECKEY gateway name is invalid", ErrInvalidRData)
+	}
 	cp := make([]byte, len(pubkey))
 	copy(cp, pubkey)
-	return IPSECKEY{prec: prec, gt: IPSECKEYGatewayName, alg: alg, gwName: name, pubkey: cp}
+	return IPSECKEY{prec: prec, gt: IPSECKEYGatewayName, alg: alg, gwName: name, pubkey: cp}, nil
+}
+
+// MustNewIPSECKEYName is the panic-on-error variant of [NewIPSECKEYName].
+func MustNewIPSECKEYName(prec uint8, alg IPSECKEYAlgorithm, name wirebb.Name, pubkey []byte) IPSECKEY {
+	k, err := NewIPSECKEYName(prec, alg, name, pubkey)
+	if err != nil {
+		panic(err)
+	}
+	return k
 }
 
 func unpackIPSECKEY(u *wirebb.Unpacker, rdlen int) (IPSECKEY, error) {

@@ -1,6 +1,7 @@
 package rdata
 
 import (
+	"fmt"
 	"time"
 
 	"github.com/lestrrat-go/acidns/wire/rrtype"
@@ -36,12 +37,29 @@ func (s SOA) Pack(p *wirebb.Packer) {
 	p.Uint32(uint32(s.minimum / time.Second))
 }
 
-// NewSOA returns an SOA rdata.
-func NewSOA(mname, rname wirebb.Name, serial uint32, refresh, retry, expire, minimum time.Duration) SOA {
+// NewSOA returns an SOA rdata. Returns [ErrInvalidRData] when mname
+// or rname is the zero name; both are required by RFC 1035 §3.3.13
+// and silently emitting "." would corrupt zone state in any consumer.
+func NewSOA(mname, rname wirebb.Name, serial uint32, refresh, retry, expire, minimum time.Duration) (SOA, error) {
+	if !mname.IsValid() {
+		return SOA{}, fmt.Errorf("%w: SOA mname is invalid", ErrInvalidRData)
+	}
+	if !rname.IsValid() {
+		return SOA{}, fmt.Errorf("%w: SOA rname is invalid", ErrInvalidRData)
+	}
 	return SOA{
 		mname: mname, rname: rname, serial: serial,
 		refresh: refresh, retry: retry, expire: expire, minimum: minimum,
+	}, nil
+}
+
+// MustNewSOA is the panic-on-error variant of [NewSOA].
+func MustNewSOA(mname, rname wirebb.Name, serial uint32, refresh, retry, expire, minimum time.Duration) SOA {
+	s, err := NewSOA(mname, rname, serial, refresh, retry, expire, minimum)
+	if err != nil {
+		panic(err)
 	}
+	return s
 }
 
 func unpackSOA(u *wirebb.Unpacker) (SOA, error) {

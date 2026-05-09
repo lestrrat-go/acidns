@@ -282,7 +282,7 @@ func (p *parser) parseRData(t rrtype.Type, fields []fieldTok) (rdata.RData, erro
 		if err != nil {
 			return nil, err
 		}
-		return rdata.NewMX(uint16(pref), n), nil
+		return rdata.NewMX(uint16(pref), n)
 	case rrtype.TXT:
 		strs := make([]string, len(fields))
 		for i, f := range fields {
@@ -335,5 +335,5 @@ func (p *parser) parseSOA(fields []fieldTok) (rdata.SOA, error) {
 		time.Duration(retry)*time.Second,
 		time.Duration(expire)*time.Second,
 		time.Duration(minimum)*time.Second,
-	), nil
+	)
 }

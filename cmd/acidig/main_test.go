@@ -66,7 +66,7 @@ func TestFormatRDataAAAA(t *testing.T) {
 
 func TestFormatRDataMX(t *testing.T) {
 	t.Parallel()
-	rd := rdata.NewMX(10, wire.MustParseName("mail.example.com"))
+	rd := rdata.MustNewMX(10, wire.MustParseName("mail.example.com"))
 	require.Equal(t, "10 mail.example.com.", formatRData(rd))
 }
 
@@ -81,7 +81,7 @@ func TestFormatRDataTXT(t *testing.T) {
 
 func TestFormatRDataSOA(t *testing.T) {
 	t.Parallel()
-	rd := rdata.NewSOA(
+	rd := rdata.MustNewSOA(
 		wire.MustParseName("ns.example.com"),
 		wire.MustParseName("hm.example.com"),
 		1, time.Hour, time.Hour, time.Hour, time.Hour,

@@ -50,7 +50,7 @@ func TestUnknownRDataPath(t *testing.T) {
 
 func TestSOAAccessorsAll(t *testing.T) {
 	t.Parallel()
-	soa := rdata.NewSOA(
+	soa := rdata.MustNewSOA(
 		wirebb.MustParse("ns.example.com"),
 		wirebb.MustParse("hm.example.com"),
 		1, 2*time.Hour, 30*time.Minute, 7*24*time.Hour, 60*time.Second,

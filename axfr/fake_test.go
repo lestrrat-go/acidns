@@ -69,7 +69,7 @@ func soaRec(t *testing.T, serial uint32) wire.Record {
 	return wire.NewRecord(
 		wire.MustParseName("example.com"),
 		60*time.Second,
-		rdata.NewSOA(
+		rdata.MustNewSOA(
 			wire.MustParseName("ns.example.com"),
 			wire.MustParseName("hostmaster.example.com"),
 			serial, 7200*time.Second, 3600*time.Second, 1209600*time.Second, 60*time.Second,

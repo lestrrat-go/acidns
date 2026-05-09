@@ -376,9 +376,14 @@ func publicationRecords(p Publication, flushBit bool) []wire.Record {
 		cls = rrtype.Class(uint16(rrtype.ClassIN) | CacheFlushBit)
 	}
 	var out []wire.Record
-	// SRV at instance.
-	out = append(out, wire.NewRecordClass(p.instance, cls, p.ttl,
-		rdata.NewSRV(0, 0, p.port, p.host)))
+	// SRV at instance. Publication.Validate enforces non-zero host;
+	// NewSRV cannot fail here in practice but surface the error so a
+	// future change that loosens the validate gate fails fast.
+	srv, err := rdata.NewSRV(0, 0, p.port, p.host)
+	if err != nil {
+		return nil
+	}
+	out = append(out, wire.NewRecordClass(p.instance, cls, p.ttl, srv))
 	// TXT at instance (single TXT with all key=value strings).
 	if len(p.text) > 0 {
 		strs := make([]string, 0, len(p.text))

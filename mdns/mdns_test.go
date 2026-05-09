@@ -31,7 +31,7 @@ func TestParseBrowseResponse(t *testing.T) {
 	host := wire.MustParseName("printer.local")
 
 	txt, _ := rdata.NewTXT("path=/admin", "model=acidns-bench")
-	srv := rdata.NewSRV(0, 0, 80, host)
+	srv := rdata.MustNewSRV(0, 0, 80, host)
 	a := rdata.MustNewA(netip.MustParseAddr("192.0.2.50"))
 
 	resp, err := wire.NewBuilder().

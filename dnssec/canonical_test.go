@@ -54,7 +54,7 @@ func TestSignedDataAcrossRDataTypes(t *testing.T) {
 			"SOA",
 			[]wire.Record{
 				wire.NewRecord(wire.MustParseName("example.com"), time.Hour,
-					rdata.NewSOA(
+					rdata.MustNewSOA(
 						wire.MustParseName("ns.example.com"),
 						wire.MustParseName("hm.example.com"),
 						1, time.Hour, time.Hour, time.Hour, time.Hour,
@@ -66,7 +66,7 @@ func TestSignedDataAcrossRDataTypes(t *testing.T) {
 			"MX",
 			[]wire.Record{
 				wire.NewRecord(wire.MustParseName("example.com"), time.Hour,
-					rdata.NewMX(10, wire.MustParseName("mx.example.com"))),
+					rdata.MustNewMX(10, wire.MustParseName("mx.example.com"))),
 			},
 			rrtype.MX,
 		},

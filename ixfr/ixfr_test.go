@@ -46,7 +46,7 @@ func TestTransferAXFRFallback(t *testing.T) {
 	require.NoError(t, err)
 
 	// Ask for the zone with a stale serial — server falls back to AXFR.
-	clientSOA := rdata.NewSOA(
+	clientSOA := rdata.MustNewSOA(
 		wire.MustParseName("ns1.example.com"),
 		wire.MustParseName("hm.example.com"),
 		1, 7200*time.Second, 3600*time.Second, 1209600*time.Second, 60*time.Second)

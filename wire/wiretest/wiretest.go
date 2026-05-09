@@ -161,8 +161,9 @@ func PTRRecord(name wire.Name, ttl time.Duration, target wire.Name) wire.Record 
 }
 
 // MXRecord builds an MX record with the given preference and exchange.
+// Panics if exchange is the zero name (wiretest is for fixtures only).
 func MXRecord(name wire.Name, ttl time.Duration, pref uint16, exchange wire.Name) wire.Record {
-	return wire.NewRecord(name, ttl, rdata.NewMX(pref, exchange))
+	return wire.NewRecord(name, ttl, rdata.MustNewMX(pref, exchange))
 }
 
 // TXTRecord builds a TXT record. Panics if any string exceeds the per-string
@@ -175,7 +176,8 @@ func TXTRecord(name wire.Name, ttl time.Duration, strs ...string) wire.Record {
 	return wire.NewRecord(name, ttl, rd)
 }
 
-// SOARecord builds a SOA record for an apex.
+// SOARecord builds a SOA record for an apex. Panics if either mname or
+// rname is the zero name (wiretest is for fixtures only).
 func SOARecord(name wire.Name, ttl time.Duration, mname, rname wire.Name, serial uint32, refresh, retry, expire, minimum time.Duration) wire.Record {
-	return wire.NewRecord(name, ttl, rdata.NewSOA(mname, rname, serial, refresh, retry, expire, minimum))
+	return wire.NewRecord(name, ttl, rdata.MustNewSOA(mname, rname, serial, refresh, retry, expire, minimum))
 }

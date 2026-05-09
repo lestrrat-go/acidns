@@ -1,6 +1,8 @@
 package rdata
 
 import (
+	"fmt"
+
 	"github.com/lestrrat-go/acidns/wire/rrtype"
 	"github.com/lestrrat-go/acidns/wire/wirebb"
 )
@@ -124,8 +126,24 @@ func (l LP) Pack(p *wirebb.Packer) {
 	p.NameUncompressed(l.fqdn)
 }
 
-// NewLP returns an LP rdata.
-func NewLP(pref uint16, fqdn wirebb.Name) LP { return LP{pref: pref, fqdn: fqdn} }
+// NewLP returns an LP rdata. Returns [ErrInvalidRData] when fqdn is
+// the zero name; LP is an ILNP locator-pointer and a missing target
+// has no meaningful interpretation.
+func NewLP(pref uint16, fqdn wirebb.Name) (LP, error) {
+	if !fqdn.IsValid() {
+		return LP{}, fmt.Errorf("%w: LP fqdn is invalid", ErrInvalidRData)
+	}
+	return LP{pref: pref, fqdn: fqdn}, nil
+}
+
+// MustNewLP is the panic-on-error variant of [NewLP].
+func MustNewLP(pref uint16, fqdn wirebb.Name) LP {
+	l, err := NewLP(pref, fqdn)
+	if err != nil {
+		panic(err)
+	}
+	return l
+}
 
 func unpackLP(u *wirebb.Unpacker, rdlen int) (LP, error) {
 	var zero LP

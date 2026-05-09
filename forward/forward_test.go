@@ -66,7 +66,7 @@ func answer(q wire.Message, ttl time.Duration, addr netip.Addr) wire.Message {
 }
 
 func nxdomain(q wire.Message, soaTTL, soaMin time.Duration) wire.Message {
-	soa := rdata.NewSOA(
+	soa := rdata.MustNewSOA(
 		wire.MustParseName("ns.example."),
 		wire.MustParseName("hostmaster.example."),
 		1, time.Hour, time.Minute, 24*time.Hour, soaMin,
@@ -84,7 +84,7 @@ func nxdomain(q wire.Message, soaTTL, soaMin time.Duration) wire.Message {
 }
 
 func nodata(q wire.Message, soaTTL, soaMin time.Duration) wire.Message {
-	soa := rdata.NewSOA(
+	soa := rdata.MustNewSOA(
 		wire.MustParseName("ns.example."),
 		wire.MustParseName("hostmaster.example."),
 		1, time.Hour, time.Minute, 24*time.Hour, soaMin,

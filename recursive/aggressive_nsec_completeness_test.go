@@ -42,7 +42,7 @@ func nsec3OwnerName(ownerHash []byte, zone wire.Name) wire.Name {
 // completeness tests below.
 func soaForExample() wire.Record {
 	return wire.NewRecord(wire.MustParseName("example."), 5*time.Minute,
-		rdata.NewSOA(
+		rdata.MustNewSOA(
 			wire.MustParseName("ns.example."),
 			wire.MustParseName("hm.example."),
 			1, 7200, 3600, 1209600, 60,

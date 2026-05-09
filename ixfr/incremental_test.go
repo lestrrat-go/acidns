@@ -41,7 +41,7 @@ func (f *fakeStreamExchanger) Stream(_ context.Context, _ wire.Message) (acidns.
 }
 
 func mkSOA(serial uint32) rdata.SOA {
-	return rdata.NewSOA(
+	return rdata.MustNewSOA(
 		wire.MustParseName("ns.example.com"),
 		wire.MustParseName("hm.example.com"),
 		serial,

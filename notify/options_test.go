@@ -24,7 +24,7 @@ func TestSendWithSOAAndTimeout(t *testing.T) {
 	ex, err := acidns.NewUDPExchanger(addr)
 	require.NoError(t, err)
 
-	soa := rdata.NewSOA(
+	soa := rdata.MustNewSOA(
 		wire.MustParseName("ns1.example.com"),
 		wire.MustParseName("hm.example.com"),
 		42, time.Hour, time.Hour, time.Hour, time.Hour,

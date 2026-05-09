@@ -1,6 +1,8 @@
 package rdata
 
 import (
+	"fmt"
+
 	"github.com/lestrrat-go/acidns/wire/rrtype"
 	"github.com/lestrrat-go/acidns/wire/wirebb"
 )
@@ -27,9 +29,25 @@ func (s SRV) Pack(p *wirebb.Packer) {
 	p.NameUncompressed(s.target)
 }
 
-// NewSRV returns an SRV rdata.
-func NewSRV(priority, weight, port uint16, target wirebb.Name) SRV {
-	return SRV{priority: priority, weight: weight, port: port, target: target}
+// NewSRV returns an SRV rdata. Returns [ErrInvalidRData] when target
+// is the zero name. RFC 2782 specifies a target of "." (root) as the
+// "service decidedly not available" sentinel — that is a non-zero
+// valid root name, distinct from the zero/uninitialised name this
+// check rejects.
+func NewSRV(priority, weight, port uint16, target wirebb.Name) (SRV, error) {
+	if !target.IsValid() {
+		return SRV{}, fmt.Errorf("%w: SRV target name is invalid", ErrInvalidRData)
+	}
+	return SRV{priority: priority, weight: weight, port: port, target: target}, nil
+}
+
+// MustNewSRV is the panic-on-error variant of [NewSRV].
+func MustNewSRV(priority, weight, port uint16, target wirebb.Name) SRV {
+	s, err := NewSRV(priority, weight, port, target)
+	if err != nil {
+		panic(err)
+	}
+	return s
 }
 
 func unpackSRV(u *wirebb.Unpacker, rdlen int) (SRV, error) {

@@ -68,7 +68,7 @@ func TestILNPPreferenceAccessors(t *testing.T) {
 	require.Equal(t, uint16(10), rdata.NewNID(10, 0).Preference())
 	require.Equal(t, uint16(20), rdata.NewL32(20, 0).Preference())
 	require.Equal(t, uint16(30), rdata.NewL64(30, 0).Preference())
-	require.Equal(t, uint16(40), rdata.NewLP(40, wirebb.MustParse("a.b")).Preference())
+	require.Equal(t, uint16(40), rdata.MustNewLP(40, wirebb.MustParse("a.b")).Preference())
 }
 
 func TestIPSECKEYAccessors(t *testing.T) {

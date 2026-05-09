@@ -44,7 +44,7 @@ func Example_ixfr_transfer() {
 	// serial 100 to serial 101: one A record removed, one added.
 	soa := func(serial uint32) wire.Record {
 		return wire.NewRecord(wire.MustParseName("example.com"), 60*time.Second,
-			rdata.NewSOA(
+			rdata.MustNewSOA(
 				wire.MustParseName("ns.example.com"),
 				wire.MustParseName("hm.example.com"),
 				serial,
@@ -70,7 +70,7 @@ func Example_ixfr_transfer() {
 		return
 	}
 
-	clientSOA := rdata.NewSOA(
+	clientSOA := rdata.MustNewSOA(
 		wire.MustParseName("ns.example.com"),
 		wire.MustParseName("hm.example.com"),
 		100,

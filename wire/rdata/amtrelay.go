@@ -79,9 +79,23 @@ func NewAMTRELAYAddr(prec uint8, discovery bool, addr netip.Addr) (AMTRELAY, err
 	return AMTRELAY{prec: prec, discovery: discovery, rt: rt, relayAddr: addr}, nil
 }
 
-// NewAMTRELAYName returns an AMTRELAY rdata whose relay is a domain name.
-func NewAMTRELAYName(prec uint8, discovery bool, name wirebb.Name) AMTRELAY {
-	return AMTRELAY{prec: prec, discovery: discovery, rt: AMTRELAYTypeName, relayName: name}
+// NewAMTRELAYName returns an AMTRELAY rdata whose relay is a domain
+// name. Returns [ErrInvalidRData] when name is the zero name; mirrors
+// [NewAMTRELAYAddr]'s validation surface.
+func NewAMTRELAYName(prec uint8, discovery bool, name wirebb.Name) (AMTRELAY, error) {
+	if !name.IsValid() {
+		return AMTRELAY{}, fmt.Errorf("%w: AMTRELAY relay name is invalid", ErrInvalidRData)
+	}
+	return AMTRELAY{prec: prec, discovery: discovery, rt: AMTRELAYTypeName, relayName: name}, nil
+}
+
+// MustNewAMTRELAYName is the panic-on-error variant of [NewAMTRELAYName].
+func MustNewAMTRELAYName(prec uint8, discovery bool, name wirebb.Name) AMTRELAY {
+	a, err := NewAMTRELAYName(prec, discovery, name)
+	if err != nil {
+		panic(err)
+	}
+	return a
 }
 
 func unpackAMTRELAY(u *wirebb.Unpacker, rdlen int) (AMTRELAY, error) {

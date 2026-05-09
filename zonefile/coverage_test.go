@@ -420,7 +420,7 @@ func TestWriteUnknownRData(t *testing.T) {
 // formatRDataPresentation's switch (e.g. SRV).
 func TestWriteUnsupportedRData(t *testing.T) {
 	t.Parallel()
-	srv := rdata.NewSRV(0, 0, 80, wire.MustParseName("host.example.com"))
+	srv := rdata.MustNewSRV(0, 0, 80, wire.MustParseName("host.example.com"))
 	owner := wire.MustParseName("_http._tcp.example.com")
 	rec := wire.NewRecordClass(owner, rrtype.ClassIN, 60*time.Second, srv)
 

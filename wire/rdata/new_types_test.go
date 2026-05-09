@@ -156,7 +156,7 @@ func TestAMTRELAYIPv6(t *testing.T) {
 
 func TestAMTRELAYName(t *testing.T) {
 	t.Parallel()
-	r := rdata.NewAMTRELAYName(2, false, wirebb.MustParse("relay.example.com"))
+	r := rdata.MustNewAMTRELAYName(2, false, wirebb.MustParse("relay.example.com"))
 	require.Equal(t, rdata.AMTRELAYTypeName, r.RelayType())
 
 	got := packUnpack(t, r).(rdata.AMTRELAY)

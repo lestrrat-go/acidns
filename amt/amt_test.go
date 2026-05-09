@@ -73,11 +73,11 @@ func TestDiscover_Sorting(t *testing.T) {
 	r := &fakeResolver{
 		records: []wire.Record{
 			wire.NewRecord(wire.MustParseName("_amt._udp.example.com"), 60*time.Second,
-				rdata.NewSRV(20, 0, 2268, wire.MustParseName("relay-b.example.com"))),
+				rdata.MustNewSRV(20, 0, 2268, wire.MustParseName("relay-b.example.com"))),
 			wire.NewRecord(wire.MustParseName("_amt._udp.example.com"), 60*time.Second,
-				rdata.NewSRV(10, 0, 2268, wire.MustParseName("relay-a.example.com"))),
+				rdata.MustNewSRV(10, 0, 2268, wire.MustParseName("relay-a.example.com"))),
 			wire.NewRecord(wire.MustParseName("_amt._udp.example.com"), 60*time.Second,
-				rdata.NewSRV(10, 50, 2268, wire.MustParseName("relay-c.example.com"))),
+				rdata.MustNewSRV(10, 50, 2268, wire.MustParseName("relay-c.example.com"))),
 		},
 	}
 	relays, err := amt.Discover(t.Context(), r, wire.MustParseName("example.com"))
@@ -111,7 +111,7 @@ func TestDiscover_FiltersNonSRV(t *testing.T) {
 			wire.NewRecord(wire.MustParseName("_amt._udp.example.com"), 60*time.Second,
 				rdata.MustNewA(netip.MustParseAddr("192.0.2.1"))),
 			wire.NewRecord(wire.MustParseName("_amt._udp.example.com"), 60*time.Second,
-				rdata.NewSRV(5, 100, 2268, wire.MustParseName("relay.example.com"))),
+				rdata.MustNewSRV(5, 100, 2268, wire.MustParseName("relay.example.com"))),
 		},
 	}
 	relays, err := amt.Discover(t.Context(), r, wire.MustParseName("example.com"))
@@ -132,7 +132,7 @@ func TestDiscover_FiltersTypeMismatch(t *testing.T) {
 		records: []wire.Record{
 			bogus,
 			wire.NewRecord(wire.MustParseName("_amt._udp.example.com"), 60*time.Second,
-				rdata.NewSRV(1, 0, 2268, wire.MustParseName("relay.example.com"))),
+				rdata.MustNewSRV(1, 0, 2268, wire.MustParseName("relay.example.com"))),
 		},
 	}
 	relays, err := amt.Discover(t.Context(), r, wire.MustParseName("example.com"))

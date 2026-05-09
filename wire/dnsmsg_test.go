@@ -79,7 +79,7 @@ func TestRoundTripResponse(t *testing.T) {
 	a := wire.NewRecord(name, 300*time.Second,
 		rdata.MustNewA(netip.MustParseAddr("93.184.216.34")))
 	mx := wire.NewRecord(name, 600*time.Second,
-		rdata.NewMX(10, wirebb.MustParse("mail.example.com")))
+		rdata.MustNewMX(10, wirebb.MustParse("mail.example.com")))
 
 	m, err := wire.NewBuilder().
 		ID(1).

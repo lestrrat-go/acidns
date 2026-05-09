@@ -75,7 +75,7 @@ func TestPTR(t *testing.T) {
 
 func TestMX(t *testing.T) {
 	t.Parallel()
-	r := rdata.NewMX(10, wirebb.MustParse("mail.example.com"))
+	r := rdata.MustNewMX(10, wirebb.MustParse("mail.example.com"))
 	require.Equal(t, uint16(10), r.Preference())
 	require.Equal(t, "mail.example.com.", r.Exchange().String())
 
@@ -99,7 +99,7 @@ func TestTXT(t *testing.T) {
 
 func TestSOA(t *testing.T) {
 	t.Parallel()
-	r := rdata.NewSOA(
+	r := rdata.MustNewSOA(
 		wirebb.MustParse("ns.example.com"),
 		wirebb.MustParse("hostmaster.example.com"),
 		2024010100,

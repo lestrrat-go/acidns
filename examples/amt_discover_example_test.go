@@ -26,11 +26,11 @@ func Example_amt_discover() {
 	r := &stubResolver{
 		records: []wire.Record{
 			wire.NewRecord(wire.MustParseName("_amt._udp.example.com"), 60*time.Second,
-				rdata.NewSRV(20, 0, 2268, wire.MustParseName("relay-b.example.com"))),
+				rdata.MustNewSRV(20, 0, 2268, wire.MustParseName("relay-b.example.com"))),
 			wire.NewRecord(wire.MustParseName("_amt._udp.example.com"), 60*time.Second,
-				rdata.NewSRV(10, 0, 2268, wire.MustParseName("relay-a.example.com"))),
+				rdata.MustNewSRV(10, 0, 2268, wire.MustParseName("relay-a.example.com"))),
 			wire.NewRecord(wire.MustParseName("_amt._udp.example.com"), 60*time.Second,
-				rdata.NewSRV(10, 50, 2268, wire.MustParseName("relay-c.example.com"))),
+				rdata.MustNewSRV(10, 50, 2268, wire.MustParseName("relay-c.example.com"))),
 		},
 	}
 

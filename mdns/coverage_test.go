@@ -219,7 +219,7 @@ func TestConflictsWithSRVBranches(t *testing.T) {
 		Answer(wire.NewRecord(
 			wire.MustParseName("Living Room TV._http._tcp.local."),
 			120*time.Second,
-			rdata.NewSRV(0, 0, 8080, wire.MustParseName("intruder.local.")))).
+			rdata.MustNewSRV(0, 0, 8080, wire.MustParseName("intruder.local.")))).
 		Build()
 	tr.inbox <- conflict
 
@@ -245,7 +245,7 @@ func TestConflictsWithSRVNonconflicting(t *testing.T) {
 		Answer(wire.NewRecord(
 			wire.MustParseName("Living Room TV._http._tcp.local."),
 			120*time.Second,
-			rdata.NewSRV(0, 0, 8080, wire.MustParseName("tv-living-room.local.")))).
+			rdata.MustNewSRV(0, 0, 8080, wire.MustParseName("tv-living-room.local.")))).
 		// Unrelated PTR (ignored by conflict detector).
 		Answer(wire.NewRecord(
 			wire.MustParseName("_http._tcp.local."),
@@ -255,7 +255,7 @@ func TestConflictsWithSRVNonconflicting(t *testing.T) {
 		Answer(wire.NewRecord(
 			wire.MustParseName("Other._http._tcp.local."),
 			120*time.Second,
-			rdata.NewSRV(0, 0, 1234, wire.MustParseName("other.local.")))).
+			rdata.MustNewSRV(0, 0, 1234, wire.MustParseName("other.local.")))).
 		Build()
 	tr.inbox <- matching
 
@@ -422,7 +422,7 @@ func TestParseBrowseResponseAAAAFromAdditional(t *testing.T) {
 	instance := wire.MustParseName("V6._http._tcp.local")
 	host := wire.MustParseName("v6.local")
 
-	srv := rdata.NewSRV(0, 0, 8080, host)
+	srv := rdata.MustNewSRV(0, 0, 8080, host)
 	v6 := rdata.MustNewAAAA(netip.MustParseAddr("2001:db8::1"))
 
 	resp, err := wire.NewBuilder().
@@ -448,7 +448,7 @@ func TestParseTXTBareKeyAndEmpty(t *testing.T) {
 	instance := wire.MustParseName("BareKey._http._tcp.local")
 	host := wire.MustParseName("barekey.local")
 
-	srv := rdata.NewSRV(0, 0, 80, host)
+	srv := rdata.MustNewSRV(0, 0, 80, host)
 	txt, err := rdata.NewTXT("flag", "key=value", "")
 	require.NoError(t, err)
 

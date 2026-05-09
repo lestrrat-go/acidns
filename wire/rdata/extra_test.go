@@ -11,7 +11,7 @@ import (
 
 func TestSRV(t *testing.T) {
 	t.Parallel()
-	r := rdata.NewSRV(10, 100, 443, wirebb.MustParse("svc.example.com"))
+	r := rdata.MustNewSRV(10, 100, 443, wirebb.MustParse("svc.example.com"))
 	require.Equal(t, rrtype.SRV, r.Type())
 	require.Equal(t, uint16(443), r.Port())
 

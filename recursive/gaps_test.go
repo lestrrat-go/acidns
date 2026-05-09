@@ -384,7 +384,7 @@ func TestServeDNSWithAuthorityAndAdditional(t *testing.T) {
 		fn: func(_ context.Context, _ netip.AddrPort, q wire.Message) (wire.Message, error) {
 			question := q.Questions()[0]
 			soa := wire.NewRecord(wire.MustParseName("example."), 30*time.Second,
-				rdata.NewSOA(
+				rdata.MustNewSOA(
 					wire.MustParseName("ns.example."),
 					wire.MustParseName("hm.example."),
 					1, 60*time.Second, 60*time.Second, 60*time.Second, 30*time.Second))
@@ -663,7 +663,7 @@ func TestNegativeCacheTTLTakesRecordTTLWhenSmaller(t *testing.T) {
 		fn: func(_ context.Context, _ netip.AddrPort, q wire.Message) (wire.Message, error) {
 			// Record TTL = 5s, SOA MINIMUM = 30s → cache uses the smaller TTL.
 			soa := wire.NewRecord(wire.MustParseName("example."), 5*time.Second,
-				rdata.NewSOA(
+				rdata.MustNewSOA(
 					wire.MustParseName("ns.example."),
 					wire.MustParseName("hm.example."),
 					1, 60*time.Second, 60*time.Second, 60*time.Second, 30*time.Second))
