@@ -29,10 +29,10 @@ func Example_mdns_parse() {
 		Build()
 
 	for _, s := range mdns.ParseBrowseResponse(resp) {
-		fmt.Println("instance:", s.Instance)
-		fmt.Println("host:", s.Host, "port:", s.Port)
-		fmt.Println("addrs:", s.Addrs)
-		fmt.Println("path:", s.Text["path"])
+		fmt.Println("instance:", s.Instance())
+		fmt.Println("host:", s.Host(), "port:", s.Port())
+		fmt.Println("addrs:", s.Addrs())
+		fmt.Println("path:", s.Text()["path"])
 	}
 
 	// OUTPUT:

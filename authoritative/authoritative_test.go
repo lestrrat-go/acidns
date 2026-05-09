@@ -30,7 +30,7 @@ chain IN CNAME alias.example.com.
 mail IN MX   10 mail.example.com.
 `
 
-func newAuth(t *testing.T) authoritative.Authoritative {
+func newAuth(t *testing.T) *authoritative.Authoritative {
 	t.Helper()
 	z, err := zonefile.Parse(strings.NewReader(sampleZone))
 	require.NoError(t, err)

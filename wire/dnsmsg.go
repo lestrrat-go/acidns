@@ -110,10 +110,10 @@ func Marshal(m Message) ([]byte, error) {
 // Unmarshal decodes a wire-format DNS message.
 func Unmarshal(buf []byte) (Message, error) {
 	if len(buf) < 12 {
-		return nil, &MessageParseError{
-			Section: SectionHeader, Index: -1, Offset: len(buf),
-			Cause: fmt.Errorf("header too short (%d bytes)", len(buf)),
-		}
+		return nil, NewMessageParseError(
+			SectionHeader, -1, len(buf),
+			fmt.Errorf("header too short (%d bytes)", len(buf)),
+		)
 	}
 	u := wirebb.NewUnpacker(buf)
 	id, _ := u.Uint16()
@@ -134,9 +134,7 @@ func Unmarshal(buf []byte) (Message, error) {
 	for i := range int(qdcount) {
 		q, err := unpackQuestion(u)
 		if err != nil {
-			return nil, &MessageParseError{
-				Section: SectionQuestion, Index: i, Offset: u.Off(), Cause: err,
-			}
+			return nil, NewMessageParseError(SectionQuestion, i, u.Off(), err)
 		}
 		m.questions = append(m.questions, q)
 	}
@@ -178,9 +176,7 @@ func unpackRRs(u *wirebb.Unpacker, dst *[]Record, n int, section Section) error 
 	for i := range n {
 		r, err := unpackRecord(u)
 		if err != nil {
-			return &MessageParseError{
-				Section: section, Index: i, Offset: u.Off(), Cause: err,
-			}
+			return NewMessageParseError(section, i, u.Off(), err)
 		}
 		out = append(out, r)
 	}
@@ -196,31 +192,31 @@ func unpackAdditionals(u *wirebb.Unpacker, m *message, n int) error {
 		// Peek at the type without committing the unpacker.
 		save := u.Off()
 		if _, err := u.Name(); err != nil {
-			return &MessageParseError{Section: SectionAdditional, Index: i, Offset: u.Off(), Cause: err}
+			return NewMessageParseError(SectionAdditional, i, u.Off(), err)
 		}
 		t, err := u.Uint16()
 		if err != nil {
-			return &MessageParseError{Section: SectionAdditional, Index: i, Offset: u.Off(), Cause: err}
+			return NewMessageParseError(SectionAdditional, i, u.Off(), err)
 		}
 		u.SetOff(save)
 
 		if t == optTypeWire {
 			if m.edns != nil {
-				return &MessageParseError{
-					Section: SectionOPT, Index: i, Offset: save,
-					Cause: fmt.Errorf("multiple OPT pseudo-RRs"),
-				}
+				return NewMessageParseError(
+					SectionOPT, i, save,
+					fmt.Errorf("multiple OPT pseudo-RRs"),
+				)
 			}
 			e, err := unpackOPT(u)
 			if err != nil {
-				return &MessageParseError{Section: SectionOPT, Index: i, Offset: u.Off(), Cause: err}
+				return NewMessageParseError(SectionOPT, i, u.Off(), err)
 			}
 			m.edns = e
 			continue
 		}
 		r, err := unpackRecord(u)
 		if err != nil {
-			return &MessageParseError{Section: SectionAdditional, Index: i, Offset: u.Off(), Cause: err}
+			return NewMessageParseError(SectionAdditional, i, u.Off(), err)
 		}
 		out = append(out, r)
 	}

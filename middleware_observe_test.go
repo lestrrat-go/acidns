@@ -65,13 +65,13 @@ func TestNewObservedCapturesEvent(t *testing.T) {
 
 	mu.Lock()
 	defer mu.Unlock()
-	require.NotNil(t, got.Request, "Request must be set")
-	require.NotNil(t, got.Response, "Response must be captured for single-write handlers")
-	require.Equal(t, uint16(0xdead), got.Response.ID())
-	require.Equal(t, netip.MustParseAddrPort("198.51.100.1:1"), got.RemoteAddr)
-	require.Equal(t, netUDP, got.Network)
-	require.GreaterOrEqual(t, got.Latency, time.Duration(0))
-	require.NoError(t, got.Err)
+	require.NotNil(t, got.Request(), "Request must be set")
+	require.NotNil(t, got.Response(), "Response must be captured for single-write handlers")
+	require.Equal(t, uint16(0xdead), got.Response().ID())
+	require.Equal(t, netip.MustParseAddrPort("198.51.100.1:1"), got.RemoteAddr())
+	require.Equal(t, netUDP, got.Network())
+	require.GreaterOrEqual(t, got.Latency(), time.Duration(0))
+	require.NoError(t, got.Err())
 }
 
 func TestNewObservedNilObsReturnsInner(t *testing.T) {

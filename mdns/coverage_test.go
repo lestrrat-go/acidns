@@ -437,7 +437,7 @@ func TestParseBrowseResponseAAAAFromAdditional(t *testing.T) {
 
 	services := mdns.ParseBrowseResponse(resp)
 	require.Equal(t, 1, len(services))
-	require.Equal(t, "2001:db8::1", services[0].Addrs[0].String())
+	require.Equal(t, "2001:db8::1", services[0].Addrs()[0].String())
 }
 
 func TestParseTXTBareKeyAndEmpty(t *testing.T) {
@@ -463,8 +463,8 @@ func TestParseTXTBareKeyAndEmpty(t *testing.T) {
 
 	services := mdns.ParseBrowseResponse(resp)
 	require.Equal(t, 1, len(services))
-	require.Equal(t, "", services[0].Text["flag"])     // bare key
-	require.Equal(t, "value", services[0].Text["key"]) // key=value
-	_, hasEmpty := services[0].Text[""]
+	require.Equal(t, "", services[0].Text()["flag"])     // bare key
+	require.Equal(t, "value", services[0].Text()["key"]) // key=value
+	_, hasEmpty := services[0].Text()[""]
 	require.False(t, hasEmpty, "empty TXT string should be ignored")
 }

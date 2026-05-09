@@ -41,29 +41,6 @@ var ErrTruncatedAfterTCPFail = errors.New("recursive: TC=1 with TCP fallback fai
 // were no remaining unrestricted servers to try.
 var ErrUpstreamRateLimited = errors.New("recursive: all upstream servers rate-limited")
 
-// Recursive is the public face of the resolver. It implements
-// acidns.Handler so it can be plugged into ListenUDP / ListenTCP directly,
-// and exposes Resolve for direct use.
-type Recursive interface {
-	acidns.Handler
-	Resolve(ctx context.Context, name wire.Name, t rrtype.Type) (Entry, error)
-	// Prime issues an NS . query against the configured roots and
-	// replaces the in-memory root list with the authoritative reply
-	// (RFC 8109). It is safe to call concurrently with Resolve. A
-	// failed prime leaves the existing roots untouched.
-	Prime(ctx context.Context) error
-	// RunMaintenance drives background maintenance tasks (currently
-	// root priming when enabled via [WithRootPriming], and the
-	// aggressive-NSEC sweep) and BLOCKS until ctx is canceled.
-	// Returns ctx.Err() on cancellation, or nil immediately when no
-	// background work is configured. Resolve does not require
-	// RunMaintenance to have been called.
-	//
-	// The name disambiguates from the non-blocking server-side Run
-	// (e.g. UDPServer.Run) used elsewhere in this module.
-	RunMaintenance(ctx context.Context) error
-}
-
 // ChainValidator is the contract recursive expects from a DNSSEC
 // chain validator — an implementation that walks the chain of trust
 // from a configured anchor down to (qname, qtype) and returns a
@@ -115,7 +92,10 @@ type Dialer interface {
 	Exchange(ctx context.Context, server netip.AddrPort, q wire.Message) (wire.Message, error)
 }
 
-type recursive struct {
+// Recursive is the iterative recursive resolver. It implements
+// [acidns.Handler] so it can be plugged into a server directly, and
+// exposes Resolve for direct use. Construct via [New].
+type Recursive struct {
 	rootsMu        sync.RWMutex
 	roots          []netip.AddrPort
 	cache          Cache
@@ -181,7 +161,7 @@ type inflightCall struct {
 	err   error
 }
 
-// New returns a Recursive resolver. Returns an error when option
+// New returns a [*Recursive] resolver. Returns an error when option
 // invariants are violated (e.g. WithAggressiveNSEC without
 // WithValidator).
 //
@@ -190,7 +170,7 @@ type inflightCall struct {
 // zero-config New(...) works out of the box. Long-running daemons
 // SHOULD pair this with [WithRootPriming] so the live list stays
 // current as IANA reorganises operators.
-func New(opts ...Option) (Recursive, error) {
+func New(opts ...Option) (*Recursive, error) {
 	c := config{
 		maxIterations: 30,
 		maxDepth:      8,
@@ -220,7 +200,7 @@ func New(opts ...Option) (Recursive, error) {
 		// is responsible for its own 0x20 verification.
 		c.dialer = defaultDialer{use0x20: c.caseRandom}
 	}
-	r := &recursive{
+	r := &Recursive{
 		roots:          append([]netip.AddrPort(nil), c.roots...),
 		cache:          c.cache,
 		stats:          c.stats,
@@ -309,7 +289,7 @@ func (d defaultDialer) Exchange(ctx context.Context, server netip.AddrPort, q wi
 }
 
 // ServeDNS implements acidns.Handler.
-func (r *recursive) ServeDNS(ctx context.Context, w acidns.ResponseWriter, q wire.Message) {
+func (r *Recursive) ServeDNS(ctx context.Context, w acidns.ResponseWriter, q wire.Message) {
 	b := wire.NewBuilder().
 		ID(q.ID()).
 		Response(true).
@@ -382,7 +362,7 @@ func must(m wire.Message, err error) wire.Message {
 var errBogusAnswer = errors.New("recursive: dnssec bogus")
 
 // Resolve returns a cached or freshly-iterated entry for (name, t).
-func (r *recursive) Resolve(ctx context.Context, name wire.Name, t rrtype.Type) (Entry, error) {
+func (r *Recursive) Resolve(ctx context.Context, name wire.Name, t rrtype.Type) (Entry, error) {
 	if r.resolveBudget > 0 {
 		var cancel context.CancelFunc
 		ctx, cancel = context.WithTimeout(ctx, r.resolveBudget)
@@ -437,7 +417,7 @@ func (r *recursive) Resolve(ctx context.Context, name wire.Name, t rrtype.Type) 
 // resolution in resolveDepth. cnameSeen tracks visited owners to detect
 // loops. depth bounds out-of-bailiwick NS recursion, cnameDepth bounds the
 // CNAME chain.
-func (r *recursive) resolveDepthFollow(ctx context.Context, name wire.Name, t rrtype.Type, depth, cnameDepth int, cnameSeen map[string]struct{}) (Entry, error) {
+func (r *Recursive) resolveDepthFollow(ctx context.Context, name wire.Name, t rrtype.Type, depth, cnameDepth int, cnameSeen map[string]struct{}) (Entry, error) {
 	if cnameDepth >= r.maxCNAMEs {
 		return Entry{}, ErrCNAMELoop
 	}
@@ -516,7 +496,7 @@ func recordsAt(records []wire.Record, name wire.Name) []wire.Record {
 	return out
 }
 
-func (r *recursive) resolveDepth(ctx context.Context, name wire.Name, t rrtype.Type, depth int) (Entry, error) {
+func (r *Recursive) resolveDepth(ctx context.Context, name wire.Name, t rrtype.Type, depth int) (Entry, error) {
 	if depth >= r.maxDepth {
 		return Entry{}, fmt.Errorf("recursive: depth limit reached for %s", name)
 	}
@@ -566,7 +546,7 @@ func (r *recursive) resolveDepth(ctx context.Context, name wire.Name, t rrtype.T
 	return entry, err
 }
 
-func (r *recursive) resolveDepthInner(ctx context.Context, target wire.Name, t rrtype.Type, depth int) (Entry, error) {
+func (r *Recursive) resolveDepthInner(ctx context.Context, target wire.Name, t rrtype.Type, depth int) (Entry, error) {
 	servers := r.currentRoots()
 	// closestZone tracks the deepest known authoritative zone the
 	// resolver has confirmed via referral. Starts at the root and
@@ -693,7 +673,7 @@ func minimisedQName(closestZone, target wire.Name) wire.Name {
 // the response and the server that produced it. A fresh transaction ID is
 // generated for every transmission so a late datagram from a slow server
 // can't be confused with the next server's reply (RFC 5452 §5).
-func (r *recursive) queryAny(ctx context.Context, servers []netip.AddrPort, name wire.Name, t rrtype.Type) (wire.Message, netip.AddrPort, error) {
+func (r *Recursive) queryAny(ctx context.Context, servers []netip.AddrPort, name wire.Name, t rrtype.Type) (wire.Message, netip.AddrPort, error) {
 	var lastErr error
 	var skippedRateLimit bool
 	for _, s := range servers {
@@ -764,7 +744,7 @@ func (r *recursive) queryAny(ctx context.Context, servers []netip.AddrPort, name
 // §5.4.1 — accepting out-of-bailiwick glue lets a malicious nameserver
 // poison arbitrary names by stuffing the additional section with A
 // records for unrelated owners.
-func (r *recursive) serversFromReferral(ctx context.Context, resp wire.Message, depth int) []netip.AddrPort {
+func (r *Recursive) serversFromReferral(ctx context.Context, resp wire.Message, depth int) []netip.AddrPort {
 	zone := referralZone(resp)
 	var glued []netip.AddrPort
 	var ungluedNS []wire.Name
@@ -856,7 +836,7 @@ func (r *recursive) serversFromReferral(ctx context.Context, resp wire.Message, 
 // already chasing it and this caller should skip ahead to the next
 // candidate. The caller must call [unmarkNSInProgress] on the same
 // key on success.
-func (r *recursive) markNSInProgress(nsKey string) bool {
+func (r *Recursive) markNSInProgress(nsKey string) bool {
 	r.nsInProgressMu.Lock()
 	defer r.nsInProgressMu.Unlock()
 	if _, busy := r.nsInProgress[nsKey]; busy {
@@ -866,7 +846,7 @@ func (r *recursive) markNSInProgress(nsKey string) bool {
 	return true
 }
 
-func (r *recursive) unmarkNSInProgress(nsKey string) {
+func (r *Recursive) unmarkNSInProgress(nsKey string) {
 	r.nsInProgressMu.Lock()
 	delete(r.nsInProgress, nsKey)
 	r.nsInProgressMu.Unlock()
@@ -983,7 +963,7 @@ func removeServer(servers []netip.AddrPort, target netip.AddrPort) []netip.AddrP
 	return out
 }
 
-func (r *recursive) entryFromResponse(qname wire.Name, resp wire.Message) Entry {
+func (r *Recursive) entryFromResponse(qname wire.Name, resp wire.Message) Entry {
 	ttl := minTTL(60*time.Second, resp.Answers(), resp.Authorities())
 	if len(resp.Answers()) == 0 {
 		if neg := negativeCacheTTL(resp.Authorities()); neg > 0 && neg < ttl {

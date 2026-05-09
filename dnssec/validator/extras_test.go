@@ -220,7 +220,7 @@ func TestWalkerClockSkewAcceptsBoundarySigs(t *testing.T) {
 	// Walk slightly past expiration but inside the clock-skew window.
 	w, err := validator.NewWalker(src,
 		validator.WithWalkerAnchors(anchor),
-		validator.WithWalkerNow(func() time.Time { return now.Add(time.Hour + time.Minute) }),
+		validator.WithWalkerClock(func() time.Time { return now.Add(time.Hour + time.Minute) }),
 		validator.WithWalkerClockSkew(0),            // ignored zero (still within default)
 		validator.WithWalkerClockSkew(-time.Second), // negative ignored
 		validator.WithWalkerClockSkew(2*time.Hour),
@@ -239,7 +239,7 @@ func TestWalkerOptionGuards(t *testing.T) {
 	src, _, anchor := buildChain(t, rdata.AlgECDSAP256SHA256, now)
 	w, err := validator.NewWalker(src,
 		validator.WithWalkerAnchors(anchor),
-		validator.WithWalkerNow(func() time.Time { return now }),
+		validator.WithWalkerClock(func() time.Time { return now }),
 		validator.WithWalkerMaxRRSIGsTry(0),  // ignored
 		validator.WithWalkerMaxRRSIGsTry(16), // applied
 		validator.WithWalkerMaxAlgorithms(0), // ignored
@@ -335,7 +335,7 @@ func TestWalkerNoDataMissingProof(t *testing.T) {
 	anchor, _ := validator.NewAnchor(rootDS.apex, rootDS.ds)
 	w, err := validator.NewWalker(stripper,
 		validator.WithWalkerAnchors(anchor),
-		validator.WithWalkerNow(func() time.Time { return now }),
+		validator.WithWalkerClock(func() time.Time { return now }),
 		validator.WithWalkerBogusPolicy(validator.BogusReturnAnswer),
 	)
 	require.NoError(t, err)
@@ -418,7 +418,7 @@ func TestWalkerUnsignedAnswerInSignedZone(t *testing.T) {
 	}
 	w, err := validator.NewWalker(wrapped,
 		validator.WithWalkerAnchors(anchor),
-		validator.WithWalkerNow(func() time.Time { return now }),
+		validator.WithWalkerClock(func() time.Time { return now }),
 		validator.WithWalkerBogusPolicy(validator.BogusReturnAnswer),
 	)
 	require.NoError(t, err)
@@ -448,7 +448,7 @@ func TestWalkerInsecureDelegationAnswerLookupError(t *testing.T) {
 	anchor, _ := validator.NewAnchor(rootDS.apex, rootDS.ds)
 	w, err := validator.NewWalker(wrapped,
 		validator.WithWalkerAnchors(anchor),
-		validator.WithWalkerNow(func() time.Time { return now }),
+		validator.WithWalkerClock(func() time.Time { return now }),
 		validator.WithWalkerBogusPolicy(validator.BogusReturnAnswer),
 	)
 	require.NoError(t, err)
@@ -481,7 +481,7 @@ func TestValidatorRRSIGFutureInception(t *testing.T) {
 	}
 	// Inception in the future.
 	sig := signRRSIG(t, priv, set, key, now.Add(time.Hour), now.Add(2*time.Hour))
-	v, err := validator.New(validator.WithValidatorNow(func() time.Time { return now }), validator.WithValidatorBogusPolicy(validator.BogusReturnAnswer))
+	v, err := validator.New(validator.WithValidatorClock(func() time.Time { return now }), validator.WithValidatorBogusPolicy(validator.BogusReturnAnswer))
 	require.NoError(t, err)
 	res, _, err := v.ValidateRRset(set, []rdata.RRSIG{sig}, []rdata.DNSKEY{key})
 	require.Equal(t, validator.Bogus, res)

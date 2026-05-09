@@ -59,7 +59,7 @@ func TestWalkerValidateNegativeNXDOMAINBogus(t *testing.T) {
 
 	w, err := validator.NewWalker(wrapped,
 		validator.WithWalkerAnchors(anchor),
-		validator.WithWalkerNow(func() time.Time { return now }),
+		validator.WithWalkerClock(func() time.Time { return now }),
 		validator.WithWalkerBogusPolicy(validator.BogusReturnAnswer),
 	)
 	require.NoError(t, err)
@@ -182,7 +182,7 @@ func TestWalkerValidateNegativeNXDOMAINSecure(t *testing.T) {
 
 	w, err := validator.NewWalker(wrapped,
 		validator.WithWalkerAnchors(anchor),
-		validator.WithWalkerNow(func() time.Time { return now }),
+		validator.WithWalkerClock(func() time.Time { return now }),
 	)
 	require.NoError(t, err)
 	ans, err := w.Resolve(t.Context(), target, rrtype.AAAA)
@@ -224,7 +224,7 @@ func TestWalkerValidateNegativeNXDOMAINMissingWildcardProof(t *testing.T) {
 
 	w, err := validator.NewWalker(wrapped,
 		validator.WithWalkerAnchors(anchor),
-		validator.WithWalkerNow(func() time.Time { return now }),
+		validator.WithWalkerClock(func() time.Time { return now }),
 		validator.WithWalkerBogusPolicy(validator.BogusReturnAnswer),
 	)
 	require.NoError(t, err)
@@ -283,7 +283,7 @@ func TestWalkerValidateNoDataNSECNoSigs(t *testing.T) {
 
 	w, err := validator.NewWalker(wrapped,
 		validator.WithWalkerAnchors(anchor),
-		validator.WithWalkerNow(func() time.Time { return now }),
+		validator.WithWalkerClock(func() time.Time { return now }),
 		validator.WithWalkerBogusPolicy(validator.BogusReturnAnswer),
 	)
 	require.NoError(t, err)

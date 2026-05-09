@@ -82,9 +82,9 @@ func TestDiscover_SkipsNonSVCB(t *testing.T) {
 	endpoints, err := ddr.Discover(t.Context(), r)
 	require.NoError(t, err)
 	require.Len(t, endpoints, 1)
-	require.Equal(t, ddr.ProtoDoT, endpoints[0].Protocol)
-	require.Equal(t, uint16(853), endpoints[0].Port)
-	require.Equal(t, uint16(5), endpoints[0].Priority)
+	require.Equal(t, ddr.ProtoDoT, endpoints[0].Protocol())
+	require.Equal(t, uint16(853), endpoints[0].Port())
+	require.Equal(t, uint16(5), endpoints[0].Priority())
 }
 
 func TestDiscover_SortsByPriority(t *testing.T) {
@@ -105,9 +105,9 @@ func TestDiscover_SortsByPriority(t *testing.T) {
 	endpoints, err := ddr.Discover(t.Context(), r)
 	require.NoError(t, err)
 	require.Len(t, endpoints, 3)
-	require.Equal(t, uint16(1), endpoints[0].Priority)
-	require.Equal(t, uint16(5), endpoints[1].Priority)
-	require.Equal(t, uint16(10), endpoints[2].Priority)
+	require.Equal(t, uint16(1), endpoints[0].Priority())
+	require.Equal(t, uint16(5), endpoints[1].Priority())
+	require.Equal(t, uint16(10), endpoints[2].Priority())
 }
 
 // TestDiscover_InferProtocolVariants exercises every branch of
@@ -151,13 +151,13 @@ func TestDiscover_InferProtocolVariants(t *testing.T) {
 
 	byPriority := map[uint16]ddr.Endpoint{}
 	for _, ep := range endpoints {
-		byPriority[ep.Priority] = ep
+		byPriority[ep.Priority()] = ep
 	}
-	require.Equal(t, ddr.ProtoDoH, byPriority[1].Protocol, "h3 → DoH")
-	require.Equal(t, ddr.ProtoDoH, byPriority[2].Protocol, "http/1.1 → DoH")
-	require.Equal(t, ddr.ProtoDoQ, byPriority[3].Protocol, "doq → DoQ")
-	require.Equal(t, ddr.ProtoUnknown, byPriority[4].Protocol, "no hints → unknown")
-	require.Equal(t, ddr.ProtoDoT, byPriority[5].Protocol, "DoT (mixed-case) → DoT")
+	require.Equal(t, ddr.ProtoDoH, byPriority[1].Protocol(), "h3 → DoH")
+	require.Equal(t, ddr.ProtoDoH, byPriority[2].Protocol(), "http/1.1 → DoH")
+	require.Equal(t, ddr.ProtoDoQ, byPriority[3].Protocol(), "doq → DoQ")
+	require.Equal(t, ddr.ProtoUnknown, byPriority[4].Protocol(), "no hints → unknown")
+	require.Equal(t, ddr.ProtoDoT, byPriority[5].Protocol(), "DoT (mixed-case) → DoT")
 }
 
 func TestDiscover_IPv6Hints(t *testing.T) {
@@ -177,7 +177,7 @@ func TestDiscover_IPv6Hints(t *testing.T) {
 	endpoints, err := ddr.Discover(t.Context(), r)
 	require.NoError(t, err)
 	require.Len(t, endpoints, 1)
-	require.Equal(t, ddr.ProtoDoT, endpoints[0].Protocol)
-	require.Len(t, endpoints[0].IPv6Hints, 1)
-	require.Equal(t, netip.MustParseAddr("2001:db8::1"), endpoints[0].IPv6Hints[0])
+	require.Equal(t, ddr.ProtoDoT, endpoints[0].Protocol())
+	require.Len(t, endpoints[0].IPv6Hints(), 1)
+	require.Equal(t, netip.MustParseAddr("2001:db8::1"), endpoints[0].IPv6Hints()[0])
 }

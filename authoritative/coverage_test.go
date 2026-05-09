@@ -48,7 +48,7 @@ c8        IN CNAME c9.example.com.
 c9        IN CNAME ns1.example.com.
 `
 
-func newCNAMEAuth(t *testing.T) authoritative.Authoritative {
+func newCNAMEAuth(t *testing.T) *authoritative.Authoritative {
 	t.Helper()
 	z, err := zonefile.Parse(strings.NewReader(cnameZone))
 	require.NoError(t, err)
@@ -304,7 +304,7 @@ func TestUpdateZoneNotSOA(t *testing.T) {
 
 // startUpdatableLocal returns an authoritative server (with a known zone)
 // listening on UDP, suitable for exchanging UPDATE requests in-process.
-func startUpdatableLocal(t *testing.T) (authoritative.Authoritative, netip.AddrPort) {
+func startUpdatableLocal(t *testing.T) (*authoritative.Authoritative, netip.AddrPort) {
 	t.Helper()
 	z, err := zonefile.Parse(strings.NewReader(updateZone))
 	require.NoError(t, err)

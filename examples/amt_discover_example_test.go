@@ -41,7 +41,7 @@ func Example_amt_discover() {
 	}
 
 	for _, rl := range relays {
-		fmt.Printf("prio=%d weight=%d port=%d %s\n", rl.Priority, rl.Weight, rl.Port, rl.Target)
+		fmt.Printf("prio=%d weight=%d port=%d %s\n", rl.Priority(), rl.Weight(), rl.Port(), rl.Target())
 	}
 
 	// OUTPUT:

@@ -30,23 +30,23 @@ options ndots:3 timeout:7 attempts:4 use-vc
 		netip.MustParseAddrPort("1.1.1.1:53"),
 		netip.MustParseAddrPort("8.8.8.8:5353"),
 		netip.MustParseAddrPort("[::1]:53"),
-	}, cfg.Nameservers)
+	}, cfg.Nameservers())
 
-	require.Equal(t, 2, len(cfg.Search))
-	require.Equal(t, "example.com.", cfg.Search[0].String())
-	require.Equal(t, 3, cfg.Ndots)
-	require.Equal(t, 7*time.Second, cfg.Timeout)
-	require.Equal(t, 4, cfg.Attempts)
-	require.Contains(t, cfg.Verbatim, "options use-vc")
+	require.Equal(t, 2, len(cfg.Search()))
+	require.Equal(t, "example.com.", cfg.Search()[0].String())
+	require.Equal(t, 3, cfg.Ndots())
+	require.Equal(t, 7*time.Second, cfg.Timeout())
+	require.Equal(t, 4, cfg.Attempts())
+	require.Contains(t, cfg.Verbatim(), "options use-vc")
 }
 
 func TestParseDefaults(t *testing.T) {
 	t.Parallel()
 	cfg, err := resolvconf.Parse(strings.NewReader("nameserver 9.9.9.9\n"))
 	require.NoError(t, err)
-	require.Equal(t, 1, cfg.Ndots)
-	require.Equal(t, 5*time.Second, cfg.Timeout)
-	require.Equal(t, 2, cfg.Attempts)
+	require.Equal(t, 1, cfg.Ndots())
+	require.Equal(t, 5*time.Second, cfg.Timeout())
+	require.Equal(t, 2, cfg.Attempts())
 }
 
 // TestParseSkipsMalformedAndPreservesUnknown exercises the branches that drop
@@ -63,10 +63,10 @@ func TestParseSkipsMalformedAndPreservesUnknown(t *testing.T) {
 		"sortlist 10.0.0.0/8\n"
 	cfg, err := resolvconf.Parse(strings.NewReader(in))
 	require.NoError(t, err)
-	require.Empty(t, cfg.Nameservers, "bare nameserver and invalid address must be skipped")
-	require.Len(t, cfg.Search, 1, "only the valid search entry should survive")
-	require.Equal(t, "valid.example.com.", cfg.Search[0].String())
-	require.Contains(t, cfg.Verbatim, "sortlist 10.0.0.0/8", "unknown directive must be preserved verbatim")
+	require.Empty(t, cfg.Nameservers(), "bare nameserver and invalid address must be skipped")
+	require.Len(t, cfg.Search(), 1, "only the valid search entry should survive")
+	require.Equal(t, "valid.example.com.", cfg.Search()[0].String())
+	require.Contains(t, cfg.Verbatim(), "sortlist 10.0.0.0/8", "unknown directive must be preserved verbatim")
 }
 
 // TestParseDomainInvalid covers the domain directive when the name is invalid:
@@ -76,7 +76,7 @@ func TestParseDomainInvalid(t *testing.T) {
 	tooLong := strings.Repeat("a", 64) + ".example.com"
 	cfg, err := resolvconf.Parse(strings.NewReader("domain " + tooLong + "\n"))
 	require.NoError(t, err)
-	require.Empty(t, cfg.Search)
+	require.Empty(t, cfg.Search())
 }
 
 // errReader returns a fixed error from Read, exercising the bufio.Scanner

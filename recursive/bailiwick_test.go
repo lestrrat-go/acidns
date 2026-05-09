@@ -81,7 +81,7 @@ func TestRecordsAtFiltersByOwner(t *testing.T) {
 // caps negative caching at 24 hours; the resolver's default is 1 hour.
 func TestEntryFromResponseCapsNegativeTTL(t *testing.T) {
 	t.Parallel()
-	r := &recursive{maxNegTTL: time.Hour}
+	r := &Recursive{maxNegTTL: time.Hour}
 
 	soa := wire.NewRecord(wire.MustParseName("evil.example."), 365*24*time.Hour,
 		rdata.NewSOA(

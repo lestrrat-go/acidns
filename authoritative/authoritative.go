@@ -30,15 +30,10 @@ var ErrNoSOA = errors.New("authoritative: zone has no SOA")
 // zone with a self-referential CNAME loop cannot stall a request.
 const maxCNAMEChain = 8
 
-// Authoritative is the public face of the authoritative server. It both
-// implements acidns.Handler and exposes zone management methods.
-type Authoritative interface {
-	acidns.Handler
-	AddZone(z zonefile.Zone) error
-	Zones() []wire.Name
-}
-
-type authoritative struct {
+// Authoritative is a master-file-backed authoritative DNS server. It
+// implements [acidns.Handler] and exposes zone management methods.
+// Construct via [New].
+type Authoritative struct {
 	mu            sync.RWMutex
 	zones         map[string]*zoneIndex
 	notifyHandler NotifyHandler
@@ -56,9 +51,9 @@ type zoneIndex struct {
 	namesExist map[string]struct{}      // names with records, plus empty non-terminals
 }
 
-// New returns a new Authoritative.
-func New(opts ...Option) (Authoritative, error) {
-	a := &authoritative{zones: make(map[string]*zoneIndex)}
+// New returns a new [*Authoritative].
+func New(opts ...Option) (*Authoritative, error) {
+	a := &Authoritative{zones: make(map[string]*zoneIndex)}
 	c := &config{maxNotifyInflight: 32}
 	for _, o := range opts {
 		o.applyAuth(c)
@@ -78,7 +73,7 @@ func New(opts ...Option) (Authoritative, error) {
 	return a, nil
 }
 
-func (a *authoritative) AddZone(z zonefile.Zone) error {
+func (a *Authoritative) AddZone(z zonefile.Zone) error {
 	soa, soaRec, ok := z.SOA()
 	if !ok {
 		return fmt.Errorf("%w: %s", ErrNoSOA, z.Origin())
@@ -115,7 +110,7 @@ func (a *authoritative) AddZone(z zonefile.Zone) error {
 	return nil
 }
 
-func (a *authoritative) Zones() []wire.Name {
+func (a *Authoritative) Zones() []wire.Name {
 	a.mu.RLock()
 	defer a.mu.RUnlock()
 	out := make([]wire.Name, 0, len(a.zones))
@@ -126,7 +121,7 @@ func (a *authoritative) Zones() []wire.Name {
 }
 
 // ServeDNS implements acidns.Handler.
-func (a *authoritative) ServeDNS(ctx context.Context, w acidns.ResponseWriter, q wire.Message) {
+func (a *Authoritative) ServeDNS(ctx context.Context, w acidns.ResponseWriter, q wire.Message) {
 	if q.Flags().Opcode() == wire.OpcodeUpdate {
 		a.serveUpdate(ctx, w, q)
 		return
@@ -237,7 +232,7 @@ func StreamAXFR(w acidns.ResponseWriter, q wire.Message, soa wire.Record, body [
 // the final message ends with the apex SOA. Each message is a complete,
 // self-framed DNS response with AA=1; per RFC 5936 §2.2 a receiver
 // reassembles the zone by concatenating answer sections in arrival order.
-func (a *authoritative) serveAXFR(ctx context.Context, w acidns.ResponseWriter, q wire.Message) {
+func (a *Authoritative) serveAXFR(ctx context.Context, w acidns.ResponseWriter, q wire.Message) {
 	question := q.Questions()[0]
 	header := func() *wire.Builder {
 		return wire.NewBuilder().
@@ -283,7 +278,7 @@ func estimateRecordSize(rec wire.Record) int {
 	return rec.Name().WireLen() + fixedHeader + len(rdata.Pack(rec.RData()))
 }
 
-func (a *authoritative) answer(q wire.Message) wire.Message {
+func (a *Authoritative) answer(q wire.Message) wire.Message {
 	b := wire.NewBuilder().
 		ID(q.ID()).
 		Response(true).
@@ -377,7 +372,7 @@ func mustBuild(b *wire.Builder, q wire.Message) wire.Message {
 }
 
 // findZone returns the deepest zone whose origin is an ancestor of name.
-func (a *authoritative) findZone(name wire.Name) *zoneIndex {
+func (a *Authoritative) findZone(name wire.Name) *zoneIndex {
 	a.mu.RLock()
 	defer a.mu.RUnlock()
 	cur := name

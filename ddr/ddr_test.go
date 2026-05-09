@@ -56,11 +56,11 @@ func TestDiscover(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, endpoints, 2)
 
-	require.Equal(t, ddr.ProtoDoH, endpoints[0].Protocol)
-	require.Equal(t, "/dns-query{?dns}", endpoints[0].DOHPath)
-	require.Equal(t, uint16(443), endpoints[0].Port)
-	require.Len(t, endpoints[0].IPv4Hints, 1)
+	require.Equal(t, ddr.ProtoDoH, endpoints[0].Protocol())
+	require.Equal(t, "/dns-query{?dns}", endpoints[0].DOHPath())
+	require.Equal(t, uint16(443), endpoints[0].Port())
+	require.Len(t, endpoints[0].IPv4Hints(), 1)
 
-	require.Equal(t, ddr.ProtoDoT, endpoints[1].Protocol)
-	require.Equal(t, uint16(853), endpoints[1].Port)
+	require.Equal(t, ddr.ProtoDoT, endpoints[1].Protocol())
+	require.Equal(t, uint16(853), endpoints[1].Port())
 }

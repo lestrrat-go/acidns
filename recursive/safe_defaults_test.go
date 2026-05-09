@@ -62,4 +62,4 @@ func TestServeDNSAllowNoRDOptIn(t *testing.T) {
 		"WithAllowNoRD must let RD=0 queries reach the resolver")
 }
 
-var _ = acidns.Handler(nil) // ensure recursive.Recursive composes cleanly
+var _ acidns.Handler = (*recursive.Recursive)(nil) // compile-time check that *Recursive implements acidns.Handler

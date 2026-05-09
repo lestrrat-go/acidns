@@ -100,7 +100,7 @@ func TestWalkerFix1ValidSigLastNotTruncated(t *testing.T) {
 	wrapped := &extraSigPrepender{inner: src, target: target, qtype: rrtype.A, extras: 4}
 	w, err := validator.NewWalker(wrapped,
 		validator.WithWalkerAnchors(anchor),
-		validator.WithWalkerNow(func() time.Time { return now }),
+		validator.WithWalkerClock(func() time.Time { return now }),
 		validator.WithWalkerMaxRRSIGsTry(5),
 	)
 	require.NoError(t, err)
@@ -123,7 +123,7 @@ func TestWalkerFix2BogusWrapsErrBogus(t *testing.T) {
 		src, _, anchor := buildChain(t, rdata.AlgECDSAP256SHA256, now)
 		w, err := validator.NewWalker(src,
 			validator.WithWalkerAnchors(anchor),
-			validator.WithWalkerNow(func() time.Time { return now.Add(48 * time.Hour) }),
+			validator.WithWalkerClock(func() time.Time { return now.Add(48 * time.Hour) }),
 			validator.WithWalkerBogusPolicy(validator.BogusReturnAnswer),
 		)
 		require.NoError(t, err)
@@ -141,7 +141,7 @@ func TestWalkerFix2BogusWrapsErrBogus(t *testing.T) {
 		}
 		w, err := validator.NewWalker(wrapped,
 			validator.WithWalkerAnchors(anchor),
-			validator.WithWalkerNow(func() time.Time { return now }),
+			validator.WithWalkerClock(func() time.Time { return now }),
 			validator.WithWalkerBogusPolicy(validator.BogusReturnAnswer),
 		)
 		require.NoError(t, err)
@@ -218,7 +218,7 @@ func TestValidatorFix4SkewTolerance(t *testing.T) {
 
 	t.Run("skew=0 rejects future inception", func(t *testing.T) {
 		v, err := validator.New(
-			validator.WithValidatorNow(func() time.Time { return now }),
+			validator.WithValidatorClock(func() time.Time { return now }),
 			validator.WithValidatorBogusPolicy(validator.BogusReturnAnswer),
 		)
 		require.NoError(t, err)
@@ -228,7 +228,7 @@ func TestValidatorFix4SkewTolerance(t *testing.T) {
 	})
 	t.Run("skew=1m accepts future inception", func(t *testing.T) {
 		v, err := validator.New(
-			validator.WithValidatorNow(func() time.Time { return now }),
+			validator.WithValidatorClock(func() time.Time { return now }),
 			validator.WithValidatorSkew(time.Minute),
 		)
 		require.NoError(t, err)

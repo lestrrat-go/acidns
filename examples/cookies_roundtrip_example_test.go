@@ -19,7 +19,11 @@ func Example_cookies_roundtrip() {
 		return
 	}
 	defer pool.Close()
-	srv := cookies.NewServer(pool)
+	srv, err := cookies.NewServer(pool)
+	if err != nil {
+		fmt.Println("new server:", err)
+		return
+	}
 
 	clientCookie := [8]byte{1, 2, 3, 4, 5, 6, 7, 8}
 	clientAddr := netip.MustParseAddr("203.0.113.1")
@@ -49,7 +53,11 @@ func Example_cookies_roundtrip() {
 	// Client side: Apply installs a cookie EDNS option on outgoing
 	// queries. The first call emits a client-only cookie; we just check
 	// that the option is present (its bytes are random by design).
-	c := cookies.NewClient()
+	c, err := cookies.NewClient()
+	if err != nil {
+		fmt.Println("new client:", err)
+		return
+	}
 	server := netip.MustParseAddrPort("198.51.100.10:53")
 	b := wire.NewEDNSBuilder()
 	b = c.Apply(server, b)

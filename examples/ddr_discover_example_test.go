@@ -46,7 +46,7 @@ func Example_ddr_discover() {
 	}
 	for _, e := range endpoints {
 		fmt.Printf("priority=%d proto=%s target=%s port=%d path=%s\n",
-			e.Priority, e.Protocol, e.Target, e.Port, e.DOHPath)
+			e.Priority(), e.Protocol(), e.Target(), e.Port(), e.DOHPath())
 	}
 
 	// OUTPUT:

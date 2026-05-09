@@ -50,10 +50,10 @@ func WithWalkerBogusPolicy(p BogusPolicy) WalkerOption {
 	return walkerOptionFunc(func(w *walker) { w.bogusPolicy = p })
 }
 
-// WithWalkerNow injects a clock. Tests use this to simulate
+// WithWalkerClock injects a clock. Tests use this to simulate
 // signature inception and expiration without sleeping. Default is
 // time.Now.
-func WithWalkerNow(now func() time.Time) WalkerOption {
+func WithWalkerClock(now func() time.Time) WalkerOption {
 	return walkerOptionFunc(func(w *walker) {
 		if now != nil {
 			w.now = now

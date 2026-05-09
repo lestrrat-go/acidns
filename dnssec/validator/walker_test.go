@@ -45,7 +45,7 @@ func buildChain(t *testing.T, alg rdata.DNSSECAlgorithm, now time.Time) (*fixtur
 
 	w, err := validator.NewWalker(src,
 		validator.WithWalkerAnchors(anchor),
-		validator.WithWalkerNow(func() time.Time { return now }),
+		validator.WithWalkerClock(func() time.Time { return now }),
 	)
 	require.NoError(t, err)
 	return src, w, anchor
@@ -96,7 +96,7 @@ func TestWalkerNTAShortCircuit(t *testing.T) {
 	w, err := validator.NewWalker(src,
 		validator.WithWalkerAnchors(anchor),
 		validator.WithWalkerNTAStore(store),
-		validator.WithWalkerNow(func() time.Time { return now }),
+		validator.WithWalkerClock(func() time.Time { return now }),
 	)
 	require.NoError(t, err)
 
@@ -114,7 +114,7 @@ func TestWalkerNoTrustAnchor(t *testing.T) {
 	require.NoError(t, err)
 	w, err := validator.NewWalker(src,
 		validator.WithWalkerAnchors(otherAnchor),
-		validator.WithWalkerNow(func() time.Time { return now }),
+		validator.WithWalkerClock(func() time.Time { return now }),
 	)
 	require.NoError(t, err)
 	ans, err := w.Resolve(t.Context(), wire.MustParseName("example.com."), rrtype.A)
@@ -129,7 +129,7 @@ func TestWalkerExpiredSignatureBogus(t *testing.T) {
 	// Walker with an effective time well past signature expiration.
 	wFuture, err := validator.NewWalker(src,
 		validator.WithWalkerAnchors(anchor),
-		validator.WithWalkerNow(func() time.Time { return now.Add(48 * time.Hour) }),
+		validator.WithWalkerClock(func() time.Time { return now.Add(48 * time.Hour) }),
 		validator.WithWalkerBogusPolicy(validator.BogusReturnAnswer),
 	)
 	require.NoError(t, err)
@@ -158,7 +158,7 @@ func TestWalkerInsecureDelegation(t *testing.T) {
 	anchor, _ := validator.NewAnchor(rootDS.apex, rootDS.ds)
 	w, err := validator.NewWalker(src,
 		validator.WithWalkerAnchors(anchor),
-		validator.WithWalkerNow(func() time.Time { return now }),
+		validator.WithWalkerClock(func() time.Time { return now }),
 	)
 	require.NoError(t, err)
 
@@ -177,7 +177,7 @@ func TestWalkerTamperedAnswerBogus(t *testing.T) {
 
 	wTamper, err := validator.NewWalker(src,
 		validator.WithWalkerAnchors(anchor),
-		validator.WithWalkerNow(func() time.Time { return now }),
+		validator.WithWalkerClock(func() time.Time { return now }),
 		validator.WithWalkerBogusPolicy(validator.BogusReturnAnswer),
 	)
 	require.NoError(t, err)
@@ -250,7 +250,7 @@ func TestWalkerMaxZoneCutsBomb(t *testing.T) {
 	src, _, anchor := buildChain(t, rdata.AlgECDSAP256SHA256, now)
 	wTight, err := validator.NewWalker(src,
 		validator.WithWalkerAnchors(anchor),
-		validator.WithWalkerNow(func() time.Time { return now }),
+		validator.WithWalkerClock(func() time.Time { return now }),
 		validator.WithWalkerMaxZoneCuts(1),
 		validator.WithWalkerBogusPolicy(validator.BogusReturnAnswer),
 	)

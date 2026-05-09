@@ -36,11 +36,28 @@ func DiscoveryName(domain wire.Name) (wire.Name, error) {
 
 // Relay is a single AMT relay candidate.
 type Relay struct {
-	Priority uint16
-	Weight   uint16
-	Port     uint16
-	Target   wire.Name
+	priority uint16
+	weight   uint16
+	port     uint16
+	target   wire.Name
 }
+
+// NewRelay constructs a Relay candidate with the given SRV-style fields.
+func NewRelay(priority, weight, port uint16, target wire.Name) Relay {
+	return Relay{priority: priority, weight: weight, port: port, target: target}
+}
+
+// Priority returns the relay's RFC 2782 priority.
+func (r Relay) Priority() uint16 { return r.priority }
+
+// Weight returns the relay's RFC 2782 weight.
+func (r Relay) Weight() uint16 { return r.weight }
+
+// Port returns the relay's UDP port.
+func (r Relay) Port() uint16 { return r.port }
+
+// Target returns the relay's target host name.
+func (r Relay) Target() wire.Name { return r.target }
 
 // Discover queries `_amt._udp.<domain>` for SRV records and returns the
 // candidate relays sorted by RFC 2782 priority (ascending; weight ties
@@ -63,13 +80,8 @@ func Discover(ctx context.Context, r acidns.Resolver, domain wire.Name) ([]Relay
 		if !ok {
 			continue
 		}
-		out = append(out, Relay{
-			Priority: s.Priority(),
-			Weight:   s.Weight(),
-			Port:     s.Port(),
-			Target:   s.Target(),
-		})
+		out = append(out, NewRelay(s.Priority(), s.Weight(), s.Port(), s.Target()))
 	}
-	sort.SliceStable(out, func(i, j int) bool { return out[i].Priority < out[j].Priority })
+	sort.SliceStable(out, func(i, j int) bool { return out[i].priority < out[j].priority })
 	return out, nil
 }

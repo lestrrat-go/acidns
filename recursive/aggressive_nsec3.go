@@ -447,7 +447,7 @@ func nsec3OwnerHashFromName(owner wire.Name) ([]byte, error) {
 // a §5.3/§5.4 proof can be assembled, returns a synthesised Entry.
 // Returns (zero, false) when aggressive use is disabled, no
 // matching zone is in the index, or no usable proof exists.
-func (r *recursive) synthesiseFromNSEC3(name wire.Name, t rrtype.Type) (Entry, bool) {
+func (r *Recursive) synthesiseFromNSEC3(name wire.Name, t rrtype.Type) (Entry, bool) {
 	if !r.aggressiveNSEC || r.nsec3Idx == nil {
 		return Entry{}, false
 	}

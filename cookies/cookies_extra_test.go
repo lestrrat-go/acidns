@@ -42,10 +42,12 @@ func TestServerMaxAgeDefault(t *testing.T) {
 	pool, _ := cookies.NewSecretPool()
 	t.Cleanup(pool.Close)
 
-	srv := cookies.NewServer(pool)
+	srv, err := cookies.NewServer(pool)
+	require.NoError(t, err)
 	require.Equal(t, time.Hour, srv.MaxAge())
 
-	srv2 := cookies.NewServer(pool, cookies.WithServerMaxAge(17*time.Minute))
+	srv2, err := cookies.NewServer(pool, cookies.WithServerMaxAge(17*time.Minute))
+	require.NoError(t, err)
 	require.Equal(t, 17*time.Minute, srv2.MaxAge())
 }
 
@@ -54,13 +56,14 @@ func TestServerValidateMalformedCookies(t *testing.T) {
 	t.Parallel()
 	pool, _ := cookies.NewSecretPool()
 	t.Cleanup(pool.Close)
-	srv := cookies.NewServer(pool)
+	srv, err := cookies.NewServer(pool)
+	require.NoError(t, err)
 	cc := [8]byte{1, 2, 3, 4, 5, 6, 7, 8}
 	addr := netip.MustParseAddr("203.0.113.99")
 	now := time.Unix(1_700_000_000, 0).UTC()
 
 	// Wrong length.
-	_, err := srv.Validate(make([]byte, 8), cc, addr, now)
+	_, err = srv.Validate(make([]byte, 8), cc, addr, now)
 	require.ErrorIs(t, err, cookies.ErrCookieMalformed)
 
 	// Wrong version (byte 0 != 1).
@@ -76,14 +79,15 @@ func TestServerValidateFutureTimestamp(t *testing.T) {
 	t.Parallel()
 	pool, _ := cookies.NewSecretPool()
 	t.Cleanup(pool.Close)
-	srv := cookies.NewServer(pool)
+	srv, err := cookies.NewServer(pool)
+	require.NoError(t, err)
 	cc := [8]byte{}
 	addr := netip.MustParseAddr("203.0.113.50")
 	future := time.Unix(1_700_000_000, 0).UTC()
 	cookie := srv.Make(cc, addr, future)
 
 	// "now" is 10 minutes BEFORE the cookie's timestamp.
-	_, err := srv.Validate(cookie, cc, addr, future.Add(-10*time.Minute))
+	_, err = srv.Validate(cookie, cc, addr, future.Add(-10*time.Minute))
 	require.ErrorIs(t, err, cookies.ErrCookieExpired)
 }
 
@@ -92,13 +96,14 @@ func TestServerCookieIPv6(t *testing.T) {
 	t.Parallel()
 	pool, _ := cookies.NewSecretPool()
 	t.Cleanup(pool.Close)
-	srv := cookies.NewServer(pool)
+	srv, err := cookies.NewServer(pool)
+	require.NoError(t, err)
 	cc := [8]byte{9, 9, 9, 9, 9, 9, 9, 9}
 	addr := netip.MustParseAddr("2001:db8::1")
 	now := time.Unix(1_700_000_000, 0).UTC()
 
 	cookie := srv.Make(cc, addr, now)
-	_, err := srv.Validate(cookie, cc, addr, now)
+	_, err = srv.Validate(cookie, cc, addr, now)
 	require.NoError(t, err)
 
 	// Different IPv6 address → mismatch.
@@ -113,13 +118,14 @@ func TestServerCookieZeroAddr(t *testing.T) {
 	t.Parallel()
 	pool, _ := cookies.NewSecretPool()
 	t.Cleanup(pool.Close)
-	srv := cookies.NewServer(pool)
+	srv, err := cookies.NewServer(pool)
+	require.NoError(t, err)
 	cc := [8]byte{}
 	var zero netip.Addr
 	now := time.Unix(1_700_000_000, 0).UTC()
 
 	cookie := srv.Make(cc, zero, now)
-	_, err := srv.Validate(cookie, cc, zero, now)
+	_, err = srv.Validate(cookie, cc, zero, now)
 	require.NoError(t, err)
 }
 
@@ -128,7 +134,8 @@ func TestServerCookieZeroAddr(t *testing.T) {
 // cookie cached on first call.
 func TestClientApplyReusesClientCookie(t *testing.T) {
 	t.Parallel()
-	c := cookies.NewClient()
+	c, err := cookies.NewClient()
+	require.NoError(t, err)
 	server := netip.MustParseAddrPort("[2001:db8::53]:53")
 
 	b := wire.NewEDNSBuilder()
@@ -149,7 +156,8 @@ func TestClientApplyReusesClientCookie(t *testing.T) {
 // subsequent Apply still emits client-only.
 func TestClientObserveIgnoresMissingCookie(t *testing.T) {
 	t.Parallel()
-	c := cookies.NewClient()
+	c, err := cookies.NewClient()
+	require.NoError(t, err)
 	server := netip.MustParseAddrPort("198.51.100.20:53")
 
 	// Response with no EDNS at all.
@@ -169,7 +177,8 @@ func TestClientObserveIgnoresMissingCookie(t *testing.T) {
 // Observe.
 func TestClientObserveIgnoresShortCookie(t *testing.T) {
 	t.Parallel()
-	c := cookies.NewClient()
+	c, err := cookies.NewClient()
+	require.NoError(t, err)
 	server := netip.MustParseAddrPort("198.51.100.21:53")
 
 	// Server cookie shorter than 8 bytes is not allowed by
@@ -192,7 +201,8 @@ func TestClientObserveIgnoresShortCookie(t *testing.T) {
 // TestClientRetryMissingCookie covers the BADCOOKIE-without-cookie path.
 func TestClientRetryMissingCookie(t *testing.T) {
 	t.Parallel()
-	c := cookies.NewClient()
+	c, err := cookies.NewClient()
+	require.NoError(t, err)
 	server := netip.MustParseAddrPort("198.51.100.30:53")
 
 	// Build a BADCOOKIE response with EDNS but no cookie option.
@@ -219,7 +229,8 @@ func TestClientRetryMissingCookie(t *testing.T) {
 // and rely on extractCookieFromMsg returning sc=nil.
 func TestClientRetryShortServerCookie(t *testing.T) {
 	t.Parallel()
-	c := cookies.NewClient()
+	c, err := cookies.NewClient()
+	require.NoError(t, err)
 	server := netip.MustParseAddrPort("198.51.100.31:53")
 	cc := [8]byte{2, 2, 2, 2, 2, 2, 2, 2}
 
@@ -238,7 +249,8 @@ func TestClientRetryShortServerCookie(t *testing.T) {
 // branch in extractCookieFromMsg.
 func TestClientObserveSkipsNonCookieOptions(t *testing.T) {
 	t.Parallel()
-	c := cookies.NewClient()
+	c, err := cookies.NewClient()
+	require.NoError(t, err)
 	server := netip.MustParseAddrPort("198.51.100.40:53")
 
 	// Build EDNS with only an extended-error option (not a cookie).
@@ -263,10 +275,11 @@ func TestClientCacheEvictsAtMaxEntries(t *testing.T) {
 	t.Parallel()
 
 	now := time.Unix(1_700_000_000, 0)
-	c := cookies.NewClient(
+	c, err := cookies.NewClient(
 		cookies.WithClientMaxEntries(4),
 		cookies.WithClientClock(func() time.Time { return now }),
 	)
+	require.NoError(t, err)
 
 	// Fill the cap with four distinct servers, advancing the clock
 	// each time so the LRU ordering is well-defined.

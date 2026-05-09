@@ -23,7 +23,7 @@ ns1 IN  A    192.0.2.10
 sub.deep IN A 192.0.2.99
 `
 
-func newWildcardAuth(t *testing.T) authoritative.Authoritative {
+func newWildcardAuth(t *testing.T) *authoritative.Authoritative {
 	t.Helper()
 	z, err := zonefile.Parse(strings.NewReader(wildcardZone))
 	require.NoError(t, err)

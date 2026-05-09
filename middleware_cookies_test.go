@@ -53,7 +53,9 @@ func newCookiesServer(t *testing.T) cookies.Server {
 	t.Helper()
 	pool, _ := cookies.NewSecretPool() // no auto-rotation in tests
 	t.Cleanup(pool.Close)
-	return cookies.NewServer(pool)
+	srv, err := cookies.NewServer(pool)
+	require.NoError(t, err)
+	return srv
 }
 
 func extractCookieOpt(t *testing.T, m wire.Message) ([8]byte, []byte) {

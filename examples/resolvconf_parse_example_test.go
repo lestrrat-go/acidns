@@ -22,9 +22,9 @@ options ndots:2
 		return
 	}
 
-	fmt.Println("nameservers:", cfg.Nameservers)
-	fmt.Println("search:", cfg.Search)
-	fmt.Println("ndots:", cfg.Ndots)
+	fmt.Println("nameservers:", cfg.Nameservers())
+	fmt.Println("search:", cfg.Search())
+	fmt.Println("ndots:", cfg.Ndots())
 
 	// OUTPUT:
 	// nameservers: [1.1.1.1:53 8.8.8.8:53]

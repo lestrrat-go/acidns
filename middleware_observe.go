@@ -45,14 +45,89 @@ import (
 // are therefore not a reliable signal for handler crashes; use a
 // process-level supervisor instead.
 type QueryEvent struct {
-	Request    wire.Message
-	Response   wire.Message
-	RemoteAddr netip.AddrPort
-	LocalAddr  netip.AddrPort
-	Network    string
-	Latency    time.Duration
-	Envelopes  int
-	Err        error
+	request    wire.Message
+	response   wire.Message
+	remoteAddr netip.AddrPort
+	localAddr  netip.AddrPort
+	network    string
+	latency    time.Duration
+	envelopes  int
+	err        error
+}
+
+// Request returns the inbound request message.
+func (e QueryEvent) Request() wire.Message { return e.request }
+
+// Response returns the captured response message; nil for dropped or
+// streamed exchanges. See QueryEvent for the precise semantics.
+func (e QueryEvent) Response() wire.Message { return e.response }
+
+// RemoteAddr returns the client's address.
+func (e QueryEvent) RemoteAddr() netip.AddrPort { return e.remoteAddr }
+
+// LocalAddr returns the server-side address that handled the query.
+func (e QueryEvent) LocalAddr() netip.AddrPort { return e.localAddr }
+
+// Network returns the listener network ("udp", "tcp", etc.).
+func (e QueryEvent) Network() string { return e.network }
+
+// Latency returns the time spent inside the inner handler.
+func (e QueryEvent) Latency() time.Duration { return e.latency }
+
+// Envelopes returns the number of WriteMsg calls made by the inner
+// handler (0 = dropped, 1 = single response, >1 = streamed).
+func (e QueryEvent) Envelopes() int { return e.envelopes }
+
+// Err returns the error returned by the FIRST WriteMsg call, if any.
+func (e QueryEvent) Err() error { return e.err }
+
+// QueryEventBuilder builds a QueryEvent.
+type QueryEventBuilder struct {
+	e QueryEvent
+}
+
+// NewQueryEventBuilder returns a fresh QueryEventBuilder.
+func NewQueryEventBuilder() *QueryEventBuilder { return &QueryEventBuilder{} }
+
+// Request sets the inbound request message.
+func (b *QueryEventBuilder) Request(v wire.Message) *QueryEventBuilder { b.e.request = v; return b }
+
+// Response sets the captured response.
+func (b *QueryEventBuilder) Response(v wire.Message) *QueryEventBuilder {
+	b.e.response = v
+	return b
+}
+
+// RemoteAddr sets the client address.
+func (b *QueryEventBuilder) RemoteAddr(v netip.AddrPort) *QueryEventBuilder {
+	b.e.remoteAddr = v
+	return b
+}
+
+// LocalAddr sets the server address.
+func (b *QueryEventBuilder) LocalAddr(v netip.AddrPort) *QueryEventBuilder {
+	b.e.localAddr = v
+	return b
+}
+
+// Network sets the listener network identifier.
+func (b *QueryEventBuilder) Network(v string) *QueryEventBuilder { b.e.network = v; return b }
+
+// Latency sets the measured inner-handler latency.
+func (b *QueryEventBuilder) Latency(v time.Duration) *QueryEventBuilder {
+	b.e.latency = v
+	return b
+}
+
+// Envelopes sets the WriteMsg envelope count.
+func (b *QueryEventBuilder) Envelopes(v int) *QueryEventBuilder { b.e.envelopes = v; return b }
+
+// Err sets the first WriteMsg error, if any.
+func (b *QueryEventBuilder) Err(v error) *QueryEventBuilder { b.e.err = v; return b }
+
+// Build returns the assembled QueryEvent.
+func (b *QueryEventBuilder) Build() (QueryEvent, error) {
+	return b.e, nil
 }
 
 // QueryObserver receives one [QueryEvent] per Handler invocation. It
@@ -86,16 +161,17 @@ func (o *observed) ServeDNS(ctx context.Context, w ResponseWriter, q wire.Messag
 	captured := &capturingWriter{ResponseWriter: w}
 	started := time.Now()
 	o.inner.ServeDNS(ctx, captured, q)
-	o.obs(QueryEvent{
-		Request:    q,
-		Response:   captured.snapshot(),
-		RemoteAddr: w.RemoteAddr(),
-		LocalAddr:  w.LocalAddr(),
-		Network:    w.Network(),
-		Latency:    time.Since(started),
-		Envelopes:  captured.envelopeCount(),
-		Err:        captured.firstErr(),
-	})
+	ev, _ := NewQueryEventBuilder().
+		Request(q).
+		Response(captured.snapshot()).
+		RemoteAddr(w.RemoteAddr()).
+		LocalAddr(w.LocalAddr()).
+		Network(w.Network()).
+		Latency(time.Since(started)).
+		Envelopes(captured.envelopeCount()).
+		Err(captured.firstErr()).
+		Build()
+	o.obs(ev)
 }
 
 // capturingWriter is a ResponseWriter that records the message handed

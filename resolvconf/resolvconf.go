@@ -26,13 +26,32 @@ const DefaultPath = "/etc/resolv.conf"
 
 // Config is a parsed resolv.conf snapshot.
 type Config struct {
-	Nameservers []netip.AddrPort
-	Search      []wire.Name
-	Ndots       int
-	Timeout     time.Duration
-	Attempts    int
-	Verbatim    []string
+	nameservers []netip.AddrPort
+	search      []wire.Name
+	ndots       int
+	timeout     time.Duration
+	attempts    int
+	verbatim    []string
 }
+
+// Nameservers returns the parsed nameserver entries in source order.
+func (c *Config) Nameservers() []netip.AddrPort { return c.nameservers }
+
+// Search returns the parsed search-list entries.
+func (c *Config) Search() []wire.Name { return c.search }
+
+// Ndots returns the ndots option value.
+func (c *Config) Ndots() int { return c.ndots }
+
+// Timeout returns the per-attempt timeout option value.
+func (c *Config) Timeout() time.Duration { return c.timeout }
+
+// Attempts returns the attempts option value.
+func (c *Config) Attempts() int { return c.attempts }
+
+// Verbatim returns directives and options the parser did not consume,
+// preserved verbatim so callers may surface them or pass them through.
+func (c *Config) Verbatim() []string { return c.verbatim }
 
 // Default values used when a field is absent or zero.
 const (
@@ -46,7 +65,7 @@ var ErrNoNameserver = errors.New("resolvconf: no nameserver entries")
 
 // Parse reads a Config from r.
 func Parse(r io.Reader) (*Config, error) {
-	cfg := &Config{Ndots: defaultNdots, Timeout: defaultTimeout, Attempts: defaultAttempts}
+	cfg := &Config{ndots: defaultNdots, timeout: defaultTimeout, attempts: defaultAttempts}
 	sc := bufio.NewScanner(r)
 	for sc.Scan() {
 		line := strings.TrimSpace(sc.Text())
@@ -63,20 +82,20 @@ func Parse(r io.Reader) (*Config, error) {
 			if err != nil {
 				continue
 			}
-			cfg.Nameservers = append(cfg.Nameservers, ap)
+			cfg.nameservers = append(cfg.nameservers, ap)
 		case "search":
-			cfg.Search = cfg.Search[:0]
+			cfg.search = cfg.search[:0]
 			for _, s := range fields[1:] {
 				n, err := wire.ParseName(s)
 				if err != nil {
 					continue
 				}
-				cfg.Search = append(cfg.Search, n)
+				cfg.search = append(cfg.search, n)
 			}
 		case "domain":
 			if len(fields) >= 2 {
 				if n, err := wire.ParseName(fields[1]); err == nil {
-					cfg.Search = []wire.Name{n}
+					cfg.search = []wire.Name{n}
 				}
 			}
 		case "options":
@@ -85,22 +104,22 @@ func Parse(r io.Reader) (*Config, error) {
 				switch {
 				case k == "ndots" && ok:
 					if n, err := strconv.Atoi(v); err == nil {
-						cfg.Ndots = n
+						cfg.ndots = n
 					}
 				case k == "timeout" && ok:
 					if n, err := strconv.Atoi(v); err == nil {
-						cfg.Timeout = time.Duration(n) * time.Second
+						cfg.timeout = time.Duration(n) * time.Second
 					}
 				case k == "attempts" && ok:
 					if n, err := strconv.Atoi(v); err == nil {
-						cfg.Attempts = n
+						cfg.attempts = n
 					}
 				default:
-					cfg.Verbatim = append(cfg.Verbatim, "options "+opt)
+					cfg.verbatim = append(cfg.verbatim, "options "+opt)
 				}
 			}
 		default:
-			cfg.Verbatim = append(cfg.Verbatim, line)
+			cfg.verbatim = append(cfg.verbatim, line)
 		}
 	}
 	if err := sc.Err(); err != nil {
@@ -132,4 +151,65 @@ func parseServer(s string) (netip.AddrPort, error) {
 		return netip.AddrPort{}, err
 	}
 	return netip.AddrPortFrom(addr, 53), nil
+}
+
+// ConfigBuilder constructs a Config programmatically. Build() always
+// returns a nil error; the signature is reserved so future validation
+// can be added without breaking callers.
+type ConfigBuilder struct {
+	cfg Config
+}
+
+// NewConfigBuilder returns a ConfigBuilder seeded with the package
+// defaults for ndots/timeout/attempts so the produced Config matches
+// what Parse would yield from an empty file.
+func NewConfigBuilder() *ConfigBuilder {
+	return &ConfigBuilder{cfg: Config{
+		ndots:    defaultNdots,
+		timeout:  defaultTimeout,
+		attempts: defaultAttempts,
+	}}
+}
+
+// Nameservers replaces the nameserver list.
+func (b *ConfigBuilder) Nameservers(ns ...netip.AddrPort) *ConfigBuilder {
+	b.cfg.nameservers = append(b.cfg.nameservers[:0], ns...)
+	return b
+}
+
+// Search replaces the search list.
+func (b *ConfigBuilder) Search(s ...wire.Name) *ConfigBuilder {
+	b.cfg.search = append(b.cfg.search[:0], s...)
+	return b
+}
+
+// Ndots sets the ndots option.
+func (b *ConfigBuilder) Ndots(n int) *ConfigBuilder {
+	b.cfg.ndots = n
+	return b
+}
+
+// Timeout sets the per-attempt timeout.
+func (b *ConfigBuilder) Timeout(d time.Duration) *ConfigBuilder {
+	b.cfg.timeout = d
+	return b
+}
+
+// Attempts sets the attempts option.
+func (b *ConfigBuilder) Attempts(n int) *ConfigBuilder {
+	b.cfg.attempts = n
+	return b
+}
+
+// Verbatim replaces the verbatim list of unrecognised directives.
+func (b *ConfigBuilder) Verbatim(v ...string) *ConfigBuilder {
+	b.cfg.verbatim = append(b.cfg.verbatim[:0], v...)
+	return b
+}
+
+// Build returns the assembled Config. The error return is reserved
+// for future validation; today it is always nil.
+func (b *ConfigBuilder) Build() (*Config, error) {
+	out := b.cfg
+	return &out, nil
 }

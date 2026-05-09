@@ -23,7 +23,7 @@ func TestKeepAliveDecodeReject(t *testing.T) {
 
 	t.Run("wrong type", func(t *testing.T) {
 		t.Parallel()
-		bad := dso.TLV{Type: dso.TypeRetryDelay, Data: make([]byte, 8)}
+		bad := dso.NewTLV(dso.TypeRetryDelay, make([]byte, 8))
 		in, ka, ok := dso.KeepAlive(bad)
 		require.False(t, ok)
 		require.Zero(t, in)
@@ -32,7 +32,7 @@ func TestKeepAliveDecodeReject(t *testing.T) {
 
 	t.Run("wrong length", func(t *testing.T) {
 		t.Parallel()
-		bad := dso.TLV{Type: dso.TypeKeepAlive, Data: make([]byte, 4)}
+		bad := dso.NewTLV(dso.TypeKeepAlive, make([]byte, 4))
 		_, _, ok := dso.KeepAlive(bad)
 		require.False(t, ok)
 	})
@@ -51,7 +51,7 @@ func TestRetryDelayDecodeReject(t *testing.T) {
 
 	t.Run("wrong type", func(t *testing.T) {
 		t.Parallel()
-		bad := dso.TLV{Type: dso.TypeKeepAlive, Data: make([]byte, 4)}
+		bad := dso.NewTLV(dso.TypeKeepAlive, make([]byte, 4))
 		d, ok := dso.RetryDelay(bad)
 		require.False(t, ok)
 		require.Zero(t, d)
@@ -59,7 +59,7 @@ func TestRetryDelayDecodeReject(t *testing.T) {
 
 	t.Run("wrong length", func(t *testing.T) {
 		t.Parallel()
-		bad := dso.TLV{Type: dso.TypeRetryDelay, Data: make([]byte, 2)}
+		bad := dso.NewTLV(dso.TypeRetryDelay, make([]byte, 2))
 		_, ok := dso.RetryDelay(bad)
 		require.False(t, ok)
 	})
@@ -69,20 +69,17 @@ func TestPaddingPackUnpack(t *testing.T) {
 	t.Parallel()
 	pad, err := dso.NewEncryptionPadding(16)
 	require.NoError(t, err)
-	require.Len(t, pad.Data, 16)
+	require.Len(t, pad.Data(), 16)
 
-	m := &dso.Message{
-		Primary:    dso.NewKeepAlive(30*time.Second, 5*time.Second),
-		Additional: []dso.TLV{pad},
-	}
+	m := dso.NewMessage(dso.NewKeepAlive(30*time.Second, 5*time.Second), pad)
 	wire, err := m.Pack()
 	require.NoError(t, err)
 
 	got, err := dso.Unpack(wire)
 	require.NoError(t, err)
-	require.Equal(t, dso.TypeKeepAlive, got.Primary.Type)
-	require.Len(t, got.Additional, 1)
-	require.Equal(t, dso.TypeEncryptionPadding, got.Additional[0].Type)
+	require.Equal(t, dso.TypeKeepAlive, got.Primary().Type())
+	require.Len(t, got.Additional(), 1)
+	require.Equal(t, dso.TypeEncryptionPadding, got.Additional()[0].Type())
 }
 
 func TestNewEncryptionPaddingRange(t *testing.T) {
@@ -92,8 +89,8 @@ func TestNewEncryptionPaddingRange(t *testing.T) {
 		t.Parallel()
 		pad, err := dso.NewEncryptionPadding(0)
 		require.NoError(t, err)
-		require.Equal(t, dso.TypeEncryptionPadding, pad.Type)
-		require.Empty(t, pad.Data)
+		require.Equal(t, dso.TypeEncryptionPadding, pad.Type())
+		require.Empty(t, pad.Data())
 	})
 
 	t.Run("negative rejected", func(t *testing.T) {
@@ -116,7 +113,7 @@ func TestNewEncryptionPaddingRange(t *testing.T) {
 // byte slice with no error.
 func TestPackEmptyMessage(t *testing.T) {
 	t.Parallel()
-	m := &dso.Message{}
+	m := dso.NewMessage(dso.TLV{})
 	b, err := m.Pack()
 	require.NoError(t, err)
 	require.Empty(t, b)
@@ -130,7 +127,7 @@ func TestPackOversizedTLV(t *testing.T) {
 
 	t.Run("primary", func(t *testing.T) {
 		t.Parallel()
-		m := &dso.Message{Primary: dso.TLV{Type: dso.TypeKeepAlive, Data: huge}}
+		m := dso.NewMessage(dso.NewTLV(dso.TypeKeepAlive, huge))
 		_, err := m.Pack()
 		require.Error(t, err)
 		require.ErrorIs(t, err, dso.ErrInvalidDSO)
@@ -138,10 +135,10 @@ func TestPackOversizedTLV(t *testing.T) {
 
 	t.Run("additional", func(t *testing.T) {
 		t.Parallel()
-		m := &dso.Message{
-			Primary:    dso.NewKeepAlive(time.Second, time.Second),
-			Additional: []dso.TLV{{Type: dso.TypeEncryptionPadding, Data: huge}},
-		}
+		m := dso.NewMessage(
+			dso.NewKeepAlive(time.Second, time.Second),
+			dso.NewTLV(dso.TypeEncryptionPadding, huge),
+		)
 		_, err := m.Pack()
 		require.Error(t, err)
 		require.ErrorIs(t, err, dso.ErrInvalidDSO)
@@ -172,7 +169,8 @@ func TestUnpackTruncated(t *testing.T) {
 		t.Parallel()
 		// Valid primary (KeepAlive, 8 bytes of zero) followed by a
 		// truncated additional TLV header.
-		good, err := (&dso.Message{Primary: dso.NewKeepAlive(0, 0)}).Pack()
+		good_msg := dso.NewMessage(dso.NewKeepAlive(0, 0))
+		good, err := good_msg.Pack()
 		require.NoError(t, err)
 		buf := append(good, 0x00, 0x02) // only 2 bytes of next header
 		_, err = dso.Unpack(buf)
@@ -189,9 +187,9 @@ func TestUnpackUnknownType(t *testing.T) {
 	buf := []byte{0xff, 0xfe, 0x00, 0x03, 0xde, 0xad, 0xbe}
 	got, err := dso.Unpack(buf)
 	require.NoError(t, err)
-	require.Equal(t, dso.Type(0xfffe), got.Primary.Type)
-	require.Equal(t, []byte{0xde, 0xad, 0xbe}, got.Primary.Data)
-	require.Empty(t, got.Additional)
+	require.Equal(t, dso.Type(0xfffe), got.Primary().Type())
+	require.Equal(t, []byte{0xde, 0xad, 0xbe}, got.Primary().Data())
+	require.Empty(t, got.Additional())
 
 	// Round-trip back to wire and ensure bytes match.
 	out, err := got.Pack()
@@ -205,26 +203,24 @@ func TestRoundTripMultipleAdditional(t *testing.T) {
 	t.Parallel()
 	pad8, err := dso.NewEncryptionPadding(8)
 	require.NoError(t, err)
-	m := &dso.Message{
-		Primary: dso.NewKeepAlive(60*time.Second, 10*time.Second),
-		Additional: []dso.TLV{
-			dso.NewRetryDelay(3 * time.Second),
-			pad8,
-		},
-	}
+	m := dso.NewMessage(
+		dso.NewKeepAlive(60*time.Second, 10*time.Second),
+		dso.NewRetryDelay(3*time.Second),
+		pad8,
+	)
 	wire, err := m.Pack()
 	require.NoError(t, err)
 
 	got, err := dso.Unpack(wire)
 	require.NoError(t, err)
-	require.Equal(t, dso.TypeKeepAlive, got.Primary.Type)
-	require.Len(t, got.Additional, 2)
-	require.Equal(t, dso.TypeRetryDelay, got.Additional[0].Type)
-	d, ok := dso.RetryDelay(got.Additional[0])
+	require.Equal(t, dso.TypeKeepAlive, got.Primary().Type())
+	require.Len(t, got.Additional(), 2)
+	require.Equal(t, dso.TypeRetryDelay, got.Additional()[0].Type())
+	d, ok := dso.RetryDelay(got.Additional()[0])
 	require.True(t, ok)
 	require.Equal(t, 3*time.Second, d)
-	require.Equal(t, dso.TypeEncryptionPadding, got.Additional[1].Type)
-	require.Len(t, got.Additional[1].Data, 8)
+	require.Equal(t, dso.TypeEncryptionPadding, got.Additional()[1].Type())
+	require.Len(t, got.Additional()[1].Data(), 8)
 }
 
 // TestErrInvalidDSOSentinel guards against accidental sentinel rewrites.

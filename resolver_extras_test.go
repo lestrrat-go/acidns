@@ -16,7 +16,7 @@ import (
 
 func TestRCodeErrorIs(t *testing.T) {
 	t.Parallel()
-	live := &acidns.RCodeError{Code: wire.RCODENXDomain}
+	live := acidns.NewRCodeError(wire.RCODENXDomain, nil)
 	require.True(t, errors.Is(live, acidns.ErrNXDOMAIN))
 	require.False(t, errors.Is(live, acidns.ErrServFail))
 	require.False(t, errors.Is(live, errors.New("other")))

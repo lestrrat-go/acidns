@@ -339,7 +339,7 @@ func typeInBitmap(bitmap []rrtype.Type, t rrtype.Type) bool {
 //
 // Returns (zero, false) when aggressive use is disabled, the index
 // has no useful entry, or the entry has expired.
-func (r *recursive) synthesiseFromNSEC(name wire.Name, t rrtype.Type) (Entry, bool) {
+func (r *Recursive) synthesiseFromNSEC(name wire.Name, t rrtype.Type) (Entry, bool) {
 	if !r.aggressiveNSEC || r.nsecIdx == nil {
 		return Entry{}, false
 	}

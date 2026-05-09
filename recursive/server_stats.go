@@ -21,9 +21,22 @@ type ServerStats interface {
 // Score summarises a server's current ranking inputs. Higher RTT or
 // FailureStreak makes a server worse.
 type Score struct {
-	RTT           time.Duration
-	FailureStreak int
+	rtt           time.Duration
+	failureStreak int
 }
+
+// NewScore constructs a Score with the given smoothed RTT and failure
+// streak count.
+func NewScore(rtt time.Duration, failureStreak int) Score {
+	return Score{rtt: rtt, failureStreak: failureStreak}
+}
+
+// RTT returns the smoothed round-trip time.
+func (s Score) RTT() time.Duration { return s.rtt }
+
+// FailureStreak returns the number of consecutive failures observed
+// since the last successful query.
+func (s Score) FailureStreak() int { return s.failureStreak }
 
 // maxMemoryStatEntries caps the number of distinct upstream servers
 // the in-memory ServerStats will track. Without a cap an open
@@ -92,7 +105,7 @@ func (s *memoryStats) Score(server netip.AddrPort) Score {
 	if e == nil {
 		return Score{}
 	}
-	return Score{RTT: e.rtt, FailureStreak: e.streak}
+	return Score{rtt: e.rtt, failureStreak: e.streak}
 }
 
 // evictOldestLocked removes up to n entries with the oldest lastUsed
@@ -146,17 +159,17 @@ func rankServers(stats ServerStats, servers []netip.AddrPort) []netip.AddrPort {
 	sort.SliceStable(out, func(i, j int) bool {
 		si := stats.Score(out[i])
 		sj := stats.Score(out[j])
-		if si.FailureStreak != sj.FailureStreak {
-			return si.FailureStreak < sj.FailureStreak
+		if si.failureStreak != sj.failureStreak {
+			return si.failureStreak < sj.failureStreak
 		}
 		// Untested (RTT==0) goes first to give new servers a chance.
-		if si.RTT == 0 && sj.RTT != 0 {
+		if si.rtt == 0 && sj.rtt != 0 {
 			return true
 		}
-		if sj.RTT == 0 && si.RTT != 0 {
+		if sj.rtt == 0 && si.rtt != 0 {
 			return false
 		}
-		return si.RTT < sj.RTT
+		return si.rtt < sj.rtt
 	})
 	return out
 }

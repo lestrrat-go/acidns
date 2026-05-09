@@ -51,13 +51,13 @@ func TestParseBrowseResponse(t *testing.T) {
 	// dnsname canonicalises owner labels to lowercase; the parsed
 	// instance name reflects that. Real mDNS responders should send
 	// case-preserving instance labels via escapes if case matters.
-	require.Equal(t, "my printer", s.Instance)
-	require.Equal(t, "_http._tcp.local.", s.Type.String())
-	require.Equal(t, "printer.local.", s.Host.String())
-	require.Equal(t, uint16(80), s.Port)
-	require.Equal(t, "192.0.2.50", s.Addrs[0].String())
-	require.Equal(t, "/admin", s.Text["path"])
-	require.Equal(t, "acidns-bench", s.Text["model"])
+	require.Equal(t, "my printer", s.Instance())
+	require.Equal(t, "_http._tcp.local.", s.Type().String())
+	require.Equal(t, "printer.local.", s.Host().String())
+	require.Equal(t, uint16(80), s.Port())
+	require.Equal(t, "192.0.2.50", s.Addrs()[0].String())
+	require.Equal(t, "/admin", s.Text()["path"])
+	require.Equal(t, "acidns-bench", s.Text()["model"])
 }
 
 func TestParseBrowseResponseEmpty(t *testing.T) {

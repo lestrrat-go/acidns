@@ -162,7 +162,7 @@ func WithSystemResolvers() ResolverOption {
 			c.systemErr = err
 			return
 		}
-		if len(cfg.Nameservers) == 0 {
+		if len(cfg.Nameservers()) == 0 {
 			c.systemErr = resolvconf.ErrNoNameserver
 			return
 		}
@@ -175,23 +175,21 @@ func WithSystemResolvers() ResolverOption {
 // pipeline against a temp resolv.conf without depending on the real
 // /etc/resolv.conf being present.
 func applyResolvconfToConfig(c *resolverConfig, cfg *resolvconf.Config) {
-	c.servers = append(c.servers[:0], cfg.Nameservers...)
-	c.searchList = append(c.searchList[:0], cfg.Search...)
-	c.ndots = cfg.Ndots
+	c.servers = append(c.servers[:0], cfg.Nameservers()...)
+	c.searchList = append(c.searchList[:0], cfg.Search()...)
+	c.ndots = cfg.Ndots()
 	c.ndotsSet = true
 	const (
 		maxResolvconfTimeout  = 30 * time.Second
 		maxResolvconfAttempts = 10
 	)
-	if cfg.Timeout > 0 {
-		t := cfg.Timeout
+	if t := cfg.Timeout(); t > 0 {
 		if t > maxResolvconfTimeout {
 			t = maxResolvconfTimeout
 		}
 		c.perAttempt = t
 	}
-	if cfg.Attempts > 0 {
-		a := cfg.Attempts
+	if a := cfg.Attempts(); a > 0 {
 		if a > maxResolvconfAttempts {
 			a = maxResolvconfAttempts
 		}
@@ -376,7 +374,7 @@ func (r *resolver) logResolve(ctx context.Context, name wire.Name, t rrtype.Type
 	if err != nil {
 		var rce *RCodeError
 		if errors.As(err, &rce) {
-			attrs = append(attrs, slog.String("rcode", rce.Code.String()))
+			attrs = append(attrs, slog.String("rcode", rce.Code().String()))
 			r.logger.LogAttrs(ctx, slog.LevelWarn, "resolver.resolve", attrs...)
 			return
 		}
@@ -394,7 +392,7 @@ func (r *resolver) logResolve(ctx context.Context, name wire.Name, t rrtype.Type
 // carrying that answer. NoError responses are returned (Answer, nil).
 func wrapRCode(ans *Answer) (*Answer, error) {
 	if rcode := ans.RCODE(); rcode != wire.RCODENoError {
-		return nil, &RCodeError{Code: rcode, Answer: ans}
+		return nil, NewRCodeError(rcode, ans)
 	}
 	return ans, nil
 }

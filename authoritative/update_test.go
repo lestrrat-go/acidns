@@ -27,7 +27,7 @@ ns1 IN  A    192.0.2.10
 www IN  A    192.0.2.42
 `
 
-func startUpdatable(t *testing.T) (authoritative.Authoritative, netip.AddrPort) {
+func startUpdatable(t *testing.T) (*authoritative.Authoritative, netip.AddrPort) {
 	t.Helper()
 	z, err := zonefile.Parse(strings.NewReader(updateZone))
 	require.NoError(t, err)

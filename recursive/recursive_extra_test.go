@@ -240,8 +240,8 @@ www IN  A    192.0.2.42
 	_, err := r.Resolve(rctx, wire.MustParseName("www.example.com"), rrtype.A)
 	require.NoError(t, err)
 	score := stats.Score(addr)
-	require.Greater(t, score.RTT.Nanoseconds(), int64(0), "expected non-zero RTT recorded")
-	require.Equal(t, 0, score.FailureStreak)
+	require.Greater(t, score.RTT().Nanoseconds(), int64(0), "expected non-zero RTT recorded")
+	require.Equal(t, 0, score.FailureStreak())
 }
 
 func TestQueryTimeoutSurvivesContextRespect(t *testing.T) {

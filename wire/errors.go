@@ -48,15 +48,29 @@ func (s Section) String() string {
 // content with a sentinel still get errors.Is(err, ErrInvalidMessage)
 // because Is matches the sentinel.
 type MessageParseError struct {
-	Section Section
-	// Index is the 0-based RR position within the section. -1 when not
-	// applicable (header parse, section count overflow).
-	Index int
-	// Offset is the byte position into the input buffer at which the
-	// failure was detected. -1 when not tracked.
-	Offset int
-	Cause  error
+	section Section
+	index   int
+	offset  int
+	cause   error
 }
+
+func NewMessageParseError(section Section, index, offset int, cause error) *MessageParseError {
+	return &MessageParseError{section: section, index: index, offset: offset, cause: cause}
+}
+
+// Section returns the message section in which the failure originated.
+func (e *MessageParseError) Section() Section { return e.section }
+
+// Index returns the 0-based RR position within the section. -1 when not
+// applicable (header parse, section count overflow).
+func (e *MessageParseError) Index() int { return e.index }
+
+// Offset returns the byte position into the input buffer at which the
+// failure was detected. -1 when not tracked.
+func (e *MessageParseError) Offset() int { return e.offset }
+
+// Cause returns the underlying error.
+func (e *MessageParseError) Cause() error { return e.cause }
 
 // Error renders a human-readable summary. The Cause is included so that
 // fmt.Errorf("...: %w", err) chains read as expected; structured fields
@@ -64,25 +78,25 @@ type MessageParseError struct {
 func (e *MessageParseError) Error() string {
 	var prefix string
 	switch {
-	case e.Section == SectionUnknown && e.Index < 0:
+	case e.section == SectionUnknown && e.index < 0:
 		prefix = "parse"
-	case e.Index < 0:
-		prefix = fmt.Sprintf("parse %s", e.Section)
+	case e.index < 0:
+		prefix = fmt.Sprintf("parse %s", e.section)
 	default:
-		prefix = fmt.Sprintf("parse %s[%d]", e.Section, e.Index)
+		prefix = fmt.Sprintf("parse %s[%d]", e.section, e.index)
 	}
-	if e.Offset >= 0 {
-		prefix += fmt.Sprintf(" at offset %d", e.Offset)
+	if e.offset >= 0 {
+		prefix += fmt.Sprintf(" at offset %d", e.offset)
 	}
-	if e.Cause == nil {
+	if e.cause == nil {
 		return "wire: " + prefix
 	}
-	return fmt.Sprintf("wire: %s: %s", prefix, e.Cause)
+	return fmt.Sprintf("wire: %s: %s", prefix, e.cause)
 }
 
 // Unwrap returns the underlying cause so errors.As / errors.Is can reach
 // further into the chain.
-func (e *MessageParseError) Unwrap() error { return e.Cause }
+func (e *MessageParseError) Unwrap() error { return e.cause }
 
 // Is matches against ErrInvalidMessage so legacy callers that check
 // errors.Is(err, ErrInvalidMessage) continue to work without taking a

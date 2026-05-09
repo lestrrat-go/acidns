@@ -187,11 +187,7 @@ func (e *exchanger) Exchange(ctx context.Context, q wire.Message) (wire.Message,
 
 	if resp.StatusCode != http.StatusOK {
 		body, _ := io.ReadAll(io.LimitReader(resp.Body, 1024))
-		return nil, &HTTPStatusError{
-			StatusCode: resp.StatusCode,
-			Status:     resp.Status,
-			Body:       body,
-		}
+		return nil, NewHTTPStatusError(resp.StatusCode, resp.Status, body)
 	}
 	// RFC 8484 §6: a DoH server MUST set Content-Type to
 	// application/dns-message. Treat both a missing and a wrong header

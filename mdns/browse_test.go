@@ -187,9 +187,9 @@ func TestBrowseSuccess(t *testing.T) {
 	services, err := mdns.Browse(ctx, "_http._tcp", withConn(pc))
 	require.NoError(t, err)
 	require.Equal(t, 1, len(services))
-	require.Equal(t, "test", services[0].Instance)
-	require.Equal(t, uint16(80), services[0].Port)
-	require.Equal(t, "bar", services[0].Text["foo"])
+	require.Equal(t, "test", services[0].Instance())
+	require.Equal(t, uint16(80), services[0].Port())
+	require.Equal(t, "bar", services[0].Text()["foo"])
 
 	// First write was the marshalled query.
 	pc.mu.Lock()

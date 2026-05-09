@@ -19,8 +19,8 @@ func TestMessageParseError_IsCompat(t *testing.T) {
 
 	var pe *wire.MessageParseError
 	require.True(t, errors.As(err, &pe), "errors.As should reach MessageParseError")
-	require.Equal(t, wire.SectionHeader, pe.Section)
-	require.Equal(t, -1, pe.Index)
+	require.Equal(t, wire.SectionHeader, pe.Section())
+	require.Equal(t, -1, pe.Index())
 }
 
 func TestSection_String(t *testing.T) {
@@ -36,10 +36,10 @@ func TestSection_String(t *testing.T) {
 
 func TestMessageParseError_ErrorString(t *testing.T) {
 	t.Parallel()
-	e := &wire.MessageParseError{
-		Section: wire.SectionAnswer, Index: 3, Offset: 47,
-		Cause: errors.New("name truncated"),
-	}
+	e := wire.NewMessageParseError(
+		wire.SectionAnswer, 3, 47,
+		errors.New("name truncated"),
+	)
 	got := e.Error()
 	// Must mention section, index, offset, and cause.
 	require.Contains(t, got, "answer")

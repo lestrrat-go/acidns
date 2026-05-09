@@ -102,7 +102,7 @@ func TestE2EAuthoritativeOverUDPAndTCP(t *testing.T) {
 		require.ErrorIs(t, err, acidns.ErrNXDOMAIN)
 		var rerr *acidns.RCodeError
 		require.ErrorAs(t, err, &rerr)
-		require.Equal(t, 1, len(rerr.Answer.Raw().Authorities()))
+		require.Equal(t, 1, len(rerr.Answer().Raw().Authorities()))
 	})
 
 	t.Run("NODATA", func(t *testing.T) {

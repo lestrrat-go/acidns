@@ -36,7 +36,7 @@ const defaultRootRefreshInterval = 24 * time.Hour
 // one — the IANA snapshot in [iANARootHints] is returned so an
 // operator who calls [New] with no options still gets working
 // recursion out of the box.
-func (r *recursive) currentRoots() []netip.AddrPort {
+func (r *Recursive) currentRoots() []netip.AddrPort {
 	r.rootsMu.RLock()
 	defer r.rootsMu.RUnlock()
 	if len(r.roots) == 0 {
@@ -48,7 +48,7 @@ func (r *recursive) currentRoots() []netip.AddrPort {
 // setRoots atomically replaces the root server list. A nil/empty
 // list is rejected — we never want to leave the resolver with no
 // roots to bootstrap from.
-func (r *recursive) setRoots(addrs []netip.AddrPort) error {
+func (r *Recursive) setRoots(addrs []netip.AddrPort) error {
 	if len(addrs) == 0 {
 		return errors.New("recursive: refusing to set empty root list")
 	}
@@ -60,7 +60,7 @@ func (r *recursive) setRoots(addrs []netip.AddrPort) error {
 
 // Prime performs one priming exchange. Failure leaves the existing
 // root list untouched.
-func (r *recursive) Prime(ctx context.Context) error {
+func (r *Recursive) Prime(ctx context.Context) error {
 	servers := r.currentRoots()
 	if len(servers) == 0 {
 		return errors.New("recursive: no configured roots to prime from")
@@ -123,7 +123,7 @@ func primingAddrsFromResponse(resp wire.Message) []netip.AddrPort {
 //
 // This method BLOCKS until ctx is canceled. The name disambiguates
 // from the non-blocking server-side Run (e.g. UDPServer.Run).
-func (r *recursive) RunMaintenance(ctx context.Context) error {
+func (r *Recursive) RunMaintenance(ctx context.Context) error {
 	if !r.rootPriming && !r.aggressiveNSEC {
 		return nil
 	}

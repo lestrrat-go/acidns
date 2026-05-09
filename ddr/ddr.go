@@ -51,14 +51,75 @@ func (p Protocol) String() string {
 
 // Endpoint is one designated-resolver alternative.
 type Endpoint struct {
-	Priority  uint16
-	Target    wire.Name
-	Protocol  Protocol
-	ALPN      []string
-	Port      uint16 // 0 when unspecified
-	DOHPath   string // empty for non-DoH endpoints
-	IPv4Hints []netip.Addr
-	IPv6Hints []netip.Addr
+	priority  uint16
+	target    wire.Name
+	protocol  Protocol
+	alpn      []string
+	port      uint16
+	dohPath   string
+	ipv4Hints []netip.Addr
+	ipv6Hints []netip.Addr
+}
+
+// Priority returns the endpoint's SVCB priority (lower means preferred).
+func (e Endpoint) Priority() uint16 { return e.priority }
+
+// Target returns the endpoint's target name.
+func (e Endpoint) Target() wire.Name { return e.target }
+
+// Protocol returns the encrypted transport the endpoint advertises.
+func (e Endpoint) Protocol() Protocol { return e.protocol }
+
+// ALPN returns the ALPN identifiers advertised by the endpoint.
+func (e Endpoint) ALPN() []string { return e.alpn }
+
+// Port returns the endpoint's port; 0 when unspecified.
+func (e Endpoint) Port() uint16 { return e.port }
+
+// DOHPath returns the DoH URI template path; empty for non-DoH endpoints.
+func (e Endpoint) DOHPath() string { return e.dohPath }
+
+// IPv4Hints returns the SVCB IPv4 address hints.
+func (e Endpoint) IPv4Hints() []netip.Addr { return e.ipv4Hints }
+
+// IPv6Hints returns the SVCB IPv6 address hints.
+func (e Endpoint) IPv6Hints() []netip.Addr { return e.ipv6Hints }
+
+// EndpointBuilder builds an Endpoint with the typed-setter pattern.
+type EndpointBuilder struct {
+	e Endpoint
+}
+
+// NewEndpointBuilder returns a fresh EndpointBuilder.
+func NewEndpointBuilder() *EndpointBuilder { return &EndpointBuilder{} }
+
+// Priority sets the SVCB priority.
+func (b *EndpointBuilder) Priority(v uint16) *EndpointBuilder { b.e.priority = v; return b }
+
+// Target sets the target name.
+func (b *EndpointBuilder) Target(v wire.Name) *EndpointBuilder { b.e.target = v; return b }
+
+// Protocol sets the protocol.
+func (b *EndpointBuilder) Protocol(v Protocol) *EndpointBuilder { b.e.protocol = v; return b }
+
+// ALPN sets the ALPN identifiers.
+func (b *EndpointBuilder) ALPN(v []string) *EndpointBuilder { b.e.alpn = v; return b }
+
+// Port sets the port (0 = unspecified).
+func (b *EndpointBuilder) Port(v uint16) *EndpointBuilder { b.e.port = v; return b }
+
+// DOHPath sets the DoH URI template path.
+func (b *EndpointBuilder) DOHPath(v string) *EndpointBuilder { b.e.dohPath = v; return b }
+
+// IPv4Hints sets the IPv4 address hints.
+func (b *EndpointBuilder) IPv4Hints(v []netip.Addr) *EndpointBuilder { b.e.ipv4Hints = v; return b }
+
+// IPv6Hints sets the IPv6 address hints.
+func (b *EndpointBuilder) IPv6Hints(v []netip.Addr) *EndpointBuilder { b.e.ipv6Hints = v; return b }
+
+// Build returns the configured Endpoint.
+func (b *EndpointBuilder) Build() (Endpoint, error) {
+	return b.e, nil
 }
 
 // Discover queries _dns.resolver.arpa via r and returns the Endpoints sorted
@@ -85,25 +146,25 @@ func Discover(ctx context.Context, r acidns.Resolver) ([]Endpoint, error) {
 		}
 		out = append(out, endpointFromSVCB(s))
 	}
-	sort.SliceStable(out, func(i, j int) bool { return out[i].Priority < out[j].Priority })
+	sort.SliceStable(out, func(i, j int) bool { return out[i].priority < out[j].priority })
 	return out, nil
 }
 
 func endpointFromSVCB(s rdata.SVCB) Endpoint {
-	e := Endpoint{
-		Priority: s.Priority(),
-		Target:   s.Target(),
-		ALPN:     s.ALPN(),
-	}
+	b := NewEndpointBuilder().
+		Priority(s.Priority()).
+		Target(s.Target()).
+		ALPN(s.ALPN()).
+		IPv4Hints(s.IPv4Hints()).
+		IPv6Hints(s.IPv6Hints())
 	if p, ok := s.Port(); ok {
-		e.Port = p
+		b.Port(p)
 	}
 	if path, ok := s.DOHPath(); ok {
-		e.DOHPath = path
+		b.DOHPath(path)
 	}
-	e.IPv4Hints = s.IPv4Hints()
-	e.IPv6Hints = s.IPv6Hints()
-	e.Protocol = inferProtocol(e.ALPN, e.DOHPath)
+	b.Protocol(inferProtocol(s.ALPN(), b.e.dohPath))
+	e, _ := b.Build()
 	return e
 }
 

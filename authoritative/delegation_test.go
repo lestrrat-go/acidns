@@ -31,7 +31,7 @@ ns2.sub    IN AAAA 2001:db8::20
 out IN NS ns1.elsewhere.example.org.
 `
 
-func newDelegationAuth(t *testing.T) authoritative.Authoritative {
+func newDelegationAuth(t *testing.T) *authoritative.Authoritative {
 	t.Helper()
 	z, err := zonefile.Parse(strings.NewReader(delegationZone))
 	require.NoError(t, err)

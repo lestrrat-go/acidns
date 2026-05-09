@@ -50,7 +50,7 @@ func TestSpecialUseInvalid(t *testing.T) {
 	require.ErrorIs(t, err, acidns.ErrNXDOMAIN)
 	var rerr *acidns.RCodeError
 	require.ErrorAs(t, err, &rerr)
-	require.Equal(t, wire.RCODENXDomain, rerr.Answer.RCODE())
+	require.Equal(t, wire.RCODENXDomain, rerr.Answer().RCODE())
 }
 
 // recordingExchanger captures the most recent question so tests can assert

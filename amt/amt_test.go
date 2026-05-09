@@ -83,16 +83,16 @@ func TestDiscover_Sorting(t *testing.T) {
 	relays, err := amt.Discover(t.Context(), r, wire.MustParseName("example.com"))
 	require.NoError(t, err)
 	require.Len(t, relays, 3)
-	require.Equal(t, uint16(10), relays[0].Priority)
-	require.Equal(t, uint16(10), relays[1].Priority)
-	require.Equal(t, uint16(20), relays[2].Priority)
+	require.Equal(t, uint16(10), relays[0].Priority())
+	require.Equal(t, uint16(10), relays[1].Priority())
+	require.Equal(t, uint16(20), relays[2].Priority())
 	// Stable sort: weight ties preserve server-supplied order, so
 	// relay-a (weight 0) comes before relay-c (weight 50).
-	require.Equal(t, "relay-a.example.com.", relays[0].Target.String())
-	require.Equal(t, "relay-c.example.com.", relays[1].Target.String())
-	require.Equal(t, "relay-b.example.com.", relays[2].Target.String())
-	require.Equal(t, uint16(2268), relays[0].Port)
-	require.Equal(t, uint16(0), relays[0].Weight)
+	require.Equal(t, "relay-a.example.com.", relays[0].Target().String())
+	require.Equal(t, "relay-c.example.com.", relays[1].Target().String())
+	require.Equal(t, "relay-b.example.com.", relays[2].Target().String())
+	require.Equal(t, uint16(2268), relays[0].Port())
+	require.Equal(t, uint16(0), relays[0].Weight())
 }
 
 func TestDiscover_NoRecords(t *testing.T) {
@@ -117,7 +117,7 @@ func TestDiscover_FiltersNonSRV(t *testing.T) {
 	relays, err := amt.Discover(t.Context(), r, wire.MustParseName("example.com"))
 	require.NoError(t, err)
 	require.Len(t, relays, 1)
-	require.Equal(t, "relay.example.com.", relays[0].Target.String())
+	require.Equal(t, "relay.example.com.", relays[0].Target().String())
 }
 
 func TestDiscover_FiltersTypeMismatch(t *testing.T) {
@@ -138,7 +138,7 @@ func TestDiscover_FiltersTypeMismatch(t *testing.T) {
 	relays, err := amt.Discover(t.Context(), r, wire.MustParseName("example.com"))
 	require.NoError(t, err)
 	require.Len(t, relays, 1)
-	require.Equal(t, uint16(1), relays[0].Priority)
+	require.Equal(t, uint16(1), relays[0].Priority())
 }
 
 func TestDiscover_ResolverError(t *testing.T) {

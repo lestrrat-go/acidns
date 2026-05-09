@@ -122,7 +122,7 @@ func WithClientClock(now func() time.Time) ClientOption {
 }
 
 // NewClient returns a fresh Client backed by an in-memory map.
-func NewClient(opts ...ClientOption) Client {
+func NewClient(opts ...ClientOption) (Client, error) {
 	cfg := clientConfig{maxEntries: DefaultClientMaxEntries, now: time.Now}
 	for _, o := range opts {
 		o.applyClient(&cfg)
@@ -134,7 +134,7 @@ func NewClient(opts ...ClientOption) Client {
 		cache:      make(map[netip.AddrPort]clientEntry),
 		maxEntries: cfg.maxEntries,
 		now:        cfg.now,
-	}
+	}, nil
 }
 
 type clientEntry struct {
@@ -469,12 +469,12 @@ func WithMaxFutureSkew(d time.Duration) ServerOption {
 // acceptance window is 1 hour and the future-skew tolerance is
 // [DefaultMaxFutureSkew]; pass [WithServerMaxAge] / [WithMaxFutureSkew]
 // to override.
-func NewServer(pool SecretPool, opts ...ServerOption) Server {
+func NewServer(pool SecretPool, opts ...ServerOption) (Server, error) {
 	cfg := serverConfig{maxAge: time.Hour, maxFutureSkew: DefaultMaxFutureSkew}
 	for _, o := range opts {
 		o.applyCookieServer(&cfg)
 	}
-	return &serverImpl{pool: pool, maxAge: cfg.maxAge, maxFutureSkew: cfg.maxFutureSkew}
+	return &serverImpl{pool: pool, maxAge: cfg.maxAge, maxFutureSkew: cfg.maxFutureSkew}, nil
 }
 
 type serverImpl struct {

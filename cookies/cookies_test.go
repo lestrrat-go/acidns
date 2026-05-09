@@ -14,7 +14,8 @@ func TestServerCookieRoundTrip(t *testing.T) {
 	t.Parallel()
 	pool, _ := cookies.NewSecretPool()
 	t.Cleanup(pool.Close)
-	srv := cookies.NewServer(pool)
+	srv, err := cookies.NewServer(pool)
+	require.NoError(t, err)
 	cc := [8]byte{1, 2, 3, 4, 5, 6, 7, 8}
 	addr := netip.MustParseAddr("203.0.113.1")
 	now := time.Unix(1_700_000_000, 0).UTC()
@@ -31,12 +32,13 @@ func TestServerCookieRejectsWrongAddr(t *testing.T) {
 	t.Parallel()
 	pool, _ := cookies.NewSecretPool()
 	t.Cleanup(pool.Close)
-	srv := cookies.NewServer(pool)
+	srv, err := cookies.NewServer(pool)
+	require.NoError(t, err)
 	cc := [8]byte{0xab, 0xcd, 0xef, 1, 2, 3, 4, 5}
 	now := time.Unix(1_700_000_000, 0).UTC()
 
 	cookie := srv.Make(cc, netip.MustParseAddr("203.0.113.1"), now)
-	_, err := srv.Validate(cookie, cc, netip.MustParseAddr("203.0.113.2"), now)
+	_, err = srv.Validate(cookie, cc, netip.MustParseAddr("203.0.113.2"), now)
 	require.ErrorIs(t, err, cookies.ErrCookieMismatch)
 }
 
@@ -44,14 +46,15 @@ func TestServerCookieRejectsExpired(t *testing.T) {
 	t.Parallel()
 	pool, _ := cookies.NewSecretPool()
 	t.Cleanup(pool.Close)
-	srv := cookies.NewServer(pool, cookies.WithServerMaxAge(30*time.Minute))
+	srv, err := cookies.NewServer(pool, cookies.WithServerMaxAge(30*time.Minute))
+	require.NoError(t, err)
 	cc := [8]byte{}
 	addr := netip.MustParseAddr("203.0.113.1")
 	now := time.Unix(1_700_000_000, 0).UTC()
 	cookie := srv.Make(cc, addr, now)
 
 	// 31 minutes later → outside acceptance window.
-	_, err := srv.Validate(cookie, cc, addr, now.Add(31*time.Minute))
+	_, err = srv.Validate(cookie, cc, addr, now.Add(31*time.Minute))
 	require.ErrorIs(t, err, cookies.ErrCookieExpired)
 }
 
@@ -59,7 +62,8 @@ func TestServerCookieAcceptsPreviousSecretAfterRotation(t *testing.T) {
 	t.Parallel()
 	pool, _ := cookies.NewSecretPool()
 	t.Cleanup(pool.Close)
-	srv := cookies.NewServer(pool)
+	srv, err := cookies.NewServer(pool)
+	require.NoError(t, err)
 	cc := [8]byte{42, 42, 42, 42, 42, 42, 42, 42}
 	addr := netip.MustParseAddr("198.51.100.5")
 	now := time.Now().UTC().Truncate(time.Second)
@@ -68,7 +72,7 @@ func TestServerCookieAcceptsPreviousSecretAfterRotation(t *testing.T) {
 	require.NoError(t, pool.Rotate())
 	// After rotation the OLD secret is "previous"; validation must still
 	// succeed because Server.All returns both.
-	_, err := srv.Validate(cookie, cc, addr, now.Add(time.Minute))
+	_, err = srv.Validate(cookie, cc, addr, now.Add(time.Minute))
 	require.NoError(t, err)
 
 	// After two rotations the OLD secret is gone → fail.
@@ -79,7 +83,8 @@ func TestServerCookieAcceptsPreviousSecretAfterRotation(t *testing.T) {
 
 func TestClientApplyAndObserveAndRetry(t *testing.T) {
 	t.Parallel()
-	c := cookies.NewClient()
+	c, err := cookies.NewClient()
+	require.NoError(t, err)
 	server := netip.MustParseAddrPort("198.51.100.10:53")
 
 	// Apply on a fresh server emits a client-only cookie.
@@ -121,7 +126,8 @@ func TestClientApplyAndObserveAndRetry(t *testing.T) {
 
 func TestClientRetryNotBADCOOKIENoOp(t *testing.T) {
 	t.Parallel()
-	c := cookies.NewClient()
+	c, err := cookies.NewClient()
+	require.NoError(t, err)
 	server := netip.MustParseAddrPort("198.51.100.10:53")
 	resp, _ := wire.NewBuilder().Response(true).Build()
 	ok, err := c.Retry(server, resp)

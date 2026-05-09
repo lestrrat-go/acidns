@@ -19,8 +19,8 @@ func TestLoad(t *testing.T) {
 
 	cfg, err := resolvconf.Load(p)
 	require.NoError(t, err)
-	require.Len(t, cfg.Nameservers, 1)
-	require.Equal(t, "1.1.1.1:53", cfg.Nameservers[0].String())
+	require.Len(t, cfg.Nameservers(), 1)
+	require.Equal(t, "1.1.1.1:53", cfg.Nameservers()[0].String())
 }
 
 func TestLoadMissing(t *testing.T) {

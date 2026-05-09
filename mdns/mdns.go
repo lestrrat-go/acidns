@@ -38,17 +38,83 @@ var ErrNoResponse = errors.New("mdns: no responses received")
 
 // Service is a single discovered instance.
 type Service struct {
-	// Instance name (the "Foo Bar" part of "Foo Bar._http._tcp.local.").
-	Instance string
-	// Service type ("_http._tcp.local.").
-	Type     wire.Name
-	Host     wire.Name
-	Port     uint16
-	Priority uint16
-	Weight   uint16
-	Addrs    []netip.Addr
-	Text     map[string]string
-	TTL      time.Duration
+	instance string
+	typ      wire.Name
+	host     wire.Name
+	port     uint16
+	priority uint16
+	weight   uint16
+	addrs    []netip.Addr
+	text     map[string]string
+	ttl      time.Duration
+}
+
+// Instance returns the instance name (the "Foo Bar" part of
+// "Foo Bar._http._tcp.local.").
+func (s Service) Instance() string { return s.instance }
+
+// Type returns the service type ("_http._tcp.local.").
+func (s Service) Type() wire.Name { return s.typ }
+
+// Host returns the target host name.
+func (s Service) Host() wire.Name { return s.host }
+
+// Port returns the service port.
+func (s Service) Port() uint16 { return s.port }
+
+// Priority returns the service's SRV priority.
+func (s Service) Priority() uint16 { return s.priority }
+
+// Weight returns the service's SRV weight.
+func (s Service) Weight() uint16 { return s.weight }
+
+// Addrs returns the discovered addresses.
+func (s Service) Addrs() []netip.Addr { return s.addrs }
+
+// Text returns the discovered TXT key/value pairs.
+func (s Service) Text() map[string]string { return s.text }
+
+// TTL returns the discovered SRV TTL.
+func (s Service) TTL() time.Duration { return s.ttl }
+
+// ServiceBuilder builds a discovered-Service value.
+type ServiceBuilder struct {
+	s Service
+}
+
+// NewServiceBuilder returns a fresh ServiceBuilder.
+func NewServiceBuilder() *ServiceBuilder { return &ServiceBuilder{} }
+
+// Instance sets the instance name.
+func (b *ServiceBuilder) Instance(v string) *ServiceBuilder { b.s.instance = v; return b }
+
+// Type sets the service type name.
+func (b *ServiceBuilder) Type(v wire.Name) *ServiceBuilder { b.s.typ = v; return b }
+
+// Host sets the target host name.
+func (b *ServiceBuilder) Host(v wire.Name) *ServiceBuilder { b.s.host = v; return b }
+
+// Port sets the service port.
+func (b *ServiceBuilder) Port(v uint16) *ServiceBuilder { b.s.port = v; return b }
+
+// Priority sets the SRV priority.
+func (b *ServiceBuilder) Priority(v uint16) *ServiceBuilder { b.s.priority = v; return b }
+
+// Weight sets the SRV weight.
+func (b *ServiceBuilder) Weight(v uint16) *ServiceBuilder { b.s.weight = v; return b }
+
+// Addrs sets the discovered address list.
+func (b *ServiceBuilder) Addrs(v []netip.Addr) *ServiceBuilder { b.s.addrs = v; return b }
+
+// Text sets the TXT key/value pairs.
+func (b *ServiceBuilder) Text(v map[string]string) *ServiceBuilder { b.s.text = v; return b }
+
+// TTL sets the SRV TTL.
+func (b *ServiceBuilder) TTL(v time.Duration) *ServiceBuilder { b.s.ttl = v; return b }
+
+// Build returns the assembled Service.
+func (b *ServiceBuilder) Build() (Service, error) {
+	return b.s, nil
 }
 
 // BuildBrowseQuery constructs a PTR query for the given service type
@@ -120,17 +186,17 @@ func ParseBrowseResponse(m wire.Message) []Service {
 		if !haveSRV {
 			continue
 		}
-		svc := Service{
-			Instance: leadingLabel(instanceName),
-			Type:     rec.Name(),
-			Host:     s.Target(),
-			Port:     s.Port(),
-			Priority: s.Priority(),
-			Weight:   s.Weight(),
-			Addrs:    append([]netip.Addr(nil), addrsByHost[s.Target().String()]...),
-			Text:     parseTXT(txtByOwner[key]),
-			TTL:      srvTTLs[key],
-		}
+		svc, _ := NewServiceBuilder().
+			Instance(leadingLabel(instanceName)).
+			Type(rec.Name()).
+			Host(s.Target()).
+			Port(s.Port()).
+			Priority(s.Priority()).
+			Weight(s.Weight()).
+			Addrs(append([]netip.Addr(nil), addrsByHost[s.Target().String()]...)).
+			Text(parseTXT(txtByOwner[key])).
+			TTL(srvTTLs[key]).
+			Build()
 		out = append(out, svc)
 	}
 	return out
@@ -196,7 +262,7 @@ func Browse(ctx context.Context, service string, opts ...BrowseOption) ([]Servic
 			continue
 		}
 		for _, svc := range ParseBrowseResponse(resp) {
-			key := svc.Instance + "|" + svc.Type.String()
+			key := svc.instance + "|" + svc.typ.String()
 			merged[key] = svc
 		}
 	}
