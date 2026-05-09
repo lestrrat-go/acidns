@@ -447,6 +447,19 @@ func (z *zoneIndex) lookupAuthoritative(qname wire.Name, qtype rrtype.Type) (ans
 			return answer, nil, wire.RCODENoError
 		}
 
+		// DNAME redirection (RFC 6672 §3.3): if any strict ancestor of
+		// `current` carries a DNAME, the parent zone's owner is being
+		// redirected. Return the DNAME RR and synthesise a CNAME from
+		// `current` to the equivalent name under the DNAME target, then
+		// continue the chase.
+		if dnameRR, synth, ok := z.findDNAMEAncestor(current); ok {
+			cnameRD := rdata.NewCNAME(synth)
+			cnameRR := wire.NewRecord(current, dnameRR.TTL(), cnameRD)
+			answer = append(answer, dnameRR, cnameRR)
+			current = synth
+			continue
+		}
+
 		// Try wildcard synthesis (RFC 4592).
 		if encloser, ok := z.closestEncloser(current); ok {
 			if wcRecs, found := z.byName[wildcardKey(encloser)]; found {
@@ -608,6 +621,101 @@ func (z *zoneIndex) collectGlue(nsRecs []wire.Record) []wire.Record {
 // included), wrapped in a string for use as a map key.
 func nameKey(n wire.Name) string {
 	return string(n.AppendWire(nil))
+}
+
+// findDNAMEAncestor walks strict ancestors of qname looking for a name
+// in the zone that carries a DNAME record. On match it returns the
+// DNAME RR and the synthesised target name produced by replacing the
+// DNAME owner suffix of qname with the DNAME target (RFC 6672 §3.3).
+//
+// The walk visits strict ancestors only — a DNAME at qname itself is
+// handled by the normal exact-match path; the spec also forbids
+// signing a DNAME with the DNAME at the same owner.
+func (z *zoneIndex) findDNAMEAncestor(qname wire.Name) (wire.Record, wire.Name, bool) {
+	cur := qname
+	for {
+		parent, ok := cur.Parent()
+		if !ok {
+			return nil, wire.Name{}, false
+		}
+		cur = parent
+		recs, has := z.byName[nameKey(cur)]
+		if !has {
+			continue
+		}
+		for _, r := range recs {
+			d, ok := wire.RDataAs[rdata.DNAME](r)
+			if !ok {
+				continue
+			}
+			synth, ok := substituteSuffix(qname, cur, d.Target())
+			if !ok {
+				return nil, wire.Name{}, false
+			}
+			return r, synth, true
+		}
+	}
+}
+
+// substituteSuffix returns name with its `owner` suffix replaced by
+// `target`. It returns ok=false if `owner` is not a strict suffix of
+// `name`, or if the synthesised name would exceed the 255-octet wire
+// limit (in which case the spec mandates YXDOMAIN; the authoritative
+// caller falls back to the no-DNAME path).
+func substituteSuffix(name, owner, target wire.Name) (wire.Name, bool) {
+	nameLabels := collectLabels(name)
+	ownerLabels := collectLabels(owner)
+	if len(nameLabels) <= len(ownerLabels) {
+		return wire.Name{}, false
+	}
+	prefixLen := len(nameLabels) - len(ownerLabels)
+	for i, lbl := range ownerLabels {
+		if !labelEqualFold(nameLabels[prefixLen+i], lbl) {
+			return wire.Name{}, false
+		}
+	}
+	targetLabels := collectLabels(target)
+	combined := make([]string, 0, prefixLen+len(targetLabels))
+	for _, lbl := range nameLabels[:prefixLen] {
+		combined = append(combined, string(lbl))
+	}
+	for _, lbl := range targetLabels {
+		combined = append(combined, string(lbl))
+	}
+	out, err := wire.NameFromLabels(combined...)
+	if err != nil {
+		return wire.Name{}, false
+	}
+	return out, true
+}
+
+func collectLabels(n wire.Name) [][]byte {
+	var out [][]byte
+	for lbl := range n.Labels() {
+		cp := make([]byte, len(lbl))
+		copy(cp, lbl)
+		out = append(out, cp)
+	}
+	return out
+}
+
+func labelEqualFold(a, b []byte) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	for i := range a {
+		ca, cb := a[i], b[i]
+		if ca >= 'A' && ca <= 'Z' {
+			ca += 'a' - 'A'
+		}
+		if cb >= 'A' && cb <= 'Z' {
+			cb += 'a' - 'A'
+		}
+		if ca != cb {
+			return false
+		}
+	}
+	return true
 }
 
 // allRecordsOrdered returns every record in the zone. Order is unspecified

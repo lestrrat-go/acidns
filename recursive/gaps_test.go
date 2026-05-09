@@ -46,13 +46,13 @@ func TestCacheGetExpired(t *testing.T) {
 	t.Parallel()
 	c := recursive.NewMemoryCache()
 	name := wire.MustParseName("expired.example.")
-	c.Put(name, rrtype.A, mustEntry(t, recursive.NewEntryBuilder().
+	c.Put(name, rrtype.ClassIN, rrtype.A, mustEntry(t, recursive.NewEntryBuilder().
 		ExpiresAt(time.Now().Add(-1*time.Second))))
-	_, ok := c.Get(name, rrtype.A)
+	_, ok := c.Get(name, rrtype.ClassIN, rrtype.A)
 	require.False(t, ok, "expired entry should be evicted")
 
 	// Miss.
-	_, ok = c.Get(wire.MustParseName("missing.example."), rrtype.A)
+	_, ok = c.Get(wire.MustParseName("missing.example."), rrtype.ClassIN, rrtype.A)
 	require.False(t, ok)
 }
 
@@ -71,7 +71,7 @@ func TestMemoryCacheBoundedByMaxSize(t *testing.T) {
 
 	for i := range 4 * limit {
 		name := wire.MustParseName(fmt.Sprintf("n%d.example.", i))
-		c.Put(name, rrtype.A, mustEntry(t, recursive.NewEntryBuilder().
+		c.Put(name, rrtype.ClassIN, rrtype.A, mustEntry(t, recursive.NewEntryBuilder().
 			ExpiresAt(time.Now().Add(time.Duration(i+1)*time.Minute))))
 	}
 	require.LessOrEqual(t, c.Len(), ceiling,

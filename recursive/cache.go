@@ -9,13 +9,15 @@ import (
 	"github.com/lestrrat-go/acidns/wire/rrtype"
 )
 
-// Cache stores authoritative response components keyed by (name, type) so a
-// recursive resolver can satisfy repeated queries from memory.
+// Cache stores authoritative response components keyed by
+// (name, class, type) so a recursive resolver can satisfy repeated
+// queries from memory. Class is part of the key so a CHAOS-class query
+// cannot collide with the IN-class entry of the same name and type.
 //
 // Implementations MUST be safe for concurrent use.
 type Cache interface {
-	Get(name wire.Name, t rrtype.Type) (Entry, bool)
-	Put(name wire.Name, t rrtype.Type, e Entry)
+	Get(name wire.Name, c rrtype.Class, t rrtype.Type) (Entry, bool)
+	Put(name wire.Name, c rrtype.Class, t rrtype.Type, e Entry)
 }
 
 // Entry is the cached form of an authoritative result. Fields are
@@ -191,13 +193,14 @@ func (c *MemoryCache) shardFor(k string) *memoryCacheShard {
 	return c.shards[h&(numCacheShards-1)]
 }
 
-// Get returns the cached Entry for (name, t), or the zero value when
-// the entry is missing or expired. The returned Entry's slice fields
-// are freshly allocated copies of the cache's storage — caller code
-// may mutate the returned slices without poisoning other readers.
-// Records themselves are concrete value types and may be shared.
-func (c *MemoryCache) Get(name wire.Name, t rrtype.Type) (Entry, bool) {
-	k := key(name, t)
+// Get returns the cached Entry for (name, class, type), or the zero
+// value when the entry is missing or expired. The returned Entry's
+// slice fields are freshly allocated copies of the cache's storage —
+// caller code may mutate the returned slices without poisoning other
+// readers. Records themselves are concrete value types and may be
+// shared.
+func (c *MemoryCache) Get(name wire.Name, cl rrtype.Class, t rrtype.Type) (Entry, bool) {
+	k := key(name, cl, t)
 	sh := c.shardFor(k)
 	sh.mu.RLock()
 	e, ok := sh.entries[k]
@@ -217,12 +220,12 @@ func (c *MemoryCache) Get(name wire.Name, t rrtype.Type) (Entry, bool) {
 // Put stores e in the cache. The slice fields of e are copied so a
 // caller continuing to use its source slices after Put cannot
 // retroactively corrupt the cache's view of the entry.
-func (c *MemoryCache) Put(name wire.Name, t rrtype.Type, e Entry) {
+func (c *MemoryCache) Put(name wire.Name, cl rrtype.Class, t rrtype.Type, e Entry) {
 	if c.maxRecordsPerEntr > 0 {
 		e = capEntryRecords(e, c.maxRecordsPerEntr)
 	}
 	stored := cloneEntry(e)
-	k := key(name, t)
+	k := key(name, cl, t)
 	sh := c.shardFor(k)
 	sh.mu.Lock()
 	defer sh.mu.Unlock()
@@ -324,8 +327,8 @@ func (c *MemoryCache) Len() int {
 	return total
 }
 
-func key(n wire.Name, t rrtype.Type) string {
-	return string(n.AppendWire(nil)) + "|" + t.String()
+func key(n wire.Name, c rrtype.Class, t rrtype.Type) string {
+	return string(n.AppendWire(nil)) + "|" + c.String() + "|" + t.String()
 }
 
 // minTTL returns the smallest TTL across the supplied record sets, or the

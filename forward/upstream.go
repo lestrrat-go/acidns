@@ -18,7 +18,10 @@ type udpTCPFallback struct {
 }
 
 func newUDPTCPFallback(addr netip.AddrPort) acidns.Exchanger {
-	udp, err := acidns.NewUDPExchanger(addr)
+	// 0x20 case randomization (RFC 5452 §6) is on by default to mirror
+	// the recursive resolver: a forwarder relying on 16-bit ID alone
+	// is the classic Kaminsky-class hole.
+	udp, err := acidns.NewUDPExchanger(addr, acidns.WithUDP0x20(true))
 	if err != nil {
 		return errExchanger{err: fmt.Errorf("forward: udp upstream: %w", err)}
 	}

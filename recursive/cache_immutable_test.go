@@ -22,11 +22,11 @@ func TestCacheGetReturnsCopy(t *testing.T) {
 	name := wire.MustParseName("a.test.")
 	rec := wire.NewRecord(name, time.Hour,
 		rdata.NewA(netip.MustParseAddr("192.0.2.1")))
-	c.Put(name, rrtype.A, mustEntry(t, recursive.NewEntryBuilder().
+	c.Put(name, rrtype.ClassIN, rrtype.A, mustEntry(t, recursive.NewEntryBuilder().
 		Answer([]wire.Record{rec}).
 		ExpiresAt(time.Now().Add(time.Hour))))
 
-	first, ok := c.Get(name, rrtype.A)
+	first, ok := c.Get(name, rrtype.ClassIN, rrtype.A)
 	require.True(t, ok)
 	firstAnswer := first.Answer()
 	require.Equal(t, 1, len(firstAnswer))
@@ -36,7 +36,7 @@ func TestCacheGetReturnsCopy(t *testing.T) {
 	firstAnswer[0] = wire.NewRecord(name, time.Hour,
 		rdata.NewA(netip.MustParseAddr("198.51.100.99")))
 
-	second, ok := c.Get(name, rrtype.A)
+	second, ok := c.Get(name, rrtype.ClassIN, rrtype.A)
 	require.True(t, ok)
 	secondAnswer := second.Answer()
 	require.Equal(t, 1, len(secondAnswer))
@@ -56,7 +56,7 @@ func TestCachePutSnapshotsCaller(t *testing.T) {
 		wire.NewRecord(name, time.Hour,
 			rdata.NewA(netip.MustParseAddr("192.0.2.1"))),
 	}
-	c.Put(name, rrtype.A, mustEntry(t, recursive.NewEntryBuilder().
+	c.Put(name, rrtype.ClassIN, rrtype.A, mustEntry(t, recursive.NewEntryBuilder().
 		Answer(answer).
 		ExpiresAt(time.Now().Add(time.Hour))))
 
@@ -64,7 +64,7 @@ func TestCachePutSnapshotsCaller(t *testing.T) {
 	answer[0] = wire.NewRecord(name, time.Hour,
 		rdata.NewA(netip.MustParseAddr("198.51.100.99")))
 
-	got, ok := c.Get(name, rrtype.A)
+	got, ok := c.Get(name, rrtype.ClassIN, rrtype.A)
 	require.True(t, ok)
 	a, ok := wire.RDataAs[rdata.A](got.Answer()[0])
 	require.True(t, ok)

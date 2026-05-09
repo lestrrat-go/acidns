@@ -494,7 +494,7 @@ func (r *recursive) resolveDepth(ctx context.Context, name wire.Name, t rrtype.T
 	if depth >= r.maxDepth {
 		return Entry{}, fmt.Errorf("recursive: depth limit reached for %s", name)
 	}
-	if e, ok := r.cache.Get(name, t); ok {
+	if e, ok := r.cache.Get(name, rrtype.ClassIN, t); ok {
 		return e, nil
 	}
 	// RFC 8198 aggressive NSEC: before going to the network, check
@@ -504,11 +504,11 @@ func (r *recursive) resolveDepth(ctx context.Context, name wire.Name, t rrtype.T
 	// synthesised entry is also written to the regular cache so the
 	// next lookup hits the standard fast path above.
 	if e, ok := r.synthesiseFromNSEC(name, t); ok {
-		r.cache.Put(name, t, e)
+		r.cache.Put(name, rrtype.ClassIN, t, e)
 		return e, nil
 	}
 	if e, ok := r.synthesiseFromNSEC3(name, t); ok {
-		r.cache.Put(name, t, e)
+		r.cache.Put(name, rrtype.ClassIN, t, e)
 		return e, nil
 	}
 
@@ -600,7 +600,7 @@ func (r *recursive) resolveDepthInner(ctx context.Context, target wire.Name, t r
 		if resp.Flags().Authoritative() {
 			if queryName.Equal(target) {
 				entry := r.entryFromResponse(target, resp)
-				r.cache.Put(target, t, entry)
+				r.cache.Put(target, rrtype.ClassIN, t, entry)
 				return entry, nil
 			}
 			// Intermediate authoritative response.
@@ -629,7 +629,7 @@ func (r *recursive) resolveDepthInner(ctx context.Context, target wire.Name, t r
 		}
 		if queryName.Equal(target) && hasAnswerFor(resp, target, t) {
 			entry := r.entryFromResponse(target, resp)
-			r.cache.Put(target, t, entry)
+			r.cache.Put(target, rrtype.ClassIN, t, entry)
 			return entry, nil
 		}
 		// No referral and not the target query — fall back to target.
