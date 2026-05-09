@@ -3,14 +3,19 @@ package recursive
 import (
 	"net/netip"
 	"time"
+
+	"github.com/lestrrat-go/option/v3"
 )
 
 // Option configures a Recursive at construction.
-type Option interface{ applyRecursive(*config) }
+type Option interface {
+	option.Interface
+	recursiveOption()
+}
 
-type optionFunc func(*config)
+type recursiveOption struct{ option.Interface }
 
-func (f optionFunc) applyRecursive(c *config) { f(c) }
+func (recursiveOption) recursiveOption() {}
 
 type config struct {
 	roots              []netip.AddrPort
@@ -38,26 +43,53 @@ type config struct {
 	rootRefresh        time.Duration
 }
 
+// rateLimit carries the (qps, burst) tuple for WithUpstreamRateLimit.
+type rateLimit struct {
+	qps   float64
+	burst float64
+}
+
+type identRoots struct{}
+type identCache struct{}
+type identServerStats struct{}
+type identMaxIterations struct{}
+type identMaxDepth struct{}
+type identMaxCNAMEDepth struct{}
+type identQueryTimeout struct{}
+type identValidator struct{}
+type identDialer struct{}
+type identResolveBudget struct{}
+type identMaxNegativeTTL struct{}
+type identMaxPositiveTTL struct{}
+type identAllowNoRD struct{}
+type identAggressiveNSEC struct{}
+type identQNameMinimisation struct{}
+type identCaseRandomization struct{}
+type identUpstreamRateLimit struct{}
+type identUpstreamRateLimitMaxKeys struct{}
+type identMaxInflight struct{}
+type identRootPriming struct{}
+
 // WithRoots overrides the default root server list.
 func WithRoots(addrs ...netip.AddrPort) Option {
-	return optionFunc(func(c *config) { c.roots = append(c.roots[:0], addrs...) })
+	return recursiveOption{option.New(identRoots{}, addrs)}
 }
 
 // WithCache sets a custom Cache implementation.
 func WithCache(c Cache) Option {
-	return optionFunc(func(cfg *config) { cfg.cache = c })
+	return recursiveOption{option.New(identCache{}, c)}
 }
 
 // WithServerStats sets a custom ServerStats implementation. The default is
 // an in-memory store.
 func WithServerStats(s ServerStats) Option {
-	return optionFunc(func(c *config) { c.stats = s })
+	return recursiveOption{option.New(identServerStats{}, s)}
 }
 
 // WithMaxIterations caps how many delegation steps a single query may
 // traverse. Defaults to 30.
 func WithMaxIterations(n int) Option {
-	return optionFunc(func(c *config) { c.maxIterations = n })
+	return recursiveOption{option.New(identMaxIterations{}, n)}
 }
 
 // WithMaxDepth caps the recursive resolveDepth nesting. CNAME chains
@@ -65,33 +97,33 @@ func WithMaxIterations(n int) Option {
 // without a cap a hostile NS-graph can drive arbitrary recursion.
 // Defaults to 8.
 func WithMaxDepth(n int) Option {
-	return optionFunc(func(c *config) { c.maxDepth = n })
+	return recursiveOption{option.New(identMaxDepth{}, n)}
 }
 
 // WithMaxCNAMEDepth caps how many CNAME hops a single query may follow.
 // Defaults to 8 — RFC 1035 doesn't specify a limit but every production
 // resolver caps to defend against loops.
 func WithMaxCNAMEDepth(n int) Option {
-	return optionFunc(func(c *config) { c.maxCNAMEs = n })
+	return recursiveOption{option.New(identMaxCNAMEDepth{}, n)}
 }
 
 // WithQueryTimeout sets a per-query timeout that bounds each individual
 // upstream exchange (independent of any caller-supplied context). Defaults
 // to 4 seconds.
 func WithQueryTimeout(d time.Duration) Option {
-	return optionFunc(func(c *config) { c.queryTimeout = d })
+	return recursiveOption{option.New(identQueryTimeout{}, d)}
 }
 
 // WithValidator enables DNSSEC validation. The validator is invoked on
 // every Resolve call; bogus answers become SERVFAIL responses bearing the
 // configured EDE. The Resolver caches validated answers like any other.
 func WithValidator(v Validator) Option {
-	return optionFunc(func(c *config) { c.validator = v })
+	return recursiveOption{option.New(identValidator{}, v)}
 }
 
 // WithDialer sets a custom Dialer.
 func WithDialer(d Dialer) Option {
-	return optionFunc(func(c *config) { c.dialer = d })
+	return recursiveOption{option.New(identDialer{}, d)}
 }
 
 // WithResolveBudget sets a hard wall-clock cap on a single Resolve call,
@@ -100,7 +132,7 @@ func WithDialer(d Dialer) Option {
 // per-query timeout) into many minutes for a single query. Defaults
 // to 30 seconds. A non-positive value disables the cap.
 func WithResolveBudget(d time.Duration) Option {
-	return optionFunc(func(c *config) { c.resolveBudget = d })
+	return recursiveOption{option.New(identResolveBudget{}, d)}
 }
 
 // WithMaxNegativeTTL caps the lifetime of negative cache entries. RFC
@@ -110,7 +142,7 @@ func WithResolveBudget(d time.Duration) Option {
 // operationally reasonable. A non-positive value disables the cap.
 // Defaults to 1 hour.
 func WithMaxNegativeTTL(d time.Duration) Option {
-	return optionFunc(func(c *config) { c.maxNegTTL = d })
+	return recursiveOption{option.New(identMaxNegativeTTL{}, d)}
 }
 
 // WithMaxPositiveTTL caps the lifetime of positive cache entries. The
@@ -119,7 +151,7 @@ func WithMaxNegativeTTL(d time.Duration) Option {
 // universally cap this. A non-positive value disables the cap.
 // Defaults to 24 hours, matching the forward handler.
 func WithMaxPositiveTTL(d time.Duration) Option {
-	return optionFunc(func(c *config) { c.maxPosTTL = d })
+	return recursiveOption{option.New(identMaxPositiveTTL{}, d)}
 }
 
 // WithAllowNoRD toggles the safe default of refusing queries whose
@@ -135,7 +167,7 @@ func WithMaxPositiveTTL(d time.Duration) Option {
 // after gating the listener with an ACL or rate limit middleware so
 // the open-resolver risk is contained at the transport layer.
 func WithAllowNoRD(enable bool) Option {
-	return optionFunc(func(c *config) { c.allowNoRD = enable })
+	return recursiveOption{option.New(identAllowNoRD{}, enable)}
 }
 
 // WithAggressiveNSEC enables RFC 8198 Aggressive Use of
@@ -156,7 +188,7 @@ func WithAllowNoRD(enable bool) Option {
 // covered — affected queries fall through to the regular iteration
 // path.
 func WithAggressiveNSEC(v bool) Option {
-	return optionFunc(func(c *config) { c.aggressiveNSEC = v })
+	return recursiveOption{option.New(identAggressiveNSEC{}, v)}
 }
 
 // WithQNameMinimisation toggles RFC 9156 / 7816 QNAME minimisation.
@@ -176,7 +208,7 @@ func WithAggressiveNSEC(v bool) Option {
 // split-horizon DNS where intermediate-name queries break in ways
 // the fallback can't recover from.
 func WithQNameMinimisation(v bool) Option {
-	return optionFunc(func(c *config) { c.qnameMin = v })
+	return recursiveOption{option.New(identQNameMinimisation{}, v)}
 }
 
 // WithCaseRandomization toggles RFC 5452 §9.3 0x20 hardening.
@@ -194,7 +226,7 @@ func WithQNameMinimisation(v bool) Option {
 // Only the default Dialer honors this option; a caller-supplied
 // custom Dialer is responsible for its own 0x20 implementation.
 func WithCaseRandomization(v bool) Option {
-	return optionFunc(func(c *config) { c.caseRandom = v })
+	return recursiveOption{option.New(identCaseRandomization{}, v)}
 }
 
 // WithUpstreamRateLimit caps the outbound query rate per upstream
@@ -213,10 +245,7 @@ func WithCaseRandomization(v bool) Option {
 // one TLD, or an attacker-driven query flood). It does not replace a
 // proper edge rate limiter in front of the resolver.
 func WithUpstreamRateLimit(qps, burst float64) Option {
-	return optionFunc(func(c *config) {
-		c.upstreamQPS = qps
-		c.upstreamBurst = burst
-	})
+	return recursiveOption{option.New(identUpstreamRateLimit{}, rateLimit{qps: qps, burst: burst})}
 }
 
 // WithUpstreamRateLimitMaxKeys caps the number of distinct upstream
@@ -227,10 +256,7 @@ func WithUpstreamRateLimit(qps, burst float64) Option {
 // buckets are evicted first, then the oldest-updated bucket. A
 // non-positive value disables the cap. Defaults to 16384.
 func WithUpstreamRateLimitMaxKeys(n int) Option {
-	return optionFunc(func(c *config) {
-		c.upstreamMaxKeys = n
-		c.upstreamMaxKeysSet = true
-	})
+	return recursiveOption{option.New(identUpstreamRateLimitMaxKeys{}, n)}
 }
 
 // WithMaxInflight caps the number of concurrent distinct cache-miss
@@ -245,7 +271,7 @@ func WithUpstreamRateLimitMaxKeys(n int) Option {
 // resolver cannot serve rather than queueing it. A non-positive value
 // disables the cap. Defaults to 1024, matching the forward handler.
 func WithMaxInflight(n int) Option {
-	return optionFunc(func(c *config) { c.maxInflight = n })
+	return recursiveOption{option.New(identMaxInflight{}, n)}
 }
 
 // WithRootPriming enables RFC 8109 root server priming: at startup
@@ -263,8 +289,5 @@ func WithMaxInflight(n int) Option {
 // built-in IANA snapshot) are always used as the seed list — priming
 // only refreshes them.
 func WithRootPriming(refresh time.Duration) Option {
-	return optionFunc(func(c *config) {
-		c.rootPriming = true
-		c.rootRefresh = refresh
-	})
+	return recursiveOption{option.New(identRootPriming{}, refresh)}
 }

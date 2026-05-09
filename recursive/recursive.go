@@ -14,6 +14,7 @@ import (
 	"github.com/lestrrat-go/acidns/wire"
 	"github.com/lestrrat-go/acidns/wire/rdata"
 	"github.com/lestrrat-go/acidns/wire/rrtype"
+	"github.com/lestrrat-go/option/v3"
 )
 
 // ErrIterationLimit is returned when the resolver fails to reach an
@@ -198,7 +199,53 @@ func New(opts ...Option) (*Recursive, error) {
 		caseRandom:    true, // RFC 5452 §9.3 spoofing defence; pass WithCaseRandomization(false) to opt out
 	}
 	for _, o := range opts {
-		o.applyRecursive(&c)
+		switch o.Ident() {
+		case identRoots{}:
+			addrs := option.MustGet[[]netip.AddrPort](o)
+			c.roots = append(c.roots[:0], addrs...)
+		case identCache{}:
+			c.cache = option.MustGet[Cache](o)
+		case identServerStats{}:
+			c.stats = option.MustGet[ServerStats](o)
+		case identMaxIterations{}:
+			c.maxIterations = option.MustGet[int](o)
+		case identMaxDepth{}:
+			c.maxDepth = option.MustGet[int](o)
+		case identMaxCNAMEDepth{}:
+			c.maxCNAMEs = option.MustGet[int](o)
+		case identQueryTimeout{}:
+			c.queryTimeout = option.MustGet[time.Duration](o)
+		case identValidator{}:
+			c.validator = option.MustGet[Validator](o)
+		case identDialer{}:
+			c.dialer = option.MustGet[Dialer](o)
+		case identResolveBudget{}:
+			c.resolveBudget = option.MustGet[time.Duration](o)
+		case identMaxNegativeTTL{}:
+			c.maxNegTTL = option.MustGet[time.Duration](o)
+		case identMaxPositiveTTL{}:
+			c.maxPosTTL = option.MustGet[time.Duration](o)
+		case identAllowNoRD{}:
+			c.allowNoRD = option.MustGet[bool](o)
+		case identAggressiveNSEC{}:
+			c.aggressiveNSEC = option.MustGet[bool](o)
+		case identQNameMinimisation{}:
+			c.qnameMin = option.MustGet[bool](o)
+		case identCaseRandomization{}:
+			c.caseRandom = option.MustGet[bool](o)
+		case identUpstreamRateLimit{}:
+			rl := option.MustGet[rateLimit](o)
+			c.upstreamQPS = rl.qps
+			c.upstreamBurst = rl.burst
+		case identUpstreamRateLimitMaxKeys{}:
+			c.upstreamMaxKeys = option.MustGet[int](o)
+			c.upstreamMaxKeysSet = true
+		case identMaxInflight{}:
+			c.maxInflight = option.MustGet[int](o)
+		case identRootPriming{}:
+			c.rootPriming = true
+			c.rootRefresh = option.MustGet[time.Duration](o)
+		}
 	}
 	if c.aggressiveNSEC && c.validator == nil {
 		return nil, fmt.Errorf("recursive: WithAggressiveNSEC requires WithValidator (RFC 8198 §5: aggressive use is only safe on validated answers)")

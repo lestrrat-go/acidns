@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/lestrrat-go/acidns/wire"
+	"github.com/lestrrat-go/option/v3"
 )
 
 // ReplayCache deduplicates verified TSIG-signed messages so a captured
@@ -58,7 +59,14 @@ func NewMemoryReplayCache(opts ...ReplayCacheOption) *MemoryReplayCache {
 		now:    time.Now,
 	}
 	for _, o := range opts {
-		o.applyReplayCache(&c)
+		switch o.Ident() {
+		case identReplayWindow{}:
+			c.window = option.MustGet[time.Duration](o)
+		case identReplayCacheSize{}:
+			c.size = option.MustGet[int](o)
+		case identReplayClock{}:
+			c.now = option.MustGet[func() time.Time](o)
+		}
 	}
 	return &MemoryReplayCache{
 		size:   c.size,

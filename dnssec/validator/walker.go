@@ -12,6 +12,7 @@ import (
 	"github.com/lestrrat-go/acidns/wire"
 	"github.com/lestrrat-go/acidns/wire/rdata"
 	"github.com/lestrrat-go/acidns/wire/rrtype"
+	"github.com/lestrrat-go/option/v3"
 )
 
 // ErrNoTrustAnchor is returned when no configured Anchor covers the query
@@ -103,11 +104,6 @@ func (a *answer) RCODE() wire.RCODE      { return a.rcode }
 func (a *answer) Chain() []ChainStep     { return a.chain }
 func (a *answer) Reason() error          { return a.reason }
 
-// WalkerOption configures a Walker. Options live in walker_options.go.
-type WalkerOption interface {
-	applyWalker(*walker)
-}
-
 type walker struct {
 	source       Source
 	anchors      []Anchor
@@ -148,7 +144,45 @@ func NewWalker(source Source, opts ...WalkerOption) (Walker, error) {
 		maxKeys:      16,
 	}
 	for _, o := range opts {
-		o.applyWalker(w)
+		switch o.Ident() {
+		case identWalkerAnchors{}:
+			anchors := option.MustGet[[]Anchor](o)
+			w.anchors = append(w.anchors[:0], anchors...)
+		case identWalkerIANARootAnchor{}:
+			if option.MustGet[bool](o) {
+				w.anchors = append(w.anchors, IANARootAnchor())
+			}
+		case identWalkerNTAStore{}:
+			if s := option.MustGet[*NTAStore](o); s != nil {
+				w.ntas = s
+			}
+		case identWalkerBogusPolicy{}:
+			w.bogusPolicy = option.MustGet[BogusPolicy](o)
+		case identWalkerClock{}:
+			if now := option.MustGet[func() time.Time](o); now != nil {
+				w.now = now
+			}
+		case identWalkerClockSkew{}:
+			if skew := option.MustGet[time.Duration](o); skew >= 0 {
+				w.skew = skew
+			}
+		case identWalkerMaxZoneCuts{}:
+			if n := option.MustGet[int](o); n > 0 {
+				w.maxZoneCuts = n
+			}
+		case identWalkerMaxRRSIGsTry{}:
+			if n := option.MustGet[int](o); n > 0 {
+				w.maxRRSIGsTry = n
+			}
+		case identWalkerMaxAlgorithms{}:
+			if n := option.MustGet[int](o); n > 0 {
+				w.maxAlgs = n
+			}
+		case identWalkerMaxKeysPerZone{}:
+			if n := option.MustGet[int](o); n > 0 {
+				w.maxKeys = n
+			}
+		}
 	}
 	return w, nil
 }

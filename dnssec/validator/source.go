@@ -6,6 +6,7 @@ import (
 
 	"github.com/lestrrat-go/acidns/wire"
 	"github.com/lestrrat-go/acidns/wire/rrtype"
+	"github.com/lestrrat-go/option/v3"
 )
 
 // Source is the validator's pluggable upstream: a Lookup function that, given
@@ -37,38 +38,43 @@ type Exchanger interface {
 func NewExchangerSource(ex Exchanger, opts ...ExchangerSourceOption) Source {
 	src := &exchangerSource{ex: ex, udpSize: 1232}
 	for _, o := range opts {
-		o.applyExchangerSource(src)
+		switch o.Ident() {
+		case identExchangerSourceUDPSize{}:
+			if size := option.MustGet[uint16](o); size > 0 {
+				src.udpSize = size
+			}
+		case identExchangerSourceID{}:
+			if id := option.MustGet[func() uint16](o); id != nil {
+				src.idFn = id
+			}
+		}
 	}
 	return src
 }
 
 // ExchangerSourceOption tunes NewExchangerSource.
 type ExchangerSourceOption interface {
-	applyExchangerSource(*exchangerSource)
+	option.Interface
+	exchangerSourceOption()
 }
 
-type exchangerSourceOptionFunc func(*exchangerSource)
+type exchangerSourceOption struct{ option.Interface }
 
-func (f exchangerSourceOptionFunc) applyExchangerSource(s *exchangerSource) { f(s) }
+func (exchangerSourceOption) exchangerSourceOption() {}
+
+type identExchangerSourceUDPSize struct{}
+type identExchangerSourceID struct{}
 
 // WithExchangerSourceUDPSize overrides the EDNS UDP buffer size advertised
 // in queries. The default (1232) is the IETF Flag Day 2020 recommendation.
 func WithExchangerSourceUDPSize(size uint16) ExchangerSourceOption {
-	return exchangerSourceOptionFunc(func(s *exchangerSource) {
-		if size > 0 {
-			s.udpSize = size
-		}
-	})
+	return exchangerSourceOption{option.New(identExchangerSourceUDPSize{}, size)}
 }
 
 // WithExchangerSourceID sets a fixed query ID generator. The default uses
 // a per-source counter starting at 1; tests sometimes prefer a fixed value.
 func WithExchangerSourceID(id func() uint16) ExchangerSourceOption {
-	return exchangerSourceOptionFunc(func(s *exchangerSource) {
-		if id != nil {
-			s.idFn = id
-		}
-	})
+	return exchangerSourceOption{option.New(identExchangerSourceID{}, id)}
 }
 
 type exchangerSource struct {

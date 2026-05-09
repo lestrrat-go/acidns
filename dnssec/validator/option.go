@@ -1,18 +1,25 @@
 package validator
 
-import "time"
+import (
+	"time"
+
+	"github.com/lestrrat-go/option/v3"
+)
 
 // ValidatorOption configures a [Validator] at construction. Distinct
 // from [WalkerOption] because the same package hosts both types and
 // the option-set names already collide on the walker side; a single
 // shared interface would either require the walker options to
-// implement an unused applyValidator, or vice versa. The names below
-// mirror the walker option-set with a Validator prefix.
-type ValidatorOption interface{ applyValidator(*validatorConfig) }
+// implement an unused validator marker, or vice versa. The names
+// below mirror the walker option-set with a Validator prefix.
+type ValidatorOption interface {
+	option.Interface
+	validatorOption()
+}
 
-type validatorOptionFunc func(*validatorConfig)
+type validatorOption struct{ option.Interface }
 
-func (f validatorOptionFunc) applyValidator(c *validatorConfig) { f(c) }
+func (validatorOption) validatorOption() {}
 
 type validatorConfig struct {
 	ntas        *NTAStore
@@ -21,18 +28,23 @@ type validatorConfig struct {
 	skew        time.Duration
 }
 
+type identValidatorNTAStore struct{}
+type identValidatorBogusPolicy struct{}
+type identValidatorClock struct{}
+type identValidatorClockSkew struct{}
+
 // WithValidatorNTAStore installs a Negative Trust Anchor store on
 // the validator. Names covered by the store short-circuit validation
 // to Indeterminate per RFC 7646. A nil store is equivalent to
 // passing no option — a fresh empty store is allocated by [New].
 func WithValidatorNTAStore(s *NTAStore) ValidatorOption {
-	return validatorOptionFunc(func(c *validatorConfig) { c.ntas = s })
+	return validatorOption{option.New(identValidatorNTAStore{}, s)}
 }
 
 // WithValidatorBogusPolicy controls how the validator handles
 // signature failures. Defaults to [BogusReturnSERVFAIL].
 func WithValidatorBogusPolicy(p BogusPolicy) ValidatorOption {
-	return validatorOptionFunc(func(c *validatorConfig) { c.bogusPolicy = p })
+	return validatorOption{option.New(identValidatorBogusPolicy{}, p)}
 }
 
 // WithValidatorClock injects a clock used for RRSIG
@@ -40,7 +52,7 @@ func WithValidatorBogusPolicy(p BogusPolicy) ValidatorOption {
 // production code should leave this unset. The bare-name spelling
 // matches the Walker's WithWalkerClock.
 func WithValidatorClock(now func() time.Time) ValidatorOption {
-	return validatorOptionFunc(func(c *validatorConfig) { c.now = now })
+	return validatorOption{option.New(identValidatorClock{}, now)}
 }
 
 // WithValidatorClockSkew widens the RRSIG inception/expiration window by
@@ -48,25 +60,36 @@ func WithValidatorClock(now func() time.Time) ValidatorOption {
 // minutes; the default of 0 is the conservative reading of RFC 4035
 // §5.3. Mirrors the walker's WithWalkerClockSkew.
 func WithValidatorClockSkew(skew time.Duration) ValidatorOption {
-	return validatorOptionFunc(func(c *validatorConfig) {
-		if skew >= 0 {
-			c.skew = skew
-		}
-	})
+	return validatorOption{option.New(identValidatorClockSkew{}, skew)}
 }
 
-type walkerOptionFunc func(*walker)
+// WalkerOption configures a Walker.
+type WalkerOption interface {
+	option.Interface
+	walkerOption()
+}
 
-func (f walkerOptionFunc) applyWalker(w *walker) { f(w) }
+type walkerOptionImpl struct{ option.Interface }
+
+func (walkerOptionImpl) walkerOption() {}
+
+type identWalkerAnchors struct{}
+type identWalkerIANARootAnchor struct{}
+type identWalkerNTAStore struct{}
+type identWalkerBogusPolicy struct{}
+type identWalkerClock struct{}
+type identWalkerClockSkew struct{}
+type identWalkerMaxZoneCuts struct{}
+type identWalkerMaxRRSIGsTry struct{}
+type identWalkerMaxAlgorithms struct{}
+type identWalkerMaxKeysPerZone struct{}
 
 // WithWalkerAnchors configures one or more trust anchors. The walker
 // selects the closest covering anchor for each query. An unconfigured
 // walker returns [ErrNoTrustAnchor] — pass this option (or
 // [WithWalkerIANARootAnchor]) explicitly.
 func WithWalkerAnchors(anchors ...Anchor) WalkerOption {
-	return walkerOptionFunc(func(w *walker) {
-		w.anchors = append(w.anchors[:0], anchors...)
-	})
+	return walkerOptionImpl{option.New(identWalkerAnchors{}, anchors)}
 }
 
 // WithWalkerIANARootAnchor opts in to the embedded IANA root KSK trust
@@ -80,40 +103,28 @@ func WithWalkerAnchors(anchors ...Anchor) WalkerOption {
 // configure" should not silently look like "I want IANA root with a
 // frozen-in-binary digest."
 func WithWalkerIANARootAnchor(v bool) WalkerOption {
-	return walkerOptionFunc(func(w *walker) {
-		if v {
-			w.anchors = append(w.anchors, IANARootAnchor())
-		}
-	})
+	return walkerOptionImpl{option.New(identWalkerIANARootAnchor{}, v)}
 }
 
 // WithWalkerNTAStore plugs in an existing NTA store. If unset, an
 // empty store is allocated. NTAs short-circuit validation for
 // covered names; cf. the project's DNSSEC stance.
 func WithWalkerNTAStore(s *NTAStore) WalkerOption {
-	return walkerOptionFunc(func(w *walker) {
-		if s != nil {
-			w.ntas = s
-		}
-	})
+	return walkerOptionImpl{option.New(identWalkerNTAStore{}, s)}
 }
 
 // WithWalkerBogusPolicy sets the policy applied when validation
 // fails. Default is BogusReturnSERVFAIL (the strict reading of RFC
 // 4035 §5.5).
 func WithWalkerBogusPolicy(p BogusPolicy) WalkerOption {
-	return walkerOptionFunc(func(w *walker) { w.bogusPolicy = p })
+	return walkerOptionImpl{option.New(identWalkerBogusPolicy{}, p)}
 }
 
 // WithWalkerClock injects a clock. Tests use this to simulate
 // signature inception and expiration without sleeping. Default is
 // time.Now.
 func WithWalkerClock(now func() time.Time) WalkerOption {
-	return walkerOptionFunc(func(w *walker) {
-		if now != nil {
-			w.now = now
-		}
-	})
+	return walkerOptionImpl{option.New(identWalkerClock{}, now)}
 }
 
 // WithWalkerClockSkew widens the RRSIG inception/expiration window
@@ -121,43 +132,27 @@ func WithWalkerClock(now func() time.Time) WalkerOption {
 // minutes; the default of 0 is the conservative reading of RFC 4035
 // §5.3.
 func WithWalkerClockSkew(skew time.Duration) WalkerOption {
-	return walkerOptionFunc(func(w *walker) {
-		if skew >= 0 {
-			w.skew = skew
-		}
-	})
+	return walkerOptionImpl{option.New(identWalkerClockSkew{}, skew)}
 }
 
 // WithWalkerMaxZoneCuts caps the depth of the chain walk. Default 16
 // is enough for any real qname and prevents zone-cut bombs.
 func WithWalkerMaxZoneCuts(n int) WalkerOption {
-	return walkerOptionFunc(func(w *walker) {
-		if n > 0 {
-			w.maxZoneCuts = n
-		}
-	})
+	return walkerOptionImpl{option.New(identWalkerMaxZoneCuts{}, n)}
 }
 
 // WithWalkerMaxRRSIGsTry caps the number of RRSIGs verified per
 // RRset. Default 8. Without this cap a hostile zone could ship many
 // RRSIGs to amplify CPU cost on a verifier.
 func WithWalkerMaxRRSIGsTry(n int) WalkerOption {
-	return walkerOptionFunc(func(w *walker) {
-		if n > 0 {
-			w.maxRRSIGsTry = n
-		}
-	})
+	return walkerOptionImpl{option.New(identWalkerMaxRRSIGsTry{}, n)}
 }
 
 // WithWalkerMaxAlgorithms caps the number of distinct DNSSEC
 // algorithms a single zone may advertise (DAU bomb guard). Default
 // 4.
 func WithWalkerMaxAlgorithms(n int) WalkerOption {
-	return walkerOptionFunc(func(w *walker) {
-		if n > 0 {
-			w.maxAlgs = n
-		}
-	})
+	return walkerOptionImpl{option.New(identWalkerMaxAlgorithms{}, n)}
 }
 
 // WithWalkerMaxKeysPerZone caps the number of usable DNSKEYs
@@ -167,9 +162,5 @@ func WithWalkerMaxAlgorithms(n int) WalkerOption {
 // that share a keytag would otherwise drive maxRRSIGsTry × N
 // candidate Verify calls per signed RRset.
 func WithWalkerMaxKeysPerZone(n int) WalkerOption {
-	return walkerOptionFunc(func(w *walker) {
-		if n > 0 {
-			w.maxKeys = n
-		}
-	})
+	return walkerOptionImpl{option.New(identWalkerMaxKeysPerZone{}, n)}
 }

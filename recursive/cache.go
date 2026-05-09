@@ -8,6 +8,7 @@ import (
 
 	"github.com/lestrrat-go/acidns/wire"
 	"github.com/lestrrat-go/acidns/wire/rrtype"
+	"github.com/lestrrat-go/option/v3"
 )
 
 // Cache stores authoritative response components keyed by
@@ -157,11 +158,14 @@ type memoryCacheShard struct {
 }
 
 // MemoryCacheOption configures a [MemoryCache] at construction.
-type MemoryCacheOption interface{ applyMemoryCache(*memoryCacheConfig) }
+type MemoryCacheOption interface {
+	option.Interface
+	memoryCacheOption()
+}
 
-type memoryCacheOptionFunc func(*memoryCacheConfig)
+type memoryCacheOption struct{ option.Interface }
 
-func (f memoryCacheOptionFunc) applyMemoryCache(c *memoryCacheConfig) { f(c) }
+func (memoryCacheOption) memoryCacheOption() {}
 
 type memoryCacheConfig struct {
 	maxSize           int
@@ -169,11 +173,15 @@ type memoryCacheConfig struct {
 	now               func() time.Time
 }
 
+type identMemoryCacheSize struct{}
+type identMemoryCacheMaxRecordsPerEntry struct{}
+type identMemoryCacheClock struct{}
+
 // WithMemoryCacheSize sets the upper bound on total entries across all
 // shards. The cap is applied per-shard as ceil(n/64). A non-positive
 // value disables the cap.
 func WithMemoryCacheSize(n int) MemoryCacheOption {
-	return memoryCacheOptionFunc(func(c *memoryCacheConfig) { c.maxSize = n })
+	return memoryCacheOption{option.New(identMemoryCacheSize{}, n)}
 }
 
 // WithMemoryCacheMaxRecordsPerEntry caps how many records a single
@@ -181,7 +189,7 @@ func WithMemoryCacheSize(n int) MemoryCacheOption {
 // A non-positive value disables the cap; the default is
 // [DefaultMaxRecordsPerEntry].
 func WithMemoryCacheMaxRecordsPerEntry(n int) MemoryCacheOption {
-	return memoryCacheOptionFunc(func(c *memoryCacheConfig) { c.maxRecordsPerEntr = n })
+	return memoryCacheOption{option.New(identMemoryCacheMaxRecordsPerEntry{}, n)}
 }
 
 // WithMemoryCacheClock injects the clock used by [MemoryCache.Get]
@@ -189,7 +197,7 @@ func WithMemoryCacheMaxRecordsPerEntry(n int) MemoryCacheOption {
 // default is [time.Now]; tests pass a controllable clock to verify
 // TTL decrement without sleeping in real time.
 func WithMemoryCacheClock(now func() time.Time) MemoryCacheOption {
-	return memoryCacheOptionFunc(func(c *memoryCacheConfig) { c.now = now })
+	return memoryCacheOption{option.New(identMemoryCacheClock{}, now)}
 }
 
 // NewMemoryCache returns an empty MemoryCache. With no options the
@@ -201,7 +209,14 @@ func NewMemoryCache(opts ...MemoryCacheOption) *MemoryCache {
 		maxRecordsPerEntr: DefaultMaxRecordsPerEntry,
 	}
 	for _, o := range opts {
-		o.applyMemoryCache(&c)
+		switch o.Ident() {
+		case identMemoryCacheSize{}:
+			c.maxSize = option.MustGet[int](o)
+		case identMemoryCacheMaxRecordsPerEntry{}:
+			c.maxRecordsPerEntr = option.MustGet[int](o)
+		case identMemoryCacheClock{}:
+			c.now = option.MustGet[func() time.Time](o)
+		}
 	}
 	now := c.now
 	if now == nil {

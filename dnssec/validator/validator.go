@@ -9,6 +9,7 @@ import (
 	"github.com/lestrrat-go/acidns/dnssec/validator/validatorbb"
 	"github.com/lestrrat-go/acidns/wire"
 	"github.com/lestrrat-go/acidns/wire/rdata"
+	"github.com/lestrrat-go/option/v3"
 )
 
 // ErrNoCoveringRRSIG is returned when a validation request supplies an
@@ -96,7 +97,18 @@ type Validator struct {
 func New(opts ...ValidatorOption) (*Validator, error) {
 	c := validatorConfig{}
 	for _, o := range opts {
-		o.applyValidator(&c)
+		switch o.Ident() {
+		case identValidatorNTAStore{}:
+			c.ntas = option.MustGet[*NTAStore](o)
+		case identValidatorBogusPolicy{}:
+			c.bogusPolicy = option.MustGet[BogusPolicy](o)
+		case identValidatorClock{}:
+			c.now = option.MustGet[func() time.Time](o)
+		case identValidatorClockSkew{}:
+			if skew := option.MustGet[time.Duration](o); skew >= 0 {
+				c.skew = skew
+			}
+		}
 	}
 	if c.ntas == nil {
 		c.ntas = NewNTAStore()
