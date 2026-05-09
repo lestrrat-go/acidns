@@ -12,9 +12,9 @@ import (
 
 func TestServerCookieRoundTrip(t *testing.T) {
 	t.Parallel()
-	pool, cancel, _ := cookies.NewSecretPool(0)
-	t.Cleanup(cancel)
-	srv := cookies.NewServer(pool, time.Hour)
+	pool, _ := cookies.NewSecretPool()
+	t.Cleanup(pool.Close)
+	srv := cookies.NewServer(pool)
 	cc := [8]byte{1, 2, 3, 4, 5, 6, 7, 8}
 	addr := netip.MustParseAddr("203.0.113.1")
 	now := time.Unix(1_700_000_000, 0).UTC()
@@ -29,9 +29,9 @@ func TestServerCookieRoundTrip(t *testing.T) {
 
 func TestServerCookieRejectsWrongAddr(t *testing.T) {
 	t.Parallel()
-	pool, cancel, _ := cookies.NewSecretPool(0)
-	t.Cleanup(cancel)
-	srv := cookies.NewServer(pool, time.Hour)
+	pool, _ := cookies.NewSecretPool()
+	t.Cleanup(pool.Close)
+	srv := cookies.NewServer(pool)
 	cc := [8]byte{0xab, 0xcd, 0xef, 1, 2, 3, 4, 5}
 	now := time.Unix(1_700_000_000, 0).UTC()
 
@@ -42,9 +42,9 @@ func TestServerCookieRejectsWrongAddr(t *testing.T) {
 
 func TestServerCookieRejectsExpired(t *testing.T) {
 	t.Parallel()
-	pool, cancel, _ := cookies.NewSecretPool(0)
-	t.Cleanup(cancel)
-	srv := cookies.NewServer(pool, 30*time.Minute)
+	pool, _ := cookies.NewSecretPool()
+	t.Cleanup(pool.Close)
+	srv := cookies.NewServer(pool, cookies.WithServerMaxAge(30*time.Minute))
 	cc := [8]byte{}
 	addr := netip.MustParseAddr("203.0.113.1")
 	now := time.Unix(1_700_000_000, 0).UTC()
@@ -57,9 +57,9 @@ func TestServerCookieRejectsExpired(t *testing.T) {
 
 func TestServerCookieAcceptsPreviousSecretAfterRotation(t *testing.T) {
 	t.Parallel()
-	pool, cancel, _ := cookies.NewSecretPool(0)
-	t.Cleanup(cancel)
-	srv := cookies.NewServer(pool, time.Hour)
+	pool, _ := cookies.NewSecretPool()
+	t.Cleanup(pool.Close)
+	srv := cookies.NewServer(pool)
 	cc := [8]byte{42, 42, 42, 42, 42, 42, 42, 42}
 	addr := netip.MustParseAddr("198.51.100.5")
 	now := time.Now().UTC().Truncate(time.Second)

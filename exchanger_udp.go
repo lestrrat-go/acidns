@@ -54,9 +54,9 @@ func WithUDPReadBufferSize(n int) UDPExchangerOption {
 // Defaults to false at this raw-exchanger level so explicit callers
 // can mix-and-match policies per server. The convenience
 // constructors ([NewResolver] with [WithServers], [recursive.New])
-// flip this on by default and expose a Without* opt-out for
-// upstreams known to silently lowercase the qname in responses
-// (rare).
+// flip this on by default and expose [WithUDP0x20](false) as an
+// opt-out for upstreams known to silently lowercase the qname in
+// responses (rare).
 func WithUDP0x20(v bool) UDPExchangerOption {
 	return udpExchangerOptionFunc(func(c *udpExchangerConfig) { c.use0x20 = v })
 }

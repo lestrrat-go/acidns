@@ -47,7 +47,7 @@ func TestPrimeReplacesRoots(t *testing.T) {
 		return primingResponseDialer(t, newA, newB).fn(ctx, server, q)
 	}}
 
-	r := recursive.New(
+	r := mustRecursive(t, 
 		recursive.WithRoots(seedRoot),
 		recursive.WithDialer(dialer),
 	)
@@ -76,7 +76,7 @@ func TestPrimeFailureKeepsRoots(t *testing.T) {
 			return b.RCODE(wire.RCODEServFail)
 		}), nil
 	}}
-	r := recursive.New(
+	r := mustRecursive(t, 
 		recursive.WithRoots(seedRoot),
 		recursive.WithDialer(dialer),
 	)
@@ -87,7 +87,7 @@ func TestPrimeFailureKeepsRoots(t *testing.T) {
 
 func TestRunWithoutPrimingReturnsImmediately(t *testing.T) {
 	t.Parallel()
-	r := recursive.New(
+	r := mustRecursive(t, 
 		recursive.WithRoots(netip.MustParseAddrPort("198.51.100.1:53")),
 	)
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
@@ -100,7 +100,7 @@ func TestRunCancelsOnContextDone(t *testing.T) {
 	dialer := stubDialer{fn: func(_ context.Context, _ netip.AddrPort, q wire.Message) (wire.Message, error) {
 		return mkResp(t, q, func(b *wire.Builder) *wire.Builder { return b }), nil
 	}}
-	r := recursive.New(
+	r := mustRecursive(t, 
 		recursive.WithRoots(netip.MustParseAddrPort("198.51.100.1:53")),
 		recursive.WithDialer(dialer),
 		recursive.WithRootPriming(time.Hour),

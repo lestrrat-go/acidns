@@ -4,12 +4,12 @@ import "github.com/lestrrat-go/acidns"
 
 // Option customises the chaos handler.
 type Option interface {
-	apply(*config)
+	applyChaos(*config)
 }
 
 type optionFunc func(*config)
 
-func (f optionFunc) apply(c *config) { f(c) }
+func (f optionFunc) applyChaos(c *config) { f(c) }
 
 type config struct {
 	id      string

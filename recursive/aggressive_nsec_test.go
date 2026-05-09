@@ -85,7 +85,7 @@ func TestAggressiveNSECSynthesisesNXDOMAIN(t *testing.T) {
 		},
 	}
 
-	r := recursive.New(
+	r := mustRecursive(t, 
 		recursive.WithRoots(netip.MustParseAddrPort("127.0.0.1:1")),
 		recursive.WithDialer(dialer),
 		recursive.WithQNameMinimisation(false),
@@ -138,7 +138,7 @@ func TestAggressiveNSECDisabledByDefault(t *testing.T) {
 		},
 	}
 
-	r := recursive.New(
+	r := mustRecursive(t, 
 		recursive.WithRoots(netip.MustParseAddrPort("127.0.0.1:1")),
 		recursive.WithDialer(dialer),
 		recursive.WithQNameMinimisation(false),
@@ -158,51 +158,18 @@ func TestAggressiveNSECDisabledByDefault(t *testing.T) {
 		"without WithAggressiveNSEC the second name must consult upstream")
 }
 
-// TestAggressiveNSECNoValidatorIsNoop verifies WithAggressiveNSEC
-// without WithValidator does nothing — index stays empty so no
-// synthesis can occur (every query goes upstream).
-func TestAggressiveNSECNoValidatorIsNoop(t *testing.T) {
+// TestAggressiveNSECNoValidatorRejected verifies WithAggressiveNSEC
+// without WithValidator is rejected at construction. RFC 8198 §5
+// requires aggressive use to operate over validated answers; a
+// silent downgrade would let an attacker poison the cache with
+// fake NSEC records and suppress resolution.
+func TestAggressiveNSECNoValidatorRejected(t *testing.T) {
 	t.Parallel()
 
-	var upstreamCalls atomic.Int32
-	dialer := stubDialer{
-		fn: func(_ context.Context, _ netip.AddrPort, q wire.Message) (wire.Message, error) {
-			upstreamCalls.Add(1)
-			soa := wire.NewRecord(wire.MustParseName("example."), 5*time.Minute,
-				rdata.NewSOA(
-					wire.MustParseName("ns.example."),
-					wire.MustParseName("hm.example."),
-					1, 7200, 3600, 1209600, 60,
-				))
-			nsec := wire.NewRecord(wire.MustParseName("a.example."), 5*time.Minute,
-				rdata.NewNSEC(wire.MustParseName("d.example."), nil))
-			return mkResp(t, q, func(b *wire.Builder) *wire.Builder {
-				return b.Authoritative(true).
-					RCODE(wire.RCODENXDomain).
-					Authority(soa).
-					Authority(nsec)
-			}), nil
-		},
-	}
-
-	r := recursive.New(
+	_, err := recursive.New(
 		recursive.WithRoots(netip.MustParseAddrPort("127.0.0.1:1")),
-		recursive.WithDialer(dialer),
-		recursive.WithQNameMinimisation(false),
-		// AggressiveNSEC without Validator — the resolver internally
-		// disables it because the safety property requires
-		// validation.
 		recursive.WithAggressiveNSEC(),
 	)
-
-	ctx, cancel := context.WithTimeout(t.Context(), 2*time.Second)
-	defer cancel()
-	_, err := r.Resolve(ctx, wire.MustParseName("c.example."), rrtype.A)
-	require.NoError(t, err)
-	primed := upstreamCalls.Load()
-
-	_, err = r.Resolve(ctx, wire.MustParseName("b.example."), rrtype.A)
-	require.NoError(t, err)
-	require.Greater(t, upstreamCalls.Load(), primed,
-		"without a validator the aggressive cache stays empty")
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "WithAggressiveNSEC requires WithValidator")
 }

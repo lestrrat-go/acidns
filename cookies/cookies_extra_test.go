@@ -15,8 +15,8 @@ import (
 // changes within a generous window.
 func TestSecretPoolAutoRotation(t *testing.T) {
 	t.Parallel()
-	pool, cancel, _ := cookies.NewSecretPool(5 * time.Millisecond)
-	t.Cleanup(cancel)
+	pool, _ := cookies.NewSecretPool(cookies.WithPoolRotateEvery(5 * time.Millisecond))
+	t.Cleanup(pool.Close)
 
 	first := append([]byte(nil), pool.Current()...)
 	require.NotEmpty(t, first)
@@ -31,30 +31,30 @@ func TestSecretPoolAutoRotation(t *testing.T) {
 // stops the background rotation loop without panicking.
 func TestSecretPoolCancelStopsRotation(t *testing.T) {
 	t.Parallel()
-	_, cancel, _ := cookies.NewSecretPool(time.Hour)
-	cancel() // immediately stop; should not block / panic.
+	pool, _ := cookies.NewSecretPool(cookies.WithPoolRotateEvery(time.Hour))
+	pool.Close() // immediately stop; should not block / panic.
 }
 
 // TestServerMaxAgeDefault checks that NewServer with maxAge=0 defaults to
 // one hour, and that explicit non-zero values are preserved.
 func TestServerMaxAgeDefault(t *testing.T) {
 	t.Parallel()
-	pool, cancel, _ := cookies.NewSecretPool(0)
-	t.Cleanup(cancel)
+	pool, _ := cookies.NewSecretPool()
+	t.Cleanup(pool.Close)
 
-	srv := cookies.NewServer(pool, 0)
+	srv := cookies.NewServer(pool)
 	require.Equal(t, time.Hour, srv.MaxAge())
 
-	srv2 := cookies.NewServer(pool, 17*time.Minute)
+	srv2 := cookies.NewServer(pool, cookies.WithServerMaxAge(17*time.Minute))
 	require.Equal(t, 17*time.Minute, srv2.MaxAge())
 }
 
 // TestServerValidateMalformedCookies covers length and version validation.
 func TestServerValidateMalformedCookies(t *testing.T) {
 	t.Parallel()
-	pool, cancel, _ := cookies.NewSecretPool(0)
-	t.Cleanup(cancel)
-	srv := cookies.NewServer(pool, time.Hour)
+	pool, _ := cookies.NewSecretPool()
+	t.Cleanup(pool.Close)
+	srv := cookies.NewServer(pool)
 	cc := [8]byte{1, 2, 3, 4, 5, 6, 7, 8}
 	addr := netip.MustParseAddr("203.0.113.99")
 	now := time.Unix(1_700_000_000, 0).UTC()
@@ -74,9 +74,9 @@ func TestServerValidateMalformedCookies(t *testing.T) {
 // guard rejects clearly bogus cookies.
 func TestServerValidateFutureTimestamp(t *testing.T) {
 	t.Parallel()
-	pool, cancel, _ := cookies.NewSecretPool(0)
-	t.Cleanup(cancel)
-	srv := cookies.NewServer(pool, time.Hour)
+	pool, _ := cookies.NewSecretPool()
+	t.Cleanup(pool.Close)
+	srv := cookies.NewServer(pool)
 	cc := [8]byte{}
 	addr := netip.MustParseAddr("203.0.113.50")
 	future := time.Unix(1_700_000_000, 0).UTC()
@@ -90,9 +90,9 @@ func TestServerValidateFutureTimestamp(t *testing.T) {
 // TestServerCookieIPv6 exercises the addr.Is6() branch of mintCookie.
 func TestServerCookieIPv6(t *testing.T) {
 	t.Parallel()
-	pool, cancel, _ := cookies.NewSecretPool(0)
-	t.Cleanup(cancel)
-	srv := cookies.NewServer(pool, time.Hour)
+	pool, _ := cookies.NewSecretPool()
+	t.Cleanup(pool.Close)
+	srv := cookies.NewServer(pool)
 	cc := [8]byte{9, 9, 9, 9, 9, 9, 9, 9}
 	addr := netip.MustParseAddr("2001:db8::1")
 	now := time.Unix(1_700_000_000, 0).UTC()
@@ -111,9 +111,9 @@ func TestServerCookieIPv6(t *testing.T) {
 // addr is the zero value (neither Is4 nor Is6).
 func TestServerCookieZeroAddr(t *testing.T) {
 	t.Parallel()
-	pool, cancel, _ := cookies.NewSecretPool(0)
-	t.Cleanup(cancel)
-	srv := cookies.NewServer(pool, time.Hour)
+	pool, _ := cookies.NewSecretPool()
+	t.Cleanup(pool.Close)
+	srv := cookies.NewServer(pool)
 	cc := [8]byte{}
 	var zero netip.Addr
 	now := time.Unix(1_700_000_000, 0).UTC()

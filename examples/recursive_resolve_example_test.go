@@ -48,10 +48,14 @@ func Example_recursive_resolve() {
 	rootAddr := netip.MustParseAddrPort("127.0.0.1:1053")
 	authAddr := netip.MustParseAddrPort("127.0.0.1:53")
 
-	r := recursive.New(
+	r, err := recursive.New(
 		recursive.WithRoots(rootAddr),
 		recursive.WithDialer(scriptedDialer{root: rootAddr, auth: authAddr}),
 	)
+	if err != nil {
+		fmt.Println("new:", err)
+		return
+	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 	defer cancel()

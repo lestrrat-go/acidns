@@ -289,33 +289,54 @@ type SecretPool interface {
 	// Rotate generates a fresh current secret, demoting the prior
 	// current to the second slot and discarding any older secret.
 	Rotate() error
+	// Close stops the rotation goroutine if [WithPoolRotateEvery] was
+	// supplied. Safe to call when no rotation goroutine is running
+	// and idempotent on repeated calls.
+	Close()
 }
 
-// NewSecretPool returns a SecretPool with a freshly-minted random secret.
-// rotateEvery > 0 starts a background goroutine that calls Rotate on the
-// supplied interval; pass 0 to disable automatic rotation.
-//
-// The caller is responsible for stopping the rotation by invoking the
-// returned cancel function on shutdown.
-//
-// An error is returned if the initial random-secret generation fails
-// (a constructor running at server start-up should not panic on a
-// transient crypto/rand error).
-func NewSecretPool(rotateEvery time.Duration) (SecretPool, func(), error) {
+// PoolOption configures a [SecretPool] returned by [NewSecretPool].
+type PoolOption interface{ applyPool(*poolConfig) }
+
+type poolOptionFunc func(*poolConfig)
+
+func (f poolOptionFunc) applyPool(c *poolConfig) { f(c) }
+
+type poolConfig struct {
+	rotateEvery time.Duration
+}
+
+// WithPoolRotateEvery enables automatic rotation of the pool's
+// HMAC secret on the supplied interval. With auto-rotation enabled
+// the returned pool's [SecretPool.Close] must be called on shutdown
+// to stop the rotation goroutine. A non-positive value disables
+// automatic rotation.
+func WithPoolRotateEvery(d time.Duration) PoolOption {
+	return poolOptionFunc(func(c *poolConfig) { c.rotateEvery = d })
+}
+
+// NewSecretPool returns a [SecretPool] with a freshly-minted random
+// secret. With [WithPoolRotateEvery] the pool spawns a background
+// goroutine that periodically rotates the current secret; the
+// goroutine is shut down by [SecretPool.Close]. An error is returned
+// if the initial random-secret generation fails.
+func NewSecretPool(opts ...PoolOption) (SecretPool, error) {
+	cfg := poolConfig{}
+	for _, o := range opts {
+		o.applyPool(&cfg)
+	}
 	p := &secretPool{}
 	if err := p.Rotate(); err != nil {
-		return nil, nil, err
+		return nil, err
 	}
-	cancel := func() {}
-	if rotateEvery > 0 {
-		stop := make(chan struct{})
-		cancel = func() { close(stop) }
+	if cfg.rotateEvery > 0 {
+		p.stop = make(chan struct{})
 		go func() {
-			tick := time.NewTicker(rotateEvery)
+			tick := time.NewTicker(cfg.rotateEvery)
 			defer tick.Stop()
 			for {
 				select {
-				case <-stop:
+				case <-p.stop:
 					return
 				case <-tick.C:
 					_ = p.Rotate()
@@ -323,13 +344,22 @@ func NewSecretPool(rotateEvery time.Duration) (SecretPool, func(), error) {
 			}
 		}()
 	}
-	return p, cancel, nil
+	return p, nil
 }
 
 type secretPool struct {
 	mu       sync.RWMutex
 	current  Secret
 	previous Secret
+	stop     chan struct{}
+	stopOnce sync.Once
+}
+
+func (p *secretPool) Close() {
+	if p.stop == nil {
+		return
+	}
+	p.stopOnce.Do(func() { close(p.stop) })
 }
 
 func (p *secretPool) Current() Secret {
@@ -378,14 +408,31 @@ type Server interface {
 	MaxAge() time.Duration
 }
 
-// NewServer returns a Server backed by pool. maxAge is the window beyond
-// the cookie's embedded timestamp after which Validate returns
-// ErrCookieExpired (default 1 hour if zero).
-func NewServer(pool SecretPool, maxAge time.Duration) Server {
-	if maxAge <= 0 {
-		maxAge = time.Hour
+// ServerOption configures the [Server] returned by [NewServer].
+type ServerOption interface{ applyCookieServer(*serverImpl) }
+
+type serverOptionFunc func(*serverImpl)
+
+func (f serverOptionFunc) applyCookieServer(s *serverImpl) { f(s) }
+
+// WithServerMaxAge sets the cookie acceptance window. RFC 7873 §5.2.5
+// recommends ~1 hour; that is the default if this option is not set.
+func WithServerMaxAge(d time.Duration) ServerOption {
+	return serverOptionFunc(func(s *serverImpl) {
+		if d > 0 {
+			s.maxAge = d
+		}
+	})
+}
+
+// NewServer returns a [Server] backed by pool. By default the cookie
+// acceptance window is 1 hour; pass [WithServerMaxAge] to override.
+func NewServer(pool SecretPool, opts ...ServerOption) Server {
+	s := &serverImpl{pool: pool, maxAge: time.Hour}
+	for _, o := range opts {
+		o.applyCookieServer(s)
 	}
-	return &serverImpl{pool: pool, maxAge: maxAge}
+	return s
 }
 
 type serverImpl struct {

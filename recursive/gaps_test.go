@@ -110,7 +110,7 @@ func TestRankServersUntestedFirst(t *testing.T) {
 			}), nil
 		},
 	}
-	r := recursive.New(
+	r := mustRecursive(t, 
 		recursive.WithRoots(a, b, c),
 		recursive.WithDialer(dialer),
 		recursive.WithServerStats(stats),
@@ -139,7 +139,7 @@ func TestCNAMEChainWithMaxDepthZero(t *testing.T) {
 			}), nil
 		},
 	}
-	r := recursive.New(
+	r := mustRecursive(t, 
 		recursive.WithRoots(netip.MustParseAddrPort("127.0.0.1:1")),
 		recursive.WithDialer(dialer),
 		recursive.WithMaxCNAMEDepth(0),
@@ -200,7 +200,7 @@ func TestUnglueOutOfBailiwickReferral(t *testing.T) {
 		},
 	}
 
-	r := recursive.New(
+	r := mustRecursive(t, 
 		recursive.WithRoots(root),
 		recursive.WithDialer(dialer),
 	)
@@ -244,7 +244,7 @@ func TestGlueAAAA(t *testing.T) {
 			}), nil
 		},
 	}
-	r := recursive.New(
+	r := mustRecursive(t, 
 		recursive.WithRoots(root),
 		recursive.WithDialer(dialer),
 	)
@@ -267,7 +267,7 @@ func TestEmptyReferral(t *testing.T) {
 			}), nil
 		},
 	}
-	r := recursive.New(
+	r := mustRecursive(t, 
 		recursive.WithRoots(root),
 		recursive.WithDialer(dialer),
 		recursive.WithMaxIterations(2),
@@ -291,7 +291,7 @@ func TestAllServersLame(t *testing.T) {
 			}), nil
 		},
 	}
-	r := recursive.New(
+	r := mustRecursive(t, 
 		recursive.WithRoots(a, b),
 		recursive.WithDialer(dialer),
 		recursive.WithMaxIterations(5),
@@ -324,7 +324,7 @@ func TestRefusedTreatedAsLame(t *testing.T) {
 			}), nil
 		},
 	}
-	r := recursive.New(
+	r := mustRecursive(t, 
 		recursive.WithRoots(bad, good),
 		recursive.WithDialer(dialer),
 	)
@@ -343,7 +343,7 @@ func TestQueryAnyAllError(t *testing.T) {
 			return nil, errors.New("synthetic dial failure")
 		},
 	}
-	r := recursive.New(
+	r := mustRecursive(t, 
 		recursive.WithRoots(
 			netip.MustParseAddrPort("127.0.0.1:1001"),
 			netip.MustParseAddrPort("127.0.0.1:1002"),
@@ -367,7 +367,7 @@ func TestQueryAnyContextCancelled(t *testing.T) {
 			return nil, errors.New("transient")
 		},
 	}
-	r := recursive.New(
+	r := mustRecursive(t, 
 		recursive.WithRoots(
 			netip.MustParseAddrPort("127.0.0.1:1001"),
 			netip.MustParseAddrPort("127.0.0.1:1002"),
@@ -406,7 +406,7 @@ func TestServeDNSWithAuthorityAndAdditional(t *testing.T) {
 			}), nil
 		},
 	}
-	r := recursive.New(
+	r := mustRecursive(t, 
 		recursive.WithRoots(netip.MustParseAddrPort("127.0.0.1:1")),
 		recursive.WithDialer(dialer),
 	)
@@ -450,7 +450,7 @@ func TestServeDNSBogusServfailWithEDE(t *testing.T) {
 			}), nil
 		},
 	}
-	r := recursive.New(
+	r := mustRecursive(t, 
 		recursive.WithRoots(netip.MustParseAddrPort("127.0.0.1:1")),
 		recursive.WithDialer(dialer),
 		recursive.WithValidator(validatorStub{status: recursive.StatusBogus}),
@@ -493,7 +493,7 @@ func TestValidatorErrorPropagated(t *testing.T) {
 		},
 	}
 	myErr := errors.New("validator boom")
-	r := recursive.New(
+	r := mustRecursive(t, 
 		recursive.WithRoots(netip.MustParseAddrPort("127.0.0.1:1")),
 		recursive.WithDialer(dialer),
 		recursive.WithValidator(validatorStub{err: myErr}),
@@ -617,7 +617,7 @@ func TestNonAAResponseTreatedAsAuthoritative(t *testing.T) {
 			}), nil
 		},
 	}
-	r := recursive.New(
+	r := mustRecursive(t, 
 		recursive.WithRoots(netip.MustParseAddrPort("127.0.0.1:1")),
 		recursive.WithDialer(dialer),
 	)
@@ -644,7 +644,7 @@ func TestResolveCNAMEDirectly(t *testing.T) {
 			}), nil
 		},
 	}
-	r := recursive.New(
+	r := mustRecursive(t, 
 		recursive.WithRoots(netip.MustParseAddrPort("127.0.0.1:1")),
 		recursive.WithDialer(dialer),
 	)
@@ -674,7 +674,7 @@ func TestNegativeCacheTTLTakesRecordTTLWhenSmaller(t *testing.T) {
 			}), nil
 		},
 	}
-	r := recursive.New(
+	r := mustRecursive(t, 
 		recursive.WithRoots(netip.MustParseAddrPort("127.0.0.1:1")),
 		recursive.WithDialer(dialer),
 	)
@@ -711,7 +711,7 @@ func TestHasAnswerForCNAMEAtOwner(t *testing.T) {
 			}), nil
 		},
 	}
-	r := recursive.New(
+	r := mustRecursive(t, 
 		recursive.WithRoots(netip.MustParseAddrPort("127.0.0.1:1")),
 		recursive.WithDialer(dialer),
 	)
@@ -744,7 +744,7 @@ func TestIterationLimitReached(t *testing.T) {
 			}), nil
 		},
 	}
-	r := recursive.New(
+	r := mustRecursive(t, 
 		recursive.WithRoots(root),
 		recursive.WithDialer(dialer),
 		recursive.WithMaxIterations(3),
@@ -777,7 +777,7 @@ func TestResolveSingleflightCoalesces(t *testing.T) {
 			}), nil
 		},
 	}
-	r := recursive.New(
+	r := mustRecursive(t, 
 		recursive.WithRoots(netip.MustParseAddrPort("127.0.0.1:1")),
 		recursive.WithDialer(dialer),
 		// Disable qname-minimisation so the test counts upstream calls

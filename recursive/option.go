@@ -59,6 +59,14 @@ func WithMaxIterations(n int) Option {
 	return optionFunc(func(c *config) { c.maxIterations = n })
 }
 
+// WithMaxDepth caps the recursive resolveDepth nesting. CNAME chains
+// and out-of-bailiwick NS resolution each consume one depth level;
+// without a cap a hostile NS-graph can drive arbitrary recursion.
+// Defaults to 8.
+func WithMaxDepth(n int) Option {
+	return optionFunc(func(c *config) { c.maxDepth = n })
+}
+
 // WithMaxCNAMEDepth caps how many CNAME hops a single query may follow.
 // Defaults to 8 — RFC 1035 doesn't specify a limit but every production
 // resolver caps to defend against loops.

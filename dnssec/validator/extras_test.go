@@ -481,7 +481,7 @@ func TestValidatorRRSIGFutureInception(t *testing.T) {
 	}
 	// Inception in the future.
 	sig := signRRSIG(t, priv, set, key, now.Add(time.Hour), now.Add(2*time.Hour))
-	v := validator.New(validator.WithValidatorClock(func() time.Time { return now }), validator.WithValidatorBogusPolicy(validator.BogusReturnAnswer))
+	v := validator.New(validator.WithValidatorNow(func() time.Time { return now }), validator.WithValidatorBogusPolicy(validator.BogusReturnAnswer))
 	res, _, err := v.ValidateRRset(set, []rdata.RRSIG{sig}, []rdata.DNSKEY{key})
 	require.Equal(t, validator.Bogus, res)
 	require.ErrorContains(t, err, "inception/expiration outside now")

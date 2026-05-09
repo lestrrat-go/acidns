@@ -45,9 +45,9 @@ func cookieMkInner() acidns.Handler {
 
 func newCookiesServer(t *testing.T) cookies.Server {
 	t.Helper()
-	pool, cancel, _ := cookies.NewSecretPool(0) // no auto-rotation in tests
-	t.Cleanup(cancel)
-	return cookies.NewServer(pool, time.Hour)
+	pool, _ := cookies.NewSecretPool() // no auto-rotation in tests
+	t.Cleanup(pool.Close)
+	return cookies.NewServer(pool)
 }
 
 func extractCookieOpt(t *testing.T, m wire.Message) ([8]byte, []byte) {

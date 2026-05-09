@@ -51,7 +51,7 @@ www IN  A    192.0.2.42
 	// Pointing the resolver directly at the child auth server: the response
 	// is authoritative on the first hop, exercising the no-delegation path.
 	// True delegation is exercised in TestRealDelegation.
-	r := recursive.New(recursive.WithRoots(childAddr))
+	r := mustRecursive(t, recursive.WithRoots(childAddr))
 	ctx, cancel := context.WithTimeout(t.Context(), 5*time.Second)
 	defer cancel()
 	entry, err := r.Resolve(ctx, wire.MustParseName("www.example.com"), rrtype.A)
@@ -112,7 +112,7 @@ www IN  A    192.0.2.55
 		},
 	}
 
-	r := recursive.New(
+	r := mustRecursive(t, 
 		recursive.WithRoots(rootCtrl.Addr()),
 		recursive.WithDialer(dialer),
 	)
@@ -146,7 +146,7 @@ $TTL 30
 ns1 IN  A    192.0.2.10
 www IN  A    192.0.2.42
 `)
-	r := recursive.New(recursive.WithRoots(addr))
+	r := mustRecursive(t, recursive.WithRoots(addr))
 	ctx, cancel := context.WithTimeout(t.Context(), 5*time.Second)
 	defer cancel()
 
@@ -165,7 +165,7 @@ $TTL 30
 @   IN  NS   ns1.example.com.
 ns1 IN  A    192.0.2.10
 `)
-	r := recursive.New(recursive.WithRoots(addr))
+	r := mustRecursive(t, recursive.WithRoots(addr))
 	ctx, cancel := context.WithTimeout(t.Context(), 5*time.Second)
 	defer cancel()
 	entry, err := r.Resolve(ctx, wire.MustParseName("nope.example.com"), rrtype.A)
@@ -184,7 +184,7 @@ $TTL 600
 ns1  IN A   192.0.2.10
 www  IN A   192.0.2.20
 `)
-	r := recursive.New(recursive.WithRoots(addr))
+	r := mustRecursive(t, recursive.WithRoots(addr))
 	ctx, cancel := context.WithTimeout(t.Context(), 5*time.Second)
 	defer cancel()
 	// www has A but not AAAA — NODATA. SOA MINIMUM=7s caps the negative

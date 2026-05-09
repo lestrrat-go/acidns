@@ -56,7 +56,7 @@ func TestValidateRRsetSecure(t *testing.T) {
 	}
 	sig := signRRSIG(t, priv, set, key, now.Add(-time.Hour), now.Add(time.Hour))
 
-	v := validator.New(validator.WithValidatorClock(func() time.Time { return now }))
+	v := validator.New(validator.WithValidatorNow(func() time.Time { return now }))
 	res, used, err := v.ValidateRRset(set, []rdata.RRSIG{sig}, []rdata.DNSKEY{key})
 	require.NoError(t, err)
 	require.Equal(t, validator.Secure, res)
@@ -106,7 +106,7 @@ func TestValidateRRsetExpiredRRSIG(t *testing.T) {
 	// Inception/expiration both in the past.
 	sig := signRRSIG(t, priv, set, key, now.Add(-2*time.Hour), now.Add(-time.Hour))
 
-	v := validator.New(validator.WithValidatorClock(func() time.Time { return now }), validator.WithValidatorBogusPolicy(validator.BogusReturnAnswer))
+	v := validator.New(validator.WithValidatorNow(func() time.Time { return now }), validator.WithValidatorBogusPolicy(validator.BogusReturnAnswer))
 	res, _, err := v.ValidateRRset(set, []rdata.RRSIG{sig}, []rdata.DNSKEY{key})
 	require.Equal(t, validator.Bogus, res)
 	require.Error(t, err)
@@ -124,7 +124,7 @@ func TestValidateRRsetNoMatchingKey(t *testing.T) {
 
 	// Pass a wrong-algorithm key (synthetic).
 	wrongKey := rdata.NewDNSKEY(257, 3, rdata.AlgED25519, make([]byte, 32))
-	v := validator.New(validator.WithValidatorClock(func() time.Time { return now }), validator.WithValidatorBogusPolicy(validator.BogusReturnAnswer))
+	v := validator.New(validator.WithValidatorNow(func() time.Time { return now }), validator.WithValidatorBogusPolicy(validator.BogusReturnAnswer))
 	res, _, err := v.ValidateRRset(set, []rdata.RRSIG{sig}, []rdata.DNSKEY{wrongKey})
 	require.Equal(t, validator.Bogus, res)
 	require.Error(t, err)
@@ -141,7 +141,7 @@ func TestValidateRRsetDefaultBogusPolicy(t *testing.T) {
 			rdata.NewA(netip.MustParseAddr("192.0.2.1"))),
 	}
 	sig := signRRSIG(t, priv, set, key, now.Add(-2*time.Hour), now.Add(-time.Hour))
-	v := validator.New(validator.WithValidatorClock(func() time.Time { return now }))
+	v := validator.New(validator.WithValidatorNow(func() time.Time { return now }))
 	res, _, err := v.ValidateRRset(set, []rdata.RRSIG{sig}, []rdata.DNSKEY{key})
 	require.Equal(t, validator.Bogus, res)
 	require.Error(t, err)
@@ -162,7 +162,7 @@ func TestValidateRRsetSameAlgDifferentKeyTag(t *testing.T) {
 	// Build a different DNSKEY with the same algorithm but different bytes
 	// (so its KeyTag differs from `key`'s tag).
 	other := rdata.NewDNSKEY(257, 3, rdata.AlgECDSAP256SHA256, make([]byte, 64))
-	v := validator.New(validator.WithValidatorClock(func() time.Time { return now }), validator.WithValidatorBogusPolicy(validator.BogusReturnAnswer))
+	v := validator.New(validator.WithValidatorNow(func() time.Time { return now }), validator.WithValidatorBogusPolicy(validator.BogusReturnAnswer))
 	res, _, err := v.ValidateRRset(set, []rdata.RRSIG{sig}, []rdata.DNSKEY{other, key})
 	require.Equal(t, validator.Secure, res, "the second key is the right one")
 	require.NoError(t, err)
@@ -186,7 +186,7 @@ func TestValidateRRsetMatchingKeyButVerifyFails(t *testing.T) {
 		now.Add(time.Hour), now.Add(-time.Hour),
 		dnssec.KeyTag(key), set[0].Name(), make([]byte, 64))
 
-	v := validator.New(validator.WithValidatorClock(func() time.Time { return now }), validator.WithValidatorBogusPolicy(validator.BogusReturnAnswer))
+	v := validator.New(validator.WithValidatorNow(func() time.Time { return now }), validator.WithValidatorBogusPolicy(validator.BogusReturnAnswer))
 	res, _, err := v.ValidateRRset(set, []rdata.RRSIG{bogus}, []rdata.DNSKEY{key})
 	require.Equal(t, validator.Bogus, res)
 	require.Error(t, err)

@@ -161,8 +161,10 @@ type inflightCall struct {
 	err   error
 }
 
-// New returns a Recursive resolver.
-func New(opts ...Option) Recursive {
+// New returns a Recursive resolver. Returns an error when option
+// invariants are violated (e.g. WithAggressiveNSEC without
+// WithValidator).
+func New(opts ...Option) (Recursive, error) {
 	c := config{
 		maxIterations: 30,
 		maxDepth:      8,
@@ -176,6 +178,9 @@ func New(opts ...Option) Recursive {
 	}
 	for _, o := range opts {
 		o.applyRecursive(&c)
+	}
+	if c.aggressiveNSEC && c.validator == nil {
+		return nil, fmt.Errorf("recursive: WithAggressiveNSEC requires WithValidator (RFC 8198 §5: aggressive use is only safe on validated answers)")
 	}
 	if c.cache == nil {
 		c.cache = NewMemoryCache()
@@ -205,7 +210,7 @@ func New(opts ...Option) Recursive {
 		allowNoRD:      c.allowNoRD,
 		caseRandom:     c.caseRandom,
 		qnameMin:       c.qnameMin,
-		aggressiveNSEC: c.aggressiveNSEC && c.validator != nil,
+		aggressiveNSEC: c.aggressiveNSEC,
 		inflight:       make(map[string]*inflightCall),
 		nsInProgress:   make(map[string]struct{}),
 	}
@@ -230,7 +235,7 @@ func New(opts ...Option) Recursive {
 			r.rootRefresh = defaultRootRefreshInterval
 		}
 	}
-	return r
+	return r, nil
 }
 
 // DefaultDialer returns the built-in Dialer.

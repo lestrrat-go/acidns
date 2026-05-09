@@ -62,7 +62,7 @@ func TestCNAMEChainFollowed(t *testing.T) {
 
 	require.NoError(t, err)
 
-	r := recursive.New(recursive.WithRoots(ctrl.Addr()))
+	r := mustRecursive(t, recursive.WithRoots(ctrl.Addr()))
 	rctx, rcancel := context.WithTimeout(t.Context(), 5*time.Second)
 	defer rcancel()
 	entry, err := r.Resolve(rctx, wire.MustParseName("www.example."), rrtype.A)
@@ -97,7 +97,7 @@ func TestCNAMELoopDetected(t *testing.T) {
 
 	require.NoError(t, err)
 
-	r := recursive.New(recursive.WithRoots(ctrl.Addr()), recursive.WithMaxCNAMEDepth(4))
+	r := mustRecursive(t, recursive.WithRoots(ctrl.Addr()), recursive.WithMaxCNAMEDepth(4))
 	rctx, rcancel := context.WithTimeout(t.Context(), 5*time.Second)
 	defer rcancel()
 	_, err = r.Resolve(rctx, wire.MustParseName("a.example."), rrtype.A)
@@ -128,7 +128,7 @@ www IN  A    192.0.2.43
 		target:   bad,
 	}
 
-	r := recursive.New(
+	r := mustRecursive(t, 
 		recursive.WithRoots(bad, good),
 		recursive.WithDialer(servfail),
 	)
@@ -191,7 +191,7 @@ $TTL 30
 ns1 IN  A    192.0.2.10
 www IN  A    192.0.2.42
 `)
-	r := recursive.New(
+	r := mustRecursive(t, 
 		recursive.WithRoots(addr),
 		recursive.WithValidator(validatorStub{status: recursive.StatusBogus}),
 	)
@@ -210,7 +210,7 @@ $TTL 30
 ns1 IN  A    192.0.2.10
 www IN  A    192.0.2.42
 `)
-	r := recursive.New(
+	r := mustRecursive(t, 
 		recursive.WithRoots(addr),
 		recursive.WithValidator(validatorStub{status: recursive.StatusSecure}),
 	)
@@ -231,7 +231,7 @@ ns1 IN  A    192.0.2.10
 www IN  A    192.0.2.42
 `)
 	stats := recursive.NewMemoryStats()
-	r := recursive.New(
+	r := mustRecursive(t, 
 		recursive.WithRoots(addr),
 		recursive.WithServerStats(stats),
 	)
@@ -266,7 +266,7 @@ func TestQueryTimeoutSurvivesContextRespect(t *testing.T) {
 
 	require.NoError(t, err)
 
-	r := recursive.New(
+	r := mustRecursive(t, 
 		recursive.WithRoots(ctrl.Addr()),
 		recursive.WithQueryTimeout(20*time.Millisecond),
 		recursive.WithMaxIterations(2),

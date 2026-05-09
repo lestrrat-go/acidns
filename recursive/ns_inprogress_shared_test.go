@@ -63,7 +63,7 @@ func TestNSInProgressSharedAcrossResolves(t *testing.T) {
 		},
 	}
 
-	r := recursive.New(
+	r := mustRecursive(t, 
 		recursive.WithRoots(netip.MustParseAddrPort("127.0.0.1:1")),
 		recursive.WithDialer(dialer),
 		recursive.WithMaxIterations(4),

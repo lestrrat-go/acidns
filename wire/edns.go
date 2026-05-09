@@ -144,6 +144,12 @@ type EDNSBuilder interface {
 	Version(uint8) EDNSBuilder
 	DO(bool) EDNSBuilder
 	Option(EDNSOption) EDNSBuilder
+	// Build returns the EDNS payload. NOTE: the asymmetry with
+	// Builder.Build (which returns (Message, error)) is intentional —
+	// EDNS construction has no validation today. If validation is
+	// added later (e.g. duplicate option codes, oversized padding),
+	// the right move is a coordinated API break that aligns this
+	// signature with the rest of the builder family.
 	Build() EDNS
 }
 

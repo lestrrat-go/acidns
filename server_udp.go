@@ -91,6 +91,9 @@ func NewUDPServer(addr netip.AddrPort, h Handler, opts ...UDPListenerOption) (*U
 	if h == nil {
 		return nil, fmt.Errorf("dnsserver: handler is nil")
 	}
+	if !addr.IsValid() {
+		return nil, fmt.Errorf("dnsserver: invalid bind address")
+	}
 	cfg := udpListenerConfig{
 		bufferSize:     4096,
 		maxResponseLen: 1232,

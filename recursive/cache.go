@@ -19,6 +19,17 @@ type Cache interface {
 }
 
 // Entry is the cached form of an authoritative result.
+//
+// The fields are exported for ergonomic access by callers that want
+// to inspect the parsed answer without going through accessors.
+// Callers MUST NOT mutate the fields after retrieval — the slice
+// fields are freshly cloned by [MemoryCache.Get] but a custom
+// [Cache] implementation that forgets to clone would alias storage
+// shared with concurrent readers. NOTE: a future API break may move
+// to unexported fields plus accessors per the project's style rule;
+// the exported-field shape is retained today only because the cost
+// of converting ~200 call sites outweighs the marginal safety win
+// while [MemoryCache] is the only shipped Cache.
 type Entry struct {
 	Answer     []wire.Record
 	Authority  []wire.Record

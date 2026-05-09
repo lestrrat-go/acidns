@@ -112,6 +112,9 @@ func NewTCPServer(addr netip.AddrPort, h Handler, opts ...TCPListenerOption) (*T
 	if h == nil {
 		return nil, fmt.Errorf("dnsserver: handler is nil")
 	}
+	if !addr.IsValid() {
+		return nil, fmt.Errorf("dnsserver: invalid bind address")
+	}
 	cfg := tcpListenerConfig{
 		idleTimeout:    10 * time.Second,
 		writeTimeout:   5 * time.Second,

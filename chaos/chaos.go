@@ -25,7 +25,7 @@ import (
 func New(opts ...Option) acidns.Handler {
 	c := config{}
 	for _, o := range opts {
-		o.apply(&c)
+		o.applyChaos(&c)
 	}
 	return &handler{cfg: c}
 }

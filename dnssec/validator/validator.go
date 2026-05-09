@@ -113,10 +113,11 @@ func WithValidatorBogusPolicy(p BogusPolicy) ValidatorOption {
 	return validatorOptionFunc(func(c *validatorConfig) { c.bogusPolicy = p })
 }
 
-// WithValidatorClock injects a clock used for RRSIG
+// WithValidatorNow injects a clock used for RRSIG
 // inception/expiration checks. Defaults to time.Now. Test-only —
-// production code should leave this unset.
-func WithValidatorClock(now func() time.Time) ValidatorOption {
+// production code should leave this unset. The bare-name spelling
+// matches the Walker's WithNow.
+func WithValidatorNow(now func() time.Time) ValidatorOption {
 	return validatorOptionFunc(func(c *validatorConfig) { c.now = now })
 }
 

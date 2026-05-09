@@ -203,7 +203,7 @@ func buildRecursive(roots []string) (acidns.Handler, error) {
 	if len(addrs) == 0 {
 		return nil, fmt.Errorf("recursive mode requires -roots")
 	}
-	return recursive.New(recursive.WithRoots(addrs...)), nil
+	return recursive.New(recursive.WithRoots(addrs...))
 }
 
 // hybrid serves authoritative answers for owned zones and falls through to
