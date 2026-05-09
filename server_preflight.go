@@ -73,6 +73,10 @@ func PreflightRequest(q wire.Message) (PreflightVerdict, wire.Message) {
 // minimal OPT (UDPSize, version, DO bit) so EDNS-aware peers do not
 // mistake the FORMERR for an EDNS-incapable server and downgrade
 // their future requests (RFC 6891 §6.1.1).
+//
+// The advertised UDPSize is clamped to formErrUDPSize (DNS Flag Day
+// 2020 default) so a peer cannot have us echo an attacker-chosen large
+// value (e.g. 65535) that downstream caches might otherwise trust.
 func formErrReply(q wire.Message) (wire.Message, bool) {
 	flags := q.Flags().
 		WithResponse(true).
@@ -80,8 +84,9 @@ func formErrReply(q wire.Message) (wire.Message, bool) {
 		WithRCODE(wire.RCODEFormErr)
 	b := wire.NewBuilder().ID(q.ID()).Flags(flags)
 	if e, ok := q.EDNS(); ok {
+		size := min(e.UDPSize(), formErrUDPSize)
 		ed, err := wire.NewEDNSBuilder().
-			UDPSize(e.UDPSize()).
+			UDPSize(size).
 			Version(e.Version()).
 			DO(e.DO()).
 			Build()
@@ -96,3 +101,8 @@ func formErrReply(q wire.Message) (wire.Message, bool) {
 	}
 	return m, true
 }
+
+// formErrUDPSize is the maximum EDNS UDPSize the FORMERR reply will
+// advertise. It mirrors the DNS Flag Day 2020 / RFC 9715 ceiling used
+// throughout the project.
+const formErrUDPSize uint16 = 1232

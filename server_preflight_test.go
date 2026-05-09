@@ -83,6 +83,40 @@ func TestPreflightFormErrOnZeroQuestionsUDP(t *testing.T) {
 	require.Equal(t, int32(0), h.hits.Load(), "handler must not see QDCOUNT=0 messages")
 }
 
+// TestPreflightFormErrClampsUDPSize verifies that a peer-supplied
+// EDNS UDPSize is clamped to the project default (1232) in the FORMERR
+// reply, so a misbehaving or malicious peer cannot have us echo an
+// inflated value (e.g. 65535) that downstream caches might otherwise
+// trust.
+func TestPreflightFormErrClampsUDPSize(t *testing.T) {
+	t.Parallel()
+	h := &recordingHandler{}
+	ctrl, _ := startUDP(t, h)
+
+	ed, err := wire.NewEDNSBuilder().UDPSize(65535).Build()
+	require.NoError(t, err)
+	q, err := wire.NewBuilder().
+		ID(0x4243).
+		RecursionDesired(true).
+		EDNS(ed).
+		Build()
+	require.NoError(t, err)
+
+	ex, err := acidns.NewUDPExchanger(ctrl.Addr())
+	require.NoError(t, err)
+	qctx, qcancel := context.WithTimeout(t.Context(), time.Second)
+	defer qcancel()
+	resp, err := ex.Exchange(qctx, q)
+	require.NoError(t, err)
+	require.Equal(t, wire.RCODEFormErr, resp.Flags().RCODE())
+
+	respE, ok := resp.EDNS()
+	require.True(t, ok, "FORMERR reply must echo OPT when request had one")
+	require.LessOrEqual(t, respE.UDPSize(), uint16(1232),
+		"FORMERR reply UDPSize must be clamped to <=1232")
+	require.Equal(t, int32(0), h.hits.Load(), "handler must not see QDCOUNT=0 messages")
+}
+
 // TestPreflightAcceptsValidQuery sanity-checks that the preflight does
 // NOT reject conformant queries.
 func TestPreflightAcceptsValidQuery(t *testing.T) {
