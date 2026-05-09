@@ -11,14 +11,18 @@ import (
 
 	"github.com/lestrrat-go/acidns/internal/serverctl"
 	"github.com/lestrrat-go/acidns/wire"
+	"github.com/lestrrat-go/option/v3"
 )
 
 // UDPListenerOption configures a UDP server.
-type UDPListenerOption interface{ applyUDPServer(*udpListenerConfig) }
+type UDPListenerOption interface {
+	option.Interface
+	udpListenerOption()
+}
 
-type udpListenerOptionFunc func(*udpListenerConfig)
+type udpListenerOption struct{ option.Interface }
 
-func (f udpListenerOptionFunc) applyUDPServer(c *udpListenerConfig) { f(c) }
+func (udpListenerOption) udpListenerOption() {}
 
 type udpListenerConfig struct {
 	bufferSize     int
@@ -27,6 +31,11 @@ type udpListenerConfig struct {
 	writeTimeout   time.Duration
 }
 
+type identUDPListenerBufferSize struct{}
+type identUDPMaxResponse struct{}
+type identUDPMaxInflight struct{}
+type identUDPWriteTimeout struct{}
+
 // WithUDPListenerBufferSize sets the size of the read buffer per
 // packet. Defaults to 4096, large enough for an EDNS-extended
 // request. The client-side counterpart is [WithUDPExchangerBufferSize];
@@ -34,7 +43,7 @@ type udpListenerConfig struct {
 // with the same identifier in the same package, so the listener
 // form takes the explicit Listener prefix.
 func WithUDPListenerBufferSize(n int) UDPListenerOption {
-	return udpListenerOptionFunc(func(c *udpListenerConfig) { c.bufferSize = n })
+	return udpListenerOption{option.New(identUDPListenerBufferSize{}, n)}
 }
 
 // WithUDPMaxResponse sets the absolute upper bound on response size before
@@ -44,7 +53,7 @@ func WithUDPListenerBufferSize(n int) UDPListenerOption {
 // vector for the well-documented amplification and frag-attack classes.
 // Raise this only if you understand the trade.
 func WithUDPMaxResponse(n int) UDPListenerOption {
-	return udpListenerOptionFunc(func(c *udpListenerConfig) { c.maxResponseLen = n })
+	return udpListenerOption{option.New(identUDPMaxResponse{}, n)}
 }
 
 // WithUDPMaxInflight caps the number of concurrently-running handler
@@ -53,7 +62,7 @@ func WithUDPMaxResponse(n int) UDPListenerOption {
 // healthy server returns to steady state without unbounded goroutine
 // growth. A non-positive value disables the cap. Defaults to 4096.
 func WithUDPMaxInflight(n int) UDPListenerOption {
-	return udpListenerOptionFunc(func(c *udpListenerConfig) { c.maxInflight = n })
+	return udpListenerOption{option.New(identUDPMaxInflight{}, n)}
 }
 
 // WithUDPWriteTimeout caps how long a single response WriteTo may
@@ -68,7 +77,7 @@ func WithUDPMaxInflight(n int) UDPListenerOption {
 // per-listener mutex so each writer sees its own deadline. The hold
 // time is bounded by the deadline itself.
 func WithUDPWriteTimeout(d time.Duration) UDPListenerOption {
-	return udpListenerOptionFunc(func(c *udpListenerConfig) { c.writeTimeout = d })
+	return udpListenerOption{option.New(identUDPWriteTimeout{}, d)}
 }
 
 // UDPServer is an immutable configuration holder for a UDP DNS server.
@@ -102,7 +111,16 @@ func NewUDPServer(addr netip.AddrPort, h Handler, opts ...UDPListenerOption) (*U
 		writeTimeout:   5 * time.Second,
 	}
 	for _, o := range opts {
-		o.applyUDPServer(&cfg)
+		switch o.Ident() {
+		case identUDPListenerBufferSize{}:
+			cfg.bufferSize = option.MustGet[int](o)
+		case identUDPMaxResponse{}:
+			cfg.maxResponseLen = option.MustGet[int](o)
+		case identUDPMaxInflight{}:
+			cfg.maxInflight = option.MustGet[int](o)
+		case identUDPWriteTimeout{}:
+			cfg.writeTimeout = option.MustGet[time.Duration](o)
+		}
 	}
 	return &UDPServer{addr: addr, handler: h, cfg: cfg}, nil
 }

@@ -14,14 +14,18 @@ import (
 
 	"github.com/lestrrat-go/acidns/internal/serverctl"
 	"github.com/lestrrat-go/acidns/wire"
+	"github.com/lestrrat-go/option/v3"
 )
 
 // TCPListenerOption configures a TCP server.
-type TCPListenerOption interface{ applyTCPServer(*tcpListenerConfig) }
+type TCPListenerOption interface {
+	option.Interface
+	tcpListenerOption()
+}
 
-type tcpListenerOptionFunc func(*tcpListenerConfig)
+type tcpListenerOption struct{ option.Interface }
 
-func (f tcpListenerOptionFunc) applyTCPServer(c *tcpListenerConfig) { f(c) }
+func (tcpListenerOption) tcpListenerOption() {}
 
 type tcpListenerConfig struct {
 	idleTimeout        time.Duration
@@ -35,11 +39,21 @@ type tcpListenerConfig struct {
 	maxInflightPer     int
 }
 
+type identTCPIdleTimeout struct{}
+type identTCPWriteTimeout struct{}
+type identTCPMaxConnections struct{}
+type identTCPMaxConnsPerSource struct{}
+type identTCPMaxMessageSize struct{}
+type identTCPMaxQueriesPerConn struct{}
+type identTCPMaxConnLifetime struct{}
+type identTCPMessageReadTimeout struct{}
+type identTCPMaxInflightPerConn struct{}
+
 // WithTCPIdleTimeout sets how long an idle connection is kept open between
 // queries. RFC 7766 §6.5 recommends a few seconds; the default is 10s.
 // A non-positive value disables the idle timeout.
 func WithTCPIdleTimeout(d time.Duration) TCPListenerOption {
-	return tcpListenerOptionFunc(func(c *tcpListenerConfig) { c.idleTimeout = d })
+	return tcpListenerOption{option.New(identTCPIdleTimeout{}, d)}
 }
 
 // WithTCPWriteTimeout caps how long a single response write may take.
@@ -47,7 +61,7 @@ func WithTCPIdleTimeout(d time.Duration) TCPListenerOption {
 // can pin a server goroutine indefinitely. Default 5s; non-positive
 // disables the deadline.
 func WithTCPWriteTimeout(d time.Duration) TCPListenerOption {
-	return tcpListenerOptionFunc(func(c *tcpListenerConfig) { c.writeTimeout = d })
+	return tcpListenerOption{option.New(identTCPWriteTimeout{}, d)}
 }
 
 // WithTCPMaxConnections caps the number of concurrent TCP connections.
@@ -55,7 +69,7 @@ func WithTCPWriteTimeout(d time.Duration) TCPListenerOption {
 // providing natural backpressure via the kernel's TCP listen backlog.
 // A non-positive value disables the cap. Defaults to 1024.
 func WithTCPMaxConnections(n int) TCPListenerOption {
-	return tcpListenerOptionFunc(func(c *tcpListenerConfig) { c.maxConnections = n })
+	return tcpListenerOption{option.New(identTCPMaxConnections{}, n)}
 }
 
 // WithTCPMaxConnsPerSource caps the number of concurrent TCP
@@ -69,7 +83,7 @@ func WithTCPMaxConnections(n int) TCPListenerOption {
 // many parallel queries from one host is never affected, low enough
 // that a hostile peer cannot starve the listener.
 func WithTCPMaxConnsPerSource(n int) TCPListenerOption {
-	return tcpListenerOptionFunc(func(c *tcpListenerConfig) { c.maxConnsPerSource = n })
+	return tcpListenerOption{option.New(identTCPMaxConnsPerSource{}, n)}
 }
 
 // WithTCPMaxMessageSize caps the length-prefixed body the server is
@@ -80,7 +94,7 @@ func WithTCPMaxConnsPerSource(n int) TCPListenerOption {
 // the bundled AXFR chunker emits while keeping per-connection memory
 // bounded. A non-positive value disables the cap (allows up to 65535).
 func WithTCPMaxMessageSize(n int) TCPListenerOption {
-	return tcpListenerOptionFunc(func(c *tcpListenerConfig) { c.maxMessageSize = n })
+	return tcpListenerOption{option.New(identTCPMaxMessageSize{}, n)}
 }
 
 // WithTCPMaxQueriesPerConn caps the total queries served on a single
@@ -92,7 +106,7 @@ func WithTCPMaxMessageSize(n int) TCPListenerOption {
 // queries. Operators MUST tune this for unusual workloads (long-lived
 // internal mirrors, AXFR-heavy backplanes).
 func WithTCPMaxQueriesPerConn(n int) TCPListenerOption {
-	return tcpListenerOptionFunc(func(c *tcpListenerConfig) { c.maxQueriesPerConn = n })
+	return tcpListenerOption{option.New(identTCPMaxQueriesPerConn{}, n)}
 }
 
 // WithTCPMaxConnLifetime caps wall-clock time a single connection may
@@ -101,7 +115,7 @@ func WithTCPMaxQueriesPerConn(n int) TCPListenerOption {
 // cap. Defaults to 1 hour. Operators MUST tune this for workloads that
 // rely on multi-hour streams (e.g. long-lived internal AXFR mirrors).
 func WithTCPMaxConnLifetime(d time.Duration) TCPListenerOption {
-	return tcpListenerOptionFunc(func(c *tcpListenerConfig) { c.maxConnLifetime = d })
+	return tcpListenerOption{option.New(identTCPMaxConnLifetime{}, d)}
 }
 
 // WithTCPMessageReadTimeout caps how long the server will wait for the
@@ -115,7 +129,7 @@ func WithTCPMaxConnLifetime(d time.Duration) TCPListenerOption {
 // disables the per-message deadline (falls back to the idle timeout
 // for the body read as well).
 func WithTCPMessageReadTimeout(d time.Duration) TCPListenerOption {
-	return tcpListenerOptionFunc(func(c *tcpListenerConfig) { c.messageReadTimeout = d })
+	return tcpListenerOption{option.New(identTCPMessageReadTimeout{}, d)}
 }
 
 // WithTCPMaxInflightPerConn caps the number of concurrently-running
@@ -125,7 +139,7 @@ func WithTCPMessageReadTimeout(d time.Duration) TCPListenerOption {
 // pushes queries faster than they complete. Defaults to 32; a
 // non-positive value disables pipelining (handlers run serially).
 func WithTCPMaxInflightPerConn(n int) TCPListenerOption {
-	return tcpListenerOptionFunc(func(c *tcpListenerConfig) { c.maxInflightPer = n })
+	return tcpListenerOption{option.New(identTCPMaxInflightPerConn{}, n)}
 }
 
 // TCPServer is an immutable configuration holder for a TCP DNS server.
@@ -163,7 +177,26 @@ func NewTCPServer(addr netip.AddrPort, h Handler, opts ...TCPListenerOption) (*T
 		maxConnLifetime:    time.Hour,
 	}
 	for _, o := range opts {
-		o.applyTCPServer(&cfg)
+		switch o.Ident() {
+		case identTCPIdleTimeout{}:
+			cfg.idleTimeout = option.MustGet[time.Duration](o)
+		case identTCPWriteTimeout{}:
+			cfg.writeTimeout = option.MustGet[time.Duration](o)
+		case identTCPMaxConnections{}:
+			cfg.maxConnections = option.MustGet[int](o)
+		case identTCPMaxConnsPerSource{}:
+			cfg.maxConnsPerSource = option.MustGet[int](o)
+		case identTCPMaxMessageSize{}:
+			cfg.maxMessageSize = option.MustGet[int](o)
+		case identTCPMaxQueriesPerConn{}:
+			cfg.maxQueriesPerConn = option.MustGet[int](o)
+		case identTCPMaxConnLifetime{}:
+			cfg.maxConnLifetime = option.MustGet[time.Duration](o)
+		case identTCPMessageReadTimeout{}:
+			cfg.messageReadTimeout = option.MustGet[time.Duration](o)
+		case identTCPMaxInflightPerConn{}:
+			cfg.maxInflightPer = option.MustGet[int](o)
+		}
 	}
 	return &TCPServer{addr: addr, handler: h, cfg: cfg}, nil
 }
