@@ -56,29 +56,19 @@ func WithUDPUpstream(addr netip.AddrPort) Option {
 	})
 }
 
-// WithDoTUpstream forwards queries to addr over RFC 7858 DoT. If
-// serverName is empty, the address's hostname is used for SNI /
-// certificate verification; pass an explicit name when forwarding to
-// an IP literal (e.g. "8.8.8.8:853" with serverName "dns.google").
-func WithDoTUpstream(addr netip.AddrPort, serverName string) Option {
+// WithDoTUpstream forwards queries to addr over RFC 7858 DoT. Pass a
+// fully-formed *tls.Config (custom roots, mTLS, KeyLogWriter, ...) to
+// drive certificate verification — tc.ServerName is honored for SNI;
+// when forwarding to an IP literal (e.g. "8.8.8.8:853") set
+// tc.ServerName to the verifying name (e.g. "dns.google"). Pass nil to
+// use the dot package defaults.
+func WithDoTUpstream(addr netip.AddrPort, tc *tls.Config) Option {
 	return optionFunc(func(c *config) {
-		ex, err := dot.New(addr, dot.WithServerName(serverName))
-		if err != nil {
-			c.upstream = errExchanger{err: err}
-			c.upstreamName = "(invalid dot)"
-			return
+		var dotOpts []dot.Option
+		if tc != nil {
+			dotOpts = append(dotOpts, dot.WithTLSConfig(tc))
 		}
-		c.upstream = ex
-		c.upstreamName = "tls://" + addr.String()
-	})
-}
-
-// WithDoTUpstreamTLSConfig is like WithDoTUpstream but lets the caller
-// supply a fully-formed *tls.Config (custom roots, mTLS, KeyLogWriter,
-// etc.). serverName from tc.ServerName is honored.
-func WithDoTUpstreamTLSConfig(addr netip.AddrPort, tc *tls.Config) Option {
-	return optionFunc(func(c *config) {
-		ex, err := dot.New(addr, dot.WithTLSConfig(tc))
+		ex, err := dot.New(addr, dotOpts...)
 		if err != nil {
 			c.upstream = errExchanger{err: err}
 			c.upstreamName = "(invalid dot)"

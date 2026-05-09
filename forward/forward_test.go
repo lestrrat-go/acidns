@@ -828,7 +828,7 @@ func TestUDPUpstreamConstructionFailureSurfacedAsServFail(t *testing.T) {
 func TestWithDoTUpstreamServerName(t *testing.T) {
 	t.Parallel()
 	addr := netip.MustParseAddrPort("127.0.0.1:853")
-	h, err := forward.New(forward.WithDoTUpstream(addr, "dns.example."))
+	h, err := forward.New(forward.WithDoTUpstream(addr, &tls.Config{ServerName: "dns.example."}))
 	require.NoError(t, err)
 	require.Contains(t, h.UpstreamName(), "tls://")
 	require.Contains(t, h.UpstreamName(), addr.String())
@@ -838,7 +838,7 @@ func TestWithDoTUpstreamServerNameInvalidAddr(t *testing.T) {
 	t.Parallel()
 	// dot.New rejects invalid addresses; the option records this as
 	// errExchanger so first ServeDNS returns SERVFAIL.
-	h, err := forward.New(forward.WithDoTUpstream(netip.AddrPort{}, "dns.example."))
+	h, err := forward.New(forward.WithDoTUpstream(netip.AddrPort{}, &tls.Config{ServerName: "dns.example."}))
 	require.NoError(t, err)
 	require.Equal(t, "(invalid dot)", h.UpstreamName())
 
@@ -851,7 +851,7 @@ func TestWithDoTUpstreamTLSConfig(t *testing.T) {
 	t.Parallel()
 	addr := netip.MustParseAddrPort("127.0.0.1:853")
 	tc := &tls.Config{ServerName: "dns.example.", MinVersion: tls.VersionTLS13}
-	h, err := forward.New(forward.WithDoTUpstreamTLSConfig(addr, tc))
+	h, err := forward.New(forward.WithDoTUpstream(addr, tc))
 	require.NoError(t, err)
 	require.Contains(t, h.UpstreamName(), "tls://")
 }
@@ -859,7 +859,7 @@ func TestWithDoTUpstreamTLSConfig(t *testing.T) {
 func TestWithDoTUpstreamTLSConfigInvalidAddr(t *testing.T) {
 	t.Parallel()
 	tc := &tls.Config{ServerName: "dns.example."}
-	h, err := forward.New(forward.WithDoTUpstreamTLSConfig(netip.AddrPort{}, tc))
+	h, err := forward.New(forward.WithDoTUpstream(netip.AddrPort{}, tc))
 	require.NoError(t, err)
 	require.Equal(t, "(invalid dot)", h.UpstreamName())
 

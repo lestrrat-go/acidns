@@ -7,6 +7,7 @@ package main
 
 import (
 	"context"
+	"crypto/tls"
 	"flag"
 	"fmt"
 	"net/netip"
@@ -160,7 +161,7 @@ func buildForward(o opts) (acidns.Handler, error) {
 		if err != nil {
 			return nil, fmt.Errorf("parse upstream-tls %q: %w", o.upstreamTLS, err)
 		}
-		opts = append(opts, forward.WithDoTUpstream(ap, o.tlsName))
+		opts = append(opts, forward.WithDoTUpstream(ap, &tls.Config{ServerName: o.tlsName}))
 	default:
 		ap, err := netip.ParseAddrPort(o.upstream)
 		if err != nil {
