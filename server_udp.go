@@ -189,6 +189,10 @@ func (l *udpLoop) run(ctx context.Context) error {
 
 	defer l.wg.Wait() // drain in-flight handlers before signalling Done
 
+	const readBackoffStart = 5 * time.Millisecond
+	const readBackoffCap = time.Second
+	tempBackoff := time.Duration(0)
+
 	for {
 		bufp, _ := l.bufPool.Get().(*[]byte) // pool's New always returns *[]byte
 		buf := *bufp
@@ -198,8 +202,31 @@ func (l *udpLoop) run(ctx context.Context) error {
 			if ctx.Err() != nil || errors.Is(err, net.ErrClosed) {
 				return ErrServerClosed
 			}
+			// Transient kernel-resource errors (ENOBUFS / ENOMEM /
+			// EAGAIN, etc.) on ReadFrom under load must NOT terminate
+			// the listener. Mirror the TCP accept-loop's exponential
+			// backoff and continue.
+			if isAcceptTransient(err) {
+				if tempBackoff == 0 {
+					tempBackoff = readBackoffStart
+				} else {
+					tempBackoff *= 2
+					if tempBackoff > readBackoffCap {
+						tempBackoff = readBackoffCap
+					}
+				}
+				timer := time.NewTimer(tempBackoff)
+				select {
+				case <-timer.C:
+				case <-ctx.Done():
+					timer.Stop()
+					return ErrServerClosed
+				}
+				continue
+			}
 			return fmt.Errorf("acidns: udp read: %w", err)
 		}
+		tempBackoff = 0
 
 		ua, ok := src.(*net.UDPAddr)
 		if !ok {
