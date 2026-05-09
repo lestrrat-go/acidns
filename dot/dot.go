@@ -123,7 +123,7 @@ func (e *exchanger) Exchange(ctx context.Context, q wire.Message) (wire.Message,
 	d := tls.Dialer{Config: e.tlsConfig, NetDialer: &net.Dialer{Timeout: e.timeout}}
 	conn, err := d.DialContext(ctx, "tcp", e.addr.String())
 	if err != nil {
-		return nil, fmt.Errorf("dot: dial %s: %w", e.addr, err)
+		return wire.Message{}, fmt.Errorf("dot: dial %s: %w", e.addr, err)
 	}
 	return streamframe.Exchange(ctx, conn, q, e.timeout)
 }

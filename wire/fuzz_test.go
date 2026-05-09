@@ -33,9 +33,6 @@ func FuzzUnmarshal(f *testing.F) {
 			// Round-trip: a successful Unmarshal followed by Marshal must
 			// not panic. Output is allowed to differ from the input (we
 			// don't ship a canonicalisation guarantee).
-			if m == nil {
-				t.Fatalf("Unmarshal returned (nil, nil)")
-			}
 			if _, mErr := wire.Marshal(m); mErr != nil {
 				// Marshal failure on a successfully-Unmarshalled message
 				// is a real bug — every parsed message must be

@@ -43,18 +43,24 @@ const (
 // not protocol.
 func PreflightRequest(q wire.Message) (PreflightVerdict, wire.Message) {
 	if q.Flags().Response() {
-		return PreflightDrop, nil
+		return PreflightDrop, wire.Message{}
 	}
 
 	op := q.Flags().Opcode()
 	switch op {
 	case wire.OpcodeQuery, wire.OpcodeUpdate, wire.OpcodeNotify:
 		if len(q.Questions()) != 1 {
-			return PreflightReply, formErrReply(q)
+			reply, ok := formErrReply(q)
+			if !ok {
+				// Builder failed — downgrade to silent drop rather
+				// than emit a malformed reply.
+				return PreflightDrop, wire.Message{}
+			}
+			return PreflightReply, reply
 		}
 	}
 
-	return PreflightAccept, nil
+	return PreflightAccept, wire.Message{}
 }
 
 // formErrReply mints a minimal FORMERR response that echoes the ID,
@@ -67,26 +73,26 @@ func PreflightRequest(q wire.Message) (PreflightVerdict, wire.Message) {
 // minimal OPT (UDPSize, version, DO bit) so EDNS-aware peers do not
 // mistake the FORMERR for an EDNS-incapable server and downgrade
 // their future requests (RFC 6891 §6.1.1).
-func formErrReply(q wire.Message) wire.Message {
+func formErrReply(q wire.Message) (wire.Message, bool) {
 	flags := q.Flags().
 		WithResponse(true).
 		WithRecursionAvailable(false).
 		WithRCODE(wire.RCODEFormErr)
 	b := wire.NewBuilder().ID(q.ID()).Flags(flags)
-	if e, ok := q.EDNS(); ok && e != nil {
+	if e, ok := q.EDNS(); ok {
 		ed, err := wire.NewEDNSBuilder().
 			UDPSize(e.UDPSize()).
 			Version(e.Version()).
 			DO(e.DO()).
 			Build()
 		if err != nil {
-			return nil
+			return wire.Message{}, false
 		}
 		b = b.EDNS(ed)
 	}
 	m, err := b.Build()
 	if err != nil {
-		return nil
+		return wire.Message{}, false
 	}
-	return m
+	return m, true
 }

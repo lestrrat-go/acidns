@@ -39,10 +39,10 @@ func (e *errorTransport) Send(_ wire.Message) error {
 
 func (e *errorTransport) Recv(ctx context.Context) (wire.Message, error) {
 	if e.recvErr != nil {
-		return nil, e.recvErr
+		return wire.Message{}, e.recvErr
 	}
 	<-ctx.Done()
-	return nil, ctx.Err()
+	return wire.Message{}, ctx.Err()
 }
 
 func TestNewAnnouncerRequiresTransport(t *testing.T) {
@@ -168,7 +168,7 @@ func (r *recvErrTransport) Send(_ wire.Message) error {
 }
 
 func (r *recvErrTransport) Recv(_ context.Context) (wire.Message, error) {
-	return nil, r.recvE
+	return wire.Message{}, r.recvE
 }
 
 func TestAnnounceListenRecvError(t *testing.T) {

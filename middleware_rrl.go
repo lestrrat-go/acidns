@@ -408,7 +408,7 @@ func truncateForRRL(m wire.Message, q wire.Message) wire.Message {
 	} else if qs := q.Questions(); len(qs) > 0 {
 		b = b.Question(qs[0])
 	}
-	if e, ok := m.EDNS(); ok && e != nil {
+	if e, ok := m.EDNS(); ok {
 		b = b.EDNS(e)
 	}
 	out, err := b.Build()

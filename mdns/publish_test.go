@@ -38,7 +38,7 @@ func (t *fakeTransport) Recv(ctx context.Context) (wire.Message, error) {
 	case m := <-t.inbox:
 		return m, nil
 	case <-ctx.Done():
-		return nil, ctx.Err()
+		return wire.Message{}, ctx.Err()
 	}
 }
 

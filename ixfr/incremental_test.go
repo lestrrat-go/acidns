@@ -23,7 +23,7 @@ type fakeStream struct {
 
 func (f *fakeStream) Next(_ context.Context) (wire.Message, error) {
 	if f.idx >= len(f.msgs) {
-		return nil, io.EOF
+		return wire.Message{}, io.EOF
 	}
 	m := f.msgs[f.idx]
 	f.idx++
@@ -34,7 +34,7 @@ func (f *fakeStream) Close() error { return nil }
 type fakeStreamExchanger struct{ stream *fakeStream }
 
 func (f *fakeStreamExchanger) Exchange(_ context.Context, _ wire.Message) (wire.Message, error) {
-	return nil, io.EOF
+	return wire.Message{}, io.EOF
 }
 func (f *fakeStreamExchanger) Stream(_ context.Context, _ wire.Message) (acidns.MessageStream, error) {
 	return f.stream, nil

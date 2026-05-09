@@ -235,7 +235,7 @@ func (l *udpLoop) handlePacket(ctx context.Context, body []byte, src netip.AddrP
 	}
 
 	maxResp := 512
-	if e, ok := q.EDNS(); ok && e != nil {
+	if e, ok := q.EDNS(); ok {
 		if size := int(e.UDPSize()); size > maxResp {
 			maxResp = size
 		}
@@ -258,9 +258,7 @@ func (l *udpLoop) handlePacket(ctx context.Context, body []byte, src netip.AddrP
 	case PreflightDrop:
 		return
 	case PreflightReply:
-		if reply != nil {
 			_ = w.WriteMsg(reply)
-		}
 		return
 	}
 
@@ -296,17 +294,13 @@ func (w *udpResponseWriter) WriteMsg(m wire.Message) error {
 		// client cannot tell EDNS-aware servers from broken ones and may
 		// permanently downgrade. Opcode and RCODE are preserved so the
 		// client can still classify the response.
-		var question wire.Question
-		if qs := m.Questions(); len(qs) > 0 {
-			question = qs[0]
-		}
 		b := wire.NewBuilder().
 			ID(m.ID()).
 			Flags(m.Flags().WithTruncated(true).WithResponse(true))
-		if question != nil {
-			b = b.Question(question)
+		if qs := m.Questions(); len(qs) > 0 {
+			b = b.Question(qs[0])
 		}
-		if e, ok := m.EDNS(); ok && e != nil {
+		if e, ok := m.EDNS(); ok {
 			b = b.EDNS(e)
 		}
 		stripped, err := b.Build()

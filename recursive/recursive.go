@@ -280,11 +280,11 @@ func (d defaultDialer) Exchange(ctx context.Context, server netip.AddrPort, q wi
 		acidns.WithUDP0x20(d.use0x20),
 	)
 	if err != nil {
-		return nil, err
+		return wire.Message{}, err
 	}
 	resp, err := uex.Exchange(ctx, q)
 	if err != nil {
-		return nil, err
+		return wire.Message{}, err
 	}
 	if !resp.Flags().Truncated() {
 		return resp, nil
@@ -297,11 +297,11 @@ func (d defaultDialer) Exchange(ctx context.Context, server netip.AddrPort, q wi
 	// quietly accept a degraded answer.
 	tex, terr := acidns.NewTCPExchanger(server)
 	if terr != nil {
-		return nil, fmt.Errorf("%w: tcp dial: %v", ErrTruncatedAfterTCPFail, terr)
+		return wire.Message{}, fmt.Errorf("%w: tcp dial: %v", ErrTruncatedAfterTCPFail, terr)
 	}
 	r2, terr := tex.Exchange(ctx, q)
 	if terr != nil {
-		return nil, fmt.Errorf("%w: tcp exchange: %v", ErrTruncatedAfterTCPFail, terr)
+		return wire.Message{}, fmt.Errorf("%w: tcp exchange: %v", ErrTruncatedAfterTCPFail, terr)
 	}
 	return r2, nil
 }
@@ -740,11 +740,11 @@ func (r *Recursive) queryAny(ctx context.Context, servers []netip.AddrPort, name
 		}
 		id, err := randomID()
 		if err != nil {
-			return nil, netip.AddrPort{}, err
+			return wire.Message{}, netip.AddrPort{}, err
 		}
 		ed, err := wire.NewEDNSBuilder().UDPSize(1232).Build()
 		if err != nil {
-			return nil, netip.AddrPort{}, err
+			return wire.Message{}, netip.AddrPort{}, err
 		}
 		q, err := wire.NewBuilder().
 			ID(id).
@@ -752,7 +752,7 @@ func (r *Recursive) queryAny(ctx context.Context, servers []netip.AddrPort, name
 			EDNS(ed).
 			Build()
 		if err != nil {
-			return nil, netip.AddrPort{}, err
+			return wire.Message{}, netip.AddrPort{}, err
 		}
 
 		exchCtx := ctx
@@ -773,7 +773,7 @@ func (r *Recursive) queryAny(ctx context.Context, servers []netip.AddrPort, name
 		r.stats.Record(s, rtt, false)
 		lastErr = err
 		if ctx.Err() != nil {
-			return nil, netip.AddrPort{}, ctx.Err()
+			return wire.Message{}, netip.AddrPort{}, ctx.Err()
 		}
 	}
 	if lastErr == nil {
@@ -783,7 +783,7 @@ func (r *Recursive) queryAny(ctx context.Context, servers []netip.AddrPort, name
 			lastErr = errors.New("no servers")
 		}
 	}
-	return nil, netip.AddrPort{}, lastErr
+	return wire.Message{}, netip.AddrPort{}, lastErr
 }
 
 // serversFromReferral picks the addresses to query next. It prefers

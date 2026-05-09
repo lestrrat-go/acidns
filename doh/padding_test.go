@@ -23,7 +23,7 @@ func TestWithPadding_DisablesPadding(t *testing.T) {
 		body, _ := io.ReadAll(r.Body)
 		seenLen = len(body)
 		if m, err := wire.Unmarshal(body); err == nil {
-			if e, ok := m.EDNS(); ok && e != nil {
+			if e, ok := m.EDNS(); ok {
 				for _, opt := range e.Options() {
 					if opt.Code() == wire.EDNSOptionPadding {
 						seenPaddingOption = true

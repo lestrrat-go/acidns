@@ -32,7 +32,7 @@ type extraSigPrepender struct {
 func (s *extraSigPrepender) Lookup(ctx context.Context, qname wire.Name, qtype rrtype.Type) (wire.Message, error) {
 	m, err := s.inner.Lookup(ctx, qname, qtype)
 	if err != nil {
-		return nil, err
+		return wire.Message{}, err
 	}
 	if !qname.Equal(s.target) || qtype != s.qtype {
 		return m, nil

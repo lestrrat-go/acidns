@@ -51,7 +51,7 @@ func TestDiscover(t *testing.T) {
 	rec1 := wire.NewRecord(ddr.ResolverDomain(), 60*time.Second, dohSVCB)
 	rec2 := wire.NewRecord(ddr.ResolverDomain(), 60*time.Second, dotSVCB)
 
-	r := &fakeResolver{answer: newFakeAnswer(nil, []wire.Record{rec1, rec2})}
+	r := &fakeResolver{answer: newFakeAnswer(wire.Question{}, []wire.Record{rec1, rec2})}
 	endpoints, err := ddr.Discover(context.Background(), r)
 	require.NoError(t, err)
 	require.Len(t, endpoints, 2)

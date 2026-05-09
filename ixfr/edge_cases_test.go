@@ -21,7 +21,7 @@ import (
 type errStreamExchanger struct{ err error }
 
 func (e *errStreamExchanger) Exchange(_ context.Context, _ wire.Message) (wire.Message, error) {
-	return nil, e.err
+	return wire.Message{}, e.err
 }
 func (e *errStreamExchanger) Stream(_ context.Context, _ wire.Message) (acidns.MessageStream, error) {
 	return nil, e.err
@@ -35,17 +35,17 @@ type errStream struct {
 
 func (e *errStream) Next(_ context.Context) (wire.Message, error) {
 	if e.done {
-		return nil, io.EOF
+		return wire.Message{}, io.EOF
 	}
 	e.done = true
-	return nil, e.err
+	return wire.Message{}, e.err
 }
 func (e *errStream) Close() error { return nil }
 
 type errStreamExchangerOpens struct{ s acidns.MessageStream }
 
 func (e *errStreamExchangerOpens) Exchange(_ context.Context, _ wire.Message) (wire.Message, error) {
-	return nil, io.EOF
+	return wire.Message{}, io.EOF
 }
 func (e *errStreamExchangerOpens) Stream(_ context.Context, _ wire.Message) (acidns.MessageStream, error) {
 	return e.s, nil
@@ -114,7 +114,7 @@ func (s *firstThenErrStream) Next(_ context.Context) (wire.Message, error) {
 	if s.idx == 1 {
 		return s.first, nil
 	}
-	return nil, s.err
+	return wire.Message{}, s.err
 }
 func (s *firstThenErrStream) Close() error { return nil }
 

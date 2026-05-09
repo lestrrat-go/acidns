@@ -374,9 +374,7 @@ func (l *serverLoop) serveConn(ctx context.Context, raw net.Conn) {
 			case acidns.PreflightDrop:
 				return
 			case acidns.PreflightReply:
-				if reply != nil {
 					_ = w.WriteMsg(reply)
-				}
 				return
 			}
 			l.handler.ServeDNS(connCtx, w, q)

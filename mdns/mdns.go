@@ -135,7 +135,7 @@ func (b *ServiceBuilder) Build() (Service, error) {
 func BuildBrowseQuery(service string) (wire.Message, error) {
 	name, err := serviceName(service)
 	if err != nil {
-		return nil, err
+		return wire.Message{}, err
 	}
 	return wire.NewBuilder().
 		ID(0). // RFC 6762 §18.1 — mDNS requests use ID 0.

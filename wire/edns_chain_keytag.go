@@ -13,7 +13,7 @@ import (
 func NewChain(closestTrustPoint wirebb.Name) EDNSOption {
 	p := wirebb.NewPacker(nil)
 	p.NameUncompressed(closestTrustPoint)
-	return ednsOption{code: EDNSOptionChain, data: p.Bytes()}
+	return EDNSOption{code: EDNSOptionChain, data: p.Bytes()}
 }
 
 // ChainClosestTrustPoint decodes the closest-trust-point name from a
@@ -38,7 +38,7 @@ func NewKeyTag(tags ...uint16) EDNSOption {
 	for i, tag := range tags {
 		binary.BigEndian.PutUint16(data[2*i:], tag)
 	}
-	return ednsOption{code: EDNSOptionKeyTag, data: data}
+	return EDNSOption{code: EDNSOptionKeyTag, data: data}
 }
 
 // KeyTags decodes the list of key tags from an edns-key-tag option.

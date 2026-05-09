@@ -148,9 +148,7 @@ func (h *Forwarder) ServeDNS(ctx context.Context, w acidns.ResponseWriter, q wir
 			slog.Duration("elapsed", time.Since(start)))
 		return
 	case acidns.PreflightReply:
-		if reply != nil {
-			_ = w.WriteMsg(reply)
-		}
+		_ = w.WriteMsg(reply)
 		h.cfg.logger.LogAttrs(ctx, slog.LevelDebug, "forward.serve",
 			slog.String("decision", "preflight_reply"),
 			slog.Duration("elapsed", time.Since(start)))
@@ -242,7 +240,7 @@ func (h *Forwarder) exchangeSingleflight(ctx context.Context, in wire.Message, q
 			case h.inflightSem <- struct{}{}:
 			default:
 				h.inflightMu.Unlock()
-				return nil, ErrInflightFull
+				return wire.Message{}, ErrInflightFull
 			}
 		}
 		call = &inflightCall{done: make(chan struct{})}
@@ -255,7 +253,7 @@ func (h *Forwarder) exchangeSingleflight(ctx context.Context, in wire.Message, q
 	case <-call.done:
 		return call.resp, call.err
 	case <-ctx.Done():
-		return nil, ctx.Err()
+		return wire.Message{}, ctx.Err()
 	}
 }
 
@@ -307,7 +305,7 @@ func singleflightKey(qq wire.Question, doBit bool) string {
 // OPT pseudo-RR, or false when the message has no OPT.
 func edsoDOBit(q wire.Message) bool {
 	e, ok := q.EDNS()
-	if !ok || e == nil {
+	if !ok {
 		return false
 	}
 	return e.DO()

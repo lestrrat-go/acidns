@@ -407,18 +407,18 @@ func New(addr netip.AddrPort, cert *Cert, opts ...Option) (acidns.Exchanger, err
 func (e *exchanger) Exchange(ctx context.Context, q wire.Message) (wire.Message, error) {
 	now := e.now()
 	if now.Before(e.cert.validFrom) || now.After(e.cert.validUntil) {
-		return nil, fmt.Errorf("%w: now=%s window=[%s, %s]",
+		return wire.Message{}, fmt.Errorf("%w: now=%s window=[%s, %s]",
 			ErrCertExpired, now, e.cert.validFrom, e.cert.validUntil)
 	}
 
 	msg, err := wire.Marshal(q)
 	if err != nil {
-		return nil, fmt.Errorf("dnscrypt: marshal: %w", err)
+		return wire.Message{}, fmt.Errorf("dnscrypt: marshal: %w", err)
 	}
 
 	var clientSK [32]byte
 	if _, err := rand.Read(clientSK[:]); err != nil {
-		return nil, fmt.Errorf("dnscrypt: rand: %w", err)
+		return wire.Message{}, fmt.Errorf("dnscrypt: rand: %w", err)
 	}
 	// Zero the ephemeral scalar before return so it does not linger in
 	// heap memory longer than this Exchange.
@@ -430,24 +430,24 @@ func (e *exchanger) Exchange(ctx context.Context, q wire.Message) (wire.Message,
 	var clientPK [32]byte
 	pk, err := curve25519.X25519(clientSK[:], curve25519.Basepoint)
 	if err != nil {
-		return nil, err
+		return wire.Message{}, err
 	}
 	copy(clientPK[:], pk)
 
 	var nonce [12]byte
 	if _, err := rand.Read(nonce[:]); err != nil {
-		return nil, fmt.Errorf("dnscrypt: rand: %w", err)
+		return wire.Message{}, fmt.Errorf("dnscrypt: rand: %w", err)
 	}
 
 	enc, err := Encrypt(e.cert, clientPK, clientSK, nonce, msg)
 	if err != nil {
-		return nil, err
+		return wire.Message{}, err
 	}
 
 	var d net.Dialer
 	conn, err := d.DialContext(ctx, "udp", e.addr.String())
 	if err != nil {
-		return nil, fmt.Errorf("dnscrypt: dial: %w", err)
+		return wire.Message{}, fmt.Errorf("dnscrypt: dial: %w", err)
 	}
 	defer func() { _ = conn.Close() }()
 	if dl, ok := ctx.Deadline(); ok {
@@ -457,7 +457,7 @@ func (e *exchanger) Exchange(ctx context.Context, q wire.Message) (wire.Message,
 	}
 
 	if _, err := conn.Write(enc); err != nil {
-		return nil, fmt.Errorf("dnscrypt: write: %w", err)
+		return wire.Message{}, fmt.Errorf("dnscrypt: write: %w", err)
 	}
 	// Sized to accommodate an EDNS-bumped DNS message (up to 65535 wire
 	// bytes per the 16-bit RDLENGTH ceiling) plus the DNSCrypt v2 header
@@ -466,17 +466,17 @@ func (e *exchanger) Exchange(ctx context.Context, q wire.Message) (wire.Message,
 	buf := make([]byte, 65535)
 	n, err := conn.Read(buf)
 	if err != nil {
-		return nil, fmt.Errorf("dnscrypt: read: %w", err)
+		return wire.Message{}, fmt.Errorf("dnscrypt: read: %w", err)
 	}
 	if n == len(buf) {
 		// Read filled the buffer exactly: a UDP datagram larger than
 		// our cap was silently truncated by the kernel. Refuse rather
 		// than feed truncated ciphertext to Decrypt.
-		return nil, fmt.Errorf("dnscrypt: response exceeded %d byte buffer", len(buf))
+		return wire.Message{}, fmt.Errorf("dnscrypt: response exceeded %d byte buffer", len(buf))
 	}
 	plain, err := Decrypt(e.cert, clientSK, nonce, buf[:n])
 	if err != nil {
-		return nil, err
+		return wire.Message{}, err
 	}
 	return wire.Unmarshal(plain)
 }

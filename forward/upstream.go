@@ -35,7 +35,7 @@ func newUDPTCPFallback(addr netip.AddrPort) acidns.Exchanger {
 func (e *udpTCPFallback) Exchange(ctx context.Context, q wire.Message) (wire.Message, error) {
 	resp, err := e.udp.Exchange(ctx, q)
 	if err != nil {
-		return nil, err
+		return wire.Message{}, err
 	}
 	if resp.Flags().Truncated() {
 		return e.tcp.Exchange(ctx, q)
@@ -49,5 +49,5 @@ func (e *udpTCPFallback) Exchange(ctx context.Context, q wire.Message) (wire.Mes
 type errExchanger struct{ err error }
 
 func (e errExchanger) Exchange(_ context.Context, _ wire.Message) (wire.Message, error) {
-	return nil, e.err
+	return wire.Message{}, e.err
 }

@@ -16,6 +16,7 @@ type Builder struct {
 	authorities []Record
 	additionals []Record
 	edns        EDNS
+	hasEDNS     bool
 	err         error
 }
 
@@ -52,18 +53,18 @@ func (b *Builder) Question(q Question) *Builder { b.questions = append(b.questio
 func (b *Builder) Answer(r Record) *Builder     { b.answers = append(b.answers, r); return b }
 func (b *Builder) Authority(r Record) *Builder  { b.authorities = append(b.authorities, r); return b }
 func (b *Builder) Additional(r Record) *Builder { b.additionals = append(b.additionals, r); return b }
-func (b *Builder) EDNS(e EDNS) *Builder         { b.edns = e; return b }
+func (b *Builder) EDNS(e EDNS) *Builder         { b.edns = e; b.hasEDNS = true; return b }
 
 func (b *Builder) Build() (Message, error) {
 	if b.err != nil {
-		return nil, b.err
+		return Message{}, b.err
 	}
 	// Snapshot every section into a freshly-allocated slice. Without this
 	// step a Builder reused after Build (b.Answer(...).Build() then more
 	// b.Answer(...).Build()) could mutate the first Message's backing
 	// array via append's grow-in-place semantics. The package contract
 	// promises Build returns an immutable Message; the copy enforces it.
-	return &message{
+	return Message{
 		id:          b.id,
 		flags:       b.flags,
 		questions:   cloneSlice(b.questions),
@@ -71,6 +72,7 @@ func (b *Builder) Build() (Message, error) {
 		authorities: cloneSlice(b.authorities),
 		additionals: cloneSlice(b.additionals),
 		edns:        b.edns,
+		hasEDNS:     b.hasEDNS,
 	}, nil
 }
 

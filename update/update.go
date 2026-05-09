@@ -96,7 +96,7 @@ func (b *Builder) PrereqNameNotInUse(name wire.Name) *Builder {
 func (b *Builder) Build() (wire.Message, error) {
 	id, err := randomID()
 	if err != nil {
-		return nil, err
+		return wire.Message{}, err
 	}
 	mb := wire.NewBuilder().
 		ID(id).

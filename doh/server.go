@@ -130,9 +130,7 @@ func (h *dohHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "doh: response in request slot", http.StatusBadRequest)
 		return
 	case acidns.PreflightReply:
-		if reply != nil {
 			_ = rw.WriteMsg(reply)
-		}
 		return
 	}
 	h.h.ServeDNS(r.Context(), rw, q)

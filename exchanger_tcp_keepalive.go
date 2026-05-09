@@ -98,7 +98,7 @@ func (e *tcpKAExchanger) Exchange(ctx context.Context, q wire.Message) (wire.Mes
 
 	conn, err := e.acquireConn(ctx)
 	if err != nil {
-		return nil, err
+		return wire.Message{}, err
 	}
 
 	e.exchangeMu.Lock()
@@ -107,7 +107,7 @@ func (e *tcpKAExchanger) Exchange(ctx context.Context, q wire.Message) (wire.Mes
 	resp, err := streamframe.ExchangeOnConn(ctx, conn, q, e.cfg.timeout)
 	if err != nil {
 		e.dropConn(conn)
-		return nil, err
+		return wire.Message{}, err
 	}
 
 	idle := e.cfg.idleFallback

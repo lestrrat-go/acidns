@@ -35,7 +35,7 @@ func Send(ctx context.Context, ex acidns.Exchanger, zone wire.Name, opts ...Opti
 	}
 	id, err := randomID()
 	if err != nil {
-		return nil, err
+		return wire.Message{}, err
 	}
 	b := wire.NewBuilder().
 		ID(id).
@@ -47,17 +47,17 @@ func Send(ctx context.Context, ex acidns.Exchanger, zone wire.Name, opts ...Opti
 	}
 	q, err := b.Build()
 	if err != nil {
-		return nil, err
+		return wire.Message{}, err
 	}
 
 	if c.tsigKey != nil {
 		signed, requestMAC, err := signMessage(q, *c.tsigKey, c.tsigNow(), c.tsigFudge)
 		if err != nil {
-			return nil, fmt.Errorf("notify: TSIG sign: %w", err)
+			return wire.Message{}, fmt.Errorf("notify: TSIG sign: %w", err)
 		}
 		q, err = wire.Unmarshal(signed)
 		if err != nil {
-			return nil, fmt.Errorf("notify: re-parse signed query: %w", err)
+			return wire.Message{}, fmt.Errorf("notify: re-parse signed query: %w", err)
 		}
 		if _, ok := ctx.Deadline(); !ok && c.timeout > 0 {
 			var cancel context.CancelFunc
@@ -66,10 +66,10 @@ func Send(ctx context.Context, ex acidns.Exchanger, zone wire.Name, opts ...Opti
 		}
 		resp, err := ex.Exchange(ctx, q)
 		if err != nil {
-			return nil, err
+			return wire.Message{}, err
 		}
 		if err := verifyResponseIfTSIG(resp, *c.tsigKey, requestMAC, c.tsigNow(), c.tsigFudge); err != nil {
-			return nil, err
+			return wire.Message{}, err
 		}
 		return resp, nil
 	}

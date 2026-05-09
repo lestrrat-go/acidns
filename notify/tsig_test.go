@@ -73,7 +73,7 @@ type roundTripExchanger struct {
 func (r *roundTripExchanger) Exchange(_ context.Context, q wire.Message) (wire.Message, error) {
 	raw, err := wire.Marshal(q)
 	if err != nil {
-		return nil, err
+		return wire.Message{}, err
 	}
 	r.got = raw
 	resp, err := wire.NewBuilder().ID(q.ID()).Opcode(wire.OpcodeNotify).Response(true).Build()

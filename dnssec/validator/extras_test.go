@@ -291,7 +291,7 @@ func TestWalkerSourceLookupErrorDefaultPolicy(t *testing.T) {
 type erroringSource struct{ err error }
 
 func (s *erroringSource) Lookup(_ context.Context, _ wire.Name, _ rrtype.Type) (wire.Message, error) {
-	return nil, s.err
+	return wire.Message{}, s.err
 }
 
 // TestWalkerChainStepAccessors covers the chainStep getters that show up in
@@ -356,7 +356,7 @@ type authorityStripper struct {
 func (s *authorityStripper) Lookup(ctx context.Context, qname wire.Name, qtype rrtype.Type) (wire.Message, error) {
 	m, err := s.inner.Lookup(ctx, qname, qtype)
 	if err != nil {
-		return nil, err
+		return wire.Message{}, err
 	}
 	if m.Flags().RCODE() != wire.RCODENoError || len(m.Answers()) > 0 {
 		return m, nil
@@ -384,7 +384,7 @@ type sigStripper struct {
 func (s *sigStripper) Lookup(ctx context.Context, qname wire.Name, qtype rrtype.Type) (wire.Message, error) {
 	m, err := s.inner.Lookup(ctx, qname, qtype)
 	if err != nil {
-		return nil, err
+		return wire.Message{}, err
 	}
 	if !qname.Equal(s.target) || qtype != s.qtype {
 		return m, nil
@@ -464,7 +464,7 @@ type errorAfterInsecure struct {
 
 func (s *errorAfterInsecure) Lookup(ctx context.Context, qname wire.Name, qtype rrtype.Type) (wire.Message, error) {
 	if qname.Equal(s.fail) && qtype == rrtype.A {
-		return nil, errors.New("network blip on insecure subtree")
+		return wire.Message{}, errors.New("network blip on insecure subtree")
 	}
 	return s.inner.Lookup(ctx, qname, qtype)
 }

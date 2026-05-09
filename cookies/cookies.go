@@ -263,7 +263,7 @@ func (c *client) evictLocked() {
 // Returns 0 if no OPT is present.
 func combinedRCODE(msg wire.Message) uint16 {
 	low := uint16(msg.Flags().RCODE())
-	if e, ok := msg.EDNS(); ok && e != nil {
+	if e, ok := msg.EDNS(); ok {
 		return uint16(e.ExtendedRCODE())<<4 | (low & 0x0f)
 	}
 	return low
@@ -274,7 +274,7 @@ func combinedRCODE(msg wire.Message) uint16 {
 func extractCookieFromMsg(msg wire.Message) ([8]byte, []byte, bool) {
 	var zero [8]byte
 	edns, ok := msg.EDNS()
-	if !ok || edns == nil {
+	if !ok {
 		return zero, nil, false
 	}
 	for _, o := range edns.Options() {

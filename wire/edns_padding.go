@@ -25,7 +25,7 @@ func PadEncrypted(m Message) Message {
 	extRCODE := uint8(0)
 	version := uint8(0)
 	do := false
-	if e, ok := m.EDNS(); ok && e != nil {
+	if e, ok := m.EDNS(); ok {
 		for _, opt := range e.Options() {
 			if opt.Code() == EDNSOptionPadding {
 				return m
@@ -49,7 +49,7 @@ func PadEncrypted(m Message) Message {
 		}
 		pad, err := NewEDNSOption(EDNSOptionPadding, make([]byte, padBytes))
 		if err != nil {
-			return nil, nil, err
+			return Message{}, nil, err
 		}
 		eb = eb.Option(pad)
 
@@ -68,17 +68,17 @@ func PadEncrypted(m Message) Message {
 		}
 		ed, err := eb.Build()
 		if err != nil {
-			return nil, nil, err
+			return Message{}, nil, err
 		}
 		b = b.EDNS(ed)
 
 		msg, err := b.Build()
 		if err != nil {
-			return nil, nil, err
+			return Message{}, nil, err
 		}
 		buf, err := Marshal(msg)
 		if err != nil {
-			return nil, nil, err
+			return Message{}, nil, err
 		}
 		return msg, buf, nil
 	}

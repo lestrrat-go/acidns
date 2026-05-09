@@ -19,7 +19,7 @@ const EDNSOptionReportChannel uint16 = 18
 func NewReportChannel(agent wirebb.Name) EDNSOption {
 	p := wirebb.NewPacker(nil)
 	p.NameUncompressed(agent)
-	return ednsOption{code: EDNSOptionReportChannel, data: p.Bytes()}
+	return EDNSOption{code: EDNSOptionReportChannel, data: p.Bytes()}
 }
 
 // ReportChannelAgent decodes the agent-domain from a Report-Channel option.

@@ -114,7 +114,7 @@ func filterBailiwick(qname wire.Name, resp wire.Message) wire.Message {
 	for _, r := range keptAdditional {
 		b = b.Additional(r)
 	}
-	if e, ok := resp.EDNS(); ok && e != nil {
+	if e, ok := resp.EDNS(); ok {
 		b = b.EDNS(e)
 	}
 	out, err := b.Build()

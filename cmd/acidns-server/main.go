@@ -215,7 +215,7 @@ type hybrid struct {
 func (h hybrid) ServeDNS(ctx context.Context, w acidns.ResponseWriter, q wire.Message) {
 	rec := &peekingWriter{ResponseWriter: w}
 	h.auth.ServeDNS(ctx, rec, q)
-	if rec.captured == nil {
+	if !rec.hasCaptured {
 		return
 	}
 	// If the authoritative side returned REFUSED (out of zone), try
@@ -230,11 +230,13 @@ func (h hybrid) ServeDNS(ctx context.Context, w acidns.ResponseWriter, q wire.Me
 type peekingWriter struct {
 	acidns.ResponseWriter
 
-	captured wire.Message
+	captured    wire.Message
+	hasCaptured bool
 }
 
 func (p *peekingWriter) WriteMsg(m wire.Message) error {
 	p.captured = m
+	p.hasCaptured = true
 	return nil
 }
 

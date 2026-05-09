@@ -76,7 +76,7 @@ func TestDiscover_SkipsNonSVCB(t *testing.T) {
 		rdata.NewSvcParamPort(853))
 	goodRec := wire.NewRecord(ddr.ResolverDomain(), 60*time.Second, good)
 
-	r := &fakeResolver{answer: newFakeAnswer(nil, []wire.Record{
+	r := &fakeResolver{answer: newFakeAnswer(wire.Question{}, []wire.Record{
 		aRec, mismatched, aliasRec, goodRec,
 	})}
 	endpoints, err := ddr.Discover(t.Context(), r)
@@ -101,7 +101,7 @@ func TestDiscover_SortsByPriority(t *testing.T) {
 		wire.NewRecord(ddr.ResolverDomain(), 60*time.Second, lo),
 		wire.NewRecord(ddr.ResolverDomain(), 60*time.Second, mid),
 	}
-	r := &fakeResolver{answer: newFakeAnswer(nil, records)}
+	r := &fakeResolver{answer: newFakeAnswer(wire.Question{}, records)}
 	endpoints, err := ddr.Discover(t.Context(), r)
 	require.NoError(t, err)
 	require.Len(t, endpoints, 3)
@@ -144,7 +144,7 @@ func TestDiscover_InferProtocolVariants(t *testing.T) {
 		wire.NewRecord(ddr.ResolverDomain(), 60*time.Second, bareSVCB),
 		wire.NewRecord(ddr.ResolverDomain(), 60*time.Second, mixedSVCB),
 	}
-	r := &fakeResolver{answer: newFakeAnswer(nil, records)}
+	r := &fakeResolver{answer: newFakeAnswer(wire.Question{}, records)}
 	endpoints, err := ddr.Discover(t.Context(), r)
 	require.NoError(t, err)
 	require.Len(t, endpoints, 5)
@@ -173,7 +173,7 @@ func TestDiscover_IPv6Hints(t *testing.T) {
 		v6hint,
 	)
 	rec := wire.NewRecord(ddr.ResolverDomain(), 60*time.Second, s)
-	r := &fakeResolver{answer: newFakeAnswer(nil, []wire.Record{rec})}
+	r := &fakeResolver{answer: newFakeAnswer(wire.Question{}, []wire.Record{rec})}
 	endpoints, err := ddr.Discover(t.Context(), r)
 	require.NoError(t, err)
 	require.Len(t, endpoints, 1)

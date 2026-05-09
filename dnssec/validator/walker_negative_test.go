@@ -27,7 +27,7 @@ type rcodeRewriter struct {
 func (s *rcodeRewriter) Lookup(ctx context.Context, qname wire.Name, qtype rrtype.Type) (wire.Message, error) {
 	m, err := s.inner.Lookup(ctx, qname, qtype)
 	if err != nil {
-		return nil, err
+		return wire.Message{}, err
 	}
 	if !qname.Equal(s.target) || qtype != s.qtype {
 		return m, nil
@@ -92,7 +92,7 @@ type nxdomainForger struct {
 func (s *nxdomainForger) Lookup(ctx context.Context, qname wire.Name, qtype rrtype.Type) (wire.Message, error) {
 	m, err := s.inner.Lookup(ctx, qname, qtype)
 	if err != nil {
-		return nil, err
+		return wire.Message{}, err
 	}
 	if !qname.Equal(s.target) || qtype != s.qtype {
 		return m, nil
@@ -248,7 +248,7 @@ type nodataSigStripper struct {
 func (s *nodataSigStripper) Lookup(ctx context.Context, qname wire.Name, qtype rrtype.Type) (wire.Message, error) {
 	m, err := s.inner.Lookup(ctx, qname, qtype)
 	if err != nil {
-		return nil, err
+		return wire.Message{}, err
 	}
 	if !qname.Equal(s.target) || qtype != s.qtype {
 		return m, nil

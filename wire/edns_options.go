@@ -17,7 +17,7 @@ import (
 func NewNSID(identifier []byte) EDNSOption {
 	cp := make([]byte, len(identifier))
 	copy(cp, identifier)
-	return ednsOption{code: EDNSOptionNSID, data: cp}
+	return EDNSOption{code: EDNSOptionNSID, data: cp}
 }
 
 // NSIDIdentifier returns the identifier bytes carried by an NSID option, or
@@ -35,13 +35,13 @@ func NSIDIdentifier(o EDNSOption) ([]byte, bool) {
 func NewEDNSExpire(seconds uint32) EDNSOption {
 	var b [4]byte
 	binary.BigEndian.PutUint32(b[:], seconds)
-	return ednsOption{code: EDNSOptionExpire, data: b[:]}
+	return EDNSOption{code: EDNSOptionExpire, data: b[:]}
 }
 
 // NewEDNSExpireQuery builds an empty-payload EDNS EXPIRE option suitable for
 // inclusion in a query (RFC 7314 §3 — query carries no data).
 func NewEDNSExpireQuery() EDNSOption {
-	return ednsOption{code: EDNSOptionExpire, data: nil}
+	return EDNSOption{code: EDNSOptionExpire, data: nil}
 }
 
 // EDNSExpireSeconds returns the seconds value from an EDNS EXPIRE option;
@@ -60,12 +60,12 @@ func EDNSExpireSeconds(o EDNSOption) (uint32, bool) {
 // preference advertised" (empty payload).
 func NewTCPKeepalive(timeout time.Duration) EDNSOption {
 	if timeout == 0 {
-		return ednsOption{code: EDNSOptionTCPKeepalive, data: nil}
+		return EDNSOption{code: EDNSOptionTCPKeepalive, data: nil}
 	}
 	units := uint16(timeout / (100 * time.Millisecond))
 	var b [2]byte
 	binary.BigEndian.PutUint16(b[:], units)
-	return ednsOption{code: EDNSOptionTCPKeepalive, data: b[:]}
+	return EDNSOption{code: EDNSOptionTCPKeepalive, data: b[:]}
 }
 
 // TCPKeepaliveTimeout returns the timeout encoded in an edns-tcp-keepalive
@@ -93,7 +93,7 @@ const (
 // trailing the source prefix length are zero-padded on the wire.
 func NewClientSubnet(prefix netip.Prefix, scope uint8) (EDNSOption, error) {
 	if !prefix.IsValid() {
-		return nil, fmt.Errorf("%w: ClientSubnet prefix invalid", ErrInvalidMessage)
+		return EDNSOption{}, fmt.Errorf("%w: ClientSubnet prefix invalid", ErrInvalidMessage)
 	}
 	family := ClientSubnetIPv4
 	var addr []byte
@@ -109,7 +109,7 @@ func NewClientSubnet(prefix netip.Prefix, scope uint8) (EDNSOption, error) {
 	// Truncate to ceil(source/8) bytes per RFC 7871 §6.
 	addrLen := (int(source) + 7) / 8
 	if addrLen > len(addr) {
-		return nil, fmt.Errorf("%w: ClientSubnet source %d exceeds address width", ErrInvalidMessage, source)
+		return EDNSOption{}, fmt.Errorf("%w: ClientSubnet source %d exceeds address width", ErrInvalidMessage, source)
 	}
 	data := make([]byte, 4+addrLen)
 	binary.BigEndian.PutUint16(data[0:], uint16(family))
@@ -127,7 +127,7 @@ func NewClientSubnet(prefix netip.Prefix, scope uint8) (EDNSOption, error) {
 			data[4+addrLen-1] &= byte(0xff << trailing)
 		}
 	}
-	return ednsOption{code: EDNSOptionClientSubnet, data: data}, nil
+	return EDNSOption{code: EDNSOptionClientSubnet, data: data}, nil
 }
 
 // ClientSubnet decodes an ECS option into family, prefix, and scope. The
@@ -189,7 +189,7 @@ var ErrInvalidCookie = errors.New("wire: invalid DNS cookie")
 // client cookie MUST be exactly 8 bytes.
 func NewClientCookie(clientCookie [8]byte) EDNSOption {
 	data := append([]byte(nil), clientCookie[:]...)
-	return ednsOption{code: EDNSOptionCookie, data: data}
+	return EDNSOption{code: EDNSOptionCookie, data: data}
 }
 
 // NewClientServerCookie builds a DNS cookie option that includes both the
@@ -197,12 +197,12 @@ func NewClientCookie(clientCookie [8]byte) EDNSOption {
 // RFC 7873 §4 / RFC 9018 §2.
 func NewClientServerCookie(clientCookie [8]byte, serverCookie []byte) (EDNSOption, error) {
 	if len(serverCookie) < 8 || len(serverCookie) > 32 {
-		return nil, fmt.Errorf("%w: server cookie length %d not in [8,32]", ErrInvalidCookie, len(serverCookie))
+		return EDNSOption{}, fmt.Errorf("%w: server cookie length %d not in [8,32]", ErrInvalidCookie, len(serverCookie))
 	}
 	data := make([]byte, 0, 8+len(serverCookie))
 	data = append(data, clientCookie[:]...)
 	data = append(data, serverCookie...)
-	return ednsOption{code: EDNSOptionCookie, data: data}, nil
+	return EDNSOption{code: EDNSOptionCookie, data: data}, nil
 }
 
 // Cookies decodes an RFC 7873 cookie option. The server cookie may be empty.
@@ -260,7 +260,7 @@ func NewExtendedError(code ExtendedErrorCode, extraText string) EDNSOption {
 	data := make([]byte, 2+len(extraText))
 	binary.BigEndian.PutUint16(data[0:], uint16(code))
 	copy(data[2:], extraText)
-	return ednsOption{code: EDNSOptionExtendedDNS, data: data}
+	return EDNSOption{code: EDNSOptionExtendedDNS, data: data}
 }
 
 // ExtendedError decodes an EDE option. Returns false if o is not an EDE
@@ -291,7 +291,7 @@ const (
 // signalling the requestor would like the responder to include zone version
 // information in the response.
 func NewZoneVersionQuery() EDNSOption {
-	return ednsOption{code: EDNSOptionZoneVersion, data: nil}
+	return EDNSOption{code: EDNSOptionZoneVersion, data: nil}
 }
 
 // NewZoneVersionSOASerial builds a response-side ZONEVERSION option carrying
@@ -302,7 +302,7 @@ func NewZoneVersionSOASerial(labelCount uint8, serial uint32) EDNSOption {
 	b[0] = labelCount
 	b[1] = uint8(ZoneVersionTypeSOASerial)
 	binary.BigEndian.PutUint32(b[2:], serial)
-	return ednsOption{code: EDNSOptionZoneVersion, data: b[:]}
+	return EDNSOption{code: EDNSOptionZoneVersion, data: b[:]}
 }
 
 // ZoneVersionSOASerial decodes a SOA-serial-typed ZONEVERSION option.

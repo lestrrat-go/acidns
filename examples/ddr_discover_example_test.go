@@ -19,7 +19,7 @@ type fakeResolver struct{ records []wire.Record }
 
 func (f *fakeResolver) Resolve(_ context.Context, _ wire.Name, _ rrtype.Type) (*acidns.Answer, error) {
 	raw, _ := wire.NewBuilder().Response(true).Build()
-	return acidns.NewAnswer(nil, f.records, raw), nil
+	return acidns.NewAnswer(wire.Question{}, f.records, raw), nil
 }
 
 func Example_ddr_discover() {

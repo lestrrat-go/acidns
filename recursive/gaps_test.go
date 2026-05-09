@@ -338,7 +338,7 @@ func TestQueryAnyAllError(t *testing.T) {
 	t.Parallel()
 	dialer := stubDialer{
 		fn: func(_ context.Context, _ netip.AddrPort, _ wire.Message) (wire.Message, error) {
-			return nil, errors.New("synthetic dial failure")
+			return wire.Message{}, errors.New("synthetic dial failure")
 		},
 	}
 	r := mustRecursive(t,
@@ -362,7 +362,7 @@ func TestQueryAnyContextCancelled(t *testing.T) {
 	dialer := stubDialer{
 		fn: func(_ context.Context, _ netip.AddrPort, _ wire.Message) (wire.Message, error) {
 			cancel()
-			return nil, errors.New("transient")
+			return wire.Message{}, errors.New("transient")
 		},
 	}
 	r := mustRecursive(t,

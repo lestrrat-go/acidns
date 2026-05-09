@@ -208,7 +208,7 @@ func (c *capturingWriter) snapshot() wire.Message {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	if c.dropped {
-		return nil
+		return wire.Message{}
 	}
 	return c.first
 }

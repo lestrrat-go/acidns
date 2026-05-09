@@ -404,9 +404,7 @@ func (l *tcpLoop) serveConn(ctx context.Context, conn net.Conn) {
 			case PreflightDrop:
 				return
 			case PreflightReply:
-				if reply != nil {
 					_ = w.WriteMsg(reply)
-				}
 				return
 			}
 			l.handler.ServeDNS(contextWithRawRequest(connCtx, body), w, q)

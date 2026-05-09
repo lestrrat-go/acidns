@@ -317,7 +317,7 @@ func (a *Authoritative) answer(q wire.Message) wire.Message {
 func setRCODE(b *wire.Builder, q wire.Message, code wire.RCODE) *wire.Builder {
 	b = b.RCODE(wire.RCODE(uint8(code) & 0x0f))
 	qe, ok := q.EDNS()
-	if !ok || qe == nil {
+	if !ok {
 		return b
 	}
 	eb := wire.NewEDNSBuilder().

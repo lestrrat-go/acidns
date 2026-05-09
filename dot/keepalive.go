@@ -153,7 +153,7 @@ func (e *kaExchanger) Exchange(ctx context.Context, q wire.Message) (wire.Messag
 
 	conn, err := e.acquireConn(ctx)
 	if err != nil {
-		return nil, err
+		return wire.Message{}, err
 	}
 
 	e.exchangeMu.Lock()
@@ -162,7 +162,7 @@ func (e *kaExchanger) Exchange(ctx context.Context, q wire.Message) (wire.Messag
 	resp, err := streamframe.ExchangeOnConn(ctx, conn, q, e.cfg.timeout)
 	if err != nil {
 		e.dropConn(conn)
-		return nil, err
+		return wire.Message{}, err
 	}
 
 	idle := e.cfg.idleFallback

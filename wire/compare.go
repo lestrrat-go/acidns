@@ -49,9 +49,6 @@ func compareRecords(a, b Record) int {
 // Kaminsky-style spoofing, since the 16-bit transaction ID can be
 // guessed at scale.
 func QuestionsMatch(a, b Message) bool {
-	if a == nil || b == nil {
-		return a == nil && b == nil
-	}
 	return questionsEqual(a.Questions(), b.Questions())
 }
 
@@ -66,9 +63,6 @@ func QuestionsMatch(a, b Message) bool {
 // equality (it doesn't check the OPT pseudo-RR's flags beyond what's
 // covered by EDNS()).
 func MessageEqual(a, b Message) bool {
-	if a == nil || b == nil {
-		return a == nil && b == nil
-	}
 	if a.ID() != b.ID() || a.Flags() != b.Flags() {
 		return false
 	}
@@ -129,9 +123,6 @@ func ednsEqual(a, b Message) bool {
 	}
 	if !oka {
 		return true
-	}
-	if ea == nil || eb == nil {
-		return ea == eb
 	}
 	if ea.UDPSize() != eb.UDPSize() ||
 		ea.ExtendedRCODE() != eb.ExtendedRCODE() ||

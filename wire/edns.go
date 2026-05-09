@@ -8,23 +8,30 @@ import (
 	"github.com/lestrrat-go/acidns/wire/wirebb"
 )
 
-// EDNS is the extension mechanism payload (RFC 6891) carried as the OPT
-// pseudo-RR in the additional section. It surfaces the negotiated UDP
-// payload size, version, extended RCODE, the DNSSEC OK flag, and any
-// per-exchange options.
-type EDNS interface {
-	UDPSize() uint16
-	ExtendedRCODE() uint8
-	Version() uint8
-	DO() bool
-	Options() []EDNSOption
+// EDNSOption is a single OPT RDATA option (code + data). Value type
+// — copy-friendly, immutable, returned by value from [EDNS.Options].
+// Construct via [NewEDNSOption] and the typed helpers
+// ([NewClientCookie], [NewExtendedError], etc.) so callers do not
+// depend on field layout. The zero value is the (code 0, empty data)
+// option which is meaningless on the wire — distinguish via
+// [EDNSOption.IsZero] when a slice may legitimately contain it.
+type EDNSOption struct {
+	code uint16
+	data []byte
 }
 
-// EDNSOption is a single OPT RDATA option (code + data).
-type EDNSOption interface {
-	Code() uint16
-	Data() []byte
-}
+// Code returns the IANA option code.
+func (o EDNSOption) Code() uint16 { return o.code }
+
+// Data returns a copy of the option's payload.
+func (o EDNSOption) Data() []byte { return slices.Clone(o.data) }
+
+// IsZero reports whether o is the zero value.
+func (o EDNSOption) IsZero() bool { return o.code == 0 && o.data == nil }
+
+// rawData returns the un-cloned payload for use within the wire
+// package only. External callers must use [EDNSOption.Data].
+func (o EDNSOption) rawData() []byte { return o.data }
 
 // EDNS option codes (IANA registry, partial — most-commonly used here).
 const (
@@ -51,10 +58,10 @@ func NewAlgorithmUnderstood(code uint16, algorithms ...uint8) (EDNSOption, error
 	switch code {
 	case EDNSOptionDAU, EDNSOptionDHU, EDNSOptionN3U:
 	default:
-		return nil, fmt.Errorf("%w: code %d is not DAU/DHU/N3U", ErrInvalidMessage, code)
+		return EDNSOption{}, fmt.Errorf("%w: code %d is not DAU/DHU/N3U", ErrInvalidMessage, code)
 	}
 	data := append([]byte(nil), algorithms...)
-	return ednsOption{code: code, data: data}, nil
+	return EDNSOption{code: code, data: data}, nil
 }
 
 // NewUpdateLease builds the "ul" EDNS option (code 2) used by Bonjour /
@@ -64,7 +71,7 @@ func NewAlgorithmUnderstood(code uint16, algorithms ...uint8) (EDNSOption, error
 func NewUpdateLease(seconds uint32) EDNSOption {
 	var b [4]byte
 	binary.BigEndian.PutUint32(b[:], seconds)
-	return ednsOption{code: EDNSOptionUL, data: b[:]}
+	return EDNSOption{code: EDNSOptionUL, data: b[:]}
 }
 
 // LLQOpcode names the long-lived-query operation (RFC 8764 §3).
@@ -100,29 +107,27 @@ func NewLLQ(opcode LLQOpcode, errCode LLQErrCode, llqID uint64, leaseSeconds uin
 	binary.BigEndian.PutUint16(b[4:], uint16(errCode))
 	binary.BigEndian.PutUint64(b[6:], llqID)
 	binary.BigEndian.PutUint32(b[14:], leaseSeconds)
-	return ednsOption{code: EDNSOptionLLQ, data: b[:]}
+	return EDNSOption{code: EDNSOptionLLQ, data: b[:]}
 }
-
-type ednsOption struct {
-	code uint16
-	data []byte
-}
-
-func (o ednsOption) Code() uint16 { return o.code }
-func (o ednsOption) Data() []byte { return slices.Clone(o.data) }
 
 // NewEDNSOption returns an EDNS option. data is copied so the caller may
 // reuse the slice.
 func NewEDNSOption(code uint16, data []byte) (EDNSOption, error) {
 	if len(data) > 0xffff {
-		return nil, fmt.Errorf("%w: option data exceeds 65535 bytes", ErrInvalidMessage)
+		return EDNSOption{}, fmt.Errorf("%w: option data exceeds 65535 bytes", ErrInvalidMessage)
 	}
 	cp := make([]byte, len(data))
 	copy(cp, data)
-	return ednsOption{code: code, data: cp}, nil
+	return EDNSOption{code: code, data: cp}, nil
 }
 
-type edns struct {
+// EDNS is the extension mechanism payload (RFC 6891) carried as the
+// OPT pseudo-RR in the additional section. It surfaces the negotiated
+// UDP payload size, version, extended RCODE, the DNSSEC OK flag, and
+// any per-exchange options. Value type — returned by value from
+// [Message.EDNS]; the zero value carries no options and is
+// distinguishable from a present-but-empty OPT via the bool return.
+type EDNS struct {
 	udpSize  uint16
 	extRCODE uint8
 	version  uint8
@@ -130,21 +135,30 @@ type edns struct {
 	opts     []EDNSOption
 }
 
-func (e *edns) UDPSize() uint16       { return e.udpSize }
-func (e *edns) ExtendedRCODE() uint8  { return e.extRCODE }
-func (e *edns) Version() uint8        { return e.version }
-func (e *edns) DO() bool              { return e.do }
-func (e *edns) Options() []EDNSOption { return slices.Clone(e.opts) }
+// UDPSize returns the requestor's UDP payload size.
+func (e EDNS) UDPSize() uint16 { return e.udpSize }
+
+// ExtendedRCODE returns the high 8 bits of the extended RCODE.
+func (e EDNS) ExtendedRCODE() uint8 { return e.extRCODE }
+
+// Version returns the EDNS version (RFC 6891 §6.1.3).
+func (e EDNS) Version() uint8 { return e.version }
+
+// DO reports whether the DNSSEC OK flag is set.
+func (e EDNS) DO() bool { return e.do }
+
+// Options returns a copy of the option list.
+func (e EDNS) Options() []EDNSOption { return slices.Clone(e.opts) }
 
 // EDNSBuilder constructs an EDNS payload. Like [Builder], an
 // EDNSBuilder is owned by a single goroutine and is NOT safe for
 // concurrent use; the EDNS value returned by Build is immutable and
 // may be shared.
-type EDNSBuilder struct{ e edns }
+type EDNSBuilder struct{ e EDNS }
 
 // NewEDNSBuilder returns a fresh EDNSBuilder with sensible defaults
 // (UDPSize=1232 — the IETF DNS Flag Day 2020 recommendation).
-func NewEDNSBuilder() *EDNSBuilder { return &EDNSBuilder{e: edns{udpSize: 1232}} }
+func NewEDNSBuilder() *EDNSBuilder { return &EDNSBuilder{e: EDNS{udpSize: 1232}} }
 
 // UDPSize sets the requestor's UDP payload size advertised in OPT.
 func (b *EDNSBuilder) UDPSize(v uint16) *EDNSBuilder { b.e.udpSize = v; return b }
@@ -172,13 +186,13 @@ func (b *EDNSBuilder) Build() (EDNS, error) {
 	for _, o := range b.e.opts {
 		c := o.Code()
 		if _, dup := seen[c]; dup {
-			return nil, fmt.Errorf("wire: duplicate EDNS option code %d", c)
+			return EDNS{}, fmt.Errorf("wire: duplicate EDNS option code %d", c)
 		}
 		seen[c] = struct{}{}
 	}
 	cp := b.e
 	cp.opts = append([]EDNSOption(nil), b.e.opts...)
-	return &cp, nil
+	return cp, nil
 }
 
 // optTypeWire is the OPT pseudo-RR type code (RFC 6891 §6.1.2).
@@ -227,36 +241,36 @@ func unpackOPT(u *wirebb.Unpacker) (EDNS, error) {
 	// owner field and pass them off as protocol-conformant.
 	name, err := u.Name()
 	if err != nil {
-		return nil, err
+		return EDNS{}, err
 	}
 	if name.NumLabels() != 0 {
-		return nil, fmt.Errorf("%w: OPT NAME must be root (RFC 6891 §6.1.2)", ErrInvalidMessage)
+		return EDNS{}, fmt.Errorf("%w: OPT NAME must be root (RFC 6891 §6.1.2)", ErrInvalidMessage)
 	}
 	t, err := u.Uint16()
 	if err != nil {
-		return nil, err
+		return EDNS{}, err
 	}
 	if t != optTypeWire {
-		return nil, fmt.Errorf("%w: expected OPT, got type %d", ErrInvalidMessage, t)
+		return EDNS{}, fmt.Errorf("%w: expected OPT, got type %d", ErrInvalidMessage, t)
 	}
 	udpSize, err := u.Uint16()
 	if err != nil {
-		return nil, err
+		return EDNS{}, err
 	}
 	ttl, err := u.Uint32()
 	if err != nil {
-		return nil, err
+		return EDNS{}, err
 	}
 	rdlen, err := u.Uint16()
 	if err != nil {
-		return nil, err
+		return EDNS{}, err
 	}
 	if u.Remaining() < int(rdlen) {
-		return nil, fmt.Errorf("%w: OPT rdata truncated", ErrInvalidMessage)
+		return EDNS{}, fmt.Errorf("%w: OPT rdata truncated", ErrInvalidMessage)
 	}
 	end := u.Off() + int(rdlen)
 
-	e := &edns{
+	e := EDNS{
 		udpSize:  udpSize,
 		extRCODE: uint8(ttl >> 24),
 		version:  uint8(ttl >> 16),
@@ -271,36 +285,36 @@ func unpackOPT(u *wirebb.Unpacker) (EDNS, error) {
 	for u.Off() < end {
 		code, err := u.Uint16()
 		if err != nil {
-			return nil, err
+			return EDNS{}, err
 		}
 		l, err := u.Uint16()
 		if err != nil {
-			return nil, err
+			return EDNS{}, err
 		}
 		// Refuse option lengths that would walk past the OPT rdata window —
 		// otherwise we'd silently consume bytes belonging to the next
 		// additional record and reframe the rest of the message.
 		if u.Off()+int(l) > end {
-			return nil, fmt.Errorf("%w: OPT option length %d at off %d would exceed rdata window end %d",
+			return EDNS{}, fmt.Errorf("%w: OPT option length %d at off %d would exceed rdata window end %d",
 				ErrInvalidMessage, l, u.Off(), end)
 		}
 		if seen == nil {
 			seen = make(map[uint16]struct{}, 4)
 		}
 		if _, dup := seen[code]; dup {
-			return nil, fmt.Errorf("%w: duplicate EDNS option code %d", ErrInvalidMessage, code)
+			return EDNS{}, fmt.Errorf("%w: duplicate EDNS option code %d", ErrInvalidMessage, code)
 		}
 		seen[code] = struct{}{}
 		data, err := u.Bytes(int(l))
 		if err != nil {
-			return nil, err
+			return EDNS{}, err
 		}
 		cp := make([]byte, len(data))
 		copy(cp, data)
-		e.opts = append(e.opts, ednsOption{code: code, data: cp})
+		e.opts = append(e.opts, EDNSOption{code: code, data: cp})
 	}
 	if u.Off() != end {
-		return nil, fmt.Errorf("%w: OPT consumed %d bytes, rdlen was %d",
+		return EDNS{}, fmt.Errorf("%w: OPT consumed %d bytes, rdlen was %d",
 			ErrInvalidMessage, int(rdlen)-(end-u.Off()), rdlen)
 	}
 	return e, nil

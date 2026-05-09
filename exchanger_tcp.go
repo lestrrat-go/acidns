@@ -58,7 +58,7 @@ func (e *tcpExchanger) Exchange(ctx context.Context, q wire.Message) (wire.Messa
 	var d net.Dialer
 	conn, err := d.DialContext(ctx, "tcp", e.addr.String())
 	if err != nil {
-		return nil, fmt.Errorf("acidns: dial %s: %w", e.addr, err)
+		return wire.Message{}, fmt.Errorf("acidns: dial %s: %w", e.addr, err)
 	}
 	return streamframe.Exchange(ctx, conn, q, e.timeout)
 }

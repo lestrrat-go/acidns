@@ -185,7 +185,7 @@ func (rr *recReader) Read(ctx context.Context) (wire.Record, error) {
 		return rec, nil
 	}
 	for {
-		if rr.curMsg != nil && rr.curIdx < len(rr.curMsg.Answers()) {
+		if rr.curIdx < len(rr.curMsg.Answers()) {
 			rec := rr.curMsg.Answers()[rr.curIdx]
 			rr.curIdx++
 			return rec, nil

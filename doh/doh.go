@@ -171,23 +171,23 @@ func (e *exchanger) Exchange(ctx context.Context, q wire.Message) (wire.Message,
 	}
 	msg, err := wire.Marshal(q)
 	if err != nil {
-		return nil, fmt.Errorf("doh: marshal: %w", err)
+		return wire.Message{}, fmt.Errorf("doh: marshal: %w", err)
 	}
 
 	req, err := e.buildRequest(ctx, msg)
 	if err != nil {
-		return nil, err
+		return wire.Message{}, err
 	}
 
 	resp, err := e.client.Do(req)
 	if err != nil {
-		return nil, fmt.Errorf("doh: request: %w", err)
+		return wire.Message{}, fmt.Errorf("doh: request: %w", err)
 	}
 	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != http.StatusOK {
 		body, _ := io.ReadAll(io.LimitReader(resp.Body, 1024))
-		return nil, NewHTTPStatusError(resp.StatusCode, resp.Status, body)
+		return wire.Message{}, NewHTTPStatusError(resp.StatusCode, resp.Status, body)
 	}
 	// RFC 8484 §6: a DoH server MUST set Content-Type to
 	// application/dns-message. Treat both a missing and a wrong header
@@ -197,10 +197,10 @@ func (e *exchanger) Exchange(ctx context.Context, q wire.Message) (wire.Message,
 	// would launder the protocol violation downstream.
 	ct := resp.Header.Get("Content-Type")
 	if ct == "" {
-		return nil, fmt.Errorf("doh: response missing Content-Type header (RFC 8484 §6 requires %q)", contentType)
+		return wire.Message{}, fmt.Errorf("doh: response missing Content-Type header (RFC 8484 §6 requires %q)", contentType)
 	}
 	if ct != contentType {
-		return nil, fmt.Errorf("doh: unexpected content type %q", ct)
+		return wire.Message{}, fmt.Errorf("doh: unexpected content type %q", ct)
 	}
 
 	// If the server advertised Content-Length, refuse before reading
@@ -209,24 +209,24 @@ func (e *exchanger) Exchange(ctx context.Context, q wire.Message) (wire.Message,
 	// 64 KiB allocation per query even though we'd reject the body
 	// shortly after.
 	if cl := resp.ContentLength; cl > maxResponseBytes {
-		return nil, fmt.Errorf("doh: Content-Length %d exceeds %d byte cap", cl, maxResponseBytes)
+		return wire.Message{}, fmt.Errorf("doh: Content-Length %d exceeds %d byte cap", cl, maxResponseBytes)
 	}
 	body, err := io.ReadAll(io.LimitReader(resp.Body, maxResponseBytes+1))
 	if err != nil {
-		return nil, fmt.Errorf("doh: read body: %w", err)
+		return wire.Message{}, fmt.Errorf("doh: read body: %w", err)
 	}
 	if len(body) > maxResponseBytes {
-		return nil, fmt.Errorf("doh: response body exceeds %d byte cap", maxResponseBytes)
+		return wire.Message{}, fmt.Errorf("doh: response body exceeds %d byte cap", maxResponseBytes)
 	}
 	m, err := wire.Unmarshal(body)
 	if err != nil {
-		return nil, fmt.Errorf("doh: unmarshal: %w", err)
+		return wire.Message{}, fmt.Errorf("doh: unmarshal: %w", err)
 	}
 	if m.ID() != q.ID() {
-		return nil, fmt.Errorf("doh: id mismatch")
+		return wire.Message{}, fmt.Errorf("doh: id mismatch")
 	}
 	if !wire.QuestionsMatch(q, m) {
-		return nil, fmt.Errorf("doh: response question does not match request")
+		return wire.Message{}, fmt.Errorf("doh: response question does not match request")
 	}
 	return m, nil
 }

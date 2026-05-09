@@ -113,7 +113,7 @@ func (e *exchanger) Exchange(ctx context.Context, q wire.Message) (wire.Message,
 	}
 	msg, err := wire.Marshal(q)
 	if err != nil {
-		return nil, fmt.Errorf("doq: marshal: %w", err)
+		return wire.Message{}, fmt.Errorf("doq: marshal: %w", err)
 	}
 	// RFC 9250 §4.2.1: the message ID on the wire MUST be 0. Multiplexing
 	// happens via the QUIC stream, not the DNS ID, so a non-zero ID here
@@ -135,38 +135,38 @@ func (e *exchanger) Exchange(ctx context.Context, q wire.Message) (wire.Message,
 		Allow0RTT: false,
 	})
 	if err != nil {
-		return nil, fmt.Errorf("doq: dial %s: %w", e.addr, err)
+		return wire.Message{}, fmt.Errorf("doq: dial %s: %w", e.addr, err)
 	}
 	defer func() { _ = conn.CloseWithError(doqNoError, "") }()
 
 	stream, err := conn.OpenStreamSync(ctx)
 	if err != nil {
-		return nil, fmt.Errorf("doq: open stream: %w", err)
+		return wire.Message{}, fmt.Errorf("doq: open stream: %w", err)
 	}
 
 	var hdr [2]byte
 	binary.BigEndian.PutUint16(hdr[:], uint16(len(msg)))
 	if _, err := stream.Write(hdr[:]); err != nil {
-		return nil, fmt.Errorf("doq: write length: %w", err)
+		return wire.Message{}, fmt.Errorf("doq: write length: %w", err)
 	}
 	if _, err := stream.Write(msg); err != nil {
-		return nil, fmt.Errorf("doq: write body: %w", err)
+		return wire.Message{}, fmt.Errorf("doq: write body: %w", err)
 	}
 	// RFC 9250 §4.2: client MUST send the FIN after the query body.
 	if err := stream.Close(); err != nil {
-		return nil, fmt.Errorf("doq: close write side: %w", err)
+		return wire.Message{}, fmt.Errorf("doq: close write side: %w", err)
 	}
 
 	if _, err := io.ReadFull(stream, hdr[:]); err != nil {
-		return nil, fmt.Errorf("doq: read length: %w", err)
+		return wire.Message{}, fmt.Errorf("doq: read length: %w", err)
 	}
 	respLen := int(binary.BigEndian.Uint16(hdr[:]))
 	if respLen > e.maxResponseBytes {
-		return nil, fmt.Errorf("doq: response length %d exceeds %d byte cap", respLen, e.maxResponseBytes)
+		return wire.Message{}, fmt.Errorf("doq: response length %d exceeds %d byte cap", respLen, e.maxResponseBytes)
 	}
 	body := make([]byte, respLen)
 	if _, err := io.ReadFull(stream, body); err != nil {
-		return nil, fmt.Errorf("doq: read body: %w", err)
+		return wire.Message{}, fmt.Errorf("doq: read body: %w", err)
 	}
 	return decodeDoQResponse(body, q)
 }
@@ -179,18 +179,18 @@ func (e *exchanger) Exchange(ctx context.Context, q wire.Message) (wire.Message,
 // via QUIC streams, not via DNS IDs.
 func decodeDoQResponse(body []byte, q wire.Message) (wire.Message, error) {
 	if len(body) < 2 {
-		return nil, fmt.Errorf("doq: response too short")
+		return wire.Message{}, fmt.Errorf("doq: response too short")
 	}
 	if got := binary.BigEndian.Uint16(body[0:2]); got != 0 {
-		return nil, fmt.Errorf("doq: response ID must be 0 per RFC 9250 §4.2.1, got %#x", got)
+		return wire.Message{}, fmt.Errorf("doq: response ID must be 0 per RFC 9250 §4.2.1, got %#x", got)
 	}
 	binary.BigEndian.PutUint16(body[0:2], q.ID())
 	resp, err := wire.Unmarshal(body)
 	if err != nil {
-		return nil, fmt.Errorf("doq: unmarshal: %w", err)
+		return wire.Message{}, fmt.Errorf("doq: unmarshal: %w", err)
 	}
 	if !wire.QuestionsMatch(q, resp) {
-		return nil, fmt.Errorf("doq: response question does not match request")
+		return wire.Message{}, fmt.Errorf("doq: response question does not match request")
 	}
 	return resp, nil
 }
@@ -276,9 +276,9 @@ func (s *doqStream) Next(ctx context.Context) (wire.Message, error) {
 	body, err := readDoQFrameBytes(s.stream)
 	if err != nil {
 		if cerr := ctx.Err(); cerr != nil {
-			return nil, cerr
+			return wire.Message{}, cerr
 		}
-		return nil, err
+		return wire.Message{}, err
 	}
 	return decodeDoQResponse(body, s.query)
 }

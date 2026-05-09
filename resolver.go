@@ -543,7 +543,7 @@ func (r *retryExchanger) Exchange(ctx context.Context, q wire.Message) (wire.Mes
 		if i > 0 {
 			id, err := randomID()
 			if err != nil {
-				return nil, err
+				return wire.Message{}, err
 			}
 			attempt = wire.WithID(q, id)
 		}
@@ -561,10 +561,10 @@ func (r *retryExchanger) Exchange(ctx context.Context, q wire.Message) (wire.Mes
 		}
 		lastErr = err
 		if ctx.Err() != nil {
-			return nil, ctx.Err()
+			return wire.Message{}, ctx.Err()
 		}
 	}
-	return nil, lastErr
+	return wire.Message{}, lastErr
 }
 
 type failover struct{ exs []Exchanger }
@@ -576,7 +576,7 @@ func (f *failover) Exchange(ctx context.Context, q wire.Message) (wire.Message, 
 		if i > 0 {
 			id, err := randomID()
 			if err != nil {
-				return nil, err
+				return wire.Message{}, err
 			}
 			attempt = wire.WithID(q, id)
 		}
@@ -586,10 +586,10 @@ func (f *failover) Exchange(ctx context.Context, q wire.Message) (wire.Message, 
 		}
 		lastErr = err
 		if ctx.Err() != nil {
-			return nil, ctx.Err()
+			return wire.Message{}, ctx.Err()
 		}
 	}
-	return nil, lastErr
+	return wire.Message{}, lastErr
 }
 
 // tcFallback wraps a primary (typically UDP) exchanger with a fallback
@@ -601,7 +601,7 @@ type tcFallback struct {
 func (e *tcFallback) Exchange(ctx context.Context, q wire.Message) (wire.Message, error) {
 	resp, err := e.primary.Exchange(ctx, q)
 	if err != nil {
-		return nil, err
+		return wire.Message{}, err
 	}
 	if resp.Flags().Truncated() && e.fallback != nil {
 		return e.fallback.Exchange(ctx, q)

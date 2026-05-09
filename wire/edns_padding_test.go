@@ -46,7 +46,12 @@ func TestPadEncrypted_AlreadyPadded_NoChange(t *testing.T) {
 	require.NoError(t, err)
 
 	got := wire.PadEncrypted(manual)
-	require.Same(t, manual, got, "PadEncrypted must return the original Message when a Padding option is already present")
+	// Message is a value type — comparing the byte-encoded form is
+	// the closest thing to "same instance" the new shape allows. A
+	// no-op PadEncrypted must round-trip to the same bytes.
+	a, _ := wire.Marshal(manual)
+	c, _ := wire.Marshal(got)
+	require.Equal(t, a, c, "PadEncrypted must return an equivalent Message when a Padding option is already present")
 }
 
 func TestPadEncrypted_NoEDNS_AddsOPT(t *testing.T) {

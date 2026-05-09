@@ -27,12 +27,12 @@ type fakeStream struct {
 
 func (f *fakeStream) Next(_ context.Context) (wire.Message, error) {
 	if f.idx >= len(f.msgs) {
-		return nil, io.EOF
+		return wire.Message{}, io.EOF
 	}
 	i := f.idx
 	f.idx++
 	if f.errs != nil && i < len(f.errs) && f.errs[i] != nil {
-		return nil, f.errs[i]
+		return wire.Message{}, f.errs[i]
 	}
 	return f.msgs[i], nil
 }
@@ -142,7 +142,7 @@ func TestStartFirstMessageStreamError(t *testing.T) {
 	t.Parallel()
 	want := errors.New("read failed")
 	stream := &fakeStream{
-		msgs: []wire.Message{nil},
+		msgs: []wire.Message{wire.Message{}},
 		errs: []error{want},
 	}
 	ex := &fakeStreamEx{stream: stream}
@@ -160,7 +160,7 @@ func TestNextStreamErrorMidTransfer(t *testing.T) {
 	first := answerMsg(t, soa, aRec(t, "a.example.com", "192.0.2.1"))
 	want := errors.New("read failed")
 	stream := &fakeStream{
-		msgs: []wire.Message{first, nil},
+		msgs: []wire.Message{first, wire.Message{}},
 		errs: []error{nil, want},
 	}
 	ex := &fakeStreamEx{stream: stream}

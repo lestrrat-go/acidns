@@ -348,7 +348,7 @@ type errUpstream struct {
 
 func (e *errUpstream) Exchange(_ context.Context, _ wire.Message) (wire.Message, error) {
 	e.calls.Add(1)
-	return nil, e.err
+	return wire.Message{}, e.err
 }
 
 func TestUpstreamErrorReturnsServFail(t *testing.T) {

@@ -28,7 +28,7 @@ func (f *fakeResolver) Resolve(_ context.Context, _ wire.Name, _ rrtype.Type) (*
 		return nil, f.err
 	}
 	raw, _ := wire.NewBuilder().Response(true).Build()
-	return acidns.NewAnswer(nil, f.records, raw), nil
+	return acidns.NewAnswer(wire.Question{}, f.records, raw), nil
 }
 
 // mismatchRecord pretends to be a SRV-typed record while carrying an

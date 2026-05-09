@@ -43,18 +43,18 @@ func ReadFrame(r io.Reader) (wire.Message, error) {
 	if _, err := io.ReadFull(r, hdr[:]); err != nil {
 		// Translate the "no bytes" case to a clean io.EOF; other shapes
 		// (partial header) become ErrUnexpectedEOF — io.ReadFull's contract.
-		return nil, err
+		return wire.Message{}, err
 	}
 	body := make([]byte, binary.BigEndian.Uint16(hdr[:]))
 	if _, err := io.ReadFull(r, body); err != nil {
 		if err == io.EOF {
-			return nil, io.ErrUnexpectedEOF
+			return wire.Message{}, io.ErrUnexpectedEOF
 		}
-		return nil, fmt.Errorf("streamframe: read body: %w", err)
+		return wire.Message{}, fmt.Errorf("streamframe: read body: %w", err)
 	}
 	m, err := wire.Unmarshal(body)
 	if err != nil {
-		return nil, fmt.Errorf("streamframe: unmarshal: %w", err)
+		return wire.Message{}, fmt.Errorf("streamframe: unmarshal: %w", err)
 	}
 	return m, nil
 }
@@ -94,20 +94,20 @@ func ExchangeOnConn(ctx context.Context, conn net.Conn, q wire.Message, fallback
 	}()
 
 	if err := WriteFrame(conn, q); err != nil {
-		return nil, err
+		return wire.Message{}, err
 	}
 	resp, err := ReadFrame(conn)
 	if err != nil {
 		if cerr := ctx.Err(); cerr != nil {
-			return nil, cerr
+			return wire.Message{}, cerr
 		}
-		return nil, err
+		return wire.Message{}, err
 	}
 	if resp.ID() != q.ID() {
-		return nil, fmt.Errorf("streamframe: id mismatch: got %#x, want %#x", resp.ID(), q.ID())
+		return wire.Message{}, fmt.Errorf("streamframe: id mismatch: got %#x, want %#x", resp.ID(), q.ID())
 	}
 	if !wire.QuestionsMatch(q, resp) {
-		return nil, fmt.Errorf("streamframe: response question does not match request")
+		return wire.Message{}, fmt.Errorf("streamframe: response question does not match request")
 	}
 	return resp, nil
 }
@@ -172,12 +172,12 @@ func (s *ConnStream) Next(ctx context.Context) (wire.Message, error) {
 	m, err := ReadFrame(s.conn)
 	if err != nil {
 		if cerr := ctx.Err(); cerr != nil {
-			return nil, cerr
+			return wire.Message{}, cerr
 		}
-		return nil, err
+		return wire.Message{}, err
 	}
 	if m.ID() != s.expect {
-		return nil, fmt.Errorf("streamframe: id mismatch: got %#x, want %#x", m.ID(), s.expect)
+		return wire.Message{}, fmt.Errorf("streamframe: id mismatch: got %#x, want %#x", m.ID(), s.expect)
 	}
 	return m, nil
 }

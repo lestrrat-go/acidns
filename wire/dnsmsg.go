@@ -7,18 +7,10 @@ import (
 	"github.com/lestrrat-go/acidns/wire/wirebb"
 )
 
-// Message is a DNS protocol message.
-type Message interface {
-	ID() uint16
-	Flags() Flags
-	Questions() []Question
-	Answers() []Record
-	Authorities() []Record
-	Additionals() []Record
-	EDNS() (EDNS, bool)
-}
-
-type message struct {
+// Message is a DNS protocol message. Value type — copy-friendly,
+// returned by value from [Unmarshal] and [Builder.Build]. Construct
+// via [NewBuilder] so callers do not depend on field layout.
+type Message struct {
 	id          uint16
 	flags       Flags
 	questions   []Question
@@ -26,6 +18,7 @@ type message struct {
 	authorities []Record
 	additionals []Record
 	edns        EDNS
+	hasEDNS     bool
 }
 
 // WithID returns a copy of m whose transaction ID has been replaced
@@ -36,71 +29,85 @@ type message struct {
 // same target.
 //
 // The returned Message shares no mutable storage with m — section
-// slices are cloned. EDNS is treated as immutable and shared.
+// slices are cloned. EDNS is treated as immutable and copied by value.
 func WithID(m Message, id uint16) Message {
-	cp := &message{
+	cp := Message{
 		id:          id,
-		flags:       m.Flags(),
-		questions:   cloneSlice(m.Questions()),
-		answers:     cloneSlice(m.Answers()),
-		authorities: cloneSlice(m.Authorities()),
-		additionals: cloneSlice(m.Additionals()),
-	}
-	if e, ok := m.EDNS(); ok {
-		cp.edns = e
+		flags:       m.flags,
+		questions:   slices.Clone(m.questions),
+		answers:     slices.Clone(m.answers),
+		authorities: slices.Clone(m.authorities),
+		additionals: slices.Clone(m.additionals),
+		edns:        m.edns,
+		hasEDNS:     m.hasEDNS,
 	}
 	return cp
 }
 
-func (m *message) ID() uint16            { return m.id }
-func (m *message) Flags() Flags          { return m.flags }
-func (m *message) Questions() []Question { return slices.Clone(m.questions) }
-func (m *message) Answers() []Record     { return slices.Clone(m.answers) }
-func (m *message) Authorities() []Record { return slices.Clone(m.authorities) }
-func (m *message) Additionals() []Record { return slices.Clone(m.additionals) }
-func (m *message) EDNS() (EDNS, bool)    { return m.edns, m.edns != nil }
+// ID returns the transaction ID.
+func (m Message) ID() uint16 { return m.id }
+
+// Flags returns the message header flags.
+func (m Message) Flags() Flags { return m.flags }
+
+// Questions returns a copy of the question section.
+func (m Message) Questions() []Question { return slices.Clone(m.questions) }
+
+// Answers returns a copy of the answer section.
+func (m Message) Answers() []Record { return slices.Clone(m.answers) }
+
+// Authorities returns a copy of the authority section.
+func (m Message) Authorities() []Record { return slices.Clone(m.authorities) }
+
+// Additionals returns a copy of the additional section, excluding any
+// OPT pseudo-RR (surfaced via [Message.EDNS]).
+func (m Message) Additionals() []Record { return slices.Clone(m.additionals) }
+
+// EDNS returns the parsed OPT payload and a bool indicating whether
+// the message carried one.
+func (m Message) EDNS() (EDNS, bool) { return m.edns, m.hasEDNS }
 
 // Marshal encodes m to a single DNS wire-format datagram, using compression
 // for repeated name suffixes.
 func Marshal(m Message) ([]byte, error) {
-	if len(m.Questions()) > 0xffff || len(m.Answers()) > 0xffff ||
-		len(m.Authorities()) > 0xffff || len(m.Additionals()) > 0xffff {
+	if len(m.questions) > 0xffff || len(m.answers) > 0xffff ||
+		len(m.authorities) > 0xffff || len(m.additionals) > 0xffff {
 		return nil, fmt.Errorf("%w: section count overflow", ErrInvalidMessage)
 	}
 
-	arcount := len(m.Additionals())
-	if e, ok := m.EDNS(); ok && e != nil {
+	arcount := len(m.additionals)
+	if m.hasEDNS {
 		arcount++
 	}
 
 	p := wirebb.NewPacker(make([]byte, 0, 64))
-	p.Uint16(m.ID())
-	p.Uint16(uint16(m.Flags()))
-	p.Uint16(uint16(len(m.Questions())))
-	p.Uint16(uint16(len(m.Answers())))
-	p.Uint16(uint16(len(m.Authorities())))
+	p.Uint16(m.id)
+	p.Uint16(uint16(m.flags))
+	p.Uint16(uint16(len(m.questions)))
+	p.Uint16(uint16(len(m.answers)))
+	p.Uint16(uint16(len(m.authorities)))
 	p.Uint16(uint16(arcount))
 
-	for _, q := range m.Questions() {
+	for _, q := range m.questions {
 		packQuestion(p, q)
 	}
-	for _, r := range m.Answers() {
+	for _, r := range m.answers {
 		if err := packRecord(p, r); err != nil {
 			return nil, err
 		}
 	}
-	for _, r := range m.Authorities() {
+	for _, r := range m.authorities {
 		if err := packRecord(p, r); err != nil {
 			return nil, err
 		}
 	}
-	for _, r := range m.Additionals() {
+	for _, r := range m.additionals {
 		if err := packRecord(p, r); err != nil {
 			return nil, err
 		}
 	}
-	if e, ok := m.EDNS(); ok && e != nil {
-		if err := packOPT(p, e); err != nil {
+	if m.hasEDNS {
+		if err := packOPT(p, m.edns); err != nil {
 			return nil, err
 		}
 	}
@@ -110,7 +117,7 @@ func Marshal(m Message) ([]byte, error) {
 // Unmarshal decodes a wire-format DNS message.
 func Unmarshal(buf []byte) (Message, error) {
 	if len(buf) < 12 {
-		return nil, NewMessageParseError(
+		return Message{}, NewMessageParseError(
 			SectionHeader, -1, len(buf),
 			fmt.Errorf("header too short (%d bytes)", len(buf)),
 		)
@@ -123,7 +130,7 @@ func Unmarshal(buf []byte) (Message, error) {
 	nscount, _ := u.Uint16()
 	arcount, _ := u.Uint16()
 
-	m := &message{id: id, flags: Flags(flags)}
+	m := Message{id: id, flags: Flags(flags)}
 
 	// Clamp the make capacities by what's actually parseable from the
 	// remaining buffer. Without this, an attacker can send a 12-byte header
@@ -134,18 +141,18 @@ func Unmarshal(buf []byte) (Message, error) {
 	for i := range int(qdcount) {
 		q, err := unpackQuestion(u)
 		if err != nil {
-			return nil, NewMessageParseError(SectionQuestion, i, u.Off(), err)
+			return Message{}, NewMessageParseError(SectionQuestion, i, u.Off(), err)
 		}
 		m.questions = append(m.questions, q)
 	}
 	if err := unpackRRs(u, &m.answers, int(ancount), SectionAnswer); err != nil {
-		return nil, err
+		return Message{}, err
 	}
 	if err := unpackRRs(u, &m.authorities, int(nscount), SectionAuthority); err != nil {
-		return nil, err
+		return Message{}, err
 	}
-	if err := unpackAdditionals(u, m, int(arcount)); err != nil {
-		return nil, err
+	if err := unpackAdditionals(u, &m, int(arcount)); err != nil {
+		return Message{}, err
 	}
 	return m, nil
 }
@@ -186,7 +193,7 @@ func unpackRRs(u *wirebb.Unpacker, dst *[]Record, n int, section Section) error 
 
 // unpackAdditionals splits the additional section into regular records and
 // the OPT pseudo-RR (if any).
-func unpackAdditionals(u *wirebb.Unpacker, m *message, n int) error {
+func unpackAdditionals(u *wirebb.Unpacker, m *Message, n int) error {
 	out := make([]Record, 0, clampCount(n, u.Remaining(), minRecordSize))
 	for i := range n {
 		// Peek at the type without committing the unpacker.
@@ -201,7 +208,7 @@ func unpackAdditionals(u *wirebb.Unpacker, m *message, n int) error {
 		u.SetOff(save)
 
 		if t == optTypeWire {
-			if m.edns != nil {
+			if m.hasEDNS {
 				return NewMessageParseError(
 					SectionOPT, i, save,
 					fmt.Errorf("multiple OPT pseudo-RRs"),
@@ -212,6 +219,7 @@ func unpackAdditionals(u *wirebb.Unpacker, m *message, n int) error {
 				return NewMessageParseError(SectionOPT, i, u.Off(), err)
 			}
 			m.edns = e
+			m.hasEDNS = true
 			continue
 		}
 		r, err := unpackRecord(u)

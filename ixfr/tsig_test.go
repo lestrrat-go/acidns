@@ -23,7 +23,7 @@ type programmableStreamEx struct {
 }
 
 func (p *programmableStreamEx) Exchange(_ context.Context, _ wire.Message) (wire.Message, error) {
-	return nil, io.EOF
+	return wire.Message{}, io.EOF
 }
 
 func (p *programmableStreamEx) Stream(_ context.Context, q wire.Message) (acidns.MessageStream, error) {

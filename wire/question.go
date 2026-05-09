@@ -7,14 +7,11 @@ import (
 	"github.com/lestrrat-go/acidns/wire/wirebb"
 )
 
-// Question is a DNS question section entry: a (name, type, class) triple.
-type Question interface {
-	Name() wirebb.Name
-	Type() rrtype.Type
-	Class() rrtype.Class
-}
-
-type question struct {
+// Question is a DNS question section entry: a (name, type, class)
+// triple. Value type — copy-friendly, immutable, returned by value
+// from [Message.Questions]. Construct via [NewQuestion] /
+// [NewQuestionClass] so callers do not depend on field layout.
+type Question struct {
 	name  wirebb.Name
 	typ   rrtype.Type
 	class rrtype.Class
@@ -28,28 +25,33 @@ type question struct {
 	rawName []byte
 }
 
-func (q question) Name() wirebb.Name   { return q.name }
-func (q question) Type() rrtype.Type   { return q.typ }
-func (q question) Class() rrtype.Class { return q.class }
+// Name returns the queried name.
+func (q Question) Name() wirebb.Name { return q.name }
+
+// Type returns the queried RR type.
+func (q Question) Type() rrtype.Type { return q.typ }
+
+// Class returns the queried class.
+func (q Question) Class() rrtype.Class { return q.class }
 
 // NewQuestion returns a Question with class IN.
 func NewQuestion(name wirebb.Name, t rrtype.Type) Question {
-	return question{name: name, typ: t, class: rrtype.ClassIN}
+	return Question{name: name, typ: t, class: rrtype.ClassIN}
 }
 
 // NewQuestionClass returns a Question with the given class.
 func NewQuestionClass(name wirebb.Name, t rrtype.Type, c rrtype.Class) Question {
-	return question{name: name, typ: t, class: c}
+	return Question{name: name, typ: t, class: c}
 }
 
 func packQuestion(p *wirebb.Packer, q Question) {
-	if qq, ok := q.(question); ok && len(qq.rawName) > 0 {
-		p.Raw(qq.rawName)
+	if len(q.rawName) > 0 {
+		p.Raw(q.rawName)
 	} else {
-		p.NameUncompressed(q.Name())
+		p.NameUncompressed(q.name)
 	}
-	p.Uint16(uint16(q.Type()))
-	p.Uint16(uint16(q.Class()))
+	p.Uint16(uint16(q.typ))
+	p.Uint16(uint16(q.class))
 }
 
 func unpackQuestion(u *wirebb.Unpacker) (Question, error) {
@@ -57,7 +59,7 @@ func unpackQuestion(u *wirebb.Unpacker) (Question, error) {
 	start := u.Off()
 	n, err := u.Name()
 	if err != nil {
-		return nil, err
+		return Question{}, err
 	}
 	// Capture the original wire bytes of the qname so a server can
 	// echo them back verbatim — required for RFC 5452 §9.3 0x20
@@ -76,7 +78,7 @@ func unpackQuestion(u *wirebb.Unpacker) (Question, error) {
 		for off < len(raw) {
 			b := raw[off]
 			if b&0xc0 == 0xc0 {
-				return nil, fmt.Errorf("%w: compression pointer in question section", ErrInvalidMessage)
+				return Question{}, fmt.Errorf("%w: compression pointer in question section", ErrInvalidMessage)
 			}
 			if b == 0 {
 				break
@@ -87,11 +89,11 @@ func unpackQuestion(u *wirebb.Unpacker) (Question, error) {
 	}
 	t, err := u.Uint16()
 	if err != nil {
-		return nil, err
+		return Question{}, err
 	}
 	c, err := u.Uint16()
 	if err != nil {
-		return nil, err
+		return Question{}, err
 	}
-	return question{name: n, typ: rrtype.Type(t), class: rrtype.Class(c), rawName: raw}, nil
+	return Question{name: n, typ: rrtype.Type(t), class: rrtype.Class(c), rawName: raw}, nil
 }

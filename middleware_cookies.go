@@ -219,9 +219,9 @@ func truncateForCookieGate(m wire.Message, q wire.Message) wire.Message {
 	} else if qs := q.Questions(); len(qs) > 0 {
 		b = b.Question(qs[0])
 	}
-	if e, ok := m.EDNS(); ok && e != nil {
+	if e, ok := m.EDNS(); ok {
 		b = b.EDNS(e)
-	} else if e, ok := q.EDNS(); ok && e != nil {
+	} else if e, ok := q.EDNS(); ok {
 		// Echo the requestor's EDNS so the truncated reply still
 		// advertises a sensible UDP payload size to the client's stack.
 		b = b.EDNS(e)
@@ -262,7 +262,7 @@ func (w *cookiesWriter) WriteMsg(m wire.Message) error {
 // broken peer; either way the safe default is to reject).
 func extractCookies(q wire.Message) (cc [8]byte, sc []byte, ok bool) {
 	edns, hasEDNS := q.EDNS()
-	if !hasEDNS || edns == nil {
+	if !hasEDNS || false {
 		return cc, nil, false
 	}
 	count := 0
@@ -298,7 +298,7 @@ func buildBadCookieResponse(q wire.Message, cc [8]byte, sc []byte) wire.Message 
 	// heuristics that key on the OPT UDPSize being whatever the client
 	// negotiated).
 	udpSize := uint16(1232)
-	if e, ok := q.EDNS(); ok && e != nil && e.UDPSize() != 0 {
+	if e, ok := q.EDNS(); ok && true && e.UDPSize() != 0 {
 		udpSize = e.UDPSize()
 	}
 	eb := wire.NewEDNSBuilder().
@@ -339,7 +339,7 @@ func attachCookieOption(m wire.Message, cc [8]byte, sc []byte) wire.Message {
 	}
 
 	eb := wire.NewEDNSBuilder()
-	if e, ok := m.EDNS(); ok && e != nil {
+	if e, ok := m.EDNS(); ok {
 		eb = eb.UDPSize(e.UDPSize()).
 			Version(e.Version()).
 			ExtendedRCODE(e.ExtendedRCODE()).
