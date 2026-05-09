@@ -89,7 +89,7 @@ func TestAggressiveNSECNoDataSynthesis(t *testing.T) {
 	r := recursive.New(
 		recursive.WithRoots(netip.MustParseAddrPort("127.0.0.1:1")),
 		recursive.WithDialer(dialer),
-		recursive.WithoutQNameMinimisation(),
+		recursive.WithQNameMinimisation(false),
 		recursive.WithValidator(alwaysSecureValidator{}),
 		recursive.WithAggressiveNSEC(),
 	)
@@ -156,7 +156,7 @@ func TestAggressiveNSECRefusesWithoutWildcardDenial(t *testing.T) {
 	r := recursive.New(
 		recursive.WithRoots(netip.MustParseAddrPort("127.0.0.1:1")),
 		recursive.WithDialer(dialer),
-		recursive.WithoutQNameMinimisation(),
+		recursive.WithQNameMinimisation(false),
 		recursive.WithValidator(alwaysSecureValidator{}),
 		recursive.WithAggressiveNSEC(),
 	)
@@ -224,7 +224,7 @@ func TestAggressiveNSEC3NoData(t *testing.T) {
 	r := recursive.New(
 		recursive.WithRoots(netip.MustParseAddrPort("127.0.0.1:1")),
 		recursive.WithDialer(dialer),
-		recursive.WithoutQNameMinimisation(),
+		recursive.WithQNameMinimisation(false),
 		recursive.WithValidator(alwaysSecureValidator{}),
 		recursive.WithAggressiveNSEC(),
 	)

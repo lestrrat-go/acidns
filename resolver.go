@@ -167,18 +167,18 @@ func WithSystemResolvers() ResolverOption {
 	})
 }
 
-// WithoutCaseRandomization disables RFC 5452 §9.3 0x20 hardening on
-// the UDP exchangers built from [WithServers]. 0x20 is on by default
-// because it materially raises the off-path spoofing search space at
-// no operational cost against modern authoritatives. Disable only
+// WithCaseRandomization toggles RFC 5452 §9.3 0x20 hardening on the
+// UDP exchangers built from [WithServers]. Default is true: 0x20
+// materially raises the off-path spoofing search space at no
+// operational cost against modern authoritatives. Pass false only
 // when targeting an upstream known to silently lowercase the qname
 // in responses.
 //
 // The option has no effect when [WithExchanger] is supplied — a
 // caller-built Exchanger applies whatever 0x20 policy its own
 // constructor was given.
-func WithoutCaseRandomization() ResolverOption {
-	return resolverOptionFunc(func(c *resolverConfig) { c.disable0x20 = true })
+func WithCaseRandomization(v bool) ResolverOption {
+	return resolverOptionFunc(func(c *resolverConfig) { c.disable0x20 = !v })
 }
 
 // WithSpecialUse toggles the RFC 6761 short-circuits applied to names like

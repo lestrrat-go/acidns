@@ -141,8 +141,8 @@ func WithAggressiveNSEC() Option {
 	return optionFunc(func(c *config) { c.aggressiveNSEC = true })
 }
 
-// WithoutQNameMinimisation turns off RFC 9156 / 7816 QNAME
-// minimisation. By default the resolver sends only the labels
+// WithQNameMinimisation toggles RFC 9156 / 7816 QNAME minimisation.
+// When enabled (the default), the resolver sends only the labels
 // needed to reach the next zone cut at each iteration step,
 // revealing the full qname to authoritative servers only at the
 // terminal hop (the zone authoritative for the qname's parent).
@@ -153,30 +153,30 @@ func WithAggressiveNSEC() Option {
 // The implementation falls back to the full target qname on any
 // "weird" intermediate response (NXDOMAIN at intermediate,
 // SERVFAIL chain, answers at a non-target name) so non-conformant
-// upstreams remain resolvable. Disable only if your environment
+// upstreams remain resolvable. Pass false only if your environment
 // has a very specific reason — e.g., a captive portal or
 // split-horizon DNS where intermediate-name queries break in ways
 // the fallback can't recover from.
-func WithoutQNameMinimisation() Option {
-	return optionFunc(func(c *config) { c.qnameMin = false })
+func WithQNameMinimisation(v bool) Option {
+	return optionFunc(func(c *config) { c.qnameMin = v })
 }
 
-// WithoutCaseRandomization disables RFC 5452 §9.3 0x20 hardening.
-// 0x20 randomly toggles the case of ASCII letters in the QNAME of
-// every outbound query and verifies the response's question section
-// matches case-exactly, multiplying the off-path spoofing search
-// space by 2^N for an N-letter qname.
+// WithCaseRandomization toggles RFC 5452 §9.3 0x20 hardening.
+// When enabled (the default), the resolver randomly toggles the
+// case of ASCII letters in the QNAME of every outbound query and
+// verifies the response's question section matches case-exactly,
+// multiplying the off-path spoofing search space by 2^N for an
+// N-letter qname.
 //
-// Defaults to ON: the spoofing-resistance benefit is large and
-// modern authoritative servers preserve case per RFC 4343. Disable
-// only when targeting an upstream known to silently lowercase the
-// qname in responses (rare, but rejection would lose resolution for
-// the affected zones).
+// Pass false only when targeting an upstream known to silently
+// lowercase the qname in responses (rare, but rejection would lose
+// resolution for the affected zones). Modern authoritative servers
+// preserve case per RFC 4343.
 //
 // Only the default Dialer honors this option; a caller-supplied
 // custom Dialer is responsible for its own 0x20 implementation.
-func WithoutCaseRandomization() Option {
-	return optionFunc(func(c *config) { c.caseRandom = false })
+func WithCaseRandomization(v bool) Option {
+	return optionFunc(func(c *config) { c.caseRandom = v })
 }
 
 // WithUpstreamRateLimit caps the outbound query rate per upstream

@@ -87,7 +87,7 @@ func TestQNameMinimisationSendsMinimisedQueries(t *testing.T) {
 		"qname-minimised resolver should send progressively-disclosed qnames")
 }
 
-// TestQNameMinimisationDisabled verifies WithoutQNameMinimisation
+// TestQNameMinimisationDisabled verifies WithQNameMinimisation(false)
 // reverts to straight-walk: every iteration sends the full target.
 func TestQNameMinimisationDisabled(t *testing.T) {
 	t.Parallel()
@@ -133,7 +133,7 @@ func TestQNameMinimisationDisabled(t *testing.T) {
 	r := recursive.New(
 		recursive.WithRoots(netip.MustParseAddrPort("127.0.0.1:1")),
 		recursive.WithDialer(dialer),
-		recursive.WithoutQNameMinimisation(),
+		recursive.WithQNameMinimisation(false),
 	)
 
 	ctx, cancel := context.WithTimeout(t.Context(), 2*time.Second)

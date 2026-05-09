@@ -88,7 +88,7 @@ func TestAggressiveNSECSynthesisesNXDOMAIN(t *testing.T) {
 	r := recursive.New(
 		recursive.WithRoots(netip.MustParseAddrPort("127.0.0.1:1")),
 		recursive.WithDialer(dialer),
-		recursive.WithoutQNameMinimisation(),
+		recursive.WithQNameMinimisation(false),
 		recursive.WithValidator(alwaysSecureValidator{}),
 		recursive.WithAggressiveNSEC(),
 	)
@@ -141,7 +141,7 @@ func TestAggressiveNSECDisabledByDefault(t *testing.T) {
 	r := recursive.New(
 		recursive.WithRoots(netip.MustParseAddrPort("127.0.0.1:1")),
 		recursive.WithDialer(dialer),
-		recursive.WithoutQNameMinimisation(),
+		recursive.WithQNameMinimisation(false),
 		recursive.WithValidator(alwaysSecureValidator{}),
 		// NO WithAggressiveNSEC
 	)
@@ -188,7 +188,7 @@ func TestAggressiveNSECNoValidatorIsNoop(t *testing.T) {
 	r := recursive.New(
 		recursive.WithRoots(netip.MustParseAddrPort("127.0.0.1:1")),
 		recursive.WithDialer(dialer),
-		recursive.WithoutQNameMinimisation(),
+		recursive.WithQNameMinimisation(false),
 		// AggressiveNSEC without Validator — the resolver internally
 		// disables it because the safety property requires
 		// validation.

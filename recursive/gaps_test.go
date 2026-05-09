@@ -783,7 +783,7 @@ func TestResolveSingleflightCoalesces(t *testing.T) {
 		// Disable qname-minimisation so the test counts upstream calls
 		// per Resolve, not per minimisation hop. This test is about
 		// singleflight; qmin's per-step queries are a separate concern.
-		recursive.WithoutQNameMinimisation(),
+		recursive.WithQNameMinimisation(false),
 	)
 
 	const callers = 16
