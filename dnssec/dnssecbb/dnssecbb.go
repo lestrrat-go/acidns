@@ -114,8 +114,18 @@ func ParseRSAPublic(b []byte) (*rsa.PublicKey, error) {
 	if !e.IsInt64() {
 		return nil, fmt.Errorf("dnssecbb: rsa exponent too large")
 	}
+	eInt := e.Int64()
+	// e=1 makes RSA verification a no-op (any signature verifies);
+	// even-valued exponents are also pathological. Real keys use 3 or
+	// 65537. Enforce e ≥ 3 and e odd to close the gap.
+	if eInt < 3 {
+		return nil, fmt.Errorf("dnssecbb: rsa exponent %d below minimum 3", eInt)
+	}
+	if eInt%2 == 0 {
+		return nil, fmt.Errorf("dnssecbb: rsa exponent %d is even", eInt)
+	}
 	mod := new(big.Int).SetBytes(modBytes)
-	return &rsa.PublicKey{N: mod, E: int(e.Int64())}, nil
+	return &rsa.PublicKey{N: mod, E: int(eInt)}, nil
 }
 
 // VerifyRSA checks an RSA-PKCS1v15 signature over data using pub. alg

@@ -161,7 +161,17 @@ func ParseCert(b []byte) (*Cert, error) {
 // Verify checks the cert's Ed25519 signature against the provider's
 // long-term public key (32 bytes) and confirms the validity window
 // covers now. Returns nil on success.
+//
+// Order matters: cheap structural checks (ES version, validity window)
+// run first so a cert with an unsupported version or out-of-window
+// timestamp does not consume Ed25519 verification CPU.
 func (c *Cert) Verify(providerPK ed25519.PublicKey, now time.Time) error {
+	if c.esVersion != ESVersion2 {
+		return fmt.Errorf("%w: ES%d", ErrUnsupportedESVersion, c.esVersion)
+	}
+	if now.Before(c.validFrom) || now.After(c.validUntil) {
+		return fmt.Errorf("%w: now=%s window=[%s, %s]", ErrCertExpired, now, c.validFrom, c.validUntil)
+	}
 	signed := make([]byte, 0, 52)
 	signed = append(signed, c.resolverPK[:]...)
 	signed = append(signed, c.clientMagic[:]...)
@@ -173,12 +183,6 @@ func (c *Cert) Verify(providerPK ed25519.PublicKey, now time.Time) error {
 
 	if !ed25519.Verify(providerPK, signed, c.signature[:]) {
 		return ErrCertSignatureInvalid
-	}
-	if now.Before(c.validFrom) || now.After(c.validUntil) {
-		return fmt.Errorf("%w: now=%s window=[%s, %s]", ErrCertExpired, now, c.validFrom, c.validUntil)
-	}
-	if c.esVersion != ESVersion2 {
-		return fmt.Errorf("%w: ES%d", ErrUnsupportedESVersion, c.esVersion)
 	}
 	c.verified = true
 	return nil

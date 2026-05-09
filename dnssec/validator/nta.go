@@ -1,12 +1,19 @@
 package validator
 
 import (
-	"strings"
 	"sync"
 	"time"
 
 	"github.com/lestrrat-go/acidns/wire"
 )
+
+// ntaKey returns the canonical map key for a name. The wire form is
+// already lowercase and terminator-included, so it's the only form
+// that gives a single equality definition regardless of how callers
+// pass the name (with or without trailing dot, mixed case, etc.).
+func ntaKey(n wire.Name) string {
+	return string(n.AppendWire(nil))
+}
 
 // DefaultNTATTL is the lifetime applied by [NTAStore.Add] when ttl <= 0.
 // RFC 7646 §3 recommends a default of no more than 24 hours so a forgotten
@@ -73,7 +80,7 @@ func (s *NTAStore) Add(n wire.Name, ttl time.Duration) bool {
 	if ttl > MaxNTATTL {
 		ttl = MaxNTATTL
 	}
-	k := strings.ToLower(n.String())
+	k := ntaKey(n)
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	_, existed := s.set[k]
@@ -106,7 +113,7 @@ func (s *NTAStore) Remove(n wire.Name) bool {
 	if !n.IsValid() {
 		return false
 	}
-	k := strings.ToLower(n.String())
+	k := ntaKey(n)
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if _, ok := s.set[k]; !ok {
@@ -173,7 +180,7 @@ func (s *NTAStore) coverScanLocked(n wire.Name, now time.Time) (bool, bool) {
 	sawExpired := false
 	cur := n
 	for {
-		k := strings.ToLower(cur.String())
+		k := ntaKey(cur)
 		if e, ok := s.set[k]; ok {
 			if e.expiresAt.After(now) {
 				matched = true

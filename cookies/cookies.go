@@ -408,36 +408,62 @@ type Server interface {
 	MaxAge() time.Duration
 }
 
+// DefaultMaxFutureSkew is the future-skew tolerance applied by the
+// default Server. Clocks across hosts diverge by seconds in practice;
+// 5 minutes is a generous bound that still rejects cookies issued
+// hours into the future.
+const DefaultMaxFutureSkew = 5 * time.Minute
+
 // ServerOption configures the [Server] returned by [NewServer].
-type ServerOption interface{ applyCookieServer(*serverImpl) }
+type ServerOption interface{ applyCookieServer(*serverConfig) }
 
-type serverOptionFunc func(*serverImpl)
+type serverOptionFunc func(*serverConfig)
 
-func (f serverOptionFunc) applyCookieServer(s *serverImpl) { f(s) }
+func (f serverOptionFunc) applyCookieServer(c *serverConfig) { f(c) }
+
+type serverConfig struct {
+	maxAge        time.Duration
+	maxFutureSkew time.Duration
+}
 
 // WithServerMaxAge sets the cookie acceptance window. RFC 7873 §5.2.5
 // recommends ~1 hour; that is the default if this option is not set.
 func WithServerMaxAge(d time.Duration) ServerOption {
-	return serverOptionFunc(func(s *serverImpl) {
+	return serverOptionFunc(func(c *serverConfig) {
 		if d > 0 {
-			s.maxAge = d
+			c.maxAge = d
+		}
+	})
+}
+
+// WithMaxFutureSkew sets how far in the future a cookie's embedded
+// timestamp may be before Validate returns ErrCookieExpired. Operators
+// who want stricter clock alignment can pass a smaller value (e.g.
+// 30 s); pass 0 to keep the default of [DefaultMaxFutureSkew].
+func WithMaxFutureSkew(d time.Duration) ServerOption {
+	return serverOptionFunc(func(c *serverConfig) {
+		if d > 0 {
+			c.maxFutureSkew = d
 		}
 	})
 }
 
 // NewServer returns a [Server] backed by pool. By default the cookie
-// acceptance window is 1 hour; pass [WithServerMaxAge] to override.
+// acceptance window is 1 hour and the future-skew tolerance is
+// [DefaultMaxFutureSkew]; pass [WithServerMaxAge] / [WithMaxFutureSkew]
+// to override.
 func NewServer(pool SecretPool, opts ...ServerOption) Server {
-	s := &serverImpl{pool: pool, maxAge: time.Hour}
+	cfg := serverConfig{maxAge: time.Hour, maxFutureSkew: DefaultMaxFutureSkew}
 	for _, o := range opts {
-		o.applyCookieServer(s)
+		o.applyCookieServer(&cfg)
 	}
-	return s
+	return &serverImpl{pool: pool, maxAge: cfg.maxAge, maxFutureSkew: cfg.maxFutureSkew}
 }
 
 type serverImpl struct {
-	pool   SecretPool
-	maxAge time.Duration
+	pool          SecretPool
+	maxAge        time.Duration
+	maxFutureSkew time.Duration
 }
 
 func (s *serverImpl) MaxAge() time.Duration { return s.maxAge }
@@ -458,7 +484,7 @@ func (s *serverImpl) Validate(serverCookie []byte, clientCookie [8]byte, clientA
 	if now.Sub(ts) > s.maxAge {
 		return time.Time{}, ErrCookieExpired
 	}
-	if ts.Sub(now) > 5*time.Minute {
+	if ts.Sub(now) > s.maxFutureSkew {
 		// Cookie issued in the (substantial) future → invalid.
 		return time.Time{}, ErrCookieExpired
 	}
