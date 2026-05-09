@@ -30,7 +30,7 @@ func TestSignedDataAcrossRDataTypes(t *testing.T) {
 			"NS",
 			[]wire.Record{
 				wire.NewRecord(wire.MustParseName("example.com"), time.Hour,
-					rdata.NewNS(wire.MustParseName("ns1.example.com"))),
+					rdata.MustNewNS(wire.MustParseName("ns1.example.com"))),
 			},
 			rrtype.NS,
 		},
@@ -38,7 +38,7 @@ func TestSignedDataAcrossRDataTypes(t *testing.T) {
 			"CNAME",
 			[]wire.Record{
 				wire.NewRecord(wire.MustParseName("a.example.com"), time.Hour,
-					rdata.NewCNAME(wire.MustParseName("b.example.com"))),
+					rdata.MustNewCNAME(wire.MustParseName("b.example.com"))),
 			},
 			rrtype.CNAME,
 		},
@@ -46,7 +46,7 @@ func TestSignedDataAcrossRDataTypes(t *testing.T) {
 			"PTR",
 			[]wire.Record{
 				wire.NewRecord(wire.MustParseName("1.2.0.192.in-addr.arpa"), time.Hour,
-					rdata.NewPTR(wire.MustParseName("host.example.com"))),
+					rdata.MustNewPTR(wire.MustParseName("host.example.com"))),
 			},
 			rrtype.PTR,
 		},

@@ -65,7 +65,11 @@ func BuildDelegationCNAMEs(prefix netip.Prefix, subzoneOwner wire.Name, ttl time
 		if err != nil {
 			return nil, err
 		}
-		out = append(out, wire.NewRecord(owner, ttl, rdata.NewCNAME(target)))
+		cname, err := rdata.NewCNAME(target)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, wire.NewRecord(owner, ttl, cname))
 	}
 	return out, nil
 }

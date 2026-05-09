@@ -83,7 +83,7 @@ www IN  A    192.0.2.55
 	rootHandler := acidns.HandlerFunc(func(_ context.Context, w acidns.ResponseWriter, q wire.Message) {
 		question := q.Questions()[0]
 		ns := wire.NewRecord(wire.MustParseName("example.com"), 60*time.Second,
-			rdata.NewNS(wire.MustParseName("ns1.example.com")))
+			rdata.MustNewNS(wire.MustParseName("ns1.example.com")))
 		glue := wire.NewRecord(wire.MustParseName("ns1.example.com"), 60*time.Second,
 			rdata.MustNewA(netip.MustParseAddr("127.0.0.1")))
 		resp, _ := wire.NewBuilder().

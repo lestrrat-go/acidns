@@ -1,6 +1,8 @@
 package rdata
 
 import (
+	"fmt"
+
 	"github.com/lestrrat-go/acidns/wire/rrtype"
 	"github.com/lestrrat-go/acidns/wire/wirebb"
 )
@@ -14,8 +16,22 @@ func (DNAME) typedRData()             {}
 func (d DNAME) Target() wirebb.Name   { return d.target }
 func (d DNAME) Pack(p *wirebb.Packer) { p.NameUncompressed(d.target) }
 
-// NewDNAME returns a DNAME rdata.
-func NewDNAME(target wirebb.Name) DNAME { return DNAME{target: target} }
+// NewDNAME returns a DNAME rdata. The target must be a valid name.
+func NewDNAME(target wirebb.Name) (DNAME, error) {
+	if !target.IsValid() {
+		return DNAME{}, fmt.Errorf("%w: DNAME target name is invalid", ErrInvalidRData)
+	}
+	return DNAME{target: target}, nil
+}
+
+// MustNewDNAME is the panic-on-error variant of [NewDNAME].
+func MustNewDNAME(target wirebb.Name) DNAME {
+	d, err := NewDNAME(target)
+	if err != nil {
+		panic(err)
+	}
+	return d
+}
 
 func unpackDNAME(u *wirebb.Unpacker, rdlen int) (DNAME, error) {
 	var zero DNAME

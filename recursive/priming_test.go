@@ -18,9 +18,9 @@ func primingResponseDialer(t *testing.T, newA, newB netip.Addr) stubDialer {
 	return stubDialer{fn: func(_ context.Context, _ netip.AddrPort, q wire.Message) (wire.Message, error) {
 		return mkResp(t, q, func(b *wire.Builder) *wire.Builder {
 			ns1 := wire.NewRecord(wire.RootName(), 86400*time.Second,
-				rdata.NewNS(wire.MustParseName("a.root-servers.test.")))
+				rdata.MustNewNS(wire.MustParseName("a.root-servers.test.")))
 			ns2 := wire.NewRecord(wire.RootName(), 86400*time.Second,
-				rdata.NewNS(wire.MustParseName("b.root-servers.test.")))
+				rdata.MustNewNS(wire.MustParseName("b.root-servers.test.")))
 			a1 := wire.NewRecord(wire.MustParseName("a.root-servers.test."),
 				86400*time.Second, rdata.MustNewA(newA))
 			a2 := wire.NewRecord(wire.MustParseName("b.root-servers.test."),

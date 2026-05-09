@@ -13,7 +13,7 @@ import (
 
 func TestDNAME(t *testing.T) {
 	t.Parallel()
-	r := rdata.NewDNAME(wirebb.MustParse("frob.example.com"))
+	r := rdata.MustNewDNAME(wirebb.MustParse("frob.example.com"))
 	require.Equal(t, rrtype.DNAME, r.Type())
 	require.Equal(t, "frob.example.com.", r.Target().String())
 
@@ -45,7 +45,7 @@ func TestHINFORejectsTooLong(t *testing.T) {
 
 func TestKX(t *testing.T) {
 	t.Parallel()
-	r := rdata.NewKX(10, wirebb.MustParse("kx.example.com"))
+	r := rdata.MustNewKX(10, wirebb.MustParse("kx.example.com"))
 	require.Equal(t, rrtype.KX, r.Type())
 	require.Equal(t, uint16(10), r.Preference())
 

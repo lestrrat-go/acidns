@@ -117,13 +117,13 @@ func unpackTyped(t rrtype.Type, u *wirebb.Unpacker, rdlen int) (RData, error) {
 	case rrtype.RP:
 		return unpackRP(u)
 	case rrtype.AFSDB:
-		return unpackAFSDB(u)
+		return unpackAFSDB(u, rdlen)
 	case rrtype.X25:
 		return unpackX25(u)
 	case rrtype.ISDN:
 		return unpackISDN(u, rdlen)
 	case rrtype.RT:
-		return unpackRT(u)
+		return unpackRT(u, rdlen)
 	case rrtype.NSAP:
 		return unpackNSAP(u, rdlen)
 	case rrtype.NSAPPTR:

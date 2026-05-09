@@ -82,7 +82,7 @@ func TestWalkerNSEC3OptOutInsecure(t *testing.T) {
 	// record but the name exists (NS record present). DS lookup → NoData
 	// covered by opt-out NSEC3 → Insecure.
 	tld.addRR(wire.NewRecord(wire.MustParseName("insecure.example."), time.Hour,
-		rdata.NewNS(wire.MustParseName("ns.insecure.example."))))
+		rdata.MustNewNS(wire.MustParseName("ns.insecure.example."))))
 
 	src := newNSEC3Source(mode, root, tld)
 	rootDS, _ := root.rootAnchor(t)

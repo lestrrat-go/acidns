@@ -42,7 +42,7 @@ func TestFilterBailiwickKeepsCNAMEChain(t *testing.T) {
 		ID(1).
 		Response(true).
 		Question(wire.NewQuestion(qname, rrtype.A)).
-		Answer(wire.NewRecord(qname, time.Hour, rdata.NewCNAME(target))).
+		Answer(wire.NewRecord(qname, time.Hour, rdata.MustNewCNAME(target))).
 		Answer(wire.NewRecord(target, time.Hour,
 			rdata.MustNewA(netip.MustParseAddr("192.0.2.1")))).
 		// Off-chain record dropped.
@@ -64,9 +64,9 @@ func TestFilterBailiwickDropsOutOfBailiwickAuthority(t *testing.T) {
 		Response(true).
 		Question(wire.NewQuestion(qname, rrtype.A)).
 		Authority(wire.NewRecord(wire.MustParseName("example."), time.Hour,
-			rdata.NewNS(wire.MustParseName("ns1.example.")))).
+			rdata.MustNewNS(wire.MustParseName("ns1.example.")))).
 		Authority(wire.NewRecord(wire.MustParseName("evil."), time.Hour,
-			rdata.NewNS(wire.MustParseName("ns1.evil.")))).
+			rdata.MustNewNS(wire.MustParseName("ns1.evil.")))).
 		Build()
 	require.NoError(t, err)
 

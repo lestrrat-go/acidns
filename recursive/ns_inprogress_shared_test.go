@@ -57,7 +57,7 @@ func TestNSInProgressSharedAcrossResolves(t *testing.T) {
 			return mkResp(t, q, func(b *wire.Builder) *wire.Builder {
 				ns := wire.NewRecord(wire.MustParseName("trap.example."),
 					60*time.Second,
-					rdata.NewNS(wire.MustParseName("ns.trap.example.")))
+					rdata.MustNewNS(wire.MustParseName("ns.trap.example.")))
 				return b.Authority(ns)
 			}), nil
 		},

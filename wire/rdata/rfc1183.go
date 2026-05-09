@@ -22,8 +22,25 @@ func (r RP) Pack(p *wirebb.Packer) {
 	p.Name(r.txt)
 }
 
-// NewRP returns an RP rdata.
-func NewRP(mbox, txt wirebb.Name) RP { return RP{mbox: mbox, txt: txt} }
+// NewRP returns an RP rdata. Both names must be valid.
+func NewRP(mbox, txt wirebb.Name) (RP, error) {
+	if !mbox.IsValid() {
+		return RP{}, fmt.Errorf("%w: RP mbox name is invalid", ErrInvalidRData)
+	}
+	if !txt.IsValid() {
+		return RP{}, fmt.Errorf("%w: RP txt-dname is invalid", ErrInvalidRData)
+	}
+	return RP{mbox: mbox, txt: txt}, nil
+}
+
+// MustNewRP is the panic-on-error variant of [NewRP].
+func MustNewRP(mbox, txt wirebb.Name) RP {
+	r, err := NewRP(mbox, txt)
+	if err != nil {
+		panic(err)
+	}
+	return r
+}
 
 func unpackRP(u *wirebb.Unpacker) (RP, error) {
 	var zero RP
@@ -38,7 +55,8 @@ func unpackRP(u *wirebb.Unpacker) (RP, error) {
 	return RP{mbox: mbox, txt: txt}, nil
 }
 
-// AFSDB is the AFS Data Base location rdata (RFC 1183 §1).
+// AFSDB is the AFS Data Base location rdata (RFC 1183 §1). Per RFC 3597
+// §4 the hostname MUST NOT be compressed on the wire.
 type AFSDB struct {
 	subtype  uint16
 	hostname wirebb.Name
@@ -50,21 +68,34 @@ func (a AFSDB) Subtype() uint16       { return a.subtype }
 func (a AFSDB) Hostname() wirebb.Name { return a.hostname }
 func (a AFSDB) Pack(p *wirebb.Packer) {
 	p.Uint16(a.subtype)
-	p.Name(a.hostname)
+	p.NameUncompressed(a.hostname)
 }
 
-// NewAFSDB returns an AFSDB rdata.
-func NewAFSDB(subtype uint16, hostname wirebb.Name) AFSDB {
-	return AFSDB{subtype: subtype, hostname: hostname}
+// NewAFSDB returns an AFSDB rdata. The hostname must be a valid name.
+func NewAFSDB(subtype uint16, hostname wirebb.Name) (AFSDB, error) {
+	if !hostname.IsValid() {
+		return AFSDB{}, fmt.Errorf("%w: AFSDB hostname is invalid", ErrInvalidRData)
+	}
+	return AFSDB{subtype: subtype, hostname: hostname}, nil
 }
 
-func unpackAFSDB(u *wirebb.Unpacker) (AFSDB, error) {
+// MustNewAFSDB is the panic-on-error variant of [NewAFSDB].
+func MustNewAFSDB(subtype uint16, hostname wirebb.Name) AFSDB {
+	a, err := NewAFSDB(subtype, hostname)
+	if err != nil {
+		panic(err)
+	}
+	return a
+}
+
+func unpackAFSDB(u *wirebb.Unpacker, rdlen int) (AFSDB, error) {
 	var zero AFSDB
+	end := u.Off() + rdlen
 	st, err := u.Uint16()
 	if err != nil {
 		return zero, err
 	}
-	n, err := u.Name()
+	n, err := u.UncompressedNameInRange(end)
 	if err != nil {
 		return zero, err
 	}
@@ -145,7 +176,8 @@ func unpackISDN(u *wirebb.Unpacker, rdlen int) (ISDN, error) {
 	return ISDN{addr: string(addr), sub: string(sub), hasSub: true}, nil
 }
 
-// RT is the Route Through rdata (RFC 1183 §3.3).
+// RT is the Route Through rdata (RFC 1183 §3.3). Per RFC 3597 §4 the
+// intermediate-host name MUST NOT be compressed on the wire.
 type RT struct {
 	pref uint16
 	host wirebb.Name
@@ -157,19 +189,34 @@ func (r RT) Preference() uint16            { return r.pref }
 func (r RT) IntermediateHost() wirebb.Name { return r.host }
 func (r RT) Pack(p *wirebb.Packer) {
 	p.Uint16(r.pref)
-	p.Name(r.host)
+	p.NameUncompressed(r.host)
 }
 
-// NewRT returns an RT rdata.
-func NewRT(pref uint16, host wirebb.Name) RT { return RT{pref: pref, host: host} }
+// NewRT returns an RT rdata. The intermediate-host must be a valid name.
+func NewRT(pref uint16, host wirebb.Name) (RT, error) {
+	if !host.IsValid() {
+		return RT{}, fmt.Errorf("%w: RT intermediate-host name is invalid", ErrInvalidRData)
+	}
+	return RT{pref: pref, host: host}, nil
+}
 
-func unpackRT(u *wirebb.Unpacker) (RT, error) {
+// MustNewRT is the panic-on-error variant of [NewRT].
+func MustNewRT(pref uint16, host wirebb.Name) RT {
+	r, err := NewRT(pref, host)
+	if err != nil {
+		panic(err)
+	}
+	return r
+}
+
+func unpackRT(u *wirebb.Unpacker, rdlen int) (RT, error) {
 	var zero RT
+	end := u.Off() + rdlen
 	pref, err := u.Uint16()
 	if err != nil {
 		return zero, err
 	}
-	n, err := u.Name()
+	n, err := u.UncompressedNameInRange(end)
 	if err != nil {
 		return zero, err
 	}

@@ -398,7 +398,7 @@ func publicationRecords(p Publication, flushBit bool) []wire.Record {
 	// PTR at type → instance (cache-flush bit NOT set on PTR; PTR is a
 	// shared-set record per RFC 6762 §10.2).
 	out = append(out, wire.NewRecord(p.typ, p.ttl,
-		rdata.NewPTR(p.instance)))
+		rdata.MustNewPTR(p.instance)))
 	// A/AAAA at host.
 	for _, a := range p.addrs {
 		if a.Is4() {

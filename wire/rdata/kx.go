@@ -1,6 +1,8 @@
 package rdata
 
 import (
+	"fmt"
+
 	"github.com/lestrrat-go/acidns/wire/rrtype"
 	"github.com/lestrrat-go/acidns/wire/wirebb"
 )
@@ -21,9 +23,21 @@ func (k KX) Pack(p *wirebb.Packer) {
 	p.NameUncompressed(k.exchange)
 }
 
-// NewKX returns a KX rdata.
-func NewKX(pref uint16, exchanger wirebb.Name) KX {
-	return KX{pref: pref, exchange: exchanger}
+// NewKX returns a KX rdata. The exchanger must be a valid name.
+func NewKX(pref uint16, exchanger wirebb.Name) (KX, error) {
+	if !exchanger.IsValid() {
+		return KX{}, fmt.Errorf("%w: KX exchanger name is invalid", ErrInvalidRData)
+	}
+	return KX{pref: pref, exchange: exchanger}, nil
+}
+
+// MustNewKX is the panic-on-error variant of [NewKX].
+func MustNewKX(pref uint16, exchanger wirebb.Name) KX {
+	k, err := NewKX(pref, exchanger)
+	if err != nil {
+		panic(err)
+	}
+	return k
 }
 
 func unpackKX(u *wirebb.Unpacker, rdlen int) (KX, error) {

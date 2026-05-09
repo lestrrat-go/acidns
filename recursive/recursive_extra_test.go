@@ -31,7 +31,7 @@ func (h chainHandler) ServeDNS(_ context.Context, w acidns.ResponseWriter, q wir
 	cur := question.Name()
 	for range 16 {
 		if next, ok := h.chain[cur.String()]; ok {
-			b.Answer(wire.NewRecord(cur, time.Hour, rdata.NewCNAME(next)))
+			b.Answer(wire.NewRecord(cur, time.Hour, rdata.MustNewCNAME(next)))
 			cur = next
 			continue
 		}

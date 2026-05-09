@@ -120,7 +120,7 @@ func TestNSEC3MatchSkipsNonNSEC3(t *testing.T) {
 	t.Parallel()
 	// Records that are not NSEC3 are ignored.
 	a := wire.NewRecord(wire.MustParseName("x.example."), time.Hour,
-		rdata.NewNS(wire.MustParseName("ns.example.")))
+		rdata.MustNewNS(wire.MustParseName("ns.example.")))
 	params := nsec3Params{alg: 1, iterations: 0, salt: nil}
 	_, ok := nsec3Match(wire.MustParseName("foo.example."), params, []wire.Record{a})
 	require.False(t, ok)

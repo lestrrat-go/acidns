@@ -168,7 +168,7 @@ func (z *signedZone) addRR(r wire.Record) {
 func (z *signedZone) addDelegation(t *testing.T, child *signedZone) {
 	t.Helper()
 	z.addRR(wire.NewRecord(child.apex, time.Hour,
-		rdata.NewNS(child.apex)))
+		rdata.MustNewNS(child.apex)))
 	digest, err := dnssec.DSDigest(child.apex, child.ksk.dnskey, rdata.DigestSHA256)
 	require.NoError(t, err)
 	ds := rdata.NewDS(dnssec.KeyTag(child.ksk.dnskey), child.ksk.dnskey.Algorithm(),

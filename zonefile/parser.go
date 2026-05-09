@@ -251,7 +251,7 @@ func (p *parser) parseRData(t rrtype.Type, fields []fieldTok) (rdata.RData, erro
 		if err != nil {
 			return nil, err
 		}
-		return rdata.NewNS(n), nil
+		return rdata.NewNS(n)
 	case rrtype.CNAME:
 		if len(fields) != 1 {
 			return nil, fmt.Errorf("CNAME: expected 1 field")
@@ -260,7 +260,7 @@ func (p *parser) parseRData(t rrtype.Type, fields []fieldTok) (rdata.RData, erro
 		if err != nil {
 			return nil, err
 		}
-		return rdata.NewCNAME(n), nil
+		return rdata.NewCNAME(n)
 	case rrtype.PTR:
 		if len(fields) != 1 {
 			return nil, fmt.Errorf("PTR: expected 1 field")
@@ -269,7 +269,7 @@ func (p *parser) parseRData(t rrtype.Type, fields []fieldTok) (rdata.RData, erro
 		if err != nil {
 			return nil, err
 		}
-		return rdata.NewPTR(n), nil
+		return rdata.NewPTR(n)
 	case rrtype.MX:
 		if len(fields) != 2 {
 			return nil, fmt.Errorf("MX: expected 2 fields")

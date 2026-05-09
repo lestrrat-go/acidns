@@ -440,7 +440,7 @@ func TestWalkerInsecureDelegationAnswerLookupError(t *testing.T) {
 	tld.publishDNSKEY()
 	root.addDelegation(t, tld)
 	tld.addRR(wire.NewRecord(wire.MustParseName("insecure.example."), time.Hour,
-		rdata.NewNS(wire.MustParseName("ns.insecure.example."))))
+		rdata.MustNewNS(wire.MustParseName("ns.insecure.example."))))
 
 	src := newFixtureSource(root, tld)
 	wrapped := &errorAfterInsecure{inner: src, fail: wire.MustParseName("ns.insecure.example.")}

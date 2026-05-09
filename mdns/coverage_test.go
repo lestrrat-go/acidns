@@ -250,7 +250,7 @@ func TestConflictsWithSRVNonconflicting(t *testing.T) {
 		Answer(wire.NewRecord(
 			wire.MustParseName("_http._tcp.local."),
 			120*time.Second,
-			rdata.NewPTR(wire.MustParseName("Other._http._tcp.local.")))).
+			rdata.MustNewPTR(wire.MustParseName("Other._http._tcp.local.")))).
 		// SRV with a different owner name (ignored).
 		Answer(wire.NewRecord(
 			wire.MustParseName("Other._http._tcp.local."),
@@ -409,7 +409,7 @@ func TestParseBrowseResponsePTRWithoutSRV(t *testing.T) {
 		ID(0).
 		Response(true).
 		// PTR but no matching SRV → service should be skipped.
-		Answer(wire.NewRecord(svcType, time.Minute, rdata.NewPTR(instance))).
+		Answer(wire.NewRecord(svcType, time.Minute, rdata.MustNewPTR(instance))).
 		Build()
 	require.NoError(t, err)
 
@@ -428,7 +428,7 @@ func TestParseBrowseResponseAAAAFromAdditional(t *testing.T) {
 	resp, err := wire.NewBuilder().
 		ID(0).
 		Response(true).
-		Answer(wire.NewRecord(svcType, time.Minute, rdata.NewPTR(instance))).
+		Answer(wire.NewRecord(svcType, time.Minute, rdata.MustNewPTR(instance))).
 		Answer(wire.NewRecord(instance, time.Minute, srv)).
 		// AAAA in additional section.
 		Additional(wire.NewRecord(host, time.Minute, v6)).
@@ -455,7 +455,7 @@ func TestParseTXTBareKeyAndEmpty(t *testing.T) {
 	resp, err := wire.NewBuilder().
 		ID(0).
 		Response(true).
-		Answer(wire.NewRecord(svcType, time.Minute, rdata.NewPTR(instance))).
+		Answer(wire.NewRecord(svcType, time.Minute, rdata.MustNewPTR(instance))).
 		Answer(wire.NewRecord(instance, time.Minute, srv)).
 		Answer(wire.NewRecord(instance, time.Minute, txt)).
 		Build()

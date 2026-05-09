@@ -38,7 +38,7 @@ func TestQNameMinimisationSendsMinimisedQueries(t *testing.T) {
 				// Root referral to com.
 				return mkResp(t, q, func(b *wire.Builder) *wire.Builder {
 					ns := wire.NewRecord(wire.MustParseName("com."), time.Hour,
-						rdata.NewNS(wire.MustParseName("ns.com.")))
+						rdata.MustNewNS(wire.MustParseName("ns.com.")))
 					glue := wire.NewRecord(wire.MustParseName("ns.com."), time.Hour,
 						rdata.MustNewA(netip.MustParseAddr("192.0.2.10")))
 					return b.Authority(ns).Additional(glue)
@@ -47,7 +47,7 @@ func TestQNameMinimisationSendsMinimisedQueries(t *testing.T) {
 				// com. referral to example.com.
 				return mkResp(t, q, func(b *wire.Builder) *wire.Builder {
 					ns := wire.NewRecord(wire.MustParseName("example.com."), time.Hour,
-						rdata.NewNS(wire.MustParseName("ns.example.com.")))
+						rdata.MustNewNS(wire.MustParseName("ns.example.com.")))
 					glue := wire.NewRecord(wire.MustParseName("ns.example.com."), time.Hour,
 						rdata.MustNewA(netip.MustParseAddr("192.0.2.20")))
 					return b.Authority(ns).Additional(glue)
@@ -107,7 +107,7 @@ func TestQNameMinimisationDisabled(t *testing.T) {
 			case 1:
 				return mkResp(t, q, func(b *wire.Builder) *wire.Builder {
 					ns := wire.NewRecord(wire.MustParseName("com."), time.Hour,
-						rdata.NewNS(wire.MustParseName("ns.com.")))
+						rdata.MustNewNS(wire.MustParseName("ns.com.")))
 					glue := wire.NewRecord(wire.MustParseName("ns.com."), time.Hour,
 						rdata.MustNewA(netip.MustParseAddr("192.0.2.10")))
 					return b.Authority(ns).Additional(glue)
@@ -115,7 +115,7 @@ func TestQNameMinimisationDisabled(t *testing.T) {
 			case 2:
 				return mkResp(t, q, func(b *wire.Builder) *wire.Builder {
 					ns := wire.NewRecord(wire.MustParseName("example.com."), time.Hour,
-						rdata.NewNS(wire.MustParseName("ns.example.com.")))
+						rdata.MustNewNS(wire.MustParseName("ns.example.com.")))
 					glue := wire.NewRecord(wire.MustParseName("ns.example.com."), time.Hour,
 						rdata.MustNewA(netip.MustParseAddr("192.0.2.20")))
 					return b.Authority(ns).Additional(glue)

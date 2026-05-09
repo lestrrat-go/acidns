@@ -164,19 +164,19 @@ func TestBuildResolverInvalidServer(t *testing.T) {
 
 func TestFormatRDataCNAME(t *testing.T) {
 	t.Parallel()
-	rd := rdata.NewCNAME(wire.MustParseName("alias.example.com"))
+	rd := rdata.MustNewCNAME(wire.MustParseName("alias.example.com"))
 	require.Contains(t, formatRData(rd), "alias.example.com")
 }
 
 func TestFormatRDataNS(t *testing.T) {
 	t.Parallel()
-	rd := rdata.NewNS(wire.MustParseName("ns.example.com"))
+	rd := rdata.MustNewNS(wire.MustParseName("ns.example.com"))
 	require.Contains(t, formatRData(rd), "ns.example.com")
 }
 
 func TestFormatRDataPTR(t *testing.T) {
 	t.Parallel()
-	rd := rdata.NewPTR(wire.MustParseName("h.example.com"))
+	rd := rdata.MustNewPTR(wire.MustParseName("h.example.com"))
 	require.Contains(t, formatRData(rd), "h.example.com")
 }
 

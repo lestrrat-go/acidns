@@ -27,7 +27,7 @@ func (d scriptedDialer) Exchange(_ context.Context, server netip.AddrPort, q wir
 	case d.root:
 		// Root returns a referral to the example.com authoritative.
 		b = b.Authority(wire.NewRecord(wire.MustParseName("example.com"), time.Minute,
-			rdata.NewNS(wire.MustParseName("ns1.example.com"))))
+			rdata.MustNewNS(wire.MustParseName("ns1.example.com"))))
 		b = b.Additional(wire.NewRecord(wire.MustParseName("ns1.example.com"), time.Minute,
 			rdata.MustNewA(netip.MustParseAddr("127.0.0.1"))))
 	case d.auth:

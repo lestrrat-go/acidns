@@ -151,7 +151,7 @@ func TestWalkerInsecureDelegation(t *testing.T) {
 	// NSEC at "insecure.example." should reflect: NS, RRSIG, NSEC — no DS,
 	// no SOA. Our fixture source synthesises NSEC from typesAt.
 	tld.addRR(wire.NewRecord(wire.MustParseName("insecure.example."), time.Hour,
-		rdata.NewNS(wire.MustParseName("ns.insecure.example."))))
+		rdata.MustNewNS(wire.MustParseName("ns.insecure.example."))))
 
 	src := newFixtureSource(root, tld)
 	rootDS, _ := root.rootAnchor(t)

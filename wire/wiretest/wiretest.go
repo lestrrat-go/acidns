@@ -146,18 +146,21 @@ func AAAARecord(name wire.Name, ttl time.Duration, ip string) wire.Record {
 }
 
 // CNAMERecord builds a CNAME record pointing to target.
+// Panics if target is not a valid name (wiretest is for fixtures only).
 func CNAMERecord(name wire.Name, ttl time.Duration, target wire.Name) wire.Record {
-	return wire.NewRecord(name, ttl, rdata.NewCNAME(target))
+	return wire.NewRecord(name, ttl, rdata.MustNewCNAME(target))
 }
 
 // NSRecord builds an NS record naming server.
+// Panics if server is not a valid name (wiretest is for fixtures only).
 func NSRecord(name wire.Name, ttl time.Duration, server wire.Name) wire.Record {
-	return wire.NewRecord(name, ttl, rdata.NewNS(server))
+	return wire.NewRecord(name, ttl, rdata.MustNewNS(server))
 }
 
 // PTRRecord builds a PTR record pointing to target.
+// Panics if target is not a valid name (wiretest is for fixtures only).
 func PTRRecord(name wire.Name, ttl time.Duration, target wire.Name) wire.Record {
-	return wire.NewRecord(name, ttl, rdata.NewPTR(target))
+	return wire.NewRecord(name, ttl, rdata.MustNewPTR(target))
 }
 
 // MXRecord builds an MX record with the given preference and exchange.

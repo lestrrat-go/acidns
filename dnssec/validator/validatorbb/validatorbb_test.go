@@ -199,9 +199,9 @@ func TestRecordsOfTypeFiltersTypeAndOwner(t *testing.T) {
 	t.Parallel()
 	owner := wire.MustParseName("foo.example.")
 	other := wire.MustParseName("bar.example.")
-	r1 := wire.NewRecord(owner, time.Hour, rdata.NewNS(wire.MustParseName("ns.foo.example.")))
-	r2 := wire.NewRecord(other, time.Hour, rdata.NewNS(wire.MustParseName("ns.bar.example.")))
-	r3 := wire.NewRecord(owner, time.Hour, rdata.NewNS(wire.MustParseName("ns2.foo.example.")))
+	r1 := wire.NewRecord(owner, time.Hour, rdata.MustNewNS(wire.MustParseName("ns.foo.example.")))
+	r2 := wire.NewRecord(other, time.Hour, rdata.MustNewNS(wire.MustParseName("ns.bar.example.")))
+	r3 := wire.NewRecord(owner, time.Hour, rdata.MustNewNS(wire.MustParseName("ns2.foo.example.")))
 	got := validatorbb.RecordsOfType([]wire.Record{r1, r2, r3}, rrtype.NS, owner)
 	require.Len(t, got, 2)
 
@@ -212,9 +212,9 @@ func TestRecordsOfTypeFiltersTypeAndOwner(t *testing.T) {
 
 func TestGroupRecordsByOwnerAppend(t *testing.T) {
 	t.Parallel()
-	a := wire.NewRecord(wire.MustParseName("a.example."), time.Hour, rdata.NewNS(wire.MustParseName("ns1.example.")))
-	a2 := wire.NewRecord(wire.MustParseName("a.example."), time.Hour, rdata.NewNS(wire.MustParseName("ns2.example.")))
-	b := wire.NewRecord(wire.MustParseName("b.example."), time.Hour, rdata.NewNS(wire.MustParseName("ns3.example.")))
+	a := wire.NewRecord(wire.MustParseName("a.example."), time.Hour, rdata.MustNewNS(wire.MustParseName("ns1.example.")))
+	a2 := wire.NewRecord(wire.MustParseName("a.example."), time.Hour, rdata.MustNewNS(wire.MustParseName("ns2.example.")))
+	b := wire.NewRecord(wire.MustParseName("b.example."), time.Hour, rdata.MustNewNS(wire.MustParseName("ns3.example.")))
 	groups := validatorbb.GroupRecordsByOwner([]wire.Record{a, b, a2})
 	require.Len(t, groups, 2)
 	// First group is a.example. with two records.
@@ -228,7 +228,7 @@ func TestFilterNSECByOwner(t *testing.T) {
 	other := wire.NewRecord(wire.MustParseName("z.example."), time.Hour,
 		rdata.NewNSEC(wire.MustParseName("zz.example."), nil))
 	notNSEC := wire.NewRecord(wire.MustParseName("a.example."), time.Hour,
-		rdata.NewNS(wire.MustParseName("ns.example.")))
+		rdata.MustNewNS(wire.MustParseName("ns.example.")))
 	got := validatorbb.FilterNSECByOwner([]wire.Record{a, other, notNSEC}, wire.MustParseName("a.example."))
 	require.Len(t, got, 1)
 }
@@ -259,7 +259,7 @@ func TestSignerOfReturnsRRSIGSigner(t *testing.T) {
 		1, wire.MustParseName("example."), nil)
 	rec := wire.NewRecord(wire.MustParseName("foo.example."), time.Hour, sig)
 	notSig := wire.NewRecord(wire.MustParseName("a.example."), time.Hour,
-		rdata.NewNS(wire.MustParseName("ns.example.")))
+		rdata.MustNewNS(wire.MustParseName("ns.example.")))
 	require.True(t, validatorbb.SignerOf([]wire.Record{notSig, rec}).Equal(wire.MustParseName("example.")))
 }
 

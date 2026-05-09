@@ -1,6 +1,7 @@
 package rdata
 
 import (
+	"fmt"
 	"slices"
 
 	"github.com/lestrrat-go/acidns/wire/rrtype"
@@ -42,8 +43,22 @@ func (NSAPPTR) typedRData()             {}
 func (n NSAPPTR) Owner() wirebb.Name    { return n.owner }
 func (n NSAPPTR) Pack(p *wirebb.Packer) { p.Name(n.owner) }
 
-// NewNSAPPTR returns an NSAP-PTR rdata.
-func NewNSAPPTR(owner wirebb.Name) NSAPPTR { return NSAPPTR{owner: owner} }
+// NewNSAPPTR returns an NSAP-PTR rdata. The owner must be a valid name.
+func NewNSAPPTR(owner wirebb.Name) (NSAPPTR, error) {
+	if !owner.IsValid() {
+		return NSAPPTR{}, fmt.Errorf("%w: NSAP-PTR owner name is invalid", ErrInvalidRData)
+	}
+	return NSAPPTR{owner: owner}, nil
+}
+
+// MustNewNSAPPTR is the panic-on-error variant of [NewNSAPPTR].
+func MustNewNSAPPTR(owner wirebb.Name) NSAPPTR {
+	n, err := NewNSAPPTR(owner)
+	if err != nil {
+		panic(err)
+	}
+	return n
+}
 
 func unpackNSAPPTR(u *wirebb.Unpacker) (NSAPPTR, error) {
 	var zero NSAPPTR

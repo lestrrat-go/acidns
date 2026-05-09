@@ -11,7 +11,7 @@ import (
 
 func TestRP(t *testing.T) {
 	t.Parallel()
-	r := rdata.NewRP(wirebb.MustParse("admin.example.com"), wirebb.MustParse("info.example.com"))
+	r := rdata.MustNewRP(wirebb.MustParse("admin.example.com"), wirebb.MustParse("info.example.com"))
 	require.Equal(t, rrtype.RP, r.Type())
 
 	got := packUnpack(t, r).(rdata.RP)
@@ -21,7 +21,7 @@ func TestRP(t *testing.T) {
 
 func TestAFSDB(t *testing.T) {
 	t.Parallel()
-	r := rdata.NewAFSDB(1, wirebb.MustParse("afs.example.com"))
+	r := rdata.MustNewAFSDB(1, wirebb.MustParse("afs.example.com"))
 	require.Equal(t, rrtype.AFSDB, r.Type())
 
 	got := packUnpack(t, r).(rdata.AFSDB)
@@ -55,7 +55,7 @@ func TestISDN(t *testing.T) {
 
 func TestRT(t *testing.T) {
 	t.Parallel()
-	r := rdata.NewRT(10, wirebb.MustParse("relay.example.com"))
+	r := rdata.MustNewRT(10, wirebb.MustParse("relay.example.com"))
 	got := packUnpack(t, r).(rdata.RT)
 	require.Equal(t, uint16(10), got.Preference())
 	require.True(t, r.IntermediateHost().Equal(got.IntermediateHost()))
@@ -74,7 +74,7 @@ func TestNSAP(t *testing.T) {
 
 func TestNSAPPTR(t *testing.T) {
 	t.Parallel()
-	r := rdata.NewNSAPPTR(wirebb.MustParse("foo.nsap.arpa"))
+	r := rdata.MustNewNSAPPTR(wirebb.MustParse("foo.nsap.arpa"))
 	got := packUnpack(t, r).(rdata.NSAPPTR)
 	require.True(t, r.Owner().Equal(got.Owner()))
 }

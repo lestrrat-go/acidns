@@ -22,7 +22,7 @@ func Example_mdns_parse() {
 	resp, _ := wire.NewBuilder().
 		ID(0).
 		Response(true).
-		Answer(wire.NewRecord(svcType, time.Minute, rdata.NewPTR(instance))).
+		Answer(wire.NewRecord(svcType, time.Minute, rdata.MustNewPTR(instance))).
 		Answer(wire.NewRecord(instance, time.Minute, rdata.MustNewSRV(0, 0, 80, host))).
 		Answer(wire.NewRecord(instance, time.Minute, txt)).
 		Additional(wire.NewRecord(host, time.Minute, rdata.MustNewA(netip.MustParseAddr("192.0.2.50")))).

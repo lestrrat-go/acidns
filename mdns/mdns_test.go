@@ -37,7 +37,7 @@ func TestParseBrowseResponse(t *testing.T) {
 	resp, err := wire.NewBuilder().
 		ID(0).
 		Response(true).
-		Answer(wire.NewRecord(svcType, time.Minute, rdata.NewPTR(instance))).
+		Answer(wire.NewRecord(svcType, time.Minute, rdata.MustNewPTR(instance))).
 		Answer(wire.NewRecord(instance, time.Minute, srv)).
 		Answer(wire.NewRecord(instance, time.Minute, txt)).
 		Additional(wire.NewRecord(host, time.Minute, a)).

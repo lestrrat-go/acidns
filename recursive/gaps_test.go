@@ -174,7 +174,7 @@ func TestUnglueOutOfBailiwickReferral(t *testing.T) {
 				return mkResp(t, q, func(b *wire.Builder) *wire.Builder {
 					ns := wire.NewRecord(wire.MustParseName("example."),
 						60*time.Second,
-						rdata.NewNS(wire.MustParseName("ns1.outsider.")))
+						rdata.MustNewNS(wire.MustParseName("ns1.outsider.")))
 					return b.Authority(ns)
 				}), nil
 			case server == root && qname == "ns1.outsider." && qtype == rrtype.A:
@@ -223,7 +223,7 @@ func TestGlueAAAA(t *testing.T) {
 				return mkResp(t, q, func(b *wire.Builder) *wire.Builder {
 					ns := wire.NewRecord(wire.MustParseName("example."),
 						60*time.Second,
-						rdata.NewNS(wire.MustParseName("ns1.example.")))
+						rdata.MustNewNS(wire.MustParseName("ns1.example.")))
 					glue := wire.NewRecord(wire.MustParseName("ns1.example."),
 						60*time.Second,
 						rdata.MustNewAAAA(netip.MustParseAddr("2001:db8::1")))
@@ -389,7 +389,7 @@ func TestServeDNSWithAuthorityAndAdditional(t *testing.T) {
 					wire.MustParseName("hm.example."),
 					1, 60*time.Second, 60*time.Second, 60*time.Second, 30*time.Second))
 			ns := wire.NewRecord(wire.MustParseName("example."), 60*time.Second,
-				rdata.NewNS(wire.MustParseName("ns.example.")))
+				rdata.MustNewNS(wire.MustParseName("ns.example.")))
 			glue := wire.NewRecord(wire.MustParseName("ns.example."), 60*time.Second,
 				rdata.MustNewA(netip.MustParseAddr("192.0.2.1")))
 			_ = question
@@ -636,7 +636,7 @@ func TestResolveCNAMEDirectly(t *testing.T) {
 		fn: func(_ context.Context, _ netip.AddrPort, q wire.Message) (wire.Message, error) {
 			question := q.Questions()[0]
 			cname := wire.NewRecord(question.Name(), 60*time.Second,
-				rdata.NewCNAME(wire.MustParseName("alias.example.")))
+				rdata.MustNewCNAME(wire.MustParseName("alias.example.")))
 			return mkResp(t, q, func(b *wire.Builder) *wire.Builder {
 				return b.Authoritative(true).Answer(cname)
 			}), nil
@@ -695,7 +695,7 @@ func TestHasAnswerForCNAMEAtOwner(t *testing.T) {
 			question := q.Questions()[0]
 			if question.Name().Equal(wire.MustParseName("www.example.")) {
 				cname := wire.NewRecord(question.Name(), 60*time.Second,
-					rdata.NewCNAME(target))
+					rdata.MustNewCNAME(target))
 				// AA=false to drive the hasAnswerFor branch.
 				return mkResp(t, q, func(b *wire.Builder) *wire.Builder {
 					return b.Answer(cname)
@@ -733,7 +733,7 @@ func TestIterationLimitReached(t *testing.T) {
 			// returning glue at 127.0.0.1:1 (same root) so we just spin.
 			ns := wire.NewRecord(wire.MustParseName("example."),
 				60*time.Second,
-				rdata.NewNS(wire.MustParseName("ns.example.")))
+				rdata.MustNewNS(wire.MustParseName("ns.example.")))
 			glue := wire.NewRecord(wire.MustParseName("ns.example."),
 				60*time.Second,
 				rdata.MustNewA(netip.MustParseAddr("127.0.0.1")))

@@ -65,7 +65,7 @@ func TestRecordsAtFiltersByOwner(t *testing.T) {
 
 	records := []wire.Record{
 		// Legitimate record at the queried name.
-		wire.NewRecord(cur, 60, rdata.NewCNAME(other)),
+		wire.NewRecord(cur, 60, rdata.MustNewCNAME(other)),
 		// Forged record bundled by a malicious authoritative.
 		wire.NewRecord(other, 60,
 			rdata.MustNewA(netip.MustParseAddr("198.51.100.1"))),
@@ -120,11 +120,11 @@ func TestBailiwickFilterDropsForgedAnswerRecords(t *testing.T) {
 	forgedAnswer := wire.NewRecord(wire.MustParseName("bank.com."), 60*time.Second,
 		rdata.MustNewA(netip.MustParseAddr("203.0.113.1")))
 	forgedAuthority := wire.NewRecord(wire.MustParseName("bank.com."), 60*time.Second,
-		rdata.NewNS(wire.MustParseName("ns.evil.example.")))
+		rdata.MustNewNS(wire.MustParseName("ns.evil.example.")))
 	forgedAdditional := wire.NewRecord(wire.MustParseName("bank.com."), 60*time.Second,
 		rdata.MustNewA(netip.MustParseAddr("203.0.113.2")))
 	zoneNS := wire.NewRecord(wire.MustParseName("evil.example."), 60*time.Second,
-		rdata.NewNS(wire.MustParseName("ns.evil.example.")))
+		rdata.MustNewNS(wire.MustParseName("ns.evil.example.")))
 
 	resp, err := wire.NewBuilder().
 		ID(1).
@@ -157,7 +157,7 @@ func TestBailiwickFilterDropsForgedAnswerRecords(t *testing.T) {
 func TestReferralZone(t *testing.T) {
 	t.Parallel()
 	rec := wire.NewRecord(wire.MustParseName("example.com"), 0,
-		rdata.NewNS(wire.MustParseName("ns1.example.com")))
+		rdata.MustNewNS(wire.MustParseName("ns1.example.com")))
 	resp, err := wire.NewBuilder().Authority(rec).Build()
 	require.NoError(t, err)
 	z := referralZone(resp)

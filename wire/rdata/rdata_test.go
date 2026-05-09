@@ -51,7 +51,7 @@ func TestAAAA(t *testing.T) {
 
 func TestCNAME(t *testing.T) {
 	t.Parallel()
-	r := rdata.NewCNAME(wirebb.MustParse("alias.example.com"))
+	r := rdata.MustNewCNAME(wirebb.MustParse("alias.example.com"))
 	require.Equal(t, rrtype.CNAME, r.Type())
 	require.Equal(t, "alias.example.com.", r.Target().String())
 
@@ -61,14 +61,14 @@ func TestCNAME(t *testing.T) {
 
 func TestNS(t *testing.T) {
 	t.Parallel()
-	r := rdata.NewNS(wirebb.MustParse("ns1.example.com"))
+	r := rdata.MustNewNS(wirebb.MustParse("ns1.example.com"))
 	got := packUnpack(t, r).(rdata.NS)
 	require.True(t, r.NSDName().Equal(got.NSDName()))
 }
 
 func TestPTR(t *testing.T) {
 	t.Parallel()
-	r := rdata.NewPTR(wirebb.MustParse("host.example.com"))
+	r := rdata.MustNewPTR(wirebb.MustParse("host.example.com"))
 	got := packUnpack(t, r).(rdata.PTR)
 	require.True(t, r.PtrDName().Equal(got.PtrDName()))
 }
