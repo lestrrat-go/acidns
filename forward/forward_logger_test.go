@@ -22,7 +22,7 @@ func TestServeDNS_LogsForwardedDecision(t *testing.T) {
 	var buf bytes.Buffer
 	logger := slog.New(slog.NewJSONHandler(&buf, &slog.HandlerOptions{Level: slog.LevelDebug}))
 
-	h, err := forward.New(
+	h, err := forward.NewForwarder(
 		forward.WithUpstream(&closableUpstream{}),
 		forward.WithLogger(logger),
 	)
@@ -47,7 +47,7 @@ func TestServeDNS_LogsUpstreamError(t *testing.T) {
 	var buf bytes.Buffer
 	logger := slog.New(slog.NewJSONHandler(&buf, &slog.HandlerOptions{Level: slog.LevelDebug}))
 
-	h, err := forward.New(
+	h, err := forward.NewForwarder(
 		forward.WithUpstream(&errUpstream{err: errors.New("upstream went boom")}),
 		forward.WithLogger(logger),
 	)

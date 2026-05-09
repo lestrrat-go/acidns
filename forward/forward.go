@@ -66,9 +66,9 @@ type inflightCall struct {
 	err  error
 }
 
-// New returns a Forwarder. Exactly one of WithUpstream, WithUDPUpstream,
-// or WithDoTUpstream must be supplied.
-func New(opts ...Option) (*Forwarder, error) {
+// NewForwarder returns a Forwarder. Exactly one of WithUpstream,
+// WithUDPUpstream, or WithDoTUpstream must be supplied.
+func NewForwarder(opts ...Option) (*Forwarder, error) {
 	c := config{
 		cacheSize:    4096,
 		minTTL:       0,
