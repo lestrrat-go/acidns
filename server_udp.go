@@ -293,10 +293,16 @@ func (w *udpResponseWriter) WriteMsg(m wire.Message) error {
 		// pseudo-RR if the original response carried one, otherwise the
 		// client cannot tell EDNS-aware servers from broken ones and may
 		// permanently downgrade. Opcode and RCODE are preserved so the
-		// client can still classify the response.
+		// client can still classify the response. AA and AD describe
+		// statements about the answer data — they do not hold over a
+		// stripped body, so clear them.
 		b := wire.NewBuilder().
 			ID(m.ID()).
-			Flags(m.Flags().WithTruncated(true).WithResponse(true))
+			Flags(m.Flags().
+				WithTruncated(true).
+				WithResponse(true).
+				WithAuthoritative(false).
+				WithAuthenticData(false))
 		if qs := m.Questions(); len(qs) > 0 {
 			b = b.Question(qs[0])
 		}
