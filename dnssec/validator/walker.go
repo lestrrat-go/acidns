@@ -349,6 +349,19 @@ func (w *walker) fetchAndVerifyDNSKEY(ctx context.Context, zone wire.Name, dss [
 	if len(dnskeyRRs) == 0 {
 		return nil, fmt.Errorf("validator: no DNSKEY rrset at %s", zone)
 	}
+	// KeyTrap pre-filter cap. The post-filter cap below catches a zone
+	// that publishes too many usable keys, but counts only after the
+	// protocol/revoke/Zone-bit filter. A hostile zone publishing tens
+	// of thousands of garbage DNSKEYs would still allocate the parsed
+	// slice and walk every record once at the filter step before they
+	// get dropped. Cap the input slice at maxKeys * 4 (slack for
+	// revoked/non-Zone keys present during a legitimate rollover) so
+	// the per-record cost is bounded by the cap.
+	preCap := w.maxKeys * 4
+	if preCap > 0 && len(dnskeyRRs) > preCap {
+		return nil, fmt.Errorf("%w: zone %s advertises %d DNSKEY records pre-filter (cap %d, KeyTrap guard)",
+			ErrIterationLimit, zone, len(dnskeyRRs), preCap)
+	}
 	keys := make([]rdata.DNSKEY, 0, len(dnskeyRRs))
 	for _, r := range dnskeyRRs {
 		k, ok := wire.RDataAs[rdata.DNSKEY](r)
