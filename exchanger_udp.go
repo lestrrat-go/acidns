@@ -10,7 +10,6 @@ package acidns
 import (
 	"bytes"
 	"context"
-	"errors"
 	"fmt"
 	"math/rand/v2"
 	"net"
@@ -133,6 +132,16 @@ func (e *udpExchanger) Exchange(ctx context.Context, q wire.Message) (wire.Messa
 	}
 
 	buf := make([]byte, e.bufsize)
+	// Bound how many invalid / spoofed datagrams we tolerate per
+	// Exchange. Without this an off-path attacker can flood the
+	// resolver's UDP socket with bogus packets and pin CPU on
+	// Unmarshal until the read deadline fires (5s by default), which
+	// — when the recursive resolver allots ~4s per upstream — turns
+	// into denial-of-resolution. 32 is plenty for legitimate noise
+	// (a few duplicate responses, the occasional ICMP-driven retry)
+	// while strictly bounding the attacker's CPU budget.
+	const maxSpurious = 32
+	spurious := 0
 	for {
 		n, err := conn.Read(buf)
 		if err != nil {
@@ -141,22 +150,36 @@ func (e *udpExchanger) Exchange(ctx context.Context, q wire.Message) (wire.Messa
 			}
 			return nil, fmt.Errorf("udp: read: %w", err)
 		}
+		// Re-check ctx after a successful read so a flood of bogus
+		// datagrams cannot keep the loop alive past cancellation.
+		if cerr := ctx.Err(); cerr != nil {
+			return nil, cerr
+		}
 		resp, err := wire.Unmarshal(buf[:n])
 		if err != nil {
 			// Malformed datagrams are dropped silently per RFC 1035 §7.3
-			// (server is misbehaving) — but only if there's still time.
-			if errors.Is(ctx.Err(), context.Canceled) || errors.Is(ctx.Err(), context.DeadlineExceeded) {
-				return nil, ctx.Err()
+			// (server is misbehaving) — but only up to the spurious cap.
+			spurious++
+			if spurious >= maxSpurious {
+				return nil, fmt.Errorf("udp: spurious-datagram budget exhausted: %w", err)
 			}
 			continue
 		}
 		if resp.ID() != q.ID() {
+			spurious++
+			if spurious >= maxSpurious {
+				return nil, fmt.Errorf("udp: spurious-datagram budget exhausted on id mismatch")
+			}
 			continue
 		}
 		if !wire.QuestionsMatch(q, resp) {
 			// RFC 5452 §9.2: spoofed responses with a guessed ID still
 			// have to match the question section. Drop and keep waiting
 			// for a legit response.
+			spurious++
+			if spurious >= maxSpurious {
+				return nil, fmt.Errorf("udp: spurious-datagram budget exhausted on question mismatch")
+			}
 			continue
 		}
 		if e.use0x20 {
@@ -164,6 +187,10 @@ func (e *udpExchanger) Exchange(ctx context.Context, q wire.Message) (wire.Messa
 			if qerr != nil || !bytes.Equal(recvQuestion, sentQuestion) {
 				// 0x20 mismatch — response question's case doesn't
 				// match what we sent. Treat as forgery; keep waiting.
+				spurious++
+				if spurious >= maxSpurious {
+					return nil, fmt.Errorf("udp: spurious-datagram budget exhausted on 0x20 mismatch")
+				}
 				continue
 			}
 		}
