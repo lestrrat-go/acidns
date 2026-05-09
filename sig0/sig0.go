@@ -49,6 +49,10 @@ var (
 	// from accidentally validating a message against a different
 	// identity than the one the SIG claims.
 	ErrKeyTagMismatch = errors.New("sig0: keytag mismatch between supplied DNSKEY and SIG(0) RR")
+	// ErrReplay is returned by [VerifyWithReplay] when a verified
+	// SIG(0) message duplicates one previously seen inside the replay
+	// cache's retention window.
+	ErrReplay = errors.New("sig0: message is a replay")
 )
 
 // Sign appends a SIG(0) RR to the additional section of msg and returns
@@ -94,31 +98,75 @@ func Sign(msg []byte, signer wire.Name, alg rdata.DNSSECAlgorithm, keyTag uint16
 // [ErrUnsupportedAlg] for the algorithm) before the cryptographic
 // verification runs.
 //
+// The cryptographic check runs BEFORE the time-window check —
+// matching tsig's order. Doing the time check first would let an
+// unauthenticated peer probe the verifier's clock skew by submitting
+// SIG(0) messages with varying inception/expiration and observing
+// which return [ErrBadTime] vs [ErrBadSignature]; sig and time are
+// independent failure modes from the attacker's perspective, so
+// running the harder check first denies that timing oracle.
+//
+// SIG(0) does not by itself prevent message REPLAY within the
+// validity window — see [VerifyWithReplay] for the replay-cache
+// helper that pairs this primitive with a [ReplayCache].
+//
 // Returns the msg bytes without the SIG(0) RR.
 func Verify(msg []byte, key rdata.DNSKEY, expectedSigner wire.Name, now time.Time) ([]byte, error) {
+	body, _, err := verifyExtractSIG(msg, key, expectedSigner, now)
+	return body, err
+}
+
+// verifyExtractSIG performs the full Verify pipeline and additionally
+// returns the parsed SIG(0) so the replay-aware variant can key the
+// cache on (signer, inception, signature).
+func verifyExtractSIG(msg []byte, key rdata.DNSKEY, expectedSigner wire.Name, now time.Time) ([]byte, parsedSIG, error) {
 	body, sig, err := stripSIG(msg)
 	if err != nil {
-		return nil, err
+		return nil, parsedSIG{}, err
 	}
 	if !sig.signer.Equal(expectedSigner) {
-		return nil, fmt.Errorf("sig0: signer mismatch: got %s", sig.signer)
+		return nil, parsedSIG{}, fmt.Errorf("sig0: signer mismatch: got %s", sig.signer)
 	}
 	if key.Algorithm() != sig.algorithm {
-		return nil, fmt.Errorf("%w: alg mismatch", ErrUnsupportedAlg)
+		return nil, parsedSIG{}, fmt.Errorf("%w: alg mismatch", ErrUnsupportedAlg)
 	}
 	if dnssec.KeyTag(key) != sig.keyTag {
-		return nil, fmt.Errorf("%w: SIG keytag %d, supplied DNSKEY %d",
+		return nil, parsedSIG{}, fmt.Errorf("%w: SIG keytag %d, supplied DNSKEY %d",
 			ErrKeyTagMismatch, sig.keyTag, dnssec.KeyTag(key))
-	}
-	if now.Unix() > int64(sig.expiration) || now.Unix() < int64(sig.inception) {
-		return nil, ErrBadTime
 	}
 
 	rdataNoSig := buildSIGRDataPrefix(key.Algorithm(), sig.expiration, sig.inception, sig.keyTag, sig.signer)
 	signedData := append(append([]byte(nil), rdataNoSig...), body...)
 
 	if err := verifySignature(key.Algorithm(), key.PublicKey(), signedData, sig.signature); err != nil {
+		return nil, parsedSIG{}, err
+	}
+	if now.Unix() > int64(sig.expiration) || now.Unix() < int64(sig.inception) {
+		return nil, parsedSIG{}, ErrBadTime
+	}
+	return body, sig, nil
+}
+
+// VerifyWithReplay performs Verify and, on success, consults cache to
+// reject re-played messages. RFC 2931 leaves replay defence to the
+// application; UPDATE / NOTIFY / any other side-effecting opcode that
+// flows over a SIG(0)-protected channel SHOULD use this variant.
+//
+// Returns [ErrReplay] when the (signer, inception, signature) tuple
+// has already been recorded inside the cache's retention window.
+// Cache.Seen is consulted only after the cryptographic verification
+// passes, so an attacker cannot pollute the cache by replaying random
+// junk.
+func VerifyWithReplay(msg []byte, key rdata.DNSKEY, expectedSigner wire.Name, now time.Time, cache ReplayCache) ([]byte, error) {
+	body, sig, err := verifyExtractSIG(msg, key, expectedSigner, now)
+	if err != nil {
 		return nil, err
+	}
+	if cache != nil {
+		incept := time.Unix(int64(sig.inception), 0)
+		if cache.Seen(sig.signer, incept, sig.signature) {
+			return nil, ErrReplay
+		}
 	}
 	return body, nil
 }
