@@ -17,24 +17,30 @@ import (
 
 	"github.com/lestrrat-go/acidns/internal/streamframe"
 	"github.com/lestrrat-go/acidns/wire"
+	"github.com/lestrrat-go/option/v3"
 )
 
 // TCPExchangerOption configures a TCP Exchanger.
-type TCPExchangerOption interface{ applyTCPExchanger(*tcpExchangerConfig) }
+type TCPExchangerOption interface {
+	option.Interface
+	tcpExchangerOption()
+}
 
-type tcpExchangerOptionFunc func(*tcpExchangerConfig)
+type tcpExchangerOption struct{ option.Interface }
 
-func (f tcpExchangerOptionFunc) applyTCPExchanger(c *tcpExchangerConfig) { f(c) }
+func (tcpExchangerOption) tcpExchangerOption() {}
 
 type tcpExchangerConfig struct {
 	timeout time.Duration
 }
 
+type identTCPTimeout struct{}
+
 // WithTCPTimeout sets a per-exchange timeout used when the caller's
 // context has no deadline. Defaults to 5 seconds. Pass 0 to disable
 // the fallback — see [WithUDPTimeout] for the same semantics.
 func WithTCPTimeout(d time.Duration) TCPExchangerOption {
-	return tcpExchangerOptionFunc(func(c *tcpExchangerConfig) { c.timeout = d })
+	return tcpExchangerOption{option.New(identTCPTimeout{}, d)}
 }
 
 type tcpExchanger struct {
@@ -49,7 +55,10 @@ func NewTCPExchanger(addr netip.AddrPort, opts ...TCPExchangerOption) (Exchanger
 	}
 	c := tcpExchangerConfig{timeout: 5 * time.Second}
 	for _, o := range opts {
-		o.applyTCPExchanger(&c)
+		switch o.Ident() {
+		case identTCPTimeout{}:
+			c.timeout = option.MustGet[time.Duration](o)
+		}
 	}
 	return &tcpExchanger{addr: addr, timeout: c.timeout}, nil
 }

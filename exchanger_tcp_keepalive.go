@@ -10,16 +10,18 @@ import (
 
 	"github.com/lestrrat-go/acidns/internal/streamframe"
 	"github.com/lestrrat-go/acidns/wire"
+	"github.com/lestrrat-go/option/v3"
 )
 
 // TCPKeepAliveOption configures a TCP keep-alive Exchanger.
 type TCPKeepAliveOption interface {
-	applyTCPKeepAlive(*tcpKAConfig)
+	option.Interface
+	tcpKeepAliveOption()
 }
 
-type tcpKAOptionFunc func(*tcpKAConfig)
+type tcpKeepAliveOption struct{ option.Interface }
 
-func (f tcpKAOptionFunc) applyTCPKeepAlive(c *tcpKAConfig) { f(c) }
+func (tcpKeepAliveOption) tcpKeepAliveOption() {}
 
 type tcpKAConfig struct {
 	timeout      time.Duration
@@ -27,10 +29,14 @@ type tcpKAConfig struct {
 	advertise    bool
 }
 
+type identTCPKeepAliveTimeout struct{}
+type identTCPKeepAliveIdle struct{}
+type identTCPKeepAliveAdvertise struct{}
+
 // WithTCPKeepAliveTimeout sets the per-exchange I/O timeout used when the
 // caller's context has no deadline. Defaults to 5 seconds.
 func WithTCPKeepAliveTimeout(d time.Duration) TCPKeepAliveOption {
-	return tcpKAOptionFunc(func(c *tcpKAConfig) { c.timeout = d })
+	return tcpKeepAliveOption{option.New(identTCPKeepAliveTimeout{}, d)}
 }
 
 // WithTCPKeepAliveIdle sets the local fallback idle window used when the
@@ -39,7 +45,7 @@ func WithTCPKeepAliveTimeout(d time.Duration) TCPKeepAliveOption {
 // closed and the next Exchange dials fresh. Defaults to 30 seconds, the
 // RFC 7766 §6.2.3 recommended client minimum.
 func WithTCPKeepAliveIdle(d time.Duration) TCPKeepAliveOption {
-	return tcpKAOptionFunc(func(c *tcpKAConfig) { c.idleFallback = d })
+	return tcpKeepAliveOption{option.New(identTCPKeepAliveIdle{}, d)}
 }
 
 // WithTCPKeepAliveAdvertise controls whether outgoing queries are
@@ -47,7 +53,7 @@ func WithTCPKeepAliveIdle(d time.Duration) TCPKeepAliveOption {
 // they have not already opted in. Defaults to true; set false if the
 // caller composes the EDNS payload itself.
 func WithTCPKeepAliveAdvertise(v bool) TCPKeepAliveOption {
-	return tcpKAOptionFunc(func(c *tcpKAConfig) { c.advertise = v })
+	return tcpKeepAliveOption{option.New(identTCPKeepAliveAdvertise{}, v)}
 }
 
 // NewTCPKeepAliveExchanger returns an Exchanger that maintains a single
@@ -69,7 +75,14 @@ func NewTCPKeepAliveExchanger(addr netip.AddrPort, opts ...TCPKeepAliveOption) (
 		advertise:    true,
 	}
 	for _, o := range opts {
-		o.applyTCPKeepAlive(&c)
+		switch o.Ident() {
+		case identTCPKeepAliveTimeout{}:
+			c.timeout = option.MustGet[time.Duration](o)
+		case identTCPKeepAliveIdle{}:
+			c.idleFallback = option.MustGet[time.Duration](o)
+		case identTCPKeepAliveAdvertise{}:
+			c.advertise = option.MustGet[bool](o)
+		}
 	}
 	return &tcpKAExchanger{addr: addr, cfg: c}, nil
 }

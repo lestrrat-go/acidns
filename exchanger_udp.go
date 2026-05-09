@@ -17,14 +17,18 @@ import (
 	"time"
 
 	"github.com/lestrrat-go/acidns/wire"
+	"github.com/lestrrat-go/option/v3"
 )
 
 // UDPExchangerOption configures a UDP Exchanger.
-type UDPExchangerOption interface{ applyUDPExchanger(*udpExchangerConfig) }
+type UDPExchangerOption interface {
+	option.Interface
+	udpExchangerOption()
+}
 
-type udpExchangerOptionFunc func(*udpExchangerConfig)
+type udpExchangerOption struct{ option.Interface }
 
-func (f udpExchangerOptionFunc) applyUDPExchanger(c *udpExchangerConfig) { f(c) }
+func (udpExchangerOption) udpExchangerOption() {}
 
 type udpExchangerConfig struct {
 	timeout    time.Duration
@@ -32,19 +36,23 @@ type udpExchangerConfig struct {
 	use0x20    bool
 }
 
+type identUDPTimeout struct{}
+type identUDPExchangerBufferSize struct{}
+type identUDP0x20 struct{}
+
 // WithUDPTimeout sets a per-exchange timeout that takes effect when
 // the caller supplies a context without its own deadline. Defaults
 // to 5 seconds. Pass 0 to disable the fallback (the context deadline
 // or kernel socket timeout becomes the only bound — typically what
 // you want only in tests or with a hard ctx deadline).
 func WithUDPTimeout(d time.Duration) UDPExchangerOption {
-	return udpExchangerOptionFunc(func(c *udpExchangerConfig) { c.timeout = d })
+	return udpExchangerOption{option.New(identUDPTimeout{}, d)}
 }
 
 // WithUDPExchangerBufferSize sets the size of the UDP read buffer in bytes. Defaults
 // to 4096, which fits a typical EDNS-extended response.
 func WithUDPExchangerBufferSize(n int) UDPExchangerOption {
-	return udpExchangerOptionFunc(func(c *udpExchangerConfig) { c.bufferSize = n })
+	return udpExchangerOption{option.New(identUDPExchangerBufferSize{}, n)}
 }
 
 // WithUDP0x20 toggles RFC 5452 §9.3 0x20 hardening: the exchanger
@@ -61,7 +69,7 @@ func WithUDPExchangerBufferSize(n int) UDPExchangerOption {
 // opt-out for upstreams known to silently lowercase the qname in
 // responses (rare).
 func WithUDP0x20(v bool) UDPExchangerOption {
-	return udpExchangerOptionFunc(func(c *udpExchangerConfig) { c.use0x20 = v })
+	return udpExchangerOption{option.New(identUDP0x20{}, v)}
 }
 
 type udpExchanger struct {
@@ -78,7 +86,14 @@ func NewUDPExchanger(addr netip.AddrPort, opts ...UDPExchangerOption) (Exchanger
 	}
 	c := udpExchangerConfig{timeout: 5 * time.Second, bufferSize: 4096}
 	for _, o := range opts {
-		o.applyUDPExchanger(&c)
+		switch o.Ident() {
+		case identUDPTimeout{}:
+			c.timeout = option.MustGet[time.Duration](o)
+		case identUDPExchangerBufferSize{}:
+			c.bufferSize = option.MustGet[int](o)
+		case identUDP0x20{}:
+			c.use0x20 = option.MustGet[bool](o)
+		}
 	}
 	return &udpExchanger{addr: addr, timeout: c.timeout, bufsize: c.bufferSize, use0x20: c.use0x20}, nil
 }
