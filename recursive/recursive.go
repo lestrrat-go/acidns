@@ -93,6 +93,7 @@ type recursive struct {
 	resolveBudget time.Duration
 	allowNoRD     bool
 	caseRandom    bool
+	qnameMin      bool
 
 	inflightMu sync.Mutex
 	inflight   map[string]*inflightCall
@@ -130,6 +131,7 @@ func New(opts ...Option) Recursive {
 		queryTimeout:  4 * time.Second,
 		maxNegTTL:     time.Hour,
 		resolveBudget: 30 * time.Second,
+		qnameMin:      true, // RFC 9156 recommended for production resolvers
 	}
 	for _, o := range opts {
 		o.applyRecursive(&c)
@@ -160,6 +162,7 @@ func New(opts ...Option) Recursive {
 		resolveBudget: c.resolveBudget,
 		allowNoRD:     c.allowNoRD,
 		caseRandom:    c.caseRandom,
+		qnameMin:      c.qnameMin,
 		inflight:      make(map[string]*inflightCall),
 		nsInProgress:  make(map[string]struct{}),
 	}
@@ -432,56 +435,127 @@ func (r *recursive) resolveDepth(ctx context.Context, name wire.Name, t rrtype.T
 	return entry, err
 }
 
-func (r *recursive) resolveDepthInner(ctx context.Context, name wire.Name, t rrtype.Type, depth int) (Entry, error) {
+func (r *recursive) resolveDepthInner(ctx context.Context, target wire.Name, t rrtype.Type, depth int) (Entry, error) {
 	servers := append([]netip.AddrPort(nil), r.roots...)
+	// closestZone tracks the deepest known authoritative zone the
+	// resolver has confirmed via referral. Starts at the root and
+	// advances on each referral (or each authoritative ENT at a
+	// minimised name). Used to compute the next minimised qname per
+	// RFC 9156 §2.3.
+	closestZone := wire.RootName()
+	// fellBack flips true when a minimised query produces a result
+	// that demands a re-query with the full target qname (NXDOMAIN
+	// at intermediate, server returned answers at intermediate, etc.
+	// — see RFC 9156 §2.4 fallback rules). When set, every
+	// subsequent query in this resolution sends target directly.
+	fellBack := !r.qnameMin
+
 	for range r.maxIterations {
 		if len(servers) == 0 {
-			return Entry{}, fmt.Errorf("recursive: no servers to query for %s", name)
+			return Entry{}, fmt.Errorf("recursive: no servers to query for %s", target)
 		}
+
+		// Choose the qname for this step. Without qmin (or after a
+		// fallback) we always query target. With qmin, we query the
+		// minimised name; if that's already target, we naturally
+		// progress to the terminal query.
+		queryName := target
+		if !fellBack {
+			queryName = minimisedQName(closestZone, target)
+		}
+
 		ranked := rankServers(r.stats, servers)
-		resp, used, err := r.queryAny(ctx, ranked, name, t)
+		resp, used, err := r.queryAny(ctx, ranked, queryName, t)
 		if err != nil {
 			return Entry{}, fmt.Errorf("recursive: query failed: %w", err)
 		}
-		// Lame check: REFUSED or SERVFAIL → mark and try next server set.
 		rcode := resp.Flags().RCODE()
+
+		// Lame check: REFUSED or SERVFAIL → mark and try next server set.
 		if rcode == wire.RCODERefused || rcode == wire.RCODEServFail {
 			r.stats.Record(used, 0, false)
-			// Drop the lame server and retry remaining without re-querying
-			// the failed one — but if we've exhausted the set, give up.
 			servers = removeServer(ranked, used)
 			if len(servers) == 0 {
+				// RFC 9156 §2.4.3: if the upstream chain refuses a
+				// minimised query, retry the same step with target so
+				// servers that misimplement the algorithm still answer.
+				if !fellBack {
+					fellBack = true
+					servers = ranked
+					continue
+				}
 				return Entry{}, ErrAllServersLame
 			}
 			continue
 		}
 
-		// Authoritative answer or NXDOMAIN is terminal.
+		// Authoritative answer is terminal IF this was the target
+		// query; otherwise it's a minimised-step result that we
+		// classify per RFC 9156 §2.4.
 		if resp.Flags().Authoritative() {
-			entry := r.entryFromResponse(name, resp)
-			r.cache.Put(name, t, entry)
-			return entry, nil
+			if queryName.Equal(target) {
+				entry := r.entryFromResponse(target, resp)
+				r.cache.Put(target, t, entry)
+				return entry, nil
+			}
+			// Intermediate authoritative response.
+			if rcode == wire.RCODENoError && len(resp.Answers()) == 0 {
+				// Empty non-terminal: name exists, no records of t. Advance.
+				closestZone = queryName
+				continue
+			}
+			// NXDOMAIN at intermediate (RFC 9156 §2.4.2 — server may
+			// misimplement ENTs) or unexpected answers at intermediate
+			// (DNAME, wildcard, mis-zoned data). Fall back to target.
+			fellBack = true
+			continue
 		}
 
-		// Non-authoritative response (AA=0). Prefer following any
-		// delegation in the authority section over accepting the
-		// answer; a path-injected forgery typically lacks a coherent
-		// delegation chain, while legitimate authoritatives set AA=1.
-		// If there's no referral path, fall back to accepting matching
-		// answer records (forwarder behaviour).
+		// Non-authoritative: prefer following any delegation in
+		// the authority section. A path-injected forgery typically
+		// lacks a coherent delegation chain.
 		next := r.serversFromReferral(ctx, resp, depth)
 		if len(next) > 0 {
 			servers = next
+			if rz := referralZone(resp); rz.IsValid() {
+				closestZone = rz
+			}
 			continue
 		}
-		if hasAnswerFor(resp, name, t) {
-			entry := r.entryFromResponse(name, resp)
-			r.cache.Put(name, t, entry)
+		if queryName.Equal(target) && hasAnswerFor(resp, target, t) {
+			entry := r.entryFromResponse(target, resp)
+			r.cache.Put(target, t, entry)
 			return entry, nil
 		}
-		return Entry{}, fmt.Errorf("recursive: empty referral for %s", name)
+		// No referral and not the target query — fall back to target.
+		if !fellBack {
+			fellBack = true
+			continue
+		}
+		return Entry{}, fmt.Errorf("recursive: empty referral for %s", target)
 	}
 	return Entry{}, ErrIterationLimit
+}
+
+// minimisedQName returns the qname to send for the next iteration
+// step under RFC 9156 §2.3. It is target with all but
+// (closestZone.NumLabels() + 1) trailing labels stripped — i.e.,
+// one label longer than the closest known zone, reaching toward
+// target. When the resulting name would equal or exceed target's
+// length, target is returned (the iteration has reached the
+// authoritative server for target's parent zone and the next query
+// is the real one).
+func minimisedQName(closestZone, target wire.Name) wire.Name {
+	encLabels := closestZone.NumLabels()
+	n := target
+	for n.NumLabels() > encLabels+1 {
+		p, ok := n.Parent()
+		if !ok || n.Equal(p) {
+			return target
+		}
+		n = p
+	}
+	return n
 }
 
 // queryAny tries servers in order, recording RTT/failure for each. Returns

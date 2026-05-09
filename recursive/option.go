@@ -26,6 +26,7 @@ type config struct {
 	resolveBudget time.Duration
 	allowNoRD     bool
 	caseRandom    bool
+	qnameMin      bool
 }
 
 // WithRoots overrides the default root server list.
@@ -110,6 +111,26 @@ func WithMaxNegativeTTL(d time.Duration) Option {
 // risk is contained at the transport layer.
 func WithAllowNoRD() Option {
 	return optionFunc(func(c *config) { c.allowNoRD = true })
+}
+
+// WithoutQNameMinimisation turns off RFC 9156 / 7816 QNAME
+// minimisation. By default the resolver sends only the labels
+// needed to reach the next zone cut at each iteration step,
+// revealing the full qname to authoritative servers only at the
+// terminal hop (the zone authoritative for the qname's parent).
+// This reduces information leakage to intermediate authoritatives —
+// the root sees only TLDs, the TLD sees only second-level domains,
+// etc.
+//
+// The implementation falls back to the full target qname on any
+// "weird" intermediate response (NXDOMAIN at intermediate,
+// SERVFAIL chain, answers at a non-target name) so non-conformant
+// upstreams remain resolvable. Disable only if your environment
+// has a very specific reason — e.g., a captive portal or
+// split-horizon DNS where intermediate-name queries break in ways
+// the fallback can't recover from.
+func WithoutQNameMinimisation() Option {
+	return optionFunc(func(c *config) { c.qnameMin = false })
 }
 
 // WithCaseRandomization enables RFC 5452 §9.3 0x20 hardening: the

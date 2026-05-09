@@ -780,6 +780,10 @@ func TestResolveSingleflightCoalesces(t *testing.T) {
 	r := recursive.New(
 		recursive.WithRoots(netip.MustParseAddrPort("127.0.0.1:1")),
 		recursive.WithDialer(dialer),
+		// Disable qname-minimisation so the test counts upstream calls
+		// per Resolve, not per minimisation hop. This test is about
+		// singleflight; qmin's per-step queries are a separate concern.
+		recursive.WithoutQNameMinimisation(),
 	)
 
 	const callers = 16

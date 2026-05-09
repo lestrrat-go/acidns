@@ -206,7 +206,7 @@ Status legend: **Implemented** = working code with tests; **Partial** = document
 | RFC 2308 §5 negative caching with SOA MINIMUM | Implemented |
 | Optional DNSSEC validation via `recursive.WithValidator` (bogus → SERVFAIL+EDE6) | Implemented |
 | Per-query timeout (`WithQueryTimeout`) | Implemented |
-| QNAME minimisation (RFC 9156) | Out of scope |
+| QNAME minimisation (RFC 7816 / 9156) | Implemented (default on; `WithoutQNameMinimisation` opt-out; relaxed fallback on intermediate NXDOMAIN/SERVFAIL/non-conformant responses per §2.4) |
 | Aggressive NSEC caching (RFC 8198) | Out of scope |
 | Parallel A/AAAA address resolution | Out of scope |
 | Per-upstream rate limiting / priming refresh | Out of scope |
@@ -215,7 +215,6 @@ Status legend: **Implemented** = working code with tests; **Partial** = document
 
 | RFC | Title | Reason |
 |-----|-------|--------|
-| 7816 / 9156 | QNAME Minimisation | Recursive resolver is straight-walk for now |
 | 8198 | Aggressive NSEC Caching | Builds on full NSEC validation, not yet present |
 | 4035 §3.1 / 5155 §7.2 | Authoritative DNSSEC signing + NSEC/NSEC3 closest-encloser proofs | The authoritative server serves the master-file's records verbatim; it does not sign zones, so it cannot produce the NSEC/NSEC3 chains required to prove non-existence. The validator-side counterpart (consuming and verifying NSEC closest-encloser proofs) IS implemented in `dnssec/validator/`. Adding signing would require: DNSKEY/RRSIG RR generation, NSEC/NSEC3 chain construction at zone-load, signed-zone serial bumping on UPDATE — out of scope for the current authoritative server. |
 
