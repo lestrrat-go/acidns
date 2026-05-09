@@ -212,9 +212,21 @@ func encryptHelperRaw(sharedKey []byte, clientNonce, serverNonce [12]byte, plain
 // TestNewUnsupportedESVersion exercises New's guard clause.
 func TestNewUnsupportedESVersion(t *testing.T) {
 	t.Parallel()
-	cert := dnscrypt.NewCert(dnscrypt.ESVersion1, 0, [32]byte{}, [8]byte{}, 0, time.Time{}, time.Time{})
-	_, err := dnscrypt.New(netip.AddrPortFrom(netip.MustParseAddr("127.0.0.1"), 53), cert)
+	_, providerSK, err := ed25519.GenerateKey(rand.Reader)
+	require.NoError(t, err)
+	cert := dnscrypt.NewCert(dnscrypt.ESVersion1, 0, [32]byte{}, [8]byte{}, 0, time.Now().Add(-time.Hour), time.Now().Add(time.Hour))
+	dnscrypt.SignCert(cert, providerSK) // marks verified=true
+	_, err = dnscrypt.New(netip.AddrPortFrom(netip.MustParseAddr("127.0.0.1"), 53), cert)
 	require.ErrorIs(t, err, dnscrypt.ErrUnsupportedESVersion)
+}
+
+// TestNewRejectsUnverifiedCert confirms that a cert which never went
+// through Verify (and was not locally SignCert'd) is rejected by New.
+func TestNewRejectsUnverifiedCert(t *testing.T) {
+	t.Parallel()
+	cert := dnscrypt.NewCert(dnscrypt.ESVersion2, 0, [32]byte{}, [8]byte{}, 0, time.Now().Add(-time.Hour), time.Now().Add(time.Hour))
+	_, err := dnscrypt.New(netip.AddrPortFrom(netip.MustParseAddr("127.0.0.1"), 53), cert)
+	require.ErrorIs(t, err, dnscrypt.ErrCertUnverified)
 }
 
 // TestNewWithTimeoutOption exercises the option-applying code path and the

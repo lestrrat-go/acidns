@@ -284,9 +284,6 @@ func verifyWithPrefix(msg []byte, key Key, priorMAC []byte, timersOnly bool, now
 			ErrBadTruncation, len(tsig.mac), floor, key.algorithm)
 	}
 	signed := time.Unix(int64(tsig.timeSigned), 0).UTC()
-	if delta := now.Sub(signed); delta > fudge || delta < -fudge {
-		return nil, nil, signed, fmt.Errorf("%w: delta %s outside fudge %s", ErrBadTime, delta, fudge)
-	}
 
 	bodyForMAC := append([]byte(nil), body...)
 	binary.BigEndian.PutUint16(bodyForMAC[0:2], tsig.origID)
@@ -307,6 +304,13 @@ func verifyWithPrefix(msg []byte, key Key, priorMAC []byte, timersOnly bool, now
 	}
 	if !hmac.Equal(mac[:len(tsig.mac)], tsig.mac) {
 		return nil, nil, signed, ErrBadSignature
+	}
+	// MAC verified — only now is timeSigned authenticated, so the
+	// time-window check can be trusted. Order MAC-then-time also denies
+	// an unauthenticated peer a BADTIME timing oracle on the verifier's
+	// clock skew.
+	if delta := now.Sub(signed); delta > fudge || delta < -fudge {
+		return nil, nil, signed, fmt.Errorf("%w: delta %s outside fudge %s", ErrBadTime, delta, fudge)
 	}
 	return bodyForMAC, tsig.mac, signed, nil
 }

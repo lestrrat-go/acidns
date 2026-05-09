@@ -27,6 +27,7 @@ type serverFixture struct {
 	cert        *dnscrypt.Cert
 	resolverSK  [32]byte
 	providerPub ed25519.PublicKey
+	providerSK  ed25519.PrivateKey
 }
 
 func mkFixture(t *testing.T) serverFixture {
@@ -52,7 +53,7 @@ func mkFixture(t *testing.T) serverFixture {
 		time.Now().Add(24*time.Hour).UTC().Truncate(time.Second),
 	)
 	dnscrypt.SignCert(cert, providerPriv)
-	return serverFixture{cert: cert, resolverSK: resolverSK, providerPub: providerPub}
+	return serverFixture{cert: cert, resolverSK: resolverSK, providerPub: providerPub, providerSK: providerPriv}
 }
 
 type echoHandler struct {
@@ -132,24 +133,17 @@ func TestServerDropsWrongClientMagic(t *testing.T) {
 
 	// Build a fixture cert with a different ClientMagic; client's
 	// outbound packets won't match the server's accepted prefix.
-	bad := dnscrypt.NewCert(
-		dnscrypt.ESVersion2, 0,
-		[32]byte{}, // any
-		[8]byte{'b', 'a', 'd', 'm', 'a', 'g', 'i', 'c'},
-		1, time.Now().Add(-time.Hour), time.Now().Add(time.Hour),
-	)
-	// We don't sign it because the client doesn't verify on
-	// outbound; we just need a cert object that picks the wrong
-	// resolver key. Use the legitimate resolver's public key so
-	// the client can complete X25519, then the server will drop
-	// because ClientMagic doesn't match.
+	// Use the legitimate resolver's public key so the client can
+	// complete X25519, then the server will drop because ClientMagic
+	// doesn't match. SignCert marks the cert verified for [New].
 	rpk := fx.cert.ResolverPK()
-	bad = dnscrypt.NewCert(
+	bad := dnscrypt.NewCert(
 		dnscrypt.ESVersion2, 0,
 		rpk,
 		[8]byte{'b', 'a', 'd', 'm', 'a', 'g', 'i', 'c'},
 		1, time.Now().Add(-time.Hour), time.Now().Add(time.Hour),
 	)
+	dnscrypt.SignCert(bad, fx.providerSK)
 
 	ex, err := dnscrypt.New(ctrl.Addr(), bad)
 	require.NoError(t, err)

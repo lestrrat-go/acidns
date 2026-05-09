@@ -146,13 +146,21 @@ func (c *client) Apply(server netip.AddrPort, b wire.EDNSBuilder) wire.EDNSBuild
 	now := c.now()
 	e, ok := c.cache[server]
 	if !ok {
+		// Generate a fresh client cookie. RFC 7873 recommends per-server
+		// uniqueness; we pick fresh random bytes from crypto/rand.
+		var cc [8]byte
+		if _, err := rand.Read(cc[:]); err != nil {
+			// Fail closed: emit the query without a cookie option rather
+			// than shipping an all-zero client cookie. The server-cookie
+			// binding (RFC 9018 §3) treats client cookie as input to the
+			// HMAC; an all-zero value would let many failing-RNG clients
+			// share a cookie identity with each other.
+			c.mu.Unlock()
+			return b
+		}
 		if c.maxEntries > 0 && len(c.cache) >= c.maxEntries {
 			c.evictLocked()
 		}
-		// Generate a fresh client cookie. RFC 7873 recommends per-server
-		// uniqueness; we pick fresh random bytes.
-		var cc [8]byte
-		_, _ = rand.Read(cc[:])
 		e = clientEntry{clientCookie: cc, updated: now}
 	} else {
 		e.updated = now

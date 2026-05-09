@@ -86,6 +86,11 @@ func NewServer(addr netip.AddrPort, h acidns.Handler, opts ...ServerOption) (*Se
 	if tc.MinVersion == 0 {
 		tc.MinVersion = tls.VersionTLS13
 	}
+	// RFC 7858 §3.2 forbids TLS < 1.2; floor regardless of caller config so
+	// a copy-pasted tls.Config can't silently downgrade the server.
+	if tc.MinVersion < tls.VersionTLS12 {
+		tc.MinVersion = tls.VersionTLS12
+	}
 	if !slices.Contains(tc.NextProtos, "dot") {
 		tc.NextProtos = append(tc.NextProtos, "dot")
 	}

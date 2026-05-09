@@ -267,6 +267,11 @@ func NewServer(addr netip.AddrPort, h acidns.Handler, opts ...ServerOption) (*Se
 	if tc.MinVersion == 0 {
 		tc.MinVersion = tls.VersionTLS13
 	}
+	// RFC 8484 inherits HTTPS's TLS 1.2 floor; enforce regardless of caller
+	// config so a copy-pasted tls.Config can't silently downgrade.
+	if tc.MinVersion < tls.VersionTLS12 {
+		tc.MinVersion = tls.VersionTLS12
+	}
 	// Advertise both HTTP/2 and HTTP/1.1 — RFC 8484 mandates HTTP/2
 	// support but real-world clients still negotiate 1.1 frequently.
 	for _, p := range []string{"h2", "http/1.1"} {

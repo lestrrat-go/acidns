@@ -59,6 +59,7 @@ var (
 	ErrUnsupportedESVersion = errors.New("dnscrypt: unsupported ES version")
 	ErrResponseMagic        = errors.New("dnscrypt: bad resolver magic in response")
 	ErrPlainTextTooShort    = errors.New("dnscrypt: response too short")
+	ErrCertUnverified       = errors.New("dnscrypt: cert not verified — call Cert.Verify first")
 )
 
 // Cert is a parsed DNSCrypt certificate (124 bytes on the wire). The
@@ -77,6 +78,12 @@ type Cert struct {
 	serial        uint32
 	validFrom     time.Time
 	validUntil    time.Time
+	// verified is set true only by Verify() on a successful signature
+	// check (or by SignCert when a fake/test cert is locally signed).
+	// New() refuses to construct an Exchanger from an unverified cert
+	// so a caller cannot accidentally bypass the signature check that
+	// is the entire point of DNSCrypt.
+	verified bool
 }
 
 // NewCert returns an unsigned Cert populated from the supplied fields.
@@ -167,6 +174,7 @@ func (c *Cert) Verify(providerPK ed25519.PublicKey, now time.Time) error {
 	if c.esVersion != ESVersion2 {
 		return fmt.Errorf("%w: ES%d", ErrUnsupportedESVersion, c.esVersion)
 	}
+	c.verified = true
 	return nil
 }
 
@@ -199,6 +207,9 @@ func SignCert(c *Cert, providerSK ed25519.PrivateKey) {
 	signed = append(signed, nums[:]...)
 	sig := ed25519.Sign(providerSK, signed)
 	copy(c.signature[:], sig)
+	// Locally-signed cert: the caller knows-good the signature; allow
+	// tests / fake responders to use it via [New] without re-verifying.
+	c.verified = true
 }
 
 // Encrypt produces a DNSCrypt-formatted query packet.
@@ -314,8 +325,19 @@ type exchanger struct {
 }
 
 // New returns a acidns.Exchanger that sends DNSCrypt-encrypted
-// queries to addr using the verified cert.
+// queries to addr using the verified cert. The caller MUST call
+// [Cert.Verify] (with the provider's long-term Ed25519 public key)
+// before passing the cert here; New refuses to construct an
+// Exchanger from an unverified cert because the resolver's short-term
+// X25519 public key is the very thing DNSCrypt's signature is meant
+// to bind, and skipping verification defeats the whole protocol.
 func New(addr netip.AddrPort, cert *Cert, opts ...Option) (acidns.Exchanger, error) {
+	if cert == nil {
+		return nil, fmt.Errorf("dnscrypt: cert is nil")
+	}
+	if !cert.verified {
+		return nil, ErrCertUnverified
+	}
 	if cert.esVersion != ESVersion2 {
 		return nil, fmt.Errorf("%w: ES%d", ErrUnsupportedESVersion, cert.esVersion)
 	}
