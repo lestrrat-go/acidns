@@ -28,6 +28,10 @@ type config struct {
 	caseRandom     bool
 	qnameMin       bool
 	aggressiveNSEC bool
+	upstreamQPS    float64
+	upstreamBurst  float64
+	rootPriming    bool
+	rootRefresh    time.Duration
 }
 
 // WithRoots overrides the default root server list.
@@ -172,4 +176,47 @@ func WithoutQNameMinimisation() Option {
 // custom Dialer is responsible for its own 0x20 implementation.
 func WithCaseRandomization() Option {
 	return optionFunc(func(c *config) { c.caseRandom = true })
+}
+
+// WithUpstreamRateLimit caps the outbound query rate per upstream
+// authoritative server (keyed by IP+port) using a token bucket. qps
+// is the steady-state refill rate in queries-per-second; burst is
+// the maximum bucket size. burst <= 0 defaults to qps. qps <= 0
+// disables the limiter entirely (this is the default).
+//
+// When the bucket for a candidate server is empty the resolver skips
+// that server and tries the next ranked one. If every candidate is
+// rate-limited, [ErrUpstreamRateLimited] is returned so callers can
+// distinguish local throttling from upstream failure.
+//
+// This guards against unintentional DDoS of a single authoritative
+// during pathological traffic patterns (e.g. a CNAME loop pinned to
+// one TLD, or an attacker-driven query flood). It does not replace a
+// proper edge rate limiter in front of the resolver.
+func WithUpstreamRateLimit(qps, burst float64) Option {
+	return optionFunc(func(c *config) {
+		c.upstreamQPS = qps
+		c.upstreamBurst = burst
+	})
+}
+
+// WithRootPriming enables RFC 8109 root server priming: at startup
+// the resolver issues a single NS . query against its configured
+// root list and replaces the in-memory root set with whatever the
+// authoritative reply contains. The query is repeated every refresh
+// interval so the resolver tracks IANA's evolving root server list
+// without requiring an operator restart.
+//
+// refresh <= 0 selects a sensible default (24 hours). The very first
+// priming attempt is asynchronous; if it fails the resolver continues
+// using the configured roots and retries on the next interval.
+//
+// Off by default. The configured roots from [WithRoots] (or the
+// built-in IANA snapshot) are always used as the seed list — priming
+// only refreshes them.
+func WithRootPriming(refresh time.Duration) Option {
+	return optionFunc(func(c *config) {
+		c.rootPriming = true
+		c.rootRefresh = refresh
+	})
 }

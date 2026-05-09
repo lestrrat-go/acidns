@@ -36,6 +36,11 @@ var ErrAllServersLame = errors.New("recursive: all candidate servers lame")
 // stripped DNSSEC RRSIGs.
 var ErrTruncatedAfterTCPFail = errors.New("recursive: TC=1 with TCP fallback failure")
 
+// ErrUpstreamRateLimited is returned when every candidate upstream
+// server has been rate-limited by [WithUpstreamRateLimit] and there
+// were no remaining unrestricted servers to try.
+var ErrUpstreamRateLimited = errors.New("recursive: all upstream servers rate-limited")
+
 // Recursive is the public face of the resolver. It implements
 // acidns.Handler so it can be plugged into ListenUDP / ListenTCP directly,
 // and exposes Resolve for direct use.
@@ -105,6 +110,10 @@ type recursive struct {
 	// indexes used to assemble the §5.3 closest-encloser proof
 	// from cached NSEC3 records.
 	nsec3Idx *nsec3Index
+
+	// upstreamLim caps the per-AddrPort outbound query rate when
+	// [WithUpstreamRateLimit] was supplied. nil disables.
+	upstreamLim *upstreamLimiter
 
 	inflightMu sync.Mutex
 	inflight   map[string]*inflightCall
@@ -181,6 +190,13 @@ func New(opts ...Option) Recursive {
 	if r.aggressiveNSEC {
 		r.nsecIdx = newNSECIndex()
 		r.nsec3Idx = newNSEC3Index()
+	}
+	if c.upstreamQPS > 0 {
+		burst := c.upstreamBurst
+		if burst <= 0 {
+			burst = c.upstreamQPS
+		}
+		r.upstreamLim = newUpstreamLimiter(c.upstreamQPS, burst, nil)
 	}
 	return r
 }
@@ -612,7 +628,18 @@ func minimisedQName(closestZone, target wire.Name) wire.Name {
 // can't be confused with the next server's reply (RFC 5452 §5).
 func (r *recursive) queryAny(ctx context.Context, servers []netip.AddrPort, name wire.Name, t rrtype.Type) (wire.Message, netip.AddrPort, error) {
 	var lastErr error
+	var skippedRateLimit bool
 	for _, s := range servers {
+		// Per-upstream rate limit. When the bucket is empty for this
+		// server, fall through to the next ranked candidate rather
+		// than blocking — typical recursive deployments have multiple
+		// authoritative servers per zone and the ranking already
+		// prefers the fastest. If every candidate is rate-limited we
+		// surface a typed error so the caller can react.
+		if !r.upstreamLim.Take(s) {
+			skippedRateLimit = true
+			continue
+		}
 		id, err := randomID()
 		if err != nil {
 			return nil, netip.AddrPort{}, err
@@ -648,7 +675,11 @@ func (r *recursive) queryAny(ctx context.Context, servers []netip.AddrPort, name
 		}
 	}
 	if lastErr == nil {
-		lastErr = errors.New("no servers")
+		if skippedRateLimit {
+			lastErr = ErrUpstreamRateLimited
+		} else {
+			lastErr = errors.New("no servers")
+		}
 	}
 	return nil, netip.AddrPort{}, lastErr
 }
@@ -704,23 +735,46 @@ func (r *recursive) serversFromReferral(ctx context.Context, resp wire.Message, 
 		if !r.markNSInProgress(nsKey) {
 			continue
 		}
-		// Resolve A first; on networks without v4 (or zones whose NS
-		// targets only have AAAA glue under their own zone), fall back
-		// to AAAA so we still have somewhere to send the next query.
-		if a4Entry, err := r.resolveDepth(ctx, ns, rrtype.A, depth+1); err == nil {
+		// Resolve A and AAAA in parallel — there's no causal
+		// dependency between them and the recursive walks they
+		// trigger don't share contention beyond the cache. Halving
+		// the latency on every NS-target resolution compounds
+		// noticeably across the full delegation chain. Result
+		// ordering is preserved: A first, then AAAA, matching the
+		// dual-stack preference of most callers.
+		var (
+			a4Addrs []netip.AddrPort
+			a6Addrs []netip.AddrPort
+			wg      sync.WaitGroup
+		)
+		wg.Add(2)
+		go func() {
+			defer wg.Done()
+			a4Entry, err := r.resolveDepth(ctx, ns, rrtype.A, depth+1)
+			if err != nil {
+				return
+			}
 			for _, rec := range a4Entry.Answer {
 				if a, ok := wire.RDataAs[rdata.A](rec); ok {
-					out = append(out, netip.AddrPortFrom(a.Addr(), 53))
+					a4Addrs = append(a4Addrs, netip.AddrPortFrom(a.Addr(), 53))
 				}
 			}
-		}
-		if a6Entry, err := r.resolveDepth(ctx, ns, rrtype.AAAA, depth+1); err == nil {
+		}()
+		go func() {
+			defer wg.Done()
+			a6Entry, err := r.resolveDepth(ctx, ns, rrtype.AAAA, depth+1)
+			if err != nil {
+				return
+			}
 			for _, rec := range a6Entry.Answer {
 				if aaaa, ok := wire.RDataAs[rdata.AAAA](rec); ok {
-					out = append(out, netip.AddrPortFrom(aaaa.Addr(), 53))
+					a6Addrs = append(a6Addrs, netip.AddrPortFrom(aaaa.Addr(), 53))
 				}
 			}
-		}
+		}()
+		wg.Wait()
+		out = append(out, a4Addrs...)
+		out = append(out, a6Addrs...)
 		r.unmarkNSInProgress(nsKey)
 	}
 	return out
