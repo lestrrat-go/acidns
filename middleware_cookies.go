@@ -135,21 +135,32 @@ func (w *cookiesWriter) WriteMsg(m wire.Message) error {
 
 // extractCookies pulls the client cookie and (optional) server cookie
 // out of q's EDNS options. Returns ok=false if the message has no
-// EDNS or no Cookie option.
+// EDNS, no Cookie option, or carries multiple Cookie OPTs (a malformed
+// query per RFC 7873 §4 — a sender MUST send at most one Cookie
+// option, so a second occurrence indicates either an attack or a
+// broken peer; either way the safe default is to reject).
 func extractCookies(q wire.Message) (cc [8]byte, sc []byte, ok bool) {
 	edns, hasEDNS := q.EDNS()
 	if !hasEDNS || edns == nil {
 		return cc, nil, false
 	}
+	count := 0
+	var firstC [8]byte
+	var firstS []byte
+	var firstValid bool
 	for _, o := range edns.Options() {
 		if o.Code() != wire.EDNSOptionCookie {
 			continue
 		}
-		c, s, valid := wire.Cookies(o)
-		if !valid {
-			continue
+		count++
+		if count > 1 {
+			return cc, nil, false
 		}
-		return c, s, true
+		c, s, valid := wire.Cookies(o)
+		firstC, firstS, firstValid = c, s, valid
+	}
+	if count == 1 && firstValid {
+		return firstC, firstS, true
 	}
 	return cc, nil, false
 }

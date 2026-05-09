@@ -290,8 +290,14 @@ func edsoDOBit(q wire.Message) bool {
 
 // buildForwardQuery returns a fresh query carrying the same question and
 // recursion-desired bit as the inbound q, with a freshly-randomised ID.
-// EDNS is preserved (DO bit, UDPSize, options) so DNSSEC-aware clients
-// continue to receive RRSIGs from the upstream.
+// DNSSEC-relevant EDNS state (DO bit, UDPSize, version) is preserved so
+// DNSSEC-aware clients continue to receive RRSIGs from the upstream.
+//
+// Privacy-sensitive EDNS options that disclose the original client
+// (e.g. RFC 7871 EDNS Client Subnet) are stripped — RFC 7871 §7.1.2
+// explicitly recommends recursive-style intermediaries strip ECS unless
+// the operator opted in. Cookies are also stripped because the inbound
+// client cookie was minted against this forwarder, not the upstream.
 func buildForwardQuery(q wire.Message) wire.Message {
 	id, _ := newID()
 	b := wire.NewBuilder().
@@ -302,7 +308,22 @@ func buildForwardQuery(q wire.Message) wire.Message {
 		b = b.Question(qq)
 	}
 	if e, ok := q.EDNS(); ok {
-		b = b.EDNS(e)
+		eb := wire.NewEDNSBuilder().
+			UDPSize(e.UDPSize()).
+			ExtendedRCODE(e.ExtendedRCODE()).
+			Version(e.Version()).
+			DO(e.DO())
+		for _, o := range e.Options() {
+			switch o.Code() {
+			case wire.EDNSOptionClientSubnet, wire.EDNSOptionCookie:
+				continue
+			}
+			eb = eb.Option(o)
+		}
+		ed, err := eb.Build()
+		if err == nil {
+			b = b.EDNS(ed)
+		}
 	}
 	m, _ := b.Build()
 	return m
