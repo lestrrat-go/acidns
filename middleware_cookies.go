@@ -31,14 +31,18 @@ import (
 
 	"github.com/lestrrat-go/acidns/cookies"
 	"github.com/lestrrat-go/acidns/wire"
+	"github.com/lestrrat-go/option/v3"
 )
 
 // CookieOption configures the cookies middleware.
-type CookieOption interface{ applyCookies(*cookieConfig) }
+type CookieOption interface {
+	option.Interface
+	cookieOption()
+}
 
-type cookieOptionFunc func(*cookieConfig)
+type cookieOption struct{ option.Interface }
 
-func (f cookieOptionFunc) applyCookies(c *cookieConfig) { f(c) }
+func (cookieOption) cookieOption() {}
 
 type cookieConfig struct {
 	now              func() time.Time
@@ -46,10 +50,19 @@ type cookieConfig struct {
 	largeRespMaxSize int
 }
 
+// requireForLargeSpec carries the (enable, maxBytes) tuple.
+type requireForLargeSpec struct {
+	enable   bool
+	maxBytes int
+}
+
+type identCookieClock struct{}
+type identRequireCookieForLarge struct{}
+
 // WithClock injects a custom clock. Test-only — production code
 // should leave this unset and rely on time.Now.
 func WithClock(now func() time.Time) CookieOption {
-	return cookieOptionFunc(func(c *cookieConfig) { c.now = now })
+	return cookieOption{option.New(identCookieClock{}, now)}
 }
 
 // WithRequireCookieForLargeResponse toggles RFC 7873 §1's amplification
@@ -65,17 +78,7 @@ func WithClock(now func() time.Time) CookieOption {
 // or LAN-only deployments). The previous "off by default" behaviour
 // silently disabled the defence; flipping the default closes the gap.
 func WithRequireCookieForLargeResponse(enable bool, maxBytes int) CookieOption {
-	return cookieOptionFunc(func(c *cookieConfig) {
-		c.requireForLarge = enable
-		if !enable {
-			return
-		}
-		if maxBytes > 0 {
-			c.largeRespMaxSize = maxBytes
-		} else {
-			c.largeRespMaxSize = 1232
-		}
-	})
+	return cookieOption{option.New(identRequireCookieForLarge{}, requireForLargeSpec{enable: enable, maxBytes: maxBytes})}
 }
 
 // NewCookies wraps inner with EDNS-Cookie processing backed by srv.
@@ -104,7 +107,20 @@ func NewCookies(inner Handler, srv cookies.Server, opts ...CookieOption) Handler
 		largeRespMaxSize: 1232,
 	}
 	for _, o := range opts {
-		o.applyCookies(&c)
+		switch o.Ident() {
+		case identCookieClock{}:
+			c.now = option.MustGet[func() time.Time](o)
+		case identRequireCookieForLarge{}:
+			spec := option.MustGet[requireForLargeSpec](o)
+			c.requireForLarge = spec.enable
+			if spec.enable {
+				if spec.maxBytes > 0 {
+					c.largeRespMaxSize = spec.maxBytes
+				} else {
+					c.largeRespMaxSize = 1232
+				}
+			}
+		}
 	}
 	return &cookiesMW{
 		inner:            inner,

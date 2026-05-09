@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"github.com/lestrrat-go/acidns/wire"
+	"github.com/lestrrat-go/option/v3"
 )
 
 // numLimiterShards stripes the bucket map so a flood of distinct
@@ -23,11 +24,14 @@ import (
 const numLimiterShards = 64
 
 // RateLimitOption configures the limiter.
-type RateLimitOption interface{ applyRateLimit(*rateLimitConfig) }
+type RateLimitOption interface {
+	option.Interface
+	rateLimitOption()
+}
 
-type rateLimitOptionFunc func(*rateLimitConfig)
+type rateLimitOption struct{ option.Interface }
 
-func (f rateLimitOptionFunc) applyRateLimit(c *rateLimitConfig) { f(c) }
+func (rateLimitOption) rateLimitOption() {}
 
 type rateLimitConfig struct {
 	qps     float64
@@ -37,29 +41,35 @@ type rateLimitConfig struct {
 	maxKeys int
 }
 
+type identRateLimitQPS struct{}
+type identRateLimitBurst struct{}
+type identRateLimitDrop struct{}
+type identRateLimitGroupPrefix struct{}
+type identRateLimitMaxKeys struct{}
+
 // WithRateLimitQPS sets the average queries-per-second rate per source. Defaults to
 // 10 qps.
 func WithRateLimitQPS(qps float64) RateLimitOption {
-	return rateLimitOptionFunc(func(c *rateLimitConfig) { c.qps = qps })
+	return rateLimitOption{option.New(identRateLimitQPS{}, qps)}
 }
 
 // WithRateLimitBurst sets how many tokens a fresh source begins with. Defaults to
 // 20 — twice WithRateLimitQPS by convention.
 func WithRateLimitBurst(n int) RateLimitOption {
-	return rateLimitOptionFunc(func(c *rateLimitConfig) { c.burst = n })
+	return rateLimitOption{option.New(identRateLimitBurst{}, n)}
 }
 
 // WithRateLimitDrop silences over-budget queries instead of returning REFUSED.
 // Pass true to drop, false to reply REFUSED (the default).
 func WithRateLimitDrop(v bool) RateLimitOption {
-	return rateLimitOptionFunc(func(c *rateLimitConfig) { c.drop = v })
+	return rateLimitOption{option.New(identRateLimitDrop{}, v)}
 }
 
 // WithRateLimitGroupPrefix coalesces sources by the given CIDR mask before keying
 // the bucket — useful so a single misbehaving /24 isn't permitted to
 // multiply a budget by 256.
 func WithRateLimitGroupPrefix(maskBits int) RateLimitOption {
-	return rateLimitOptionFunc(func(c *rateLimitConfig) { c.prefix = maskBits })
+	return rateLimitOption{option.New(identRateLimitGroupPrefix{}, maskBits)}
 }
 
 // WithRateLimitMaxKeys caps the total number of distinct source buckets
@@ -71,7 +81,7 @@ func WithRateLimitGroupPrefix(maskBits int) RateLimitOption {
 // buckets are evicted first, then the oldest-updated bucket within that
 // shard. A non-positive value disables the cap. Defaults to 100000.
 func WithRateLimitMaxKeys(n int) RateLimitOption {
-	return rateLimitOptionFunc(func(c *rateLimitConfig) { c.maxKeys = n })
+	return rateLimitOption{option.New(identRateLimitMaxKeys{}, n)}
 }
 
 type bucket struct {
@@ -100,7 +110,18 @@ type limiter struct {
 func NewRateLimit(inner Handler, opts ...RateLimitOption) Handler {
 	c := rateLimitConfig{qps: 10, burst: 20, maxKeys: 100000}
 	for _, o := range opts {
-		o.applyRateLimit(&c)
+		switch o.Ident() {
+		case identRateLimitQPS{}:
+			c.qps = option.MustGet[float64](o)
+		case identRateLimitBurst{}:
+			c.burst = option.MustGet[int](o)
+		case identRateLimitDrop{}:
+			c.drop = option.MustGet[bool](o)
+		case identRateLimitGroupPrefix{}:
+			c.prefix = option.MustGet[int](o)
+		case identRateLimitMaxKeys{}:
+			c.maxKeys = option.MustGet[int](o)
+		}
 	}
 	l := &limiter{
 		inner:  inner,

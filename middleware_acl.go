@@ -23,6 +23,7 @@ import (
 	"net/netip"
 
 	"github.com/lestrrat-go/acidns/wire"
+	"github.com/lestrrat-go/option/v3"
 )
 
 // ErrACLNoRules is returned by NewACL when neither WithACLAllow nor
@@ -33,11 +34,14 @@ import (
 var ErrACLNoRules = errors.New("acidns: NewACL requires at least one of WithACLAllow / WithACLDeny")
 
 // ACLOption configures the ACL.
-type ACLOption interface{ applyACL(*aclConfig) }
+type ACLOption interface {
+	option.Interface
+	aclOption()
+}
 
-type aclOptionFunc func(*aclConfig)
+type aclOption struct{ option.Interface }
 
-func (f aclOptionFunc) applyACL(c *aclConfig) { f(c) }
+func (aclOption) aclOption() {}
 
 type aclConfig struct {
 	allow      []netip.Prefix
@@ -45,16 +49,20 @@ type aclConfig struct {
 	dropDenied bool
 }
 
+type identACLAllow struct{}
+type identACLDeny struct{}
+type identACLDropDenied struct{}
+
 // WithACLAllow sets the explicit allow list. If non-empty, queries from any
 // other source are refused.
 func WithACLAllow(prefixes ...netip.Prefix) ACLOption {
-	return aclOptionFunc(func(c *aclConfig) { c.allow = append(c.allow, prefixes...) })
+	return aclOption{option.New(identACLAllow{}, prefixes)}
 }
 
 // WithACLDeny adds prefixes that are unconditionally refused. Deny is
 // evaluated before allow.
 func WithACLDeny(prefixes ...netip.Prefix) ACLOption {
-	return aclOptionFunc(func(c *aclConfig) { c.deny = append(c.deny, prefixes...) })
+	return aclOption{option.New(identACLDeny{}, prefixes)}
 }
 
 // WithACLDropDenied controls whether denied requests are silently
@@ -72,7 +80,7 @@ func WithACLDeny(prefixes ...netip.Prefix) ACLOption {
 // value to a legitimate misconfigured client outweighs the
 // amplification cost.
 func WithACLDropDenied(drop bool) ACLOption {
-	return aclOptionFunc(func(c *aclConfig) { c.dropDenied = drop })
+	return aclOption{option.New(identACLDropDenied{}, drop)}
 }
 
 type acl struct {
@@ -88,7 +96,14 @@ type acl struct {
 func NewACL(inner Handler, opts ...ACLOption) (Handler, error) {
 	c := &aclConfig{dropDenied: true}
 	for _, o := range opts {
-		o.applyACL(c)
+		switch o.Ident() {
+		case identACLAllow{}:
+			c.allow = append(c.allow, option.MustGet[[]netip.Prefix](o)...)
+		case identACLDeny{}:
+			c.deny = append(c.deny, option.MustGet[[]netip.Prefix](o)...)
+		case identACLDropDenied{}:
+			c.dropDenied = option.MustGet[bool](o)
+		}
 	}
 	if len(c.allow) == 0 && len(c.deny) == 0 {
 		return nil, ErrACLNoRules

@@ -20,6 +20,7 @@ import (
 	"time"
 
 	"github.com/lestrrat-go/acidns/wire"
+	"github.com/lestrrat-go/option/v3"
 )
 
 // numRRLShards stripes the bucket map so high-rate RRL traffic isn't
@@ -27,11 +28,14 @@ import (
 const numRRLShards = 64
 
 // RRLOption configures the limiter.
-type RRLOption interface{ applyRRL(*rrlConfig) }
+type RRLOption interface {
+	option.Interface
+	rrlOption()
+}
 
-type rrlOptionFunc func(*rrlConfig)
+type rrlOption struct{ option.Interface }
 
-func (f rrlOptionFunc) applyRRL(c *rrlConfig) { f(c) }
+func (rrlOption) rrlOption() {}
 
 type rrlConfig struct {
 	respPerSecond   float64
@@ -44,10 +48,19 @@ type rrlConfig struct {
 	maxKeys         int
 }
 
+type identRRLQPS struct{}
+type identRRLNXDOMAINQPS struct{}
+type identRRLErrorQPS struct{}
+type identRRLBurst struct{}
+type identRRLSlipRate struct{}
+type identRRLIPv4Prefix struct{}
+type identRRLIPv6Prefix struct{}
+type identRRLMaxKeys struct{}
+
 // WithRRLQPS sets the steady-state limit on positive
 // answers per (source-prefix, response-name) pair. Defaults to 10.
 func WithRRLQPS(qps float64) RRLOption {
-	return rrlOptionFunc(func(c *rrlConfig) { c.respPerSecond = qps })
+	return rrlOption{option.New(identRRLQPS{}, qps)}
 }
 
 // WithRRLNXDOMAINQPS sets the limit on negative (NXDOMAIN /
@@ -55,19 +68,19 @@ func WithRRLQPS(qps float64) RRLOption {
 // to 5 — operationally lower than positive responses because a flood
 // of negative answers points strongly at random-subdomain attacks.
 func WithRRLNXDOMAINQPS(qps float64) RRLOption {
-	return rrlOptionFunc(func(c *rrlConfig) { c.nxdomainsPerS = qps })
+	return rrlOption{option.New(identRRLNXDOMAINQPS{}, qps)}
 }
 
 // WithRRLErrorQPS sets the limit on SERVFAIL / REFUSED / other
 // error responses per source-prefix. Defaults to 5.
 func WithRRLErrorQPS(qps float64) RRLOption {
-	return rrlOptionFunc(func(c *rrlConfig) { c.errorsPerSecond = qps })
+	return rrlOption{option.New(identRRLErrorQPS{}, qps)}
 }
 
 // WithRRLBurst sets the bucket size — how many tokens a fresh bucket
 // starts with. Defaults to 2× the steady-state rate.
 func WithRRLBurst(n int) RRLOption {
-	return rrlOptionFunc(func(c *rrlConfig) { c.burst = n })
+	return rrlOption{option.New(identRRLBurst{}, n)}
 }
 
 // WithRRLSlipRate sets how often a blocked response is converted into
@@ -76,20 +89,20 @@ func WithRRLBurst(n int) RRLOption {
 // slipping (always drop). Defaults to 2 — matches BIND's default and
 // is RFC-compatible with RFC 5358 reflection guidance.
 func WithRRLSlipRate(n int) RRLOption {
-	return rrlOptionFunc(func(c *rrlConfig) { c.slip = n })
+	return rrlOption{option.New(identRRLSlipRate{}, n)}
 }
 
 // WithRRLIPv4Prefix groups IPv4 sources by the given CIDR mask.
 // Defaults to /24 — RRL operates on aggregations, not single hosts,
 // because spoofed sources are usually drawn from large blocks.
 func WithRRLIPv4Prefix(maskBits int) RRLOption {
-	return rrlOptionFunc(func(c *rrlConfig) { c.v4Prefix = maskBits })
+	return rrlOption{option.New(identRRLIPv4Prefix{}, maskBits)}
 }
 
 // WithRRLIPv6Prefix groups IPv6 sources by the given CIDR mask.
 // Defaults to /56.
 func WithRRLIPv6Prefix(maskBits int) RRLOption {
-	return rrlOptionFunc(func(c *rrlConfig) { c.v6Prefix = maskBits })
+	return rrlOption{option.New(identRRLIPv6Prefix{}, maskBits)}
 }
 
 // WithRRLMaxKeys caps the total number of distinct (source, name, class)
@@ -99,7 +112,7 @@ func WithRRLIPv6Prefix(maskBits int) RRLOption {
 // if still at the cap, the oldest-updated bucket is dropped. Defaults
 // to 100000.
 func WithRRLMaxKeys(n int) RRLOption {
-	return rrlOptionFunc(func(c *rrlConfig) { c.maxKeys = n })
+	return rrlOption{option.New(identRRLMaxKeys{}, n)}
 }
 
 type rrlBucket struct {
@@ -151,7 +164,24 @@ func NewRRL(inner Handler, opts ...RRLOption) Handler {
 		maxKeys:         100000,
 	}
 	for _, o := range opts {
-		o.applyRRL(&c)
+		switch o.Ident() {
+		case identRRLQPS{}:
+			c.respPerSecond = option.MustGet[float64](o)
+		case identRRLNXDOMAINQPS{}:
+			c.nxdomainsPerS = option.MustGet[float64](o)
+		case identRRLErrorQPS{}:
+			c.errorsPerSecond = option.MustGet[float64](o)
+		case identRRLBurst{}:
+			c.burst = option.MustGet[int](o)
+		case identRRLSlipRate{}:
+			c.slip = option.MustGet[int](o)
+		case identRRLIPv4Prefix{}:
+			c.v4Prefix = option.MustGet[int](o)
+		case identRRLIPv6Prefix{}:
+			c.v6Prefix = option.MustGet[int](o)
+		case identRRLMaxKeys{}:
+			c.maxKeys = option.MustGet[int](o)
+		}
 	}
 	if c.burst == 0 {
 		// Default burst tracks the largest of the per-class rates so a
