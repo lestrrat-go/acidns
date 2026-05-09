@@ -534,6 +534,13 @@ func readUint48(b []byte) uint64 {
 // walking the question and RR sections. It is intentionally a fresh
 // minimal walker rather than a re-parse via wire.Unmarshal — TSIG must
 // run on the exact msg bytes the peer produced, with no canonicalisation.
+//
+// RFC 8945 §5.1 mandates that the TSIG be the LAST record in the
+// ADDITIONAL section. As defence-in-depth, we track the index of the
+// last walked RR and require it to fall within AR (i.e. its 0-based
+// index is >= ANCOUNT + NSCOUNT). Combined with the ARCOUNT > 0 check
+// in stripTSIG this rejects messages whose counts misrepresent the
+// section in which the last RR resides.
 func findLastRROffset(msg []byte) (int, error) {
 	qdcount := int(binary.BigEndian.Uint16(msg[4:6]))
 	ancount := int(binary.BigEndian.Uint16(msg[6:8]))
@@ -555,8 +562,10 @@ func findLastRROffset(msg []byte) (int, error) {
 	}
 
 	last := off
-	for range totalRR {
+	lastIdx := -1
+	for i := range totalRR {
 		last = off
+		lastIdx = i
 		_, next, err := wire.DecodeName(msg, off)
 		if err != nil {
 			return 0, err
@@ -569,6 +578,9 @@ func findLastRROffset(msg []byte) (int, error) {
 		if off > len(msg) {
 			return 0, fmt.Errorf("tsig: truncated rr body")
 		}
+	}
+	if lastIdx < ancount+nscount {
+		return 0, fmt.Errorf("tsig: last RR not in additional section")
 	}
 	return last, nil
 }

@@ -78,3 +78,46 @@ func TestVerifyRejectsBelowFloor(t *testing.T) {
 	_, _, _, err = VerifyMAC(signed, key, now, 5*time.Minute) //nolint:dogsled // 4-tuple API
 	require.ErrorIs(t, err, ErrBadTruncation)
 }
+
+// TestFindLastRROffsetRejectsTSIGOutsideAR exercises the RFC 8945 §5.1
+// section-placement guard in findLastRROffset: a message whose last RR
+// falls in NS (ANCOUNT+NSCOUNT > 0, ARCOUNT == 0) must be rejected
+// rather than treated as a TSIG candidate.
+func TestFindLastRROffsetRejectsTSIGOutsideAR(t *testing.T) {
+	t.Parallel()
+	// Header (12 bytes) with NSCOUNT=1, ARCOUNT=0; root owner (1 byte) +
+	// 10-byte fixed RR header with TYPE=TSIG (250) and rdlen=0. The
+	// record sits in the AUTHORITY section.
+	msg := make([]byte, 12+1+10)
+	binary.BigEndian.PutUint16(msg[8:10], 1) // NSCOUNT=1
+	binary.BigEndian.PutUint16(msg[10:12], 0)
+	off := 13
+	binary.BigEndian.PutUint16(msg[off:off+2], 250)  // TYPE=TSIG
+	binary.BigEndian.PutUint16(msg[off+2:off+4], 1)  // CLASS=IN
+	binary.BigEndian.PutUint32(msg[off+4:off+8], 0)  // TTL
+	binary.BigEndian.PutUint16(msg[off+8:off+10], 0) // rdlen=0
+
+	_, err := findLastRROffset(msg)
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "last RR not in additional section")
+}
+
+// TestFindLastRROffsetAcceptsLastInAR verifies the well-formed case:
+// last RR sits in AR and findLastRROffset returns the owner-name offset
+// of that record.
+func TestFindLastRROffsetAcceptsLastInAR(t *testing.T) {
+	t.Parallel()
+	// Header with ANCOUNT=0, NSCOUNT=0, ARCOUNT=1; root owner + 10-byte
+	// header with TYPE=TSIG, rdlen=0.
+	msg := make([]byte, 12+1+10)
+	binary.BigEndian.PutUint16(msg[10:12], 1) // ARCOUNT=1
+	off := 13
+	binary.BigEndian.PutUint16(msg[off:off+2], 250)
+	binary.BigEndian.PutUint16(msg[off+2:off+4], 1)
+	binary.BigEndian.PutUint32(msg[off+4:off+8], 0)
+	binary.BigEndian.PutUint16(msg[off+8:off+10], 0)
+
+	got, err := findLastRROffset(msg)
+	require.NoError(t, err)
+	require.Equal(t, 12, got)
+}
