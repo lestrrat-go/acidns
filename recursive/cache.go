@@ -2,6 +2,7 @@ package recursive
 
 import (
 	"hash/maphash"
+	"slices"
 	"sync"
 	"time"
 
@@ -37,14 +38,16 @@ type Entry struct {
 	expiresAt  time.Time
 }
 
-// Answer returns the answer-section records.
-func (e Entry) Answer() []wire.Record { return e.answer }
+// Answer returns a copy of the answer-section records. The returned
+// slice is owned by the caller; mutating it does not affect the cached
+// entry.
+func (e Entry) Answer() []wire.Record { return slices.Clone(e.answer) }
 
-// Authority returns the authority-section records.
-func (e Entry) Authority() []wire.Record { return e.authority }
+// Authority returns a copy of the authority-section records.
+func (e Entry) Authority() []wire.Record { return slices.Clone(e.authority) }
 
-// Additional returns the additional-section records.
-func (e Entry) Additional() []wire.Record { return e.additional }
+// Additional returns a copy of the additional-section records.
+func (e Entry) Additional() []wire.Record { return slices.Clone(e.additional) }
 
 // RCODE returns the response code carried by the cached answer.
 func (e Entry) RCODE() wire.RCODE { return e.rcode }

@@ -72,11 +72,15 @@ func NewAnswer(q wire.Question, records []wire.Record, raw wire.Message) *Answer
 }
 
 func (a *Answer) Question() wire.Question { return a.q }
-func (a *Answer) Records() []wire.Record  { return a.records }
-func (a *Answer) Raw() wire.Message       { return a.raw }
-func (a *Answer) RCODE() wire.RCODE       { return a.raw.Flags().RCODE() }
-func (a *Answer) Authoritative() bool     { return a.raw.Flags().Authoritative() }
-func (a *Answer) Truncated() bool         { return a.raw.Flags().Truncated() }
+
+// Records returns a copy of the matched record list. The returned
+// slice is owned by the caller; mutating it does not affect the
+// Answer.
+func (a *Answer) Records() []wire.Record { return slices.Clone(a.records) }
+func (a *Answer) Raw() wire.Message      { return a.raw }
+func (a *Answer) RCODE() wire.RCODE      { return a.raw.Flags().RCODE() }
+func (a *Answer) Authoritative() bool    { return a.raw.Flags().Authoritative() }
+func (a *Answer) Truncated() bool        { return a.raw.Flags().Truncated() }
 
 // ResolverOption configures a Resolver.
 type ResolverOption interface{ applyResolver(*resolverConfig) }
@@ -92,12 +96,15 @@ type resolverConfig struct {
 	ednsDO            bool
 	disableEDNS       bool
 	attempts          int
+	attemptsSet       bool
 	perAttempt        time.Duration
+	perAttemptSet     bool
 	searchList        []wire.Name
 	ndots             int
 	ndotsSet          bool
 	disableSpecialUse bool
 	disable0x20       bool
+	disable0x20Set    bool
 	logger            *slog.Logger
 	systemErr         error
 }
@@ -135,15 +142,17 @@ func WithEDNS(v bool) ResolverOption {
 
 // WithAttempts sets how many times each server is retried before failover
 // to the next. Defaults to 1 (no retry). Applied only to WithServers; a
-// caller-supplied WithExchanger handles its own retry policy.
+// caller-supplied WithExchanger handles its own retry policy and combining
+// the two options is a configuration error caught by NewResolver.
 func WithAttempts(n int) ResolverOption {
-	return resolverOptionFunc(func(c *resolverConfig) { c.attempts = n })
+	return resolverOptionFunc(func(c *resolverConfig) { c.attempts = n; c.attemptsSet = true })
 }
 
 // WithPerAttemptTimeout caps the duration of each attempt. Zero means the
-// outer context's deadline (if any) is the only bound.
+// outer context's deadline (if any) is the only bound. Applied only to
+// WithServers; combining with WithExchanger is rejected by NewResolver.
 func WithPerAttemptTimeout(d time.Duration) ResolverOption {
-	return resolverOptionFunc(func(c *resolverConfig) { c.perAttempt = d })
+	return resolverOptionFunc(func(c *resolverConfig) { c.perAttempt = d; c.perAttemptSet = true })
 }
 
 // WithSystemResolvers loads /etc/resolv.conf and uses its nameservers,
@@ -204,11 +213,11 @@ func applyResolvconfToConfig(c *resolverConfig, cfg *resolvconf.Config) {
 // when targeting an upstream known to silently lowercase the qname
 // in responses.
 //
-// The option has no effect when [WithExchanger] is supplied — a
-// caller-built Exchanger applies whatever 0x20 policy its own
-// constructor was given.
+// Combining this option with [WithExchanger] is rejected by NewResolver —
+// a caller-built Exchanger applies whatever 0x20 policy its own constructor
+// was given.
 func WithCaseRandomization(v bool) ResolverOption {
-	return resolverOptionFunc(func(c *resolverConfig) { c.disable0x20 = !v })
+	return resolverOptionFunc(func(c *resolverConfig) { c.disable0x20 = !v; c.disable0x20Set = true })
 }
 
 // WithSpecialUse toggles the RFC 6761 short-circuits applied to names like
@@ -267,6 +276,21 @@ func NewResolver(opts ...ResolverOption) (Resolver, error) {
 	}
 	if c.exchanger != nil && len(c.servers) > 0 {
 		return nil, fmt.Errorf("acidns: WithExchanger and WithServers are mutually exclusive")
+	}
+	if c.exchanger != nil {
+		var conflict []string
+		if c.attemptsSet {
+			conflict = append(conflict, "WithAttempts")
+		}
+		if c.perAttemptSet {
+			conflict = append(conflict, "WithPerAttemptTimeout")
+		}
+		if c.disable0x20Set {
+			conflict = append(conflict, "WithCaseRandomization")
+		}
+		if len(conflict) > 0 {
+			return nil, fmt.Errorf("acidns: %v cannot be combined with WithExchanger; the supplied Exchanger handles its own retry/timeout/0x20 policy", conflict)
+		}
 	}
 
 	ex := c.exchanger
