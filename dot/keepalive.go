@@ -102,6 +102,9 @@ func NewKeepAliveExchanger(addr netip.AddrPort, opts ...KeepAliveOption) (acidns
 	} else {
 		tcfg = &tls.Config{MinVersion: tls.VersionTLS13}
 	}
+	if tcfg.MinVersion < tls.VersionTLS12 {
+		tcfg.MinVersion = tls.VersionTLS12
+	}
 	if c.serverName != "" {
 		tcfg.ServerName = c.serverName
 	}

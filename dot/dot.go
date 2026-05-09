@@ -69,6 +69,13 @@ func New(addr netip.AddrPort, opts ...Option) (acidns.Exchanger, error) {
 	} else {
 		tcfg = &tls.Config{MinVersion: tls.VersionTLS13}
 	}
+	// Floor MinVersion at TLS 1.2: a caller-supplied tls.Config could
+	// otherwise pin the connection to TLS 1.0/1.1, which Go still
+	// permits but no DoT operator should accept. Defaults remain
+	// TLS 1.3 when no caller config was provided.
+	if tcfg.MinVersion < tls.VersionTLS12 {
+		tcfg.MinVersion = tls.VersionTLS12
+	}
 	if c.serverName != "" {
 		tcfg.ServerName = c.serverName
 	}

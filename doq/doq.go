@@ -58,6 +58,13 @@ func New(addr netip.AddrPort, opts ...Option) (acidns.Exchanger, error) {
 	} else {
 		tcfg = &tls.Config{MinVersion: tls.VersionTLS13}
 	}
+	// RFC 9250 §3: DoQ is TLS 1.3 only. A caller-supplied tls.Config
+	// could otherwise lower MinVersion and silently negotiate
+	// something the spec forbids — quic-go itself rejects sub-1.3
+	// handshakes, but the explicit floor makes the intent loud.
+	if tcfg.MinVersion < tls.VersionTLS13 {
+		tcfg.MinVersion = tls.VersionTLS13
+	}
 	if !containsALPN(tcfg.NextProtos, alpn) {
 		tcfg.NextProtos = append(tcfg.NextProtos, alpn)
 	}
