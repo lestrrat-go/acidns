@@ -39,7 +39,7 @@ func TestWithPadding_DisablesPadding(t *testing.T) {
 	}))
 	t.Cleanup(srv.Close)
 
-	ex, err := doh.New(srv.URL, doh.WithPadding(false), doh.WithInsecure())
+	ex, err := doh.New(srv.URL, doh.WithPadding(false), doh.WithInsecure(true))
 	require.NoError(t, err)
 
 	q := wiretest.Query(wire.MustParseName("example.com"), rrtype.A)

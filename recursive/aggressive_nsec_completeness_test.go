@@ -91,7 +91,7 @@ func TestAggressiveNSECNoDataSynthesis(t *testing.T) {
 		recursive.WithDialer(dialer),
 		recursive.WithQNameMinimisation(false),
 		recursive.WithValidator(alwaysSecureValidator{}),
-		recursive.WithAggressiveNSEC(),
+		recursive.WithAggressiveNSEC(true),
 	)
 
 	// Priming with MX query at a.example — gets NoData.
@@ -158,7 +158,7 @@ func TestAggressiveNSECRefusesWithoutWildcardDenial(t *testing.T) {
 		recursive.WithDialer(dialer),
 		recursive.WithQNameMinimisation(false),
 		recursive.WithValidator(alwaysSecureValidator{}),
-		recursive.WithAggressiveNSEC(),
+		recursive.WithAggressiveNSEC(true),
 	)
 
 	ctx, cancel := context.WithTimeout(t.Context(), 2*time.Second)
@@ -226,7 +226,7 @@ func TestAggressiveNSEC3NoData(t *testing.T) {
 		recursive.WithDialer(dialer),
 		recursive.WithQNameMinimisation(false),
 		recursive.WithValidator(alwaysSecureValidator{}),
-		recursive.WithAggressiveNSEC(),
+		recursive.WithAggressiveNSEC(true),
 	)
 
 	ctx, cancel := context.WithTimeout(t.Context(), 2*time.Second)

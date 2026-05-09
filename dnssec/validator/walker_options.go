@@ -26,9 +26,11 @@ func WithWalkerAnchors(anchors ...Anchor) WalkerOption {
 // anchor was configured; that default was removed because "I forgot to
 // configure" should not silently look like "I want IANA root with a
 // frozen-in-binary digest."
-func WithWalkerIANARootAnchor() WalkerOption {
+func WithWalkerIANARootAnchor(v bool) WalkerOption {
 	return walkerOptionFunc(func(w *walker) {
-		w.anchors = append(w.anchors, IANARootAnchor())
+		if v {
+			w.anchors = append(w.anchors, IANARootAnchor())
+		}
 	})
 }
 

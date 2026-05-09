@@ -42,7 +42,7 @@ func TestNewRefusesPlaintextHTTP(t *testing.T) {
 	require.Contains(t, err.Error(), "plaintext http")
 
 	// Explicit opt-in lets it through.
-	ex, err := doh.New("http://example.com/dns-query", doh.WithInsecure())
+	ex, err := doh.New("http://example.com/dns-query", doh.WithInsecure(true))
 	require.NoError(t, err)
 	require.NotNil(t, ex)
 }
@@ -72,7 +72,7 @@ func TestExchangeBadContentType(t *testing.T) {
 	}))
 	t.Cleanup(srv.Close)
 
-	ex, err := doh.New(srv.URL, doh.WithInsecure())
+	ex, err := doh.New(srv.URL, doh.WithInsecure(true))
 	require.NoError(t, err)
 
 	_, err = ex.Exchange(t.Context(), newQuery(t, 0x1234))
@@ -92,7 +92,7 @@ func TestExchangeEmptyContentType(t *testing.T) {
 	}))
 	t.Cleanup(srv.Close)
 
-	ex, err := doh.New(srv.URL, doh.WithInsecure())
+	ex, err := doh.New(srv.URL, doh.WithInsecure(true))
 	require.NoError(t, err)
 
 	_, err = ex.Exchange(t.Context(), newQuery(t, 0x2345))
@@ -111,7 +111,7 @@ func TestExchangeUnmarshalError(t *testing.T) {
 	}))
 	t.Cleanup(srv.Close)
 
-	ex, err := doh.New(srv.URL, doh.WithInsecure())
+	ex, err := doh.New(srv.URL, doh.WithInsecure(true))
 	require.NoError(t, err)
 
 	_, err = ex.Exchange(t.Context(), newQuery(t, 0x3456))
@@ -144,7 +144,7 @@ func TestExchangeIDMismatch(t *testing.T) {
 	}))
 	t.Cleanup(srv.Close)
 
-	ex, err := doh.New(srv.URL, doh.WithInsecure())
+	ex, err := doh.New(srv.URL, doh.WithInsecure(true))
 	require.NoError(t, err)
 
 	_, err = ex.Exchange(t.Context(), newQuery(t, 0x4567))
@@ -160,7 +160,7 @@ func TestExchangeRequestError(t *testing.T) {
 	url := srv.URL
 	srv.Close() // close immediately so subsequent dial fails.
 
-	ex, err := doh.New(url, doh.WithInsecure())
+	ex, err := doh.New(url, doh.WithInsecure(true))
 	require.NoError(t, err)
 
 	_, err = ex.Exchange(t.Context(), newQuery(t, 0x5678))

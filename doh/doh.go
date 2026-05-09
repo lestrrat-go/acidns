@@ -131,7 +131,7 @@ func New(endpoint string, opts ...Option) (acidns.Exchanger, error) {
 		// the only real DoH transport
 	case "http":
 		if !c.insecure {
-			return nil, fmt.Errorf("doh: refusing plaintext http:// endpoint; use https:// or WithInsecure() (test loopback only)")
+			return nil, fmt.Errorf("doh: refusing plaintext http:// endpoint; use https:// or WithInsecure(true) (test loopback only)")
 		}
 	default:
 		return nil, fmt.Errorf("doh: endpoint scheme must be https (or http with WithInsecure)")

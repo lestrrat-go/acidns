@@ -173,7 +173,7 @@ func TestWalkerFix3IANARootAnchorOptInExposesAnchor(t *testing.T) {
 	t.Parallel()
 	src := newFixtureSource()
 	w, err := validator.NewWalker(src,
-		validator.WithWalkerIANARootAnchor(),
+		validator.WithWalkerIANARootAnchor(true),
 		validator.WithWalkerBogusPolicy(validator.BogusReturnAnswer),
 	)
 	require.NoError(t, err)

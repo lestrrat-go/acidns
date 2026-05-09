@@ -155,8 +155,8 @@ func WithAllowNoRD(enable bool) Option {
 // (type-bitmap inspection), and wildcard interaction are not yet
 // covered — affected queries fall through to the regular iteration
 // path.
-func WithAggressiveNSEC() Option {
-	return optionFunc(func(c *config) { c.aggressiveNSEC = true })
+func WithAggressiveNSEC(v bool) Option {
+	return optionFunc(func(c *config) { c.aggressiveNSEC = v })
 }
 
 // WithQNameMinimisation toggles RFC 9156 / 7816 QNAME minimisation.

@@ -60,7 +60,8 @@ func WithPadding(v bool) Option {
 // [New] refuses non-HTTPS schemes — DoH (RFC 8484) is meaningful only
 // over a TLS-protected channel, and silently downgrading to HTTP would
 // defeat the privacy goal. Use this only for tests against a local
-// loopback server (e.g. httptest.NewServer).
-func WithInsecure() Option {
-	return optionFunc(func(c *config) { c.insecure = true })
+// loopback server (e.g. httptest.NewServer). Pass true to allow
+// plaintext, false to enforce HTTPS (the default).
+func WithInsecure(v bool) Option {
+	return optionFunc(func(c *config) { c.insecure = v })
 }

@@ -50,8 +50,9 @@ func WithRateLimitBurst(n int) RateLimitOption {
 }
 
 // WithRateLimitDrop silences over-budget queries instead of returning REFUSED.
-func WithRateLimitDrop() RateLimitOption {
-	return rateLimitOptionFunc(func(c *rateLimitConfig) { c.drop = true })
+// Pass true to drop, false to reply REFUSED (the default).
+func WithRateLimitDrop(v bool) RateLimitOption {
+	return rateLimitOptionFunc(func(c *rateLimitConfig) { c.drop = v })
 }
 
 // WithRateLimitGroupPrefix coalesces sources by the given CIDR mask before keying

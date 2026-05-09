@@ -90,7 +90,7 @@ func TestRateLimitPerSourceIndependent(t *testing.T) {
 func TestRateLimitDrop(t *testing.T) {
 	t.Parallel()
 	h := acidns.NewRateLimit(rateLimitMkInner(),
-		acidns.WithRateLimitQPS(0.0001), acidns.WithRateLimitBurst(1), acidns.WithRateLimitDrop())
+		acidns.WithRateLimitQPS(0.0001), acidns.WithRateLimitBurst(1), acidns.WithRateLimitDrop(true))
 
 	w := &rlFakeWriter{src: netip.MustParseAddrPort("203.0.113.10:1")}
 	h.ServeDNS(context.Background(), w, rateLimitMkQuery(t)) // first OK

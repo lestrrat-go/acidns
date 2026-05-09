@@ -90,7 +90,7 @@ func TestAggressiveNSECSynthesisesNXDOMAIN(t *testing.T) {
 		recursive.WithDialer(dialer),
 		recursive.WithQNameMinimisation(false),
 		recursive.WithValidator(alwaysSecureValidator{}),
-		recursive.WithAggressiveNSEC(),
+		recursive.WithAggressiveNSEC(true),
 	)
 
 	// Priming: c.example. → NXDOMAIN, validated, cached + indexed.
@@ -168,7 +168,7 @@ func TestAggressiveNSECNoValidatorRejected(t *testing.T) {
 
 	_, err := recursive.New(
 		recursive.WithRoots(netip.MustParseAddrPort("127.0.0.1:1")),
-		recursive.WithAggressiveNSEC(),
+		recursive.WithAggressiveNSEC(true),
 	)
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "WithAggressiveNSEC requires WithValidator")
