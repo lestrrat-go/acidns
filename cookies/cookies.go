@@ -36,6 +36,7 @@ import (
 	"time"
 
 	"github.com/lestrrat-go/acidns/wire"
+	"github.com/lestrrat-go/option/v3"
 )
 
 // BADCOOKIE is the extended RCODE for "client sent a bad cookie"
@@ -96,17 +97,22 @@ const DefaultClientMaxEntries = 8192
 
 // NewClient returns a fresh Client backed by an in-memory map.
 func NewClient(opts ...ClientOption) (Client, error) {
-	cfg := clientConfig{maxEntries: DefaultClientMaxEntries, now: time.Now}
+	maxEntries := DefaultClientMaxEntries
+	now := time.Now
 	for _, o := range opts {
-		o.applyClient(&cfg)
-	}
-	if cfg.now == nil {
-		cfg.now = time.Now
+		switch o.Ident() {
+		case identClientMaxEntries{}:
+			maxEntries = option.MustGet[int](o)
+		case identClientClock{}:
+			if v := option.MustGet[func() time.Time](o); v != nil {
+				now = v
+			}
+		}
 	}
 	return &client{
 		cache:      make(map[netip.AddrPort]clientEntry),
-		maxEntries: cfg.maxEntries,
-		now:        cfg.now,
+		maxEntries: maxEntries,
+		now:        now,
 	}, nil
 }
 
@@ -296,18 +302,21 @@ type SecretPool interface {
 // pool as a SecretPool interface lose the Rotate method by design —
 // see the [SecretPool] doc.
 func NewSecretPool(opts ...PoolOption) (*MemorySecretPool, error) {
-	cfg := poolConfig{}
+	var rotateEvery time.Duration
 	for _, o := range opts {
-		o.applyPool(&cfg)
+		switch o.Ident() {
+		case identPoolRotateEvery{}:
+			rotateEvery = option.MustGet[time.Duration](o)
+		}
 	}
 	p := &MemorySecretPool{}
 	if err := p.Rotate(); err != nil {
 		return nil, err
 	}
-	if cfg.rotateEvery > 0 {
+	if rotateEvery > 0 {
 		p.stop = make(chan struct{})
 		go func() {
-			tick := time.NewTicker(cfg.rotateEvery)
+			tick := time.NewTicker(rotateEvery)
 			defer tick.Stop()
 			for {
 				select {
@@ -396,11 +405,21 @@ const DefaultMaxFutureSkew = 5 * time.Minute
 // [DefaultMaxFutureSkew]; pass [WithMaxAge] / [WithClockSkew]
 // to override.
 func NewServer(pool SecretPool, opts ...ServerOption) (Server, error) {
-	cfg := serverConfig{maxAge: time.Hour, maxFutureSkew: DefaultMaxFutureSkew}
+	maxAge := time.Hour
+	maxFutureSkew := DefaultMaxFutureSkew
 	for _, o := range opts {
-		o.applyCookieServer(&cfg)
+		switch o.Ident() {
+		case identServerMaxAge{}:
+			if d := option.MustGet[time.Duration](o); d > 0 {
+				maxAge = d
+			}
+		case identServerClockSkew{}:
+			if d := option.MustGet[time.Duration](o); d > 0 {
+				maxFutureSkew = d
+			}
+		}
 	}
-	return &serverImpl{pool: pool, maxAge: cfg.maxAge, maxFutureSkew: cfg.maxFutureSkew}, nil
+	return &serverImpl{pool: pool, maxAge: maxAge, maxFutureSkew: maxFutureSkew}, nil
 }
 
 type serverImpl struct {
