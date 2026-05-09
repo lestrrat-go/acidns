@@ -167,7 +167,7 @@ func (b *ednsBuilder) Build() (EDNS, error) {
 	// at most once.
 	seen := make(map[uint16]struct{}, len(b.e.opts))
 	for _, o := range b.e.opts {
-		c := uint16(o.Code())
+		c := o.Code()
 		if _, dup := seen[c]; dup {
 			return nil, fmt.Errorf("wire: duplicate EDNS option code %d", c)
 		}
