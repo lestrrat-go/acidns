@@ -727,6 +727,6 @@ func TestDecodeAddrHintMisaligned(t *testing.T) {
 func TestNewAAAARejectsV4(t *testing.T) {
 	t.Parallel()
 	require.Panics(t, func() {
-		rdata.NewAAAA(parseAddr("1.2.3.4"))
+		rdata.MustNewAAAA(parseAddr("1.2.3.4"))
 	})
 }

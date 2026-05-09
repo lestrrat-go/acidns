@@ -32,7 +32,7 @@ func TestTCPServerEcho(t *testing.T) {
 
 	h := acidns.HandlerFunc(func(_ context.Context, w acidns.ResponseWriter, q wire.Message) {
 		ans := wire.NewRecord(q.Questions()[0].Name(), time.Minute,
-			rdata.NewA(netip.MustParseAddr("203.0.113.88")))
+			rdata.MustNewA(netip.MustParseAddr("203.0.113.88")))
 		resp, _ := wire.NewBuilder().
 			ID(q.ID()).
 			Response(true).

@@ -74,7 +74,7 @@ func TestSignedDataAcrossRDataTypes(t *testing.T) {
 			"A_unknown_default",
 			[]wire.Record{
 				wire.NewRecord(wire.MustParseName("example.com"), time.Hour,
-					rdata.NewA(netip.MustParseAddr("192.0.2.1"))),
+					rdata.MustNewA(netip.MustParseAddr("192.0.2.1"))),
 			},
 			rrtype.A,
 		},
@@ -96,7 +96,7 @@ func TestSignedDataWildcardOwner(t *testing.T) {
 	// would walk back two levels.
 	set := []wire.Record{
 		wire.NewRecord(wire.MustParseName("foo.bar.example.com"), time.Hour,
-			rdata.NewA(netip.MustParseAddr("192.0.2.1"))),
+			rdata.MustNewA(netip.MustParseAddr("192.0.2.1"))),
 	}
 	rrsig := rdata.NewRRSIG(rrtype.A, rdata.AlgED25519, 2,
 		time.Hour, time.Now().Add(time.Hour), time.Now().Add(-time.Hour),

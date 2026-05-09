@@ -26,7 +26,7 @@ func Example_dnssec_verify() {
 	// The RRset we'll sign.
 	set := []wire.Record{
 		wire.NewRecord(wire.MustParseName("www.example.com"), time.Hour,
-			rdata.NewA(netip.MustParseAddr("192.0.2.1"))),
+			rdata.MustNewA(netip.MustParseAddr("192.0.2.1"))),
 	}
 
 	// Build an RRSIG skeleton (no signature yet), compute the canonical

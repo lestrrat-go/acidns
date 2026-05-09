@@ -32,7 +32,7 @@ func (*cookieWriter) Network() string              { return netUDP }
 func cookieMkInner() acidns.Handler {
 	return acidns.HandlerFunc(func(_ context.Context, w acidns.ResponseWriter, q wire.Message) {
 		ans := wire.NewRecord(q.Questions()[0].Name(), 60*time.Second,
-			rdata.NewA(netip.MustParseAddr("203.0.113.99")))
+			rdata.MustNewA(netip.MustParseAddr("203.0.113.99")))
 		resp, _ := wire.NewBuilder().
 			ID(q.ID()).
 			Response(true).

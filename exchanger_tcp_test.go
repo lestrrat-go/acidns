@@ -49,7 +49,7 @@ func startTCPEcho(t *testing.T) netip.AddrPort {
 					RecursionAvailable(true).
 					Question(req.Questions()[0]).
 					Answer(wire.NewRecord(req.Questions()[0].Name(), 60*time.Second,
-						rdata.NewA(netip.MustParseAddr("203.0.113.5")))).
+						rdata.MustNewA(netip.MustParseAddr("203.0.113.5")))).
 					Build()
 				if err != nil {
 					return

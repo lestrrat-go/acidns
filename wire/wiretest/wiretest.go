@@ -129,7 +129,7 @@ func ARecord(name wire.Name, ttl time.Duration, ip string) wire.Record {
 	if !addr.Is4() {
 		panic("wiretest.ARecord: not an IPv4 address: " + ip)
 	}
-	return wire.NewRecord(name, ttl, rdata.NewA(addr))
+	return wire.NewRecord(name, ttl, rdata.MustNewA(addr))
 }
 
 // AAAARecord builds an AAAA-record for ip parsed as IPv6.
@@ -142,7 +142,7 @@ func AAAARecord(name wire.Name, ttl time.Duration, ip string) wire.Record {
 	if !addr.Is6() || addr.Is4In6() {
 		panic("wiretest.AAAARecord: not an IPv6 address: " + ip)
 	}
-	return wire.NewRecord(name, ttl, rdata.NewAAAA(addr))
+	return wire.NewRecord(name, ttl, rdata.MustNewAAAA(addr))
 }
 
 // CNAMERecord builds a CNAME record pointing to target.

@@ -43,11 +43,11 @@ func startServer(t *testing.T, v4 []netip.Addr, v6 []netip.Addr) netip.AddrPort 
 			switch q.Type() {
 			case rrtype.A:
 				for _, a := range v4 {
-					b = b.Answer(wire.NewRecord(q.Name(), 60*time.Second, rdata.NewA(a)))
+					b = b.Answer(wire.NewRecord(q.Name(), 60*time.Second, rdata.MustNewA(a)))
 				}
 			case rrtype.AAAA:
 				for _, a := range v6 {
-					b = b.Answer(wire.NewRecord(q.Name(), 60*time.Second, rdata.NewAAAA(a)))
+					b = b.Answer(wire.NewRecord(q.Name(), 60*time.Second, rdata.MustNewAAAA(a)))
 				}
 			}
 			resp, err := b.Build()

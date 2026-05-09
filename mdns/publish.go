@@ -397,10 +397,10 @@ func publicationRecords(p Publication, flushBit bool) []wire.Record {
 	// A/AAAA at host.
 	for _, a := range p.addrs {
 		if a.Is4() {
-			out = append(out, wire.NewRecordClass(p.host, cls, p.ttl, rdata.NewA(a)))
+			out = append(out, wire.NewRecordClass(p.host, cls, p.ttl, rdata.MustNewA(a)))
 		}
 		if a.Is6() {
-			out = append(out, wire.NewRecordClass(p.host, cls, p.ttl, rdata.NewAAAA(a)))
+			out = append(out, wire.NewRecordClass(p.host, cls, p.ttl, rdata.MustNewAAAA(a)))
 		}
 	}
 	return out

@@ -401,7 +401,7 @@ func TestRDataAsMismatch(t *testing.T) {
 	rec := wire.NewRecord(
 		wirebb.MustParse("example.com"),
 		60*time.Second,
-		rdata.NewA(netip.MustParseAddr("192.0.2.1")),
+		rdata.MustNewA(netip.MustParseAddr("192.0.2.1")),
 	)
 
 	// Asking for AAAA on an A record returns false.
@@ -531,8 +531,8 @@ func TestNewRRsetFromRDatasErrors(t *testing.T) {
 			wirebb.MustParse("x."),
 			rrtype.ClassIN,
 			time.Minute,
-			rdata.NewA(netip.MustParseAddr("192.0.2.1")),
-			rdata.NewAAAA(netip.MustParseAddr("2001:db8::1")),
+			rdata.MustNewA(netip.MustParseAddr("192.0.2.1")),
+			rdata.MustNewAAAA(netip.MustParseAddr("2001:db8::1")),
 		)
 		require.ErrorIs(t, err, wire.ErrInvalidMessage)
 	})

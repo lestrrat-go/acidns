@@ -60,7 +60,7 @@ func answer(q wire.Message, ttl time.Duration, addr netip.Addr) wire.Message {
 		RecursionDesired(q.Flags().RecursionDesired()).
 		RecursionAvailable(true).
 		Question(q.Questions()[0]).
-		Answer(wire.NewRecord(q.Questions()[0].Name(), ttl, rdata.NewA(addr))).
+		Answer(wire.NewRecord(q.Questions()[0].Name(), ttl, rdata.MustNewA(addr))).
 		Build()
 	return a
 }
@@ -464,7 +464,7 @@ func TestEDNSPreservedAndForwarded(t *testing.T) {
 				RecursionAvailable(true).
 				Question(q.Questions()[0]).
 				Answer(wire.NewRecord(q.Questions()[0].Name(), 30*time.Second,
-					rdata.NewA(netip.MustParseAddr("203.0.113.99")))).
+					rdata.MustNewA(netip.MustParseAddr("203.0.113.99")))).
 				EDNS(respEDNS).
 				Build()
 			return a

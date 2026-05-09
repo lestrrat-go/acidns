@@ -25,7 +25,7 @@ func packUnpack(t *testing.T, r rdata.RData) rdata.RData {
 
 func TestA(t *testing.T) {
 	t.Parallel()
-	r := rdata.NewA(netip.MustParseAddr("93.184.216.34"))
+	r := rdata.MustNewA(netip.MustParseAddr("93.184.216.34"))
 	require.Equal(t, rrtype.A, r.Type())
 	require.Equal(t, netip.MustParseAddr("93.184.216.34"), r.Addr())
 
@@ -36,13 +36,13 @@ func TestA(t *testing.T) {
 func TestANewRejectsV6(t *testing.T) {
 	t.Parallel()
 	require.Panics(t, func() {
-		rdata.NewA(netip.MustParseAddr("::1"))
+		rdata.MustNewA(netip.MustParseAddr("::1"))
 	})
 }
 
 func TestAAAA(t *testing.T) {
 	t.Parallel()
-	r := rdata.NewAAAA(netip.MustParseAddr("2606:2800:220:1:248:1893:25c8:1946"))
+	r := rdata.MustNewAAAA(netip.MustParseAddr("2606:2800:220:1:248:1893:25c8:1946"))
 	require.Equal(t, rrtype.AAAA, r.Type())
 
 	got := packUnpack(t, r).(rdata.AAAA)

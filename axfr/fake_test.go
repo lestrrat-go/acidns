@@ -82,7 +82,7 @@ func aRec(t *testing.T, name string, addr string) wire.Record {
 	return wire.NewRecord(
 		wire.MustParseName(name),
 		60*time.Second,
-		rdata.NewA(netip.MustParseAddr(addr)),
+		rdata.MustNewA(netip.MustParseAddr(addr)),
 	)
 }
 

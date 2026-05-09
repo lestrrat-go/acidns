@@ -458,7 +458,7 @@ func TestUDPDropsMalformedThenDelivers(t *testing.T) {
 			Response(true).
 			Question(req.Questions()[0]).
 			Answer(wire.NewRecord(req.Questions()[0].Name(), time.Minute,
-				rdata.NewA(netip.MustParseAddr("203.0.113.99")))).
+				rdata.MustNewA(netip.MustParseAddr("203.0.113.99")))).
 			Build()
 		gw, _ := wire.Marshal(good)
 		_, _ = pc.WriteTo(gw, src)
@@ -542,7 +542,7 @@ func TestTCFallbackOnTruncation(t *testing.T) {
 					Response(true).
 					Question(req.Questions()[0]).
 					Answer(wire.NewRecord(req.Questions()[0].Name(), time.Minute,
-						rdata.NewA(netip.MustParseAddr("198.51.100.10")))).
+						rdata.MustNewA(netip.MustParseAddr("198.51.100.10")))).
 					Build()
 				raw, _ := wire.Marshal(resp)
 				binary.BigEndian.PutUint16(hdr[:], uint16(len(raw)))
@@ -610,7 +610,7 @@ func TestRetryEventuallySucceeds(t *testing.T) {
 				Response(true).
 				Question(req.Questions()[0]).
 				Answer(wire.NewRecord(req.Questions()[0].Name(), time.Minute,
-					rdata.NewA(netip.MustParseAddr("198.51.100.50")))).
+					rdata.MustNewA(netip.MustParseAddr("198.51.100.50")))).
 				Build()
 			raw, _ := wire.Marshal(resp)
 			_, _ = pc.WriteTo(raw, src)
@@ -645,7 +645,7 @@ func TestSystemResolversApplies(t *testing.T) {
 func TestExtractMissingType(t *testing.T) {
 	t.Parallel()
 	rec := wire.NewRecord(wire.MustParseName("example.com"), time.Minute,
-		rdata.NewAAAA(netip.MustParseAddr("2001:db8::1")))
+		rdata.MustNewAAAA(netip.MustParseAddr("2001:db8::1")))
 	got := acidns.Extract[rdata.A]([]wire.Record{rec})
 	require.Empty(t, got)
 }

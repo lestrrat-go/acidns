@@ -31,7 +31,7 @@ func (w *rlFakeWriter) Network() string            { return "udp" }
 func rateLimitMkInner() acidns.Handler {
 	return acidns.HandlerFunc(func(_ context.Context, w acidns.ResponseWriter, q wire.Message) {
 		ans := wire.NewRecord(q.Questions()[0].Name(), time.Minute,
-			rdata.NewA(netip.MustParseAddr("203.0.113.1")))
+			rdata.MustNewA(netip.MustParseAddr("203.0.113.1")))
 		resp, _ := wire.NewBuilder().
 			ID(q.ID()).
 			Response(true).

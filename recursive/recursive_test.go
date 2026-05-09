@@ -85,7 +85,7 @@ www IN  A    192.0.2.55
 		ns := wire.NewRecord(wire.MustParseName("example.com"), 60*time.Second,
 			rdata.NewNS(wire.MustParseName("ns1.example.com")))
 		glue := wire.NewRecord(wire.MustParseName("ns1.example.com"), 60*time.Second,
-			rdata.NewA(netip.MustParseAddr("127.0.0.1")))
+			rdata.MustNewA(netip.MustParseAddr("127.0.0.1")))
 		resp, _ := wire.NewBuilder().
 			ID(q.ID()).
 			Response(true).

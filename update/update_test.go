@@ -22,7 +22,7 @@ func TestSignedUpdate(t *testing.T) {
 	key := tsig.NewKey(wire.MustParseName("update.key"), tsig.HMACSHA256, secret)
 
 	rec := wire.NewRecord(wire.MustParseName("blog.example.com"), 60*time.Second,
-		rdata.NewA(netip.MustParseAddr("198.51.100.5")))
+		rdata.MustNewA(netip.MustParseAddr("198.51.100.5")))
 
 	now := time.Now().Truncate(time.Second)
 	msg, err := update.NewBuilder(wire.MustParseName("example.com")).

@@ -109,7 +109,7 @@ func TestDiscover_FiltersNonSRV(t *testing.T) {
 		records: []wire.Record{
 			// An A record sneaking into the SRV answer must be skipped.
 			wire.NewRecord(wire.MustParseName("_amt._udp.example.com"), 60*time.Second,
-				rdata.NewA(netip.MustParseAddr("192.0.2.1"))),
+				rdata.MustNewA(netip.MustParseAddr("192.0.2.1"))),
 			wire.NewRecord(wire.MustParseName("_amt._udp.example.com"), 60*time.Second,
 				rdata.NewSRV(5, 100, 2268, wire.MustParseName("relay.example.com"))),
 		},

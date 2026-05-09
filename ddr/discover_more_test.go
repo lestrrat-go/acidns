@@ -53,7 +53,7 @@ func TestDiscover_SkipsNonSVCB(t *testing.T) {
 
 	// Non-SVCB record: an A record snuck into the answer section.
 	aRec := wire.NewRecord(ddr.ResolverDomain, 60*time.Second,
-		rdata.NewA(netip.MustParseAddr("192.0.2.42")))
+		rdata.MustNewA(netip.MustParseAddr("192.0.2.42")))
 
 	// A SVCB rrtype slot whose RData is NOT an rdata.SVCB — exercise the
 	// "type assertion failed" guard inside Discover.

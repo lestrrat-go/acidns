@@ -52,7 +52,7 @@ func TestUpdateAddRRset(t *testing.T) {
 
 	// Add new record at "blog.example.com".
 	added := wire.NewRecord(wire.MustParseName("blog.example.com"), 60*time.Second,
-		rdata.NewA(netip.MustParseAddr("198.51.100.5")))
+		rdata.MustNewA(netip.MustParseAddr("198.51.100.5")))
 
 	ex, err := acidns.NewUDPExchanger(addr)
 	require.NoError(t, err)
@@ -109,7 +109,7 @@ func TestUpdatePrereqRRsetExistsFails(t *testing.T) {
 	msg, err := update.NewBuilder(wire.MustParseName("example.com")).
 		PrereqRRsetExists(wire.MustParseName("nope.example.com"), rrtype.A).
 		AddRRset(wire.NewRecord(wire.MustParseName("blog.example.com"), 60*time.Second,
-			rdata.NewA(netip.MustParseAddr("198.51.100.7")))).
+			rdata.MustNewA(netip.MustParseAddr("198.51.100.7")))).
 		Build()
 	require.NoError(t, err)
 	resp, err := ex.Exchange(t.Context(), msg)
@@ -126,7 +126,7 @@ func TestUpdatePrereqRRsetAbsentSucceeds(t *testing.T) {
 	msg, err := update.NewBuilder(wire.MustParseName("example.com")).
 		PrereqRRsetAbsent(wire.MustParseName("blog.example.com"), rrtype.A).
 		AddRRset(wire.NewRecord(wire.MustParseName("blog.example.com"), 60*time.Second,
-			rdata.NewA(netip.MustParseAddr("198.51.100.8")))).
+			rdata.MustNewA(netip.MustParseAddr("198.51.100.8")))).
 		Build()
 	require.NoError(t, err)
 	resp, err := ex.Exchange(t.Context(), msg)
@@ -162,7 +162,7 @@ func TestUpdateConcurrentWithQuery(t *testing.T) {
 				return
 			}
 			ip := netip.AddrFrom4([4]byte{198, 51, 100, byte(10 + id)})
-			rec := wire.NewRecord(wire.MustParseName("blog.example.com"), 60*time.Second, rdata.NewA(ip))
+			rec := wire.NewRecord(wire.MustParseName("blog.example.com"), 60*time.Second, rdata.MustNewA(ip))
 			for ctx.Err() == nil {
 				msg, err := update.NewBuilder(wire.MustParseName("example.com")).AddRRset(rec).Build()
 				if err != nil {
@@ -209,7 +209,7 @@ func TestUpdateOutOfZoneRefused(t *testing.T) {
 	require.NoError(t, err)
 	msg, err := update.NewBuilder(wire.MustParseName("example.org")).
 		AddRRset(wire.NewRecord(wire.MustParseName("a.example.org"), 60*time.Second,
-			rdata.NewA(netip.MustParseAddr("198.51.100.9")))).
+			rdata.MustNewA(netip.MustParseAddr("198.51.100.9")))).
 		Build()
 	require.NoError(t, err)
 	resp, err := ex.Exchange(t.Context(), msg)

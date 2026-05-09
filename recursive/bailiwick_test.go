@@ -41,7 +41,7 @@ func TestGlueForRejectsOutOfBailiwickAdditional(t *testing.T) {
 	// In-bailiwick glue is accepted.
 	good := []wire.Record{
 		wire.NewRecord(target, 0,
-			rdata.NewA(netip.MustParseAddr("192.0.2.1"))),
+			rdata.MustNewA(netip.MustParseAddr("192.0.2.1"))),
 	}
 	require.Len(t, glueFor(target, good, zone), 1)
 
@@ -52,7 +52,7 @@ func TestGlueForRejectsOutOfBailiwickAdditional(t *testing.T) {
 	evilTarget := wire.MustParseName("evil.test")
 	poisoned := []wire.Record{
 		wire.NewRecord(evilTarget, 0,
-			rdata.NewA(netip.MustParseAddr("198.51.100.1"))),
+			rdata.MustNewA(netip.MustParseAddr("198.51.100.1"))),
 	}
 	require.Empty(t, glueFor(evilTarget, poisoned, zone),
 		"glue for out-of-bailiwick name must be rejected")
@@ -68,7 +68,7 @@ func TestRecordsAtFiltersByOwner(t *testing.T) {
 		wire.NewRecord(cur, 60, rdata.NewCNAME(other)),
 		// Forged record bundled by a malicious authoritative.
 		wire.NewRecord(other, 60,
-			rdata.NewA(netip.MustParseAddr("198.51.100.1"))),
+			rdata.MustNewA(netip.MustParseAddr("198.51.100.1"))),
 	}
 	got := recordsAt(records, cur)
 	require.Len(t, got, 1, "only records owned by cur must survive")
@@ -116,13 +116,13 @@ func TestBailiwickFilterDropsForgedAnswerRecords(t *testing.T) {
 	qname := wire.MustParseName("www.evil.example.")
 
 	good := wire.NewRecord(qname, 60*time.Second,
-		rdata.NewA(netip.MustParseAddr("198.51.100.1")))
+		rdata.MustNewA(netip.MustParseAddr("198.51.100.1")))
 	forgedAnswer := wire.NewRecord(wire.MustParseName("bank.com."), 60*time.Second,
-		rdata.NewA(netip.MustParseAddr("203.0.113.1")))
+		rdata.MustNewA(netip.MustParseAddr("203.0.113.1")))
 	forgedAuthority := wire.NewRecord(wire.MustParseName("bank.com."), 60*time.Second,
 		rdata.NewNS(wire.MustParseName("ns.evil.example.")))
 	forgedAdditional := wire.NewRecord(wire.MustParseName("bank.com."), 60*time.Second,
-		rdata.NewA(netip.MustParseAddr("203.0.113.2")))
+		rdata.MustNewA(netip.MustParseAddr("203.0.113.2")))
 	zoneNS := wire.NewRecord(wire.MustParseName("evil.example."), 60*time.Second,
 		rdata.NewNS(wire.MustParseName("ns.evil.example.")))
 

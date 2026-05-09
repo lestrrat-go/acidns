@@ -19,7 +19,7 @@ func Example_dnsupdate_build() {
 	rec := wire.NewRecord(
 		wire.MustParseName("blog.example.com"),
 		60*time.Second,
-		rdata.NewA(netip.MustParseAddr("198.51.100.5")),
+		rdata.MustNewA(netip.MustParseAddr("198.51.100.5")),
 	)
 
 	msg, err := update.NewBuilder(zone).

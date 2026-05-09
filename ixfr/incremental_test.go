@@ -60,9 +60,9 @@ func TestIncrementalDiffEvents(t *testing.T) {
 
 	zone := wire.MustParseName("example.com")
 	removed := wire.NewRecord(wire.MustParseName("a.example.com"), 60*time.Second,
-		rdata.NewA(netip.MustParseAddr("192.0.2.1")))
+		rdata.MustNewA(netip.MustParseAddr("192.0.2.1")))
 	added := wire.NewRecord(wire.MustParseName("b.example.com"), 60*time.Second,
-		rdata.NewA(netip.MustParseAddr("192.0.2.2")))
+		rdata.MustNewA(netip.MustParseAddr("192.0.2.2")))
 
 	// Wire layout:
 	//   SOA(101)               // newSOA — declared up front

@@ -440,7 +440,7 @@ func TestWriteNonSuffixOwner(t *testing.T) {
 	t.Parallel()
 	owner := wire.MustParseName("foreign.invalid")
 	rec := wire.NewRecordClass(owner, rrtype.ClassIN, 60*time.Second,
-		rdata.NewA(parseAddr(t, "192.0.2.99")))
+		rdata.MustNewA(parseAddr(t, "192.0.2.99")))
 	zsyn := &syntheticZone{
 		origin:  wire.MustParseName("example.com"),
 		records: []wire.Record{rec},

@@ -64,7 +64,7 @@ func (r *recordingExchanger) Exchange(_ context.Context, q wire.Message) (wire.M
 		Response(true).
 		Question(q.Questions()[0]).
 		Answer(wire.NewRecord(q.Questions()[0].Name(), 0,
-			rdata.NewA(netip.MustParseAddr("192.0.2.1")))).
+			rdata.MustNewA(netip.MustParseAddr("192.0.2.1")))).
 		Build()
 	return resp, nil
 }

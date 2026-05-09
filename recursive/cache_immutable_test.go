@@ -21,7 +21,7 @@ func TestCacheGetReturnsCopy(t *testing.T) {
 	c := recursive.NewMemoryCache()
 	name := wire.MustParseName("a.test.")
 	rec := wire.NewRecord(name, time.Hour,
-		rdata.NewA(netip.MustParseAddr("192.0.2.1")))
+		rdata.MustNewA(netip.MustParseAddr("192.0.2.1")))
 	c.Put(name, rrtype.ClassIN, rrtype.A, mustEntry(t, recursive.NewEntryBuilder().
 		Answer([]wire.Record{rec}).
 		ExpiresAt(time.Now().Add(time.Hour))))
@@ -34,7 +34,7 @@ func TestCacheGetReturnsCopy(t *testing.T) {
 	// Mutate the slice we got back. A second Get must see the
 	// original record, not our perturbation.
 	firstAnswer[0] = wire.NewRecord(name, time.Hour,
-		rdata.NewA(netip.MustParseAddr("198.51.100.99")))
+		rdata.MustNewA(netip.MustParseAddr("198.51.100.99")))
 
 	second, ok := c.Get(name, rrtype.ClassIN, rrtype.A)
 	require.True(t, ok)
@@ -54,7 +54,7 @@ func TestCachePutSnapshotsCaller(t *testing.T) {
 	name := wire.MustParseName("a.test.")
 	answer := []wire.Record{
 		wire.NewRecord(name, time.Hour,
-			rdata.NewA(netip.MustParseAddr("192.0.2.1"))),
+			rdata.MustNewA(netip.MustParseAddr("192.0.2.1"))),
 	}
 	c.Put(name, rrtype.ClassIN, rrtype.A, mustEntry(t, recursive.NewEntryBuilder().
 		Answer(answer).
@@ -62,7 +62,7 @@ func TestCachePutSnapshotsCaller(t *testing.T) {
 
 	// Mutate after Put.
 	answer[0] = wire.NewRecord(name, time.Hour,
-		rdata.NewA(netip.MustParseAddr("198.51.100.99")))
+		rdata.MustNewA(netip.MustParseAddr("198.51.100.99")))
 
 	got, ok := c.Get(name, rrtype.ClassIN, rrtype.A)
 	require.True(t, ok)

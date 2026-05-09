@@ -54,13 +54,13 @@ func TestServerAddrInvalid(t *testing.T) {
 
 func TestFormatRDataA(t *testing.T) {
 	t.Parallel()
-	rd := rdata.NewA(netip.MustParseAddr("192.0.2.1"))
+	rd := rdata.MustNewA(netip.MustParseAddr("192.0.2.1"))
 	require.Equal(t, "192.0.2.1", formatRData(rd))
 }
 
 func TestFormatRDataAAAA(t *testing.T) {
 	t.Parallel()
-	rd := rdata.NewAAAA(netip.MustParseAddr("2001:db8::1"))
+	rd := rdata.MustNewAAAA(netip.MustParseAddr("2001:db8::1"))
 	require.Contains(t, formatRData(rd), "2001:db8")
 }
 
@@ -111,7 +111,7 @@ func TestFormatRecord(t *testing.T) {
 	rec := wire.NewRecord(
 		wire.MustParseName("example.com"),
 		300*time.Second,
-		rdata.NewA(netip.MustParseAddr("192.0.2.1")),
+		rdata.MustNewA(netip.MustParseAddr("192.0.2.1")),
 	)
 	out := formatRecord(rec)
 	require.Contains(t, out, "example.com.")

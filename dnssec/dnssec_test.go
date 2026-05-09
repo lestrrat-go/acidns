@@ -47,7 +47,7 @@ func makeRRSIG(t *testing.T, set []wire.Record, alg rdata.DNSSECAlgorithm,
 
 func mkARRSet(name string, ip string) []wire.Record {
 	n := wire.MustParseName(name)
-	r := wire.NewRecord(n, time.Hour, rdata.NewA(netip.MustParseAddr(ip)))
+	r := wire.NewRecord(n, time.Hour, rdata.MustNewA(netip.MustParseAddr(ip)))
 	return []wire.Record{r}
 }
 

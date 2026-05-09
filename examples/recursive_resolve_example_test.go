@@ -29,11 +29,11 @@ func (d scriptedDialer) Exchange(_ context.Context, server netip.AddrPort, q wir
 		b = b.Authority(wire.NewRecord(wire.MustParseName("example.com"), time.Minute,
 			rdata.NewNS(wire.MustParseName("ns1.example.com"))))
 		b = b.Additional(wire.NewRecord(wire.MustParseName("ns1.example.com"), time.Minute,
-			rdata.NewA(netip.MustParseAddr("127.0.0.1"))))
+			rdata.MustNewA(netip.MustParseAddr("127.0.0.1"))))
 	case d.auth:
 		// Authoritative answers the query.
 		b = b.Authoritative(true).Answer(wire.NewRecord(question.Name(), time.Minute,
-			rdata.NewA(netip.MustParseAddr("198.51.100.7"))))
+			rdata.MustNewA(netip.MustParseAddr("198.51.100.7"))))
 	}
 
 	m, _ := b.Build()

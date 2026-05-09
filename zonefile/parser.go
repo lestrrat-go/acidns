@@ -230,7 +230,7 @@ func (p *parser) parseRData(t rrtype.Type, fields []fieldTok) (rdata.RData, erro
 		if !ip.Is4() {
 			return nil, fmt.Errorf("rdata A: not an IPv4 address: %s", fields[0].text)
 		}
-		return rdata.NewA(ip), nil
+		return rdata.NewA(ip)
 	case rrtype.AAAA:
 		if len(fields) != 1 {
 			return nil, fmt.Errorf("AAAA: expected 1 field, got %d", len(fields))
@@ -242,7 +242,7 @@ func (p *parser) parseRData(t rrtype.Type, fields []fieldTok) (rdata.RData, erro
 		if !ip.Is6() {
 			return nil, fmt.Errorf("AAAA: not an IPv6 address: %s", fields[0].text)
 		}
-		return rdata.NewAAAA(ip), nil
+		return rdata.NewAAAA(ip)
 	case rrtype.NS:
 		if len(fields) != 1 {
 			return nil, fmt.Errorf("NS: expected 1 field")

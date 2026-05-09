@@ -27,7 +27,7 @@ func buildChain(t *testing.T, alg rdata.DNSSECAlgorithm, now time.Time) (*fixtur
 
 	// Add data records.
 	leaf.addRR(wire.NewRecord(wire.MustParseName("www.sub.example."), time.Hour,
-		rdata.NewA(netip.MustParseAddr("192.0.2.1"))))
+		rdata.MustNewA(netip.MustParseAddr("192.0.2.1"))))
 
 	// Publish DNSKEYs at each apex and wire up delegations.
 	root.publishDNSKEY()

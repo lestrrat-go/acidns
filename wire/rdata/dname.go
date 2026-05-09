@@ -20,6 +20,9 @@ func NewDNAME(target wirebb.Name) DNAME { return DNAME{target: target} }
 func unpackDNAME(u *wirebb.Unpacker, rdlen int) (DNAME, error) {
 	var zero DNAME
 	end := u.Off() + rdlen
+	// Bound the name decode to the rdata window so a malformed peer
+	// cannot make the decoder walk into the next record before the
+	// outer off==end guard fires.
 	n, err := u.UncompressedNameInRange(end)
 	if err != nil {
 		return zero, err

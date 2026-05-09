@@ -52,7 +52,7 @@ func TestValidateRRsetSecure(t *testing.T) {
 	now := time.Now().UTC().Truncate(time.Second)
 	set := []wire.Record{
 		wire.NewRecord(wire.MustParseName("example.com"), time.Hour,
-			rdata.NewA(netip.MustParseAddr("192.0.2.1"))),
+			rdata.MustNewA(netip.MustParseAddr("192.0.2.1"))),
 	}
 	sig := signRRSIG(t, priv, set, key, now.Add(-time.Hour), now.Add(time.Hour))
 
@@ -75,7 +75,7 @@ func TestValidateRRsetNoRRSIG(t *testing.T) {
 	v := validator.New()
 	set := []wire.Record{
 		wire.NewRecord(wire.MustParseName("example.com"), time.Hour,
-			rdata.NewA(netip.MustParseAddr("192.0.2.1"))),
+			rdata.MustNewA(netip.MustParseAddr("192.0.2.1"))),
 	}
 	res, _, err := v.ValidateRRset(set, nil, nil)
 	require.Equal(t, validator.Bogus, res)
@@ -88,7 +88,7 @@ func TestValidateRRsetNTAShortCircuits(t *testing.T) {
 	v := validator.New(validator.WithValidatorNTAStore(store))
 	set := []wire.Record{
 		wire.NewRecord(wire.MustParseName("example.com"), time.Hour,
-			rdata.NewA(netip.MustParseAddr("192.0.2.1"))),
+			rdata.MustNewA(netip.MustParseAddr("192.0.2.1"))),
 	}
 	res, _, err := v.ValidateRRset(set, nil, nil)
 	require.NoError(t, err)
@@ -101,7 +101,7 @@ func TestValidateRRsetExpiredRRSIG(t *testing.T) {
 	now := time.Now().UTC().Truncate(time.Second)
 	set := []wire.Record{
 		wire.NewRecord(wire.MustParseName("example.com"), time.Hour,
-			rdata.NewA(netip.MustParseAddr("192.0.2.1"))),
+			rdata.MustNewA(netip.MustParseAddr("192.0.2.1"))),
 	}
 	// Inception/expiration both in the past.
 	sig := signRRSIG(t, priv, set, key, now.Add(-2*time.Hour), now.Add(-time.Hour))
@@ -118,7 +118,7 @@ func TestValidateRRsetNoMatchingKey(t *testing.T) {
 	now := time.Now().UTC().Truncate(time.Second)
 	set := []wire.Record{
 		wire.NewRecord(wire.MustParseName("example.com"), time.Hour,
-			rdata.NewA(netip.MustParseAddr("192.0.2.1"))),
+			rdata.MustNewA(netip.MustParseAddr("192.0.2.1"))),
 	}
 	sig := signRRSIG(t, priv, set, key, now.Add(-time.Hour), now.Add(time.Hour))
 
@@ -138,7 +138,7 @@ func TestValidateRRsetDefaultBogusPolicy(t *testing.T) {
 	now := time.Now().UTC().Truncate(time.Second)
 	set := []wire.Record{
 		wire.NewRecord(wire.MustParseName("example.com"), time.Hour,
-			rdata.NewA(netip.MustParseAddr("192.0.2.1"))),
+			rdata.MustNewA(netip.MustParseAddr("192.0.2.1"))),
 	}
 	sig := signRRSIG(t, priv, set, key, now.Add(-2*time.Hour), now.Add(-time.Hour))
 	v := validator.New(validator.WithValidatorNow(func() time.Time { return now }))
@@ -155,7 +155,7 @@ func TestValidateRRsetSameAlgDifferentKeyTag(t *testing.T) {
 	now := time.Now().UTC().Truncate(time.Second)
 	set := []wire.Record{
 		wire.NewRecord(wire.MustParseName("example.com"), time.Hour,
-			rdata.NewA(netip.MustParseAddr("192.0.2.1"))),
+			rdata.MustNewA(netip.MustParseAddr("192.0.2.1"))),
 	}
 	sig := signRRSIG(t, priv, set, key, now.Add(-time.Hour), now.Add(time.Hour))
 
@@ -177,7 +177,7 @@ func TestValidateRRsetMatchingKeyButVerifyFails(t *testing.T) {
 	now := time.Now().UTC().Truncate(time.Second)
 	set := []wire.Record{
 		wire.NewRecord(wire.MustParseName("example.com"), time.Hour,
-			rdata.NewA(netip.MustParseAddr("192.0.2.1"))),
+			rdata.MustNewA(netip.MustParseAddr("192.0.2.1"))),
 	}
 	// Build an RRSIG whose KeyTag/Algorithm match `key` but signature is
 	// random bytes.
@@ -197,7 +197,7 @@ func TestValidateRRsetNTACovers(t *testing.T) {
 	t.Parallel()
 	owner := wire.MustParseName("nta.example.")
 	set := []wire.Record{
-		wire.NewRecord(owner, time.Hour, rdata.NewA(netip.MustParseAddr("192.0.2.1"))),
+		wire.NewRecord(owner, time.Hour, rdata.MustNewA(netip.MustParseAddr("192.0.2.1"))),
 	}
 	ntas := validator.NewNTAStore()
 	require.True(t, ntas.Add(owner, 0))

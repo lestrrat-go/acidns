@@ -77,7 +77,7 @@ func TestRoundTripResponse(t *testing.T) {
 	name := wirebb.MustParse("example.com")
 	q := wire.NewQuestion(name, rrtype.A)
 	a := wire.NewRecord(name, 300*time.Second,
-		rdata.NewA(netip.MustParseAddr("93.184.216.34")))
+		rdata.MustNewA(netip.MustParseAddr("93.184.216.34")))
 	mx := wire.NewRecord(name, 600*time.Second,
 		rdata.NewMX(10, wirebb.MustParse("mail.example.com")))
 
@@ -123,7 +123,7 @@ func TestUnmarshalRealResponse(t *testing.T) {
 	a := wire.NewRecord(
 		wirebb.MustParse("example.com"),
 		86400*time.Second,
-		rdata.NewA(netip.MustParseAddr("93.184.216.34")),
+		rdata.MustNewA(netip.MustParseAddr("93.184.216.34")),
 	)
 	out, err := wire.NewBuilder().
 		ID(0x4242).

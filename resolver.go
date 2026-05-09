@@ -377,9 +377,13 @@ func (r *resolver) specialUseAnswer(name wire.Name, t rrtype.Type) (*Answer, boo
 			var rd rdata.RData
 			switch t {
 			case rrtype.A:
-				rd = rdata.NewA(addr)
+				if a, err := rdata.NewA(addr); err == nil {
+					rd = a
+				}
 			case rrtype.AAAA:
-				rd = rdata.NewAAAA(addr)
+				if a, err := rdata.NewAAAA(addr); err == nil {
+					rd = a
+				}
 			}
 			if rd != nil {
 				records = append(records,

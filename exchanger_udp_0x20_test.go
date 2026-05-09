@@ -138,7 +138,7 @@ func startCaseEchoServer(t *testing.T, preserveCase bool) netip.AddrPort {
 				Response(true).
 				Question(respQ).
 				Answer(wire.NewRecord(qq.Name(), time.Minute,
-					rdata.NewA(netip.MustParseAddr("203.0.113.1")))).
+					rdata.MustNewA(netip.MustParseAddr("203.0.113.1")))).
 				Build()
 			respBytes, _ := wire.Marshal(respMsg)
 			_, _ = pc.WriteTo(respBytes, src)

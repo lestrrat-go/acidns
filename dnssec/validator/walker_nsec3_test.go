@@ -21,7 +21,7 @@ func buildNSEC3Chain(t *testing.T, alg rdata.DNSSECAlgorithm, mode nsec3Mode, no
 	leaf := newSignedZone(t, wire.MustParseName("sub.example."), alg, now)
 
 	leaf.addRR(wire.NewRecord(wire.MustParseName("www.sub.example."), time.Hour,
-		rdata.NewA(netip.MustParseAddr("192.0.2.1"))))
+		rdata.MustNewA(netip.MustParseAddr("192.0.2.1"))))
 
 	root.publishDNSKEY()
 	tld.publishDNSKEY()
@@ -124,7 +124,7 @@ func newNSEC3SourceFrom(t *testing.T, mode nsec3Mode, alg rdata.DNSSECAlgorithm,
 	tld := newSignedZone(t, wire.MustParseName("example."), alg, now)
 	leaf := newSignedZone(t, wire.MustParseName("sub.example."), alg, now)
 	leaf.addRR(wire.NewRecord(wire.MustParseName("www.sub.example."), time.Hour,
-		rdata.NewA(netip.MustParseAddr("192.0.2.1"))))
+		rdata.MustNewA(netip.MustParseAddr("192.0.2.1"))))
 	root.publishDNSKEY()
 	tld.publishDNSKEY()
 	leaf.publishDNSKEY()

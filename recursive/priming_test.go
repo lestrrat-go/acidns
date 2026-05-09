@@ -22,9 +22,9 @@ func primingResponseDialer(t *testing.T, newA, newB netip.Addr) stubDialer {
 			ns2 := wire.NewRecord(wire.RootName(), 86400*time.Second,
 				rdata.NewNS(wire.MustParseName("b.root-servers.test.")))
 			a1 := wire.NewRecord(wire.MustParseName("a.root-servers.test."),
-				86400*time.Second, rdata.NewA(newA))
+				86400*time.Second, rdata.MustNewA(newA))
 			a2 := wire.NewRecord(wire.MustParseName("b.root-servers.test."),
-				86400*time.Second, rdata.NewA(newB))
+				86400*time.Second, rdata.MustNewA(newB))
 			return b.Authoritative(true).
 				Answer(ns1).Answer(ns2).
 				Additional(a1).Additional(a2)

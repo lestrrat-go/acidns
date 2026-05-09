@@ -99,7 +99,7 @@ func TestAnnounceConflictAborts(t *testing.T) {
 		Authoritative(true).
 		Answer(wire.NewRecord(wire.MustParseName("tv-living-room.local."),
 			120*time.Second,
-			rdata.NewA(netip.MustParseAddr("192.0.2.99")))).
+			rdata.MustNewA(netip.MustParseAddr("192.0.2.99")))).
 		Build()
 	tr.inbox <- conflict
 

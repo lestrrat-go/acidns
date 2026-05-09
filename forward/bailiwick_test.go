@@ -21,10 +21,10 @@ func TestFilterBailiwickDropsForgedAnswerRecords(t *testing.T) {
 		Response(true).
 		Question(wire.NewQuestion(qname, rrtype.A)).
 		Answer(wire.NewRecord(qname, time.Hour,
-			rdata.NewA(netip.MustParseAddr("192.0.2.1")))).
+			rdata.MustNewA(netip.MustParseAddr("192.0.2.1")))).
 		// Forged record for an unrelated name.
 		Answer(wire.NewRecord(wire.MustParseName("unrelated.evil."), time.Hour,
-			rdata.NewA(netip.MustParseAddr("198.51.100.99")))).
+			rdata.MustNewA(netip.MustParseAddr("198.51.100.99")))).
 		Build()
 	require.NoError(t, err)
 
@@ -44,10 +44,10 @@ func TestFilterBailiwickKeepsCNAMEChain(t *testing.T) {
 		Question(wire.NewQuestion(qname, rrtype.A)).
 		Answer(wire.NewRecord(qname, time.Hour, rdata.NewCNAME(target))).
 		Answer(wire.NewRecord(target, time.Hour,
-			rdata.NewA(netip.MustParseAddr("192.0.2.1")))).
+			rdata.MustNewA(netip.MustParseAddr("192.0.2.1")))).
 		// Off-chain record dropped.
 		Answer(wire.NewRecord(wire.MustParseName("other.evil."), time.Hour,
-			rdata.NewA(netip.MustParseAddr("198.51.100.99")))).
+			rdata.MustNewA(netip.MustParseAddr("198.51.100.99")))).
 		Build()
 	require.NoError(t, err)
 

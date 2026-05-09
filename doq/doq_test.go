@@ -104,7 +104,7 @@ func startDoQ(t *testing.T) (netip.AddrPort, *tls.Config) {
 					Response(true).
 					Question(req.Questions()[0]).
 					Answer(wire.NewRecord(req.Questions()[0].Name(), time.Minute,
-						rdata.NewA(netip.MustParseAddr("198.51.100.77")))).
+						rdata.MustNewA(netip.MustParseAddr("198.51.100.77")))).
 					Build()
 				out, _ := wire.Marshal(resp)
 				binary.BigEndian.PutUint16(hdr[:], uint16(len(out)))

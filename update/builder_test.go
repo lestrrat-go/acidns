@@ -39,7 +39,7 @@ func TestBuilderDeleteAll(t *testing.T) {
 func TestBuilderDeleteRecord(t *testing.T) {
 	t.Parallel()
 	rec := wire.NewRecord(wire.MustParseName("a.example.com"), 60*time.Second,
-		rdata.NewA(netip.MustParseAddr("192.0.2.1")))
+		rdata.MustNewA(netip.MustParseAddr("192.0.2.1")))
 	msg, err := update.NewBuilder(wire.MustParseName("example.com")).
 		DeleteRecord(rec).
 		Build()

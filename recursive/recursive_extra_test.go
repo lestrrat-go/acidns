@@ -36,7 +36,7 @@ func (h chainHandler) ServeDNS(_ context.Context, w acidns.ResponseWriter, q wir
 			continue
 		}
 		if a, ok := h.final[cur.String()]; ok {
-			b.Answer(wire.NewRecord(cur, time.Hour, rdata.NewA(a)))
+			b.Answer(wire.NewRecord(cur, time.Hour, rdata.MustNewA(a)))
 		}
 		break
 	}

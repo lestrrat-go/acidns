@@ -39,7 +39,7 @@ func TestUpdateRefusedByDefault(t *testing.T) {
 	require.NoError(t, err)
 	msg, err := update.NewBuilder(wire.MustParseName("example.com")).
 		AddRRset(wire.NewRecord(wire.MustParseName("blog.example.com"),
-			60*time.Second, rdata.NewA(netip.MustParseAddr("198.51.100.1")))).
+			60*time.Second, rdata.MustNewA(netip.MustParseAddr("198.51.100.1")))).
 		Build()
 	require.NoError(t, err)
 
@@ -100,7 +100,7 @@ func TestUpdatePolicyReceivesRawRequest(t *testing.T) {
 	require.NoError(t, err)
 	msg, err := update.NewBuilder(wire.MustParseName("example.com")).
 		AddRRset(wire.NewRecord(wire.MustParseName("blog.example.com"),
-			60*time.Second, rdata.NewA(netip.MustParseAddr("198.51.100.5")))).
+			60*time.Second, rdata.MustNewA(netip.MustParseAddr("198.51.100.5")))).
 		Build()
 	require.NoError(t, err)
 
@@ -145,7 +145,7 @@ func TestUpdatePolicyAllowsExplicitOptIn(t *testing.T) {
 	require.NoError(t, err)
 	msg, err := update.NewBuilder(wire.MustParseName("example.com")).
 		AddRRset(wire.NewRecord(wire.MustParseName("blog.example.com"),
-			60*time.Second, rdata.NewA(netip.MustParseAddr("198.51.100.5")))).
+			60*time.Second, rdata.MustNewA(netip.MustParseAddr("198.51.100.5")))).
 		Build()
 	require.NoError(t, err)
 	resp, err := ex.Exchange(ctx, msg)

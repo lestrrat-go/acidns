@@ -14,9 +14,9 @@ func Example_rrset_group() {
 	// Mixed TTLs harmonise to the minimum (§5.2).
 	name := wire.MustParseName("example.com")
 	records := []wire.Record{
-		wire.NewRecord(name, 60*time.Second, rdata.NewA(netip.MustParseAddr("192.0.2.1"))),
-		wire.NewRecord(name, 30*time.Second, rdata.NewA(netip.MustParseAddr("192.0.2.2"))),
-		wire.NewRecord(name, 60*time.Second, rdata.NewAAAA(netip.MustParseAddr("2001:db8::1"))),
+		wire.NewRecord(name, 60*time.Second, rdata.MustNewA(netip.MustParseAddr("192.0.2.1"))),
+		wire.NewRecord(name, 30*time.Second, rdata.MustNewA(netip.MustParseAddr("192.0.2.2"))),
+		wire.NewRecord(name, 60*time.Second, rdata.MustNewAAAA(netip.MustParseAddr("2001:db8::1"))),
 	}
 
 	groups, err := wire.GroupRecords(records)

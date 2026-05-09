@@ -82,7 +82,7 @@ func startDoT(t *testing.T) (netip.AddrPort, *tls.Config) {
 					Response(true).
 					Question(req.Questions()[0]).
 					Answer(wire.NewRecord(req.Questions()[0].Name(), time.Minute,
-						rdata.NewA(netip.MustParseAddr("198.51.100.42")))).
+						rdata.MustNewA(netip.MustParseAddr("198.51.100.42")))).
 					Build()
 				wire, _ := wire.Marshal(resp)
 				binary.BigEndian.PutUint16(lenBuf[:], uint16(len(wire)))

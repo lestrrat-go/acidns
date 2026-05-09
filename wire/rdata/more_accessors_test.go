@@ -35,7 +35,7 @@ func TestSSHFPFingerprintType(t *testing.T) {
 
 func TestRDataPack(t *testing.T) {
 	t.Parallel()
-	rd := rdata.NewA(netip.MustParseAddr("192.0.2.1"))
+	rd := rdata.MustNewA(netip.MustParseAddr("192.0.2.1"))
 	got := rdata.Pack(rd)
 	require.Equal(t, []byte{192, 0, 2, 1}, got)
 }

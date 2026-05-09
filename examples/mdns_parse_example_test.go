@@ -25,7 +25,7 @@ func Example_mdns_parse() {
 		Answer(wire.NewRecord(svcType, time.Minute, rdata.NewPTR(instance))).
 		Answer(wire.NewRecord(instance, time.Minute, rdata.NewSRV(0, 0, 80, host))).
 		Answer(wire.NewRecord(instance, time.Minute, txt)).
-		Additional(wire.NewRecord(host, time.Minute, rdata.NewA(netip.MustParseAddr("192.0.2.50")))).
+		Additional(wire.NewRecord(host, time.Minute, rdata.MustNewA(netip.MustParseAddr("192.0.2.50")))).
 		Build()
 
 	for _, s := range mdns.ParseBrowseResponse(resp) {

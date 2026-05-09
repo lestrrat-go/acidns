@@ -27,7 +27,7 @@ func (s *stubUpstream) Exchange(_ context.Context, q wire.Message) (wire.Message
 		RecursionAvailable(true).
 		Question(q.Questions()[0]).
 		Answer(wire.NewRecord(q.Questions()[0].Name(), time.Minute,
-			rdata.NewA(netip.MustParseAddr("198.51.100.42")))).
+			rdata.MustNewA(netip.MustParseAddr("198.51.100.42")))).
 		Build()
 	return resp, nil
 }

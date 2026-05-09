@@ -23,7 +23,7 @@ func TestBuilderBuildSnapshotsAnswers(t *testing.T) {
 		Question(wire.NewQuestion(wire.MustParseName("a.test."), rrtype.A)).
 		Answer(wire.NewRecord(
 			wire.MustParseName("a.test."), time.Hour,
-			rdata.NewA(netip.MustParseAddr("192.0.2.1"))))
+			rdata.MustNewA(netip.MustParseAddr("192.0.2.1"))))
 
 	first, err := b.Build()
 	require.NoError(t, err)
@@ -32,7 +32,7 @@ func TestBuilderBuildSnapshotsAnswers(t *testing.T) {
 	// Append after Build — must NOT change the previously-built message.
 	b = b.Answer(wire.NewRecord(
 		wire.MustParseName("a.test."), time.Hour,
-		rdata.NewA(netip.MustParseAddr("192.0.2.2"))))
+		rdata.MustNewA(netip.MustParseAddr("192.0.2.2"))))
 
 	require.Equal(t, 1, len(first.Answers()),
 		"first message must not see post-Build appends")

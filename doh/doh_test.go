@@ -52,7 +52,7 @@ func makeServer(t *testing.T, expectedMethod string) *httptest.Server {
 			Response(true).
 			Question(req.Questions()[0]).
 			Answer(wire.NewRecord(req.Questions()[0].Name(), time.Minute,
-				rdata.NewA(netip.MustParseAddr("198.51.100.99")))).
+				rdata.MustNewA(netip.MustParseAddr("198.51.100.99")))).
 			Build()
 		out, _ := wire.Marshal(resp)
 		w.Header().Set("Content-Type", "application/dns-message")

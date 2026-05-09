@@ -142,7 +142,7 @@ func buildAnswer(t *testing.T, id uint16, q wire.Question) wire.Message {
 		Response(true).
 		Question(q).
 		Answer(wire.NewRecord(q.Name(), time.Minute,
-			rdata.NewA(netip.MustParseAddr("198.51.100.77")))).
+			rdata.MustNewA(netip.MustParseAddr("198.51.100.77")))).
 		Build()
 	require.NoError(t, err)
 	return resp

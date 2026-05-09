@@ -106,7 +106,7 @@ func buildFakeResponse(query []byte, _ *dnscrypt.Cert, resolverSK [32]byte) ([]b
 		Response(true).
 		Question(req.Questions()[0]).
 		Answer(wire.NewRecord(req.Questions()[0].Name(), time.Minute,
-			rdata.NewA(netip.MustParseAddr("203.0.113.99")))).
+			rdata.MustNewA(netip.MustParseAddr("203.0.113.99")))).
 		Build()
 	if err != nil {
 		return nil, err

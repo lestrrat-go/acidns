@@ -60,7 +60,7 @@ func TestVerifyRRsetAllAlgsRejectsMissingAlgorithm(t *testing.T) {
 	// One placeholder record so the "empty rrset" guard does not fire
 	// before we reach the algorithm-coverage check.
 	rec := wire.NewRecord(wire.MustParseName("example."), 0,
-		rdata.NewA(netip.MustParseAddr("192.0.2.1")))
+		rdata.MustNewA(netip.MustParseAddr("192.0.2.1")))
 	err := w.verifyRRsetAllAlgs([]wire.Record{rec}, nil, nil, required)
 	require.ErrorIs(t, err, ErrAlgorithmIncomplete)
 }

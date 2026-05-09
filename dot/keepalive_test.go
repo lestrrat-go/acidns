@@ -93,7 +93,7 @@ func startMultiDoT(t *testing.T, idleTimeout time.Duration) (netip.AddrPort, *tl
 						Response(true).
 						Question(req.Questions()[0]).
 						Answer(wire.NewRecord(req.Questions()[0].Name(), time.Minute,
-							rdata.NewA(netip.MustParseAddr("198.51.100.99")))).
+							rdata.MustNewA(netip.MustParseAddr("198.51.100.99")))).
 						EDNS(mustEDNS(t, eb)).
 						Build()
 					out, _ := wire.Marshal(resp)

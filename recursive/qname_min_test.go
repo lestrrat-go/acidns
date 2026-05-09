@@ -40,7 +40,7 @@ func TestQNameMinimisationSendsMinimisedQueries(t *testing.T) {
 					ns := wire.NewRecord(wire.MustParseName("com."), time.Hour,
 						rdata.NewNS(wire.MustParseName("ns.com.")))
 					glue := wire.NewRecord(wire.MustParseName("ns.com."), time.Hour,
-						rdata.NewA(netip.MustParseAddr("192.0.2.10")))
+						rdata.MustNewA(netip.MustParseAddr("192.0.2.10")))
 					return b.Authority(ns).Additional(glue)
 				}), nil
 			case "example.com.":
@@ -49,14 +49,14 @@ func TestQNameMinimisationSendsMinimisedQueries(t *testing.T) {
 					ns := wire.NewRecord(wire.MustParseName("example.com."), time.Hour,
 						rdata.NewNS(wire.MustParseName("ns.example.com.")))
 					glue := wire.NewRecord(wire.MustParseName("ns.example.com."), time.Hour,
-						rdata.NewA(netip.MustParseAddr("192.0.2.20")))
+						rdata.MustNewA(netip.MustParseAddr("192.0.2.20")))
 					return b.Authority(ns).Additional(glue)
 				}), nil
 			case "www.example.com.":
 				// example.com. authoritative answer.
 				return mkResp(t, q, func(b *wire.Builder) *wire.Builder {
 					a := wire.NewRecord(qname, time.Minute,
-						rdata.NewA(netip.MustParseAddr("203.0.113.5")))
+						rdata.MustNewA(netip.MustParseAddr("203.0.113.5")))
 					return b.Authoritative(true).Answer(a)
 				}), nil
 			}
@@ -109,7 +109,7 @@ func TestQNameMinimisationDisabled(t *testing.T) {
 					ns := wire.NewRecord(wire.MustParseName("com."), time.Hour,
 						rdata.NewNS(wire.MustParseName("ns.com.")))
 					glue := wire.NewRecord(wire.MustParseName("ns.com."), time.Hour,
-						rdata.NewA(netip.MustParseAddr("192.0.2.10")))
+						rdata.MustNewA(netip.MustParseAddr("192.0.2.10")))
 					return b.Authority(ns).Additional(glue)
 				}), nil
 			case 2:
@@ -117,13 +117,13 @@ func TestQNameMinimisationDisabled(t *testing.T) {
 					ns := wire.NewRecord(wire.MustParseName("example.com."), time.Hour,
 						rdata.NewNS(wire.MustParseName("ns.example.com.")))
 					glue := wire.NewRecord(wire.MustParseName("ns.example.com."), time.Hour,
-						rdata.NewA(netip.MustParseAddr("192.0.2.20")))
+						rdata.MustNewA(netip.MustParseAddr("192.0.2.20")))
 					return b.Authority(ns).Additional(glue)
 				}), nil
 			default:
 				return mkResp(t, q, func(b *wire.Builder) *wire.Builder {
 					a := wire.NewRecord(question.Name(), time.Minute,
-						rdata.NewA(netip.MustParseAddr("203.0.113.5")))
+						rdata.MustNewA(netip.MustParseAddr("203.0.113.5")))
 					return b.Authoritative(true).Answer(a)
 				}), nil
 			}
@@ -164,7 +164,7 @@ func TestQNameMinimisationFallsBackOnNXDOMAIN(t *testing.T) {
 				seenFullTarget = true
 				return mkResp(t, q, func(b *wire.Builder) *wire.Builder {
 					a := wire.NewRecord(qname, time.Minute,
-						rdata.NewA(netip.MustParseAddr("203.0.113.7")))
+						rdata.MustNewA(netip.MustParseAddr("203.0.113.7")))
 					return b.Authoritative(true).Answer(a)
 				}), nil
 			}

@@ -332,7 +332,7 @@ func TestUpdatePrereqNameInUseFailsNXDomain(t *testing.T) {
 	msg, err := update.NewBuilder(wire.MustParseName("example.com")).
 		PrereqNameInUse(wire.MustParseName("ghost.example.com")).
 		AddRRset(wire.NewRecord(wire.MustParseName("blog.example.com"), 60*time.Second,
-			rdata.NewA(netip.MustParseAddr("198.51.100.1")))).
+			rdata.MustNewA(netip.MustParseAddr("198.51.100.1")))).
 		Build()
 	require.NoError(t, err)
 	resp, err := ex.Exchange(t.Context(), msg)
@@ -349,7 +349,7 @@ func TestUpdatePrereqNameNotInUseFailsYXDomain(t *testing.T) {
 	msg, err := update.NewBuilder(wire.MustParseName("example.com")).
 		PrereqNameNotInUse(wire.MustParseName("www.example.com")).
 		AddRRset(wire.NewRecord(wire.MustParseName("blog.example.com"), 60*time.Second,
-			rdata.NewA(netip.MustParseAddr("198.51.100.1")))).
+			rdata.MustNewA(netip.MustParseAddr("198.51.100.1")))).
 		Build()
 	require.NoError(t, err)
 	resp, err := ex.Exchange(t.Context(), msg)
@@ -367,7 +367,7 @@ func TestUpdatePrereqRRsetExistsSucceeds(t *testing.T) {
 	msg, err := update.NewBuilder(wire.MustParseName("example.com")).
 		PrereqRRsetExists(wire.MustParseName("www.example.com"), rrtype.A).
 		AddRRset(wire.NewRecord(wire.MustParseName("blog.example.com"), 60*time.Second,
-			rdata.NewA(netip.MustParseAddr("198.51.100.2")))).
+			rdata.MustNewA(netip.MustParseAddr("198.51.100.2")))).
 		Build()
 	require.NoError(t, err)
 	resp, err := ex.Exchange(t.Context(), msg)
@@ -384,7 +384,7 @@ func TestUpdatePrereqRRsetAbsentFailsYXRRSet(t *testing.T) {
 	msg, err := update.NewBuilder(wire.MustParseName("example.com")).
 		PrereqRRsetAbsent(wire.MustParseName("www.example.com"), rrtype.A).
 		AddRRset(wire.NewRecord(wire.MustParseName("blog.example.com"), 60*time.Second,
-			rdata.NewA(netip.MustParseAddr("198.51.100.3")))).
+			rdata.MustNewA(netip.MustParseAddr("198.51.100.3")))).
 		Build()
 	require.NoError(t, err)
 	resp, err := ex.Exchange(t.Context(), msg)
@@ -426,7 +426,7 @@ func TestUpdateDeleteRecordSpecific(t *testing.T) {
 	// First add a second A at www (so we can verify only one specific
 	// record is removed).
 	add := wire.NewRecord(wire.MustParseName("www.example.com"), 60*time.Second,
-		rdata.NewA(netip.MustParseAddr("198.51.100.10")))
+		rdata.MustNewA(netip.MustParseAddr("198.51.100.10")))
 	addMsg, err := update.NewBuilder(wire.MustParseName("example.com")).
 		AddRRset(add).
 		Build()
@@ -437,7 +437,7 @@ func TestUpdateDeleteRecordSpecific(t *testing.T) {
 	// Now delete the original 192.0.2.42 specifically.
 	delMsg, err := update.NewBuilder(wire.MustParseName("example.com")).
 		DeleteRecord(wire.NewRecord(wire.MustParseName("www.example.com"), 0,
-			rdata.NewA(netip.MustParseAddr("192.0.2.42")))).
+			rdata.MustNewA(netip.MustParseAddr("192.0.2.42")))).
 		Build()
 	require.NoError(t, err)
 	resp, err := ex.Exchange(t.Context(), delMsg)
@@ -467,7 +467,7 @@ func TestUpdatePrereqRRsetExistsNameExistsTypeMiss(t *testing.T) {
 	msg, err := update.NewBuilder(wire.MustParseName("example.com")).
 		PrereqRRsetExists(wire.MustParseName("www.example.com"), rrtype.AAAA).
 		AddRRset(wire.NewRecord(wire.MustParseName("blog.example.com"), 60*time.Second,
-			rdata.NewA(netip.MustParseAddr("198.51.100.4")))).
+			rdata.MustNewA(netip.MustParseAddr("198.51.100.4")))).
 		Build()
 	require.NoError(t, err)
 	resp, err := ex.Exchange(t.Context(), msg)
@@ -486,7 +486,7 @@ func TestUpdateDeleteRecordRemovesLast(t *testing.T) {
 
 	// Add a fresh name with a single A.
 	addRec := wire.NewRecord(wire.MustParseName("solo.example.com"), 60*time.Second,
-		rdata.NewA(netip.MustParseAddr("198.51.100.50")))
+		rdata.MustNewA(netip.MustParseAddr("198.51.100.50")))
 	addMsg, err := update.NewBuilder(wire.MustParseName("example.com")).
 		AddRRset(addRec).
 		Build()
@@ -521,7 +521,7 @@ func TestUpdateDeleteRecordMissingName(t *testing.T) {
 	require.NoError(t, err)
 	msg, err := update.NewBuilder(wire.MustParseName("example.com")).
 		DeleteRecord(wire.NewRecord(wire.MustParseName("ghost.example.com"), 0,
-			rdata.NewA(netip.MustParseAddr("192.0.2.99")))).
+			rdata.MustNewA(netip.MustParseAddr("192.0.2.99")))).
 		Build()
 	require.NoError(t, err)
 	resp, err := ex.Exchange(t.Context(), msg)
@@ -591,7 +591,7 @@ func TestUpdateDeleteRecordNoMatch(t *testing.T) {
 	require.NoError(t, err)
 	msg, err := update.NewBuilder(wire.MustParseName("example.com")).
 		DeleteRecord(wire.NewRecord(wire.MustParseName("www.example.com"), 0,
-			rdata.NewA(netip.MustParseAddr("203.0.113.99")))).
+			rdata.MustNewA(netip.MustParseAddr("203.0.113.99")))).
 		Build()
 	require.NoError(t, err)
 	resp, err := ex.Exchange(t.Context(), msg)

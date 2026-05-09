@@ -280,7 +280,7 @@ func TestConflictsWithAAAA(t *testing.T) {
 		Answer(wire.NewRecord(
 			wire.MustParseName("tv-living-room.local."),
 			120*time.Second,
-			rdata.NewAAAA(netip.MustParseAddr("2001:db8::1")))).
+			rdata.MustNewAAAA(netip.MustParseAddr("2001:db8::1")))).
 		Build()
 	tr.inbox <- conflict
 
@@ -314,17 +314,17 @@ func TestConflictsWithAAAANonconflicting(t *testing.T) {
 		Answer(wire.NewRecord(
 			wire.MustParseName("tv-living-room.local."),
 			120*time.Second,
-			rdata.NewAAAA(v6))).
+			rdata.MustNewAAAA(v6))).
 		// AAAA at a different name (skipped).
 		Answer(wire.NewRecord(
 			wire.MustParseName("other.local."),
 			120*time.Second,
-			rdata.NewAAAA(netip.MustParseAddr("2001:db8::99")))).
+			rdata.MustNewAAAA(netip.MustParseAddr("2001:db8::99")))).
 		// A at a different name (skipped via name mismatch).
 		Answer(wire.NewRecord(
 			wire.MustParseName("other.local."),
 			120*time.Second,
-			rdata.NewA(netip.MustParseAddr("198.51.100.5")))).
+			rdata.MustNewA(netip.MustParseAddr("198.51.100.5")))).
 		Build()
 	tr.inbox <- matching
 
@@ -423,7 +423,7 @@ func TestParseBrowseResponseAAAAFromAdditional(t *testing.T) {
 	host := wire.MustParseName("v6.local")
 
 	srv := rdata.NewSRV(0, 0, 8080, host)
-	v6 := rdata.NewAAAA(netip.MustParseAddr("2001:db8::1"))
+	v6 := rdata.MustNewAAAA(netip.MustParseAddr("2001:db8::1"))
 
 	resp, err := wire.NewBuilder().
 		ID(0).

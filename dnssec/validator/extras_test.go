@@ -324,7 +324,7 @@ func TestWalkerNoDataMissingProof(t *testing.T) {
 	// Add a real RR so leaf-style queries hit the zone and a separate name
 	// ("ghost.example.") exists in the zone but only with a different type.
 	tld.addRR(wire.NewRecord(wire.MustParseName("ghost.example."), time.Hour,
-		rdata.NewA(netip.MustParseAddr("192.0.2.42"))))
+		rdata.MustNewA(netip.MustParseAddr("192.0.2.42"))))
 
 	// Wrap the fixture source with one that strips authority records on
 	// NoData responses so the walker can't validate denial.
@@ -477,7 +477,7 @@ func TestValidatorRRSIGFutureInception(t *testing.T) {
 	now := time.Now().UTC().Truncate(time.Second)
 	set := []wire.Record{
 		wire.NewRecord(wire.MustParseName("example.com"), time.Hour,
-			rdata.NewA(netip.MustParseAddr("192.0.2.1"))),
+			rdata.MustNewA(netip.MustParseAddr("192.0.2.1"))),
 	}
 	// Inception in the future.
 	sig := signRRSIG(t, priv, set, key, now.Add(time.Hour), now.Add(2*time.Hour))

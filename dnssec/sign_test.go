@@ -19,7 +19,7 @@ func TestSignedData(t *testing.T) {
 	t.Parallel()
 	set := []wire.Record{
 		wire.NewRecord(wire.MustParseName("a.example.com"), time.Hour,
-			rdata.NewA(netip.MustParseAddr("192.0.2.1"))),
+			rdata.MustNewA(netip.MustParseAddr("192.0.2.1"))),
 	}
 	rrsig := rdata.NewRRSIG(set[0].Type(), rdata.AlgECDSAP256SHA256, 3,
 		time.Hour, time.Now().Add(time.Hour), time.Now().Add(-time.Hour),
@@ -92,7 +92,7 @@ func TestVerifyKeyTagMismatch(t *testing.T) {
 		wire.MustParseName("example.com"), make([]byte, 64))
 	set := []wire.Record{
 		wire.NewRecord(wire.MustParseName("a.example.com"), time.Hour,
-			rdata.NewA(netip.MustParseAddr("192.0.2.1"))),
+			rdata.MustNewA(netip.MustParseAddr("192.0.2.1"))),
 	}
 	require.ErrorIs(t, dnssec.Verify(set, rrsig, key), dnssec.ErrSignatureMismatch)
 }
