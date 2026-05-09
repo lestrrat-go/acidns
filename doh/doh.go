@@ -188,6 +188,14 @@ func (e *exchanger) Exchange(ctx context.Context, q wire.Message) (wire.Message,
 		return nil, fmt.Errorf("doh: unexpected content type %q", ct)
 	}
 
+	// If the server advertised Content-Length, refuse before reading
+	// any body when it claims more than the cap. Without this an
+	// upstream that lies about its body size could force us into a
+	// 64 KiB allocation per query even though we'd reject the body
+	// shortly after.
+	if cl := resp.ContentLength; cl > maxResponseBytes {
+		return nil, fmt.Errorf("doh: Content-Length %d exceeds %d byte cap", cl, maxResponseBytes)
+	}
 	body, err := io.ReadAll(io.LimitReader(resp.Body, maxResponseBytes+1))
 	if err != nil {
 		return nil, fmt.Errorf("doh: read body: %w", err)

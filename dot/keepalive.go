@@ -124,9 +124,20 @@ type kaExchanger struct {
 	cfg       kaConfig
 	tlsConfig *tls.Config
 
-	mu       sync.Mutex
+	// dialMu guards conn / deadline / dialing. It is held only for
+	// brief bookkeeping — never across the dial+TLS-handshake (which
+	// can stall arbitrarily on a black-holed upstream) nor across the
+	// wire exchange.
+	dialMu   sync.Mutex
 	conn     net.Conn
 	deadline time.Time
+	dialing  chan struct{} // non-nil while a dial is in flight
+
+	// exchangeMu serialises the wire exchange (one writer + one reader
+	// over a single TCP/TLS conn cannot interleave). The keepalive
+	// contract is "one conn, sequential queries"; only this mutex
+	// enforces that ordering.
+	exchangeMu sync.Mutex
 }
 
 func (e *kaExchanger) Exchange(ctx context.Context, q wire.Message) (wire.Message, error) {
@@ -137,27 +148,17 @@ func (e *kaExchanger) Exchange(ctx context.Context, q wire.Message) (wire.Messag
 		q = ensureKeepAliveOption(q)
 	}
 
-	e.mu.Lock()
-	defer e.mu.Unlock()
-
-	if e.conn != nil && !e.deadline.IsZero() && time.Now().After(e.deadline) {
-		_ = e.conn.Close()
-		e.conn = nil
-	}
-
-	if e.conn == nil {
-		d := tls.Dialer{Config: e.tlsConfig, NetDialer: &net.Dialer{Timeout: e.cfg.timeout}}
-		c, err := d.DialContext(ctx, "tcp", e.addr.String())
-		if err != nil {
-			return nil, fmt.Errorf("dot-keepalive: dial %s: %w", e.addr, err)
-		}
-		e.conn = c
-	}
-
-	resp, err := streamframe.ExchangeOnConn(ctx, e.conn, q, e.cfg.timeout)
+	conn, err := e.acquireConn(ctx)
 	if err != nil {
-		_ = e.conn.Close()
-		e.conn = nil
+		return nil, err
+	}
+
+	e.exchangeMu.Lock()
+	defer e.exchangeMu.Unlock()
+
+	resp, err := streamframe.ExchangeOnConn(ctx, conn, q, e.cfg.timeout)
+	if err != nil {
+		e.dropConn(conn)
 		return nil, err
 	}
 
@@ -170,22 +171,95 @@ func (e *kaExchanger) Exchange(ctx context.Context, q wire.Message) (wire.Messag
 			}
 		}
 	}
+	e.dialMu.Lock()
 	if idle == 0 {
 		// Server signals "close after this exchange" (RFC 7828 §3.3.2).
-		_ = e.conn.Close()
-		e.conn = nil
+		if e.conn == conn {
+			_ = e.conn.Close()
+			e.conn = nil
+		} else {
+			_ = conn.Close()
+		}
 		e.deadline = time.Time{}
-	} else {
+	} else if e.conn == conn {
 		e.deadline = time.Now().Add(idle)
 	}
+	e.dialMu.Unlock()
 	return resp, nil
+}
+
+// acquireConn returns a usable connection. A live cached conn is
+// reused; otherwise the caller dials outside dialMu so a stalled TLS
+// handshake does not pin concurrent callers. Concurrent callers
+// dedupe via the dialing channel — exactly one dial happens per
+// epoch.
+func (e *kaExchanger) acquireConn(ctx context.Context) (net.Conn, error) {
+	for {
+		e.dialMu.Lock()
+		if e.conn != nil {
+			if e.deadline.IsZero() || time.Now().Before(e.deadline) {
+				c := e.conn
+				e.dialMu.Unlock()
+				return c, nil
+			}
+			// Expired — drop and re-dial.
+			_ = e.conn.Close()
+			e.conn = nil
+			e.deadline = time.Time{}
+		}
+		if e.dialing != nil {
+			ch := e.dialing
+			e.dialMu.Unlock()
+			select {
+			case <-ch:
+				// Someone else's dial finished; re-check state.
+				continue
+			case <-ctx.Done():
+				return nil, ctx.Err()
+			}
+		}
+		// Become the dialer.
+		done := make(chan struct{})
+		e.dialing = done
+		e.dialMu.Unlock()
+
+		d := tls.Dialer{Config: e.tlsConfig, NetDialer: &net.Dialer{Timeout: e.cfg.timeout}}
+		c, dialErr := d.DialContext(ctx, "tcp", e.addr.String())
+
+		e.dialMu.Lock()
+		e.dialing = nil
+		if dialErr == nil {
+			e.conn = c
+			e.deadline = time.Time{}
+		}
+		e.dialMu.Unlock()
+		close(done)
+
+		if dialErr != nil {
+			return nil, fmt.Errorf("dot-keepalive: dial %s: %w", e.addr, dialErr)
+		}
+		// Loop once more so the standard reuse path returns the conn.
+	}
+}
+
+// dropConn invalidates conn so the next Exchange dials fresh. If conn
+// is no longer the active one (a concurrent caller already swapped it
+// out) we still close it so the resource isn't leaked.
+func (e *kaExchanger) dropConn(conn net.Conn) {
+	e.dialMu.Lock()
+	defer e.dialMu.Unlock()
+	if e.conn == conn {
+		e.conn = nil
+		e.deadline = time.Time{}
+	}
+	_ = conn.Close()
 }
 
 // Close releases any cached TLS connection. Subsequent Exchange calls
 // will re-handshake.
 func (e *kaExchanger) Close() error {
-	e.mu.Lock()
-	defer e.mu.Unlock()
+	e.dialMu.Lock()
+	defer e.dialMu.Unlock()
 	if e.conn != nil {
 		err := e.conn.Close()
 		e.conn = nil

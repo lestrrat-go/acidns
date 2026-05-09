@@ -78,9 +78,17 @@ type tcpKAExchanger struct {
 	addr netip.AddrPort
 	cfg  tcpKAConfig
 
-	mu       sync.Mutex
+	// dialMu guards conn / deadline / dialing. Held only for brief
+	// bookkeeping; never across the dial (which can stall arbitrarily
+	// on a black-holed upstream) nor across the wire exchange.
+	dialMu   sync.Mutex
 	conn     net.Conn
 	deadline time.Time
+	dialing  chan struct{}
+
+	// exchangeMu serialises the wire exchange (one writer + one reader
+	// over a single TCP conn cannot interleave).
+	exchangeMu sync.Mutex
 }
 
 func (e *tcpKAExchanger) Exchange(ctx context.Context, q wire.Message) (wire.Message, error) {
@@ -88,27 +96,17 @@ func (e *tcpKAExchanger) Exchange(ctx context.Context, q wire.Message) (wire.Mes
 		q = ensureKeepAliveOption(q)
 	}
 
-	e.mu.Lock()
-	defer e.mu.Unlock()
-
-	if e.conn != nil && !e.deadline.IsZero() && time.Now().After(e.deadline) {
-		_ = e.conn.Close()
-		e.conn = nil
-	}
-
-	if e.conn == nil {
-		var d net.Dialer
-		c, err := d.DialContext(ctx, "tcp", e.addr.String())
-		if err != nil {
-			return nil, fmt.Errorf("tcp-keepalive: dial %s: %w", e.addr, err)
-		}
-		e.conn = c
-	}
-
-	resp, err := streamframe.ExchangeOnConn(ctx, e.conn, q, e.cfg.timeout)
+	conn, err := e.acquireConn(ctx)
 	if err != nil {
-		_ = e.conn.Close()
-		e.conn = nil
+		return nil, err
+	}
+
+	e.exchangeMu.Lock()
+	defer e.exchangeMu.Unlock()
+
+	resp, err := streamframe.ExchangeOnConn(ctx, conn, q, e.cfg.timeout)
+	if err != nil {
+		e.dropConn(conn)
 		return nil, err
 	}
 
@@ -121,22 +119,85 @@ func (e *tcpKAExchanger) Exchange(ctx context.Context, q wire.Message) (wire.Mes
 			}
 		}
 	}
+	e.dialMu.Lock()
 	if idle == 0 {
-		// Server signals "close after this exchange" (RFC 7828 §3.3.2).
-		_ = e.conn.Close()
-		e.conn = nil
+		if e.conn == conn {
+			_ = e.conn.Close()
+			e.conn = nil
+		} else {
+			_ = conn.Close()
+		}
 		e.deadline = time.Time{}
-	} else {
+	} else if e.conn == conn {
 		e.deadline = time.Now().Add(idle)
 	}
+	e.dialMu.Unlock()
 	return resp, nil
+}
+
+// acquireConn returns a usable connection, dialing outside dialMu so a
+// stalled handshake does not pin concurrent callers. Concurrent
+// callers dedupe via the dialing channel.
+func (e *tcpKAExchanger) acquireConn(ctx context.Context) (net.Conn, error) {
+	for {
+		e.dialMu.Lock()
+		if e.conn != nil {
+			if e.deadline.IsZero() || time.Now().Before(e.deadline) {
+				c := e.conn
+				e.dialMu.Unlock()
+				return c, nil
+			}
+			_ = e.conn.Close()
+			e.conn = nil
+			e.deadline = time.Time{}
+		}
+		if e.dialing != nil {
+			ch := e.dialing
+			e.dialMu.Unlock()
+			select {
+			case <-ch:
+				continue
+			case <-ctx.Done():
+				return nil, ctx.Err()
+			}
+		}
+		done := make(chan struct{})
+		e.dialing = done
+		e.dialMu.Unlock()
+
+		var d net.Dialer
+		c, dialErr := d.DialContext(ctx, "tcp", e.addr.String())
+
+		e.dialMu.Lock()
+		e.dialing = nil
+		if dialErr == nil {
+			e.conn = c
+			e.deadline = time.Time{}
+		}
+		e.dialMu.Unlock()
+		close(done)
+
+		if dialErr != nil {
+			return nil, fmt.Errorf("tcp-keepalive: dial %s: %w", e.addr, dialErr)
+		}
+	}
+}
+
+func (e *tcpKAExchanger) dropConn(conn net.Conn) {
+	e.dialMu.Lock()
+	defer e.dialMu.Unlock()
+	if e.conn == conn {
+		e.conn = nil
+		e.deadline = time.Time{}
+	}
+	_ = conn.Close()
 }
 
 // Close releases any cached connection. Subsequent Exchange calls will
 // dial fresh.
 func (e *tcpKAExchanger) Close() error {
-	e.mu.Lock()
-	defer e.mu.Unlock()
+	e.dialMu.Lock()
+	defer e.dialMu.Unlock()
 	if e.conn != nil {
 		err := e.conn.Close()
 		e.conn = nil

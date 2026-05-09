@@ -150,7 +150,18 @@ func (h *dohHandler) readRequest(r *http.Request) ([]byte, error) {
 		if ct := r.Header.Get("Content-Type"); ct != contentType {
 			return nil, &httpProblem{status: http.StatusUnsupportedMediaType, msg: "doh: Content-Type must be " + contentType}
 		}
-		return io.ReadAll(io.LimitReader(r.Body, int64(h.cfg.maxRequestBytes)+1))
+		// Refuse oversized advertised bodies before reading.
+		if cl := r.ContentLength; cl > int64(h.cfg.maxRequestBytes) {
+			return nil, &httpProblem{status: http.StatusRequestEntityTooLarge, msg: "doh: request body exceeds size cap"}
+		}
+		body, err := io.ReadAll(io.LimitReader(r.Body, int64(h.cfg.maxRequestBytes)+1))
+		if err != nil {
+			return nil, err
+		}
+		if len(body) > h.cfg.maxRequestBytes {
+			return nil, &httpProblem{status: http.StatusRequestEntityTooLarge, msg: "doh: request body exceeds size cap"}
+		}
+		return body, nil
 	case http.MethodGet:
 		// RFC 8484 §4.1: base64url-encoded "dns" query parameter, no
 		// padding. The Go base64 package's RawURLEncoding rejects
