@@ -1,5 +1,7 @@
 package dnscrypt
 
+import "time"
+
 // ServerOption configures a DNSCrypt [Server].
 type ServerOption interface {
 	applyDNSCryptServer(*serverConfig)
@@ -12,6 +14,7 @@ func (f serverOptionFunc) applyDNSCryptServer(c *serverConfig) { f(c) }
 type serverConfig struct {
 	bufferSize    int
 	maxInflight   int
+	writeTimeout  time.Duration
 	resolverSK    [32]byte
 	resolverSKSet bool
 }
@@ -46,7 +49,22 @@ func WithServerBufferSize(n int) ServerOption {
 // dropped silently — the kernel UDP receive buffer absorbs short
 // bursts and a steady-state-overloaded server returns to baseline
 // without unbounded goroutine growth. A non-positive value disables
-// the cap. Defaults to 4096.
+// the cap. Defaults to 256: each accepted packet performs an X25519
+// + ChaCha20-Poly1305 Open, so a higher cap lets a junk-flood
+// attacker pin a CPU.
 func WithServerMaxInflight(n int) ServerOption {
 	return serverOptionFunc(func(c *serverConfig) { c.maxInflight = n })
+}
+
+// WithServerWriteTimeout caps the time the server will spend writing
+// a single response datagram. Without a deadline a blocked WriteTo —
+// e.g. a saturated socket buffer or a kernel that drops outbound
+// traffic for the destination — pins the handler goroutine
+// indefinitely; under sustained handshake load the inflight cap
+// fills and legitimate packets are dropped. Every other transport
+// (UDP/TCP/DoT/DoQ) wires a write deadline; DNSCrypt was the gap.
+//
+// Defaults to 5 seconds. A non-positive value disables the deadline.
+func WithServerWriteTimeout(d time.Duration) ServerOption {
+	return serverOptionFunc(func(c *serverConfig) { c.writeTimeout = d })
 }

@@ -82,8 +82,9 @@ func NewServer(addr netip.AddrPort, h acidns.Handler, cert *Cert, opts ...Server
 		return nil, fmt.Errorf("%w: ES%d (only ES%d is implemented)", ErrUnsupportedESVersion, cert.esVersion, ESVersion2)
 	}
 	cfg := serverConfig{
-		bufferSize:  4096,
-		maxInflight: 4096,
+		bufferSize:   4096,
+		maxInflight:  256,
+		writeTimeout: 5 * time.Second,
 	}
 	for _, o := range opts {
 		o.applyDNSCryptServer(&cfg)
@@ -236,6 +237,11 @@ type serverLoop struct {
 	sem      chan struct{}
 	bufPool  sync.Pool
 	wg       sync.WaitGroup
+	// writeMu serialises (SetWriteDeadline, WriteTo) on the shared
+	// PacketConn across handler goroutines. Without it concurrent
+	// writers can clobber each other's deadlines, producing spurious
+	// deadline-exceeded errors that look like network failures.
+	writeMu sync.Mutex
 }
 
 func (l *serverLoop) run(ctx context.Context) error {
@@ -265,6 +271,28 @@ func (l *serverLoop) run(ctx context.Context) error {
 
 		ua, ok := src.(*net.UDPAddr)
 		if !ok {
+			l.bufPool.Put(bufp)
+			continue
+		}
+		// ClientMagic prefix-gate runs BEFORE acquiring an inflight
+		// slot. Each accepted packet performs an X25519 +
+		// ChaCha20-Poly1305 Open, so without this gate a junk-flood
+		// attacker who knows nothing about the cert can still occupy
+		// every inflight slot and force legitimate clients to drop.
+		// The compare is constant-time (the ClientMagic is the
+		// secret-ish discriminator that any prefix-timing oracle would
+		// otherwise leak); inside the goroutine we skip the redundant
+		// re-check via the prefix-checked flag.
+		if n < 8 {
+			l.bufPool.Put(bufp)
+			continue
+		}
+		mat := l.material.Load()
+		if mat == nil {
+			l.bufPool.Put(bufp)
+			continue
+		}
+		if subtle.ConstantTimeCompare((*bufp)[0:8], mat.cert.clientMagic[:]) != 1 {
 			l.bufPool.Put(bufp)
 			continue
 		}
@@ -343,11 +371,13 @@ func (l *serverLoop) handlePacket(ctx context.Context, body []byte, src netip.Ad
 	}
 
 	w := &responseWriter{
-		pc:          l.pc,
-		dst:         src,
-		local:       l.addr,
-		clientNonce: clientNonce,
-		aead:        aead,
+		pc:           l.pc,
+		dst:          src,
+		local:        l.addr,
+		clientNonce:  clientNonce,
+		aead:         aead,
+		writeTimeout: l.cfg.writeTimeout,
+		writeMu:      &l.writeMu,
 	}
 	_ = shared // referenced via aead's bound key
 	switch verdict, reply := acidns.PreflightRequest(q); verdict {
@@ -367,12 +397,14 @@ func (l *serverLoop) handlePacket(ctx context.Context, body []byte, src netip.Ad
 // response and ships it back to the client; subsequent calls are
 // rejected because UDP carries one response per query.
 type responseWriter struct {
-	pc          net.PacketConn
-	dst         netip.AddrPort
-	local       netip.AddrPort
-	clientNonce [12]byte
-	aead        cipher.AEAD
-	wrote       bool
+	pc           net.PacketConn
+	dst          netip.AddrPort
+	local        netip.AddrPort
+	clientNonce  [12]byte
+	aead         cipher.AEAD
+	writeTimeout time.Duration
+	writeMu      *sync.Mutex
+	wrote        bool
 }
 
 func (w *responseWriter) RemoteAddr() netip.AddrPort { return w.dst }
@@ -408,6 +440,20 @@ func (w *responseWriter) WriteMsg(m wire.Message) error {
 	out = append(out, ct...)
 
 	udst := net.UDPAddrFromAddrPort(w.dst)
+	// Bound the write so a saturated socket buffer or a kernel that
+	// silently drops outbound traffic for the destination cannot pin
+	// this handler goroutine indefinitely. Mirrors UDP/TCP/DoT/DoQ.
+	// Serialise (SetWriteDeadline, WriteTo) on the shared PacketConn:
+	// concurrent writers would otherwise clobber each other's
+	// deadlines.
+	if w.writeMu != nil {
+		w.writeMu.Lock()
+		defer w.writeMu.Unlock()
+	}
+	if w.writeTimeout > 0 {
+		_ = w.pc.SetWriteDeadline(time.Now().Add(w.writeTimeout))
+		defer func() { _ = w.pc.SetWriteDeadline(time.Time{}) }()
+	}
 	_, err = w.pc.WriteTo(out, udst)
 	return err
 }
