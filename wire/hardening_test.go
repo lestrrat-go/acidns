@@ -183,3 +183,60 @@ func TestEDNSOptionLengthBounded(t *testing.T) {
 	_, err := wire.Unmarshal(msg)
 	require.Error(t, err, "OPT option length must be bounded by rdata window")
 }
+
+// TestEDNSDuplicateOptionRejected confirms that an OPT carrying two
+// instances of the same option code is rejected. RFC 7873 §5.4 (Cookie)
+// and RFC 7871 §6 (ECS) explicitly forbid duplicates; the parser must
+// match the builder, otherwise an attacker can ship two valid-looking
+// cookies and let strict / lax peers disagree on which one is in
+// effect.
+func TestEDNSDuplicateOptionRejected(t *testing.T) {
+	t.Parallel()
+	hdr := []byte{
+		0x00, 0x00, // ID
+		0x00, 0x00, // flags
+		0x00, 0x00, // qd
+		0x00, 0x00, // an
+		0x00, 0x00, // ns
+		0x00, 0x01, // ar
+	}
+	// OPT with two padding options, each empty (0 bytes data).
+	opt := []byte{
+		0x00,                   // root
+		0x00, 0x29,             // OPT
+		0x02, 0x00,             // udpsize 512
+		0x00, 0x00, 0x00, 0x00, // ttl
+		0x00, 0x08,             // rdlen = 8 (two 4-byte option headers)
+		0x00, 0x0c, 0x00, 0x00, // padding, len 0
+		0x00, 0x0c, 0x00, 0x00, // padding, len 0 (duplicate)
+	}
+	_, err := wire.Unmarshal(append(hdr, opt...))
+	require.Error(t, err, "duplicate EDNS option code must be rejected")
+}
+
+// TestQuestionCompressionPointerRejected confirms that a query whose
+// question section uses a compression pointer is rejected. RFC 1035
+// §4.1.4 doesn't formally forbid compression in the question, but the
+// real-world consensus (BIND, Unbound, Knot) rejects it; accepting it
+// breaks RFC 5452 §9.3 0x20 case-echo verification because the parser
+// would discard the original-case raw bytes.
+func TestQuestionCompressionPointerRejected(t *testing.T) {
+	t.Parallel()
+	// Header + a question whose name is a single pointer back to
+	// offset 12 (where the question itself begins). The pointer
+	// references its own bytes; the parser must reject before the
+	// loop self-references.
+	msg := []byte{
+		0x00, 0x00, // ID
+		0x00, 0x00, // flags
+		0x00, 0x01, // qd = 1
+		0x00, 0x00, // an
+		0x00, 0x00, // ns
+		0x00, 0x00, // ar
+		0xc0, 0x0c, // qname = pointer to offset 12 (self)
+		0x00, 0x01, // type A
+		0x00, 0x01, // class IN
+	}
+	_, err := wire.Unmarshal(msg)
+	require.Error(t, err, "compressed qname must be rejected")
+}

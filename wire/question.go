@@ -1,6 +1,8 @@
 package wire
 
 import (
+	"fmt"
+
 	"github.com/lestrrat-go/acidns/wire/rrtype"
 	"github.com/lestrrat-go/acidns/wire/wirebb"
 )
@@ -58,32 +60,30 @@ func unpackQuestion(u *wirebb.Unpacker) (Question, error) {
 		return nil, err
 	}
 	// Capture the original wire bytes of the qname so a server can
-	// echo them back verbatim. RFC 1035 §4.1.2 forbids compression
-	// pointers in the question section, but defensively skip raw
-	// preservation if any pointer byte is present so we never emit a
-	// pointer into a wire offset that won't exist in the response.
+	// echo them back verbatim — required for RFC 5452 §9.3 0x20
+	// verification on the client. RFC 1035 §4.1.2 silently allows
+	// compression in any name field, but the question section is the
+	// only context where the client side relies on byte-for-byte echo,
+	// and a compression pointer there can be used by a man-on-the-side
+	// to point the parser at attacker-controlled bytes elsewhere in
+	// the message and bypass case-mismatch verification. Reject
+	// compressed qnames outright.
 	end := u.Off()
 	var raw []byte
 	if start >= 0 && end > start && end <= len(msg) {
 		raw = msg[start:end]
-		hasPointer := false
 		off := 0
 		for off < len(raw) {
 			b := raw[off]
 			if b&0xc0 == 0xc0 {
-				hasPointer = true
-				break
+				return nil, fmt.Errorf("%w: compression pointer in question section", ErrInvalidMessage)
 			}
 			if b == 0 {
 				break
 			}
 			off += 1 + int(b)
 		}
-		if hasPointer {
-			raw = nil
-		} else {
-			raw = append([]byte(nil), raw...)
-		}
+		raw = append([]byte(nil), raw...)
 	}
 	t, err := u.Uint16()
 	if err != nil {
