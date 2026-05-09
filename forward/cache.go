@@ -2,6 +2,7 @@ package forward
 
 import (
 	"container/list"
+	"slices"
 	"sync"
 	"time"
 
@@ -71,7 +72,14 @@ func (c *cache) get(name wire.Name, qtype rrtype.Type, class rrtype.Class, now t
 		return entry{}, false
 	}
 	c.lru.MoveToFront(el)
-	return it.val, true
+	// Clone the slices so that callers cannot mutate cached state.
+	// put() also clones on insert; this keeps the contract symmetric and
+	// defends against a future caller that appends to a returned slice.
+	out := it.val
+	out.answers = slices.Clone(out.answers)
+	out.authority = slices.Clone(out.authority)
+	out.additional = slices.Clone(out.additional)
+	return out, true
 }
 
 func (c *cache) put(name wire.Name, qtype rrtype.Type, class rrtype.Class, e entry) {

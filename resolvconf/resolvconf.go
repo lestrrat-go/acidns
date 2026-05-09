@@ -14,6 +14,7 @@ import (
 	"io"
 	"net/netip"
 	"os"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -34,11 +35,14 @@ type Config struct {
 	verbatim    []string
 }
 
-// Nameservers returns the parsed nameserver entries in source order.
-func (c *Config) Nameservers() []netip.AddrPort { return c.nameservers }
+// Nameservers returns the parsed nameserver entries in source order. The
+// returned slice is a copy; callers may mutate it without affecting the
+// Config.
+func (c *Config) Nameservers() []netip.AddrPort { return slices.Clone(c.nameservers) }
 
-// Search returns the parsed search-list entries.
-func (c *Config) Search() []wire.Name { return c.search }
+// Search returns the parsed search-list entries. The returned slice is a
+// copy; callers may mutate it without affecting the Config.
+func (c *Config) Search() []wire.Name { return slices.Clone(c.search) }
 
 // Ndots returns the ndots option value.
 func (c *Config) Ndots() int { return c.ndots }
@@ -50,8 +54,10 @@ func (c *Config) Timeout() time.Duration { return c.timeout }
 func (c *Config) Attempts() int { return c.attempts }
 
 // Verbatim returns directives and options the parser did not consume,
-// preserved verbatim so callers may surface them or pass them through.
-func (c *Config) Verbatim() []string { return c.verbatim }
+// preserved verbatim so callers may surface them or pass them through. The
+// returned slice is a copy; callers may mutate it without affecting the
+// Config.
+func (c *Config) Verbatim() []string { return slices.Clone(c.verbatim) }
 
 // Default values used when a field is absent or zero.
 const (

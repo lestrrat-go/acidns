@@ -12,8 +12,10 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"maps"
 	"net"
 	"net/netip"
+	"slices"
 	"strings"
 	"time"
 
@@ -68,11 +70,13 @@ func (s Service) Priority() uint16 { return s.priority }
 // Weight returns the service's SRV weight.
 func (s Service) Weight() uint16 { return s.weight }
 
-// Addrs returns the discovered addresses.
-func (s Service) Addrs() []netip.Addr { return s.addrs }
+// Addrs returns the discovered addresses. The returned slice is a copy;
+// callers may mutate it without affecting the Service.
+func (s Service) Addrs() []netip.Addr { return slices.Clone(s.addrs) }
 
-// Text returns the discovered TXT key/value pairs.
-func (s Service) Text() map[string]string { return s.text }
+// Text returns the discovered TXT key/value pairs. The returned map is a
+// copy; callers may mutate it without affecting the Service.
+func (s Service) Text() map[string]string { return maps.Clone(s.text) }
 
 // TTL returns the discovered SRV TTL.
 func (s Service) TTL() time.Duration { return s.ttl }
