@@ -262,6 +262,12 @@ func unpackOPT(u *wirebb.Unpacker) (EDNS, error) {
 		version:  uint8(ttl >> 16),
 		do:       ttl&(1<<15) != 0,
 	}
+	// Track seen option codes to reject duplicates symmetric with
+	// EDNSBuilder.Build. RFC 7873 §5.4 (Cookie) and RFC 7871 §6 (ECS)
+	// explicitly require single-instance; rejecting all duplicates
+	// closes the strict-vs-lax cross-implementation gap an attacker can
+	// use to smuggle two interpretations of the same payload.
+	var seen map[uint16]struct{}
 	for u.Off() < end {
 		code, err := u.Uint16()
 		if err != nil {
@@ -278,6 +284,13 @@ func unpackOPT(u *wirebb.Unpacker) (EDNS, error) {
 			return nil, fmt.Errorf("%w: OPT option length %d at off %d would exceed rdata window end %d",
 				ErrInvalidMessage, l, u.Off(), end)
 		}
+		if seen == nil {
+			seen = make(map[uint16]struct{}, 4)
+		}
+		if _, dup := seen[code]; dup {
+			return nil, fmt.Errorf("%w: duplicate EDNS option code %d", ErrInvalidMessage, code)
+		}
+		seen[code] = struct{}{}
 		data, err := u.Bytes(int(l))
 		if err != nil {
 			return nil, err
