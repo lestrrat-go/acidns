@@ -116,6 +116,17 @@ func NewClientSubnet(prefix netip.Prefix, scope uint8) (EDNSOption, error) {
 	data[2] = source
 	data[3] = scope
 	copy(data[4:], addr[:addrLen])
+	// RFC 7871 §6: "Bits beyond the source prefix MUST be zero on the
+	// wire." A non-byte-aligned source (e.g. /20) leaves up to 7
+	// caller-supplied IP bits in the last address byte; mask them off so
+	// the privacy boundary the caller asked for is the privacy boundary
+	// the upstream sees.
+	if addrLen > 0 {
+		trailing := uint(addrLen*8) - uint(source)
+		if trailing > 0 {
+			data[4+addrLen-1] &= byte(0xff << trailing)
+		}
+	}
 	return ednsOption{code: EDNSOptionClientSubnet, data: data}, nil
 }
 

@@ -58,6 +58,29 @@ func TestClientSubnet(t *testing.T) {
 	require.Equal(t, uint8(56), scope6)
 }
 
+// RFC 7871 §6: bits beyond the source-prefix MUST be zero on the wire.
+// A non-byte-aligned source-prefix carries up to 7 caller-supplied IP
+// bits in the last address byte; the encoder must mask them off so the
+// declared privacy boundary is the on-wire boundary.
+func TestClientSubnet_TrailingBitsMaskedOnEncode(t *testing.T) {
+	t.Parallel()
+	// 192.0.2.137/20: last meaningful byte is data[6] (4 header + 3),
+	// source/8 = 2 bytes whole + 4 bits in the third byte. The third
+	// byte should retain only the high 4 bits of 0x02 → 0x00.
+	o, err := wire.NewClientSubnet(netip.MustParsePrefix("192.0.2.137/20"), 0)
+	require.NoError(t, err)
+	d := o.Data()
+	require.Len(t, d, 4+3)
+	require.Equal(t, byte(0xc0), d[4])   // 192 — full byte
+	require.Equal(t, byte(0x00), d[5])   // 0 — full byte
+	require.Equal(t, byte(0x00), d[6])   // 2 → masked to 0 (top 4 bits of 0x02 are zero)
+
+	// Decoder accepts what encoder emits (round-trip).
+	prefix, _, ok := wire.ClientSubnet(o)
+	require.True(t, ok)
+	require.Equal(t, "192.0.0.0/20", prefix.String())
+}
+
 func TestDNSCookies(t *testing.T) {
 	t.Parallel()
 	cc := [8]byte{0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08}
