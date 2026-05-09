@@ -85,9 +85,13 @@ func NewServer(addr netip.AddrPort, h acidns.Handler, cert *Cert, opts ...Server
 		bufferSize:   4096,
 		maxInflight:  256,
 		writeTimeout: 5 * time.Second,
+		now:          time.Now,
 	}
 	for _, o := range opts {
 		o.applyDNSCryptServer(&cfg)
+	}
+	if cfg.now == nil {
+		cfg.now = time.Now
 	}
 	if !cfg.resolverSKSet {
 		return nil, fmt.Errorf("dnscrypt: NewServer requires WithResolverSecretKey")
@@ -108,7 +112,7 @@ func NewServer(addr netip.AddrPort, h acidns.Handler, cert *Cert, opts ...Server
 // Run binds a fresh UDP socket and spawns the dispatch goroutine.
 // Cancelling ctx is the only way to stop the instance.
 func (s *Server) Run(ctx context.Context) (*ServerController, error) {
-	now := time.Now()
+	now := s.cfg.now()
 	if now.Before(s.cert.validFrom) || now.After(s.cert.validUntil) {
 		return nil, fmt.Errorf("%w: now=%s window=[%s, %s]",
 			ErrCertExpired, now, s.cert.validFrom, s.cert.validUntil)
@@ -193,7 +197,15 @@ func (c *ServerController) Rotate(cert *Cert, resolverSK [32]byte) error {
 	if cert.esVersion != ESVersion2 {
 		return fmt.Errorf("%w: ES%d", ErrUnsupportedESVersion, cert.esVersion)
 	}
-	now := time.Now()
+	// Mirror NewServer's zero-key reject — Rotate previously skipped
+	// this and accepted the zero array silently, installing a useless
+	// secret key whose corresponding X25519(zero, anything) shared
+	// secret is the all-zero scalar that handshake counterparts reject.
+	var zero [32]byte
+	if subtle.ConstantTimeCompare(resolverSK[:], zero[:]) == 1 {
+		return fmt.Errorf("dnscrypt: Rotate: resolver secret key is zero")
+	}
+	now := c.loop.cfg.now()
 	if now.Before(cert.validFrom) || now.After(cert.validUntil) {
 		return fmt.Errorf("%w: now=%s window=[%s, %s]",
 			ErrCertExpired, now, cert.validFrom, cert.validUntil)

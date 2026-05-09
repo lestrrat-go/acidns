@@ -367,6 +367,7 @@ type exchanger struct {
 	addr    netip.AddrPort
 	cert    *Cert
 	timeout time.Duration
+	now     func() time.Time
 }
 
 // New returns a acidns.Exchanger that sends DNSCrypt-encrypted
@@ -386,11 +387,14 @@ func New(addr netip.AddrPort, cert *Cert, opts ...Option) (acidns.Exchanger, err
 	if cert.esVersion != ESVersion2 {
 		return nil, fmt.Errorf("%w: ES%d", ErrUnsupportedESVersion, cert.esVersion)
 	}
-	c := config{timeout: 5 * time.Second}
+	c := config{timeout: 5 * time.Second, now: time.Now}
 	for _, o := range opts {
 		o.applyDNSCrypt(&c)
 	}
-	return &exchanger{addr: addr, cert: cert, timeout: c.timeout}, nil
+	if c.now == nil {
+		c.now = time.Now
+	}
+	return &exchanger{addr: addr, cert: cert, timeout: c.timeout, now: c.now}, nil
 }
 
 // Exchange encrypts q, sends it via UDP, and decrypts the response.
@@ -401,7 +405,7 @@ func New(addr netip.AddrPort, cert *Cert, opts ...Option) (acidns.Exchanger, err
 // [ErrCertExpired]; the caller is expected to fetch a fresh cert and
 // rebuild the Exchanger.
 func (e *exchanger) Exchange(ctx context.Context, q wire.Message) (wire.Message, error) {
-	now := time.Now()
+	now := e.now()
 	if now.Before(e.cert.validFrom) || now.After(e.cert.validUntil) {
 		return nil, fmt.Errorf("%w: now=%s window=[%s, %s]",
 			ErrCertExpired, now, e.cert.validFrom, e.cert.validUntil)

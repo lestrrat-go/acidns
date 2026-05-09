@@ -11,11 +11,20 @@ func (f optionFunc) applyDNSCrypt(c *config) { f(c) }
 
 type config struct {
 	timeout time.Duration
+	now     func() time.Time
 }
 
 // WithTimeout sets the per-exchange timeout when ctx has no deadline.
 func WithTimeout(d time.Duration) Option {
 	return optionFunc(func(c *config) { c.timeout = d })
+}
+
+// WithClock injects a clock function. Defaults to time.Now. Used for
+// the cert validity-window check on every Exchange call; production
+// code should leave this unset, tests can pin time to verify boundary
+// behaviour without monkey-patching the system clock.
+func WithClock(now func() time.Time) Option {
+	return optionFunc(func(c *config) { c.now = now })
 }
 
 // CertOption configures a Cert via NewCert.

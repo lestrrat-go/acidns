@@ -17,6 +17,7 @@ type serverConfig struct {
 	writeTimeout  time.Duration
 	resolverSK    [32]byte
 	resolverSKSet bool
+	now           func() time.Time
 }
 
 // WithResolverSecretKey supplies the X25519 32-byte resolver short-term
@@ -54,6 +55,14 @@ func WithServerBufferSize(n int) ServerOption {
 // attacker pin a CPU.
 func WithServerMaxInflight(n int) ServerOption {
 	return serverOptionFunc(func(c *serverConfig) { c.maxInflight = n })
+}
+
+// WithServerClock injects a clock function for cert validity checks
+// at Run / Rotate. Defaults to time.Now. Production code should leave
+// this unset; tests can pin time to verify boundary behaviour without
+// monkey-patching the system clock.
+func WithServerClock(now func() time.Time) ServerOption {
+	return serverOptionFunc(func(c *serverConfig) { c.now = now })
 }
 
 // WithServerWriteTimeout caps the time the server will spend writing
