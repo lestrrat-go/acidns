@@ -4,6 +4,7 @@ import (
 	"net/netip"
 	"slices"
 	"testing"
+	"time"
 
 	"github.com/lestrrat-go/acidns"
 	"github.com/lestrrat-go/acidns/wire"
@@ -27,6 +28,25 @@ func TestResolveAs_A(t *testing.T) {
 	}
 	slices.Sort(got)
 	require.Equal(t, []string{"203.0.113.1", "203.0.113.2"}, got)
+}
+
+// Extract[rdata.RData] is the degenerate "any rdata" form. The umbrella
+// interface has no inherent rrtype, so the type filter is skipped and
+// every record is returned. Earlier code would panic at Type() on the
+// nil interface zero value.
+func TestExtract_UmbrellaInterface(t *testing.T) {
+	t.Parallel()
+	a, err := rdata.NewA(netip.MustParseAddr("203.0.113.1"))
+	require.NoError(t, err)
+	aaaa, err := rdata.NewAAAA(netip.MustParseAddr("2001:db8::1"))
+	require.NoError(t, err)
+	recs := []wire.Record{
+		wire.NewRecord(wire.MustParseName("example.com"), 60*time.Second, a),
+		wire.NewRecord(wire.MustParseName("example.com"), 60*time.Second, aaaa),
+	}
+
+	got := acidns.Extract[rdata.RData](recs)
+	require.Len(t, got, 2)
 }
 
 // ResolveAs[rdata.AAAA] against an A-only zone returns zero results — the
