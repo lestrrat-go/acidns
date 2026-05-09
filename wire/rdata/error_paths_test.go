@@ -136,6 +136,13 @@ func TestUnpackInternalLengthOverflow(t *testing.T) {
 	buf = []byte{1, 0, 0, 1, 200}
 	unpackErr(t, rrtype.NSEC3PARAM, buf, len(buf))
 
+	// NSEC3PARAM: saltLen claims 4 bytes but rdlen only allows 2 more
+	// past the saltLen byte, even though the underlying buffer has
+	// enough trailing slack. The window check must reject before
+	// u.Bytes reads past the rdata window.
+	buf = []byte{1, 0, 0, 1, 4, 0xaa, 0xbb, 0xcc, 0xdd}
+	unpackErr(t, rrtype.NSEC3PARAM, buf, 7)
+
 	// HIP: hitLen=200, the buffer is only short -> u.Bytes fails.
 	// hitLen(1)=200 alg(1) pkLen(2) -> 4 bytes header; not enough room for
 	// hit. rdlen=4 forces out-of-bounds read.

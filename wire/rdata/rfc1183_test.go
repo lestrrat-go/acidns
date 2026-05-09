@@ -79,6 +79,28 @@ func TestNSAPPTR(t *testing.T) {
 	require.True(t, r.Owner().Equal(got.Owner()))
 }
 
+func TestX25UnpackOverrun(t *testing.T) {
+	t.Parallel()
+	// length byte 0x05 says 5 bytes follow, but rdlen=3 only allows 2 more.
+	buf := []byte{0x05, 0xaa, 0xbb}
+	unpackErr(t, rrtype.X25, buf, len(buf))
+}
+
+func TestISDNUnpackOverrun(t *testing.T) {
+	t.Parallel()
+	// address length 0x05 followed by only 2 bytes; rdlen=3.
+	buf := []byte{0x05, 0xaa, 0xbb}
+	unpackErr(t, rrtype.ISDN, buf, len(buf))
+}
+
+func TestISDNUnpackSubaddressOverrun(t *testing.T) {
+	t.Parallel()
+	// address length 0x02 + 2 bytes is well-formed; subaddress length 0x05
+	// then claims 5 bytes that are not present in the rdata window.
+	buf := []byte{0x02, 0xaa, 0xbb, 0x05, 0xcc}
+	unpackErr(t, rrtype.ISDN, buf, len(buf))
+}
+
 func TestLOC(t *testing.T) {
 	t.Parallel()
 	// arbitrary fixture

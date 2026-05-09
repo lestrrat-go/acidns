@@ -109,7 +109,7 @@ func unpackTyped(t rrtype.Type, u *wirebb.Unpacker, rdlen int) (RData, error) {
 	case rrtype.NSEC3:
 		return unpackNSEC3(u, rdlen)
 	case rrtype.NSEC3PARAM:
-		return unpackNSEC3PARAM(u)
+		return unpackNSEC3PARAM(u, rdlen)
 	case rrtype.SRV:
 		return unpackSRV(u, rdlen)
 	case rrtype.NAPTR:
@@ -119,7 +119,7 @@ func unpackTyped(t rrtype.Type, u *wirebb.Unpacker, rdlen int) (RData, error) {
 	case rrtype.AFSDB:
 		return unpackAFSDB(u, rdlen)
 	case rrtype.X25:
-		return unpackX25(u)
+		return unpackX25(u, rdlen)
 	case rrtype.ISDN:
 		return unpackISDN(u, rdlen)
 	case rrtype.RT:

@@ -119,9 +119,10 @@ func NewX25(addr string) (X25, error) {
 	return X25{addr: addr}, nil
 }
 
-func unpackX25(u *wirebb.Unpacker) (X25, error) {
+func unpackX25(u *wirebb.Unpacker, rdlen int) (X25, error) {
 	var zero X25
-	s, err := u.CharString()
+	end := u.Off() + rdlen
+	s, err := u.CharStringInRange(end)
 	if err != nil {
 		return zero, err
 	}
@@ -162,14 +163,14 @@ func NewISDN(addr, subaddress string, hasSubaddress bool) (ISDN, error) {
 func unpackISDN(u *wirebb.Unpacker, rdlen int) (ISDN, error) {
 	var zero ISDN
 	end := u.Off() + rdlen
-	addr, err := u.CharString()
+	addr, err := u.CharStringInRange(end)
 	if err != nil {
 		return zero, err
 	}
 	if u.Off() == end {
 		return ISDN{addr: string(addr)}, nil
 	}
-	sub, err := u.CharString()
+	sub, err := u.CharStringInRange(end)
 	if err != nil {
 		return zero, err
 	}

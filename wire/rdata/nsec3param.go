@@ -50,8 +50,9 @@ func MustNewNSEC3PARAM(alg, flags uint8, iter uint16, salt []byte) NSEC3PARAM {
 	return n
 }
 
-func unpackNSEC3PARAM(u *wirebb.Unpacker) (NSEC3PARAM, error) {
+func unpackNSEC3PARAM(u *wirebb.Unpacker, rdlen int) (NSEC3PARAM, error) {
 	var zero NSEC3PARAM
+	end := u.Off() + rdlen
 	alg, err := u.Uint8()
 	if err != nil {
 		return zero, err
@@ -67,6 +68,9 @@ func unpackNSEC3PARAM(u *wirebb.Unpacker) (NSEC3PARAM, error) {
 	saltLen, err := u.Uint8()
 	if err != nil {
 		return zero, err
+	}
+	if u.Off()+int(saltLen) > end {
+		return zero, fmt.Errorf("%w: NSEC3PARAM salt length %d exceeds rdata window", ErrInvalidRData, saltLen)
 	}
 	salt, err := u.Bytes(int(saltLen))
 	if err != nil {
