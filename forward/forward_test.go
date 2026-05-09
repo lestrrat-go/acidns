@@ -456,7 +456,7 @@ func TestEDNSPreservedAndForwarded(t *testing.T) {
 				sawDO.Store(e.DO())
 				sawUDPSize.Store(uint32(e.UDPSize()))
 			}
-			respEDNS := wire.NewEDNSBuilder().UDPSize(4096).DO(true).Build()
+			respEDNS := mustEDNS(t, wire.NewEDNSBuilder().UDPSize(4096).DO(true))
 			a, _ := wire.NewBuilder().
 				ID(q.ID()).
 				Response(true).
@@ -473,7 +473,7 @@ func TestEDNSPreservedAndForwarded(t *testing.T) {
 	h, err := forward.New(forward.WithUpstream(up))
 	require.NoError(t, err)
 
-	clientEDNS := wire.NewEDNSBuilder().UDPSize(1232).DO(true).Build()
+	clientEDNS := mustEDNS(t, wire.NewEDNSBuilder().UDPSize(1232).DO(true))
 	q, err := wire.NewBuilder().
 		ID(0xc0de).
 		RecursionDesired(true).

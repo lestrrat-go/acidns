@@ -305,10 +305,14 @@ func (r *resolver) resolve(ctx context.Context, name wire.Name, t rrtype.Type) (
 		RecursionDesired(true).
 		Question(wire.NewQuestion(name, t))
 	if !r.disableEDNS {
-		b = b.EDNS(wire.NewEDNSBuilder().
+		ed, eerr := wire.NewEDNSBuilder().
 			UDPSize(r.ednsUDP).
 			DO(r.ednsDO).
-			Build())
+			Build()
+		if eerr != nil {
+			return nil, eerr
+		}
+		b = b.EDNS(ed)
 	}
 	q, err := b.Build()
 	if err != nil {

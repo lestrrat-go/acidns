@@ -41,7 +41,7 @@ func TestPadEncrypted_AlreadyPadded_NoChange(t *testing.T) {
 		ID(q.ID()).
 		Flags(q.Flags()).
 		Question(q.Questions()[0]).
-		EDNS(wire.NewEDNSBuilder().UDPSize(1232).Option(preset).Build())
+		EDNS(mustEDNS(t, wire.NewEDNSBuilder().UDPSize(1232).Option(preset)))
 	manual, err := b.Build()
 	require.NoError(t, err)
 
@@ -77,11 +77,10 @@ func TestPadEncrypted_PreservesExistingOptions(t *testing.T) {
 		ID(1).
 		RecursionDesired(true).
 		Question(wire.NewQuestion(wire.MustParseName("example.com"), rrtype.A)).
-		EDNS(wire.NewEDNSBuilder().
+		EDNS(mustEDNS(t, wire.NewEDNSBuilder().
 			UDPSize(4096).
 			DO(true).
-			Option(wire.NewNSID(nil)).
-			Build())
+			Option(wire.NewNSID(nil))))
 	msg, err := q.Build()
 	require.NoError(t, err)
 

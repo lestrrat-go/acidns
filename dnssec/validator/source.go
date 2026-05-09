@@ -90,7 +90,10 @@ func (s *exchangerSource) nextID() uint16 {
 }
 
 func (s *exchangerSource) Lookup(ctx context.Context, qname wire.Name, qtype rrtype.Type) (wire.Message, error) {
-	edns := wire.NewEDNSBuilder().UDPSize(s.udpSize).DO(true).Build()
+	edns, err := wire.NewEDNSBuilder().UDPSize(s.udpSize).DO(true).Build()
+	if err != nil {
+		return nil, fmt.Errorf("validator: build EDNS: %w", err)
+	}
 	q, err := wire.NewBuilder().
 		ID(s.nextID()).
 		Opcode(wire.OpcodeQuery).

@@ -66,7 +66,11 @@ func PadEncrypted(m Message) Message {
 		for _, r := range m.Additionals() {
 			b = b.Additional(r)
 		}
-		b = b.EDNS(eb.Build())
+		ed, err := eb.Build()
+		if err != nil {
+			return nil, nil, err
+		}
+		b = b.EDNS(ed)
 
 		msg, err := b.Build()
 		if err != nil {

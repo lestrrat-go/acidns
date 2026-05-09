@@ -298,10 +298,9 @@ func TestKeepAlivePreservesExistingOption(t *testing.T) {
 		ID(0x9999).
 		RecursionDesired(true).
 		Question(wire.NewQuestion(wire.MustParseName("example.com"), rrtype.A)).
-		EDNS(wire.NewEDNSBuilder().
+		EDNS(mustEDNS(t, wire.NewEDNSBuilder().
 			UDPSize(1232).
-			Option(wire.NewTCPKeepalive(0)).
-			Build()).
+			Option(wire.NewTCPKeepalive(0)))).
 		Build()
 	require.NoError(t, err)
 

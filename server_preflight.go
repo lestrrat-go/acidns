@@ -74,11 +74,15 @@ func formErrReply(q wire.Message) wire.Message {
 		WithRCODE(wire.RCODEFormErr)
 	b := wire.NewBuilder().ID(q.ID()).Flags(flags)
 	if e, ok := q.EDNS(); ok && e != nil {
-		b = b.EDNS(wire.NewEDNSBuilder().
+		ed, err := wire.NewEDNSBuilder().
 			UDPSize(e.UDPSize()).
 			Version(e.Version()).
 			DO(e.DO()).
-			Build())
+			Build()
+		if err != nil {
+			return nil
+		}
+		b = b.EDNS(ed)
 	}
 	m, err := b.Build()
 	if err != nil {

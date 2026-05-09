@@ -53,7 +53,11 @@ func Example_cookies_roundtrip() {
 	server := netip.MustParseAddrPort("198.51.100.10:53")
 	b := wire.NewEDNSBuilder()
 	b = c.Apply(server, b)
-	edns := b.Build()
+	edns, err := b.Build()
+	if err != nil {
+		fmt.Println("build edns:", err)
+		return
+	}
 	for _, o := range edns.Options() {
 		if o.Code() == wire.EDNSOptionCookie {
 			fmt.Println("client emitted cookie option")

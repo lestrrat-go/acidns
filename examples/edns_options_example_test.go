@@ -18,13 +18,17 @@ func Example_edns_options() {
 	}
 	ede := wire.NewExtendedError(wire.ExtendedErrorDNSSECBogus, "RRSIG expired")
 
-	opt := wire.NewEDNSBuilder().
+	opt, err := wire.NewEDNSBuilder().
 		UDPSize(1232).
 		DO(true).
 		Option(cookie).
 		Option(ecs).
 		Option(ede).
 		Build()
+	if err != nil {
+		fmt.Println("build edns:", err)
+		return
+	}
 
 	fmt.Println("DO:", opt.DO())
 	fmt.Println("UDP size:", opt.UDPSize())

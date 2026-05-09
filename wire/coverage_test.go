@@ -443,7 +443,7 @@ func TestUnmarshalTruncatedAdditionalAfterPeek(t *testing.T) {
 func TestUnmarshalDoubleOPTRejected(t *testing.T) {
 	t.Parallel()
 
-	e := wire.NewEDNSBuilder().UDPSize(1232).Build()
+	e := mustEDNS(t, wire.NewEDNSBuilder().UDPSize(1232))
 	q := wire.NewQuestion(wirebb.MustParse("example.com"), rrtype.A)
 	m, err := wire.NewBuilder().ID(1).Question(q).EDNS(e).Build()
 	require.NoError(t, err)

@@ -133,13 +133,13 @@ func TestClientApplyReusesClientCookie(t *testing.T) {
 
 	b := wire.NewEDNSBuilder()
 	b = c.Apply(server, b)
-	cc1, sc1, ok := findCookie(b.Build())
+	cc1, sc1, ok := findCookie(mustEDNS(t, b))
 	require.True(t, ok)
 	require.Empty(t, sc1)
 
 	b2 := wire.NewEDNSBuilder()
 	b2 = c.Apply(server, b2)
-	cc2, _, ok := findCookie(b2.Build())
+	cc2, _, ok := findCookie(mustEDNS(t, b2))
 	require.True(t, ok)
 	require.Equal(t, cc1, cc2)
 }
@@ -160,7 +160,7 @@ func TestClientObserveIgnoresMissingCookie(t *testing.T) {
 	// Apply: no server cookie should be emitted.
 	b := wire.NewEDNSBuilder()
 	b = c.Apply(server, b)
-	_, sc, ok := findCookie(b.Build())
+	_, sc, ok := findCookie(mustEDNS(t, b))
 	require.True(t, ok)
 	require.Empty(t, sc)
 }
@@ -176,7 +176,7 @@ func TestClientObserveIgnoresShortCookie(t *testing.T) {
 	// NewClientServerCookie, so build an option from a client-only cookie
 	// (zero server bytes).
 	cc := [8]byte{1, 2, 3, 4, 5, 6, 7, 8}
-	respEDNS := wire.NewEDNSBuilder().Option(wire.NewClientCookie(cc)).Build()
+	respEDNS := mustEDNS(t, wire.NewEDNSBuilder().Option(wire.NewClientCookie(cc)))
 	resp, err := wire.NewBuilder().Response(true).EDNS(respEDNS).Build()
 	require.NoError(t, err)
 	c.Observe(server, resp)
@@ -184,7 +184,7 @@ func TestClientObserveIgnoresShortCookie(t *testing.T) {
 	// State should still treat us as fresh: server cookie empty.
 	b := wire.NewEDNSBuilder()
 	b = c.Apply(server, b)
-	_, sc, ok := findCookie(b.Build())
+	_, sc, ok := findCookie(mustEDNS(t, b))
 	require.True(t, ok)
 	require.Empty(t, sc)
 }
@@ -196,7 +196,7 @@ func TestClientRetryMissingCookie(t *testing.T) {
 	server := netip.MustParseAddrPort("198.51.100.30:53")
 
 	// Build a BADCOOKIE response with EDNS but no cookie option.
-	respEDNS := wire.NewEDNSBuilder().ExtendedRCODE(1).Build()
+	respEDNS := mustEDNS(t, wire.NewEDNSBuilder().ExtendedRCODE(1))
 	resp, err := wire.NewBuilder().Response(true).RCODE(7).EDNS(respEDNS).Build()
 	require.NoError(t, err)
 	ok, err := c.Retry(server, resp)
@@ -223,10 +223,9 @@ func TestClientRetryShortServerCookie(t *testing.T) {
 	server := netip.MustParseAddrPort("198.51.100.31:53")
 	cc := [8]byte{2, 2, 2, 2, 2, 2, 2, 2}
 
-	respEDNS := wire.NewEDNSBuilder().
+	respEDNS := mustEDNS(t, wire.NewEDNSBuilder().
 		ExtendedRCODE(1).
-		Option(wire.NewClientCookie(cc)).
-		Build()
+		Option(wire.NewClientCookie(cc)))
 	resp, err := wire.NewBuilder().Response(true).RCODE(7).EDNS(respEDNS).Build()
 	require.NoError(t, err)
 	ok, err := c.Retry(server, resp)
@@ -244,14 +243,14 @@ func TestClientObserveSkipsNonCookieOptions(t *testing.T) {
 
 	// Build EDNS with only an extended-error option (not a cookie).
 	ede := wire.NewExtendedError(0, "")
-	respEDNS := wire.NewEDNSBuilder().Option(ede).Build()
+	respEDNS := mustEDNS(t, wire.NewEDNSBuilder().Option(ede))
 	resp, err := wire.NewBuilder().Response(true).EDNS(respEDNS).Build()
 	require.NoError(t, err)
 	c.Observe(server, resp) // must not crash / set cache.
 
 	b := wire.NewEDNSBuilder()
 	b = c.Apply(server, b)
-	_, sc, ok := findCookie(b.Build())
+	_, sc, ok := findCookie(mustEDNS(t, b))
 	require.True(t, ok)
 	require.Empty(t, sc)
 }
@@ -280,24 +279,24 @@ func TestClientCacheEvictsAtMaxEntries(t *testing.T) {
 	firstCookies := make(map[netip.AddrPort][8]byte)
 	for _, a := range addrs {
 		now = now.Add(time.Second)
-		cc, _, _ := findCookie(c.Apply(a, wire.NewEDNSBuilder()).Build())
+		cc, _, _ := findCookie(mustEDNS(t, c.Apply(a, wire.NewEDNSBuilder())))
 		firstCookies[a] = cc
 	}
 
 	// Touch the second server so it's the most-recently-used; the
 	// oldest is now addrs[0].
 	now = now.Add(time.Second)
-	_, _, _ = findCookie(c.Apply(addrs[1], wire.NewEDNSBuilder()).Build())
+	_, _, _ = findCookie(mustEDNS(t, c.Apply(addrs[1], wire.NewEDNSBuilder())))
 
 	// Insert a fifth server: addrs[0] (the oldest by touch time) must
 	// be evicted to make room.
 	now = now.Add(time.Second)
 	fifth := netip.MustParseAddrPort("192.0.2.5:53")
-	_, _, _ = findCookie(c.Apply(fifth, wire.NewEDNSBuilder()).Build())
+	_, _, _ = findCookie(mustEDNS(t, c.Apply(fifth, wire.NewEDNSBuilder())))
 
 	// addrs[1] was the most-recently-touched survivor — its client
 	// cookie must be the same one that was minted on its first Apply.
-	cc1, _, ok := findCookie(c.Apply(addrs[1], wire.NewEDNSBuilder()).Build())
+	cc1, _, ok := findCookie(mustEDNS(t, c.Apply(addrs[1], wire.NewEDNSBuilder())))
 	require.True(t, ok)
 	require.Equal(t, firstCookies[addrs[1]], cc1)
 
@@ -305,7 +304,7 @@ func TestClientCacheEvictsAtMaxEntries(t *testing.T) {
 	// client cookie, so it must differ from the original. (Random
 	// 8-byte clash is a 1-in-2^64 false negative — fine.)
 	now = now.Add(time.Second)
-	cc0, _, ok := findCookie(c.Apply(addrs[0], wire.NewEDNSBuilder()).Build())
+	cc0, _, ok := findCookie(mustEDNS(t, c.Apply(addrs[0], wire.NewEDNSBuilder())))
 	require.True(t, ok)
 	require.NotEqual(t, firstCookies[addrs[0]], cc0)
 }

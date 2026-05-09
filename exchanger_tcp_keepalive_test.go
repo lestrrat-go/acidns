@@ -88,12 +88,16 @@ func (s *keepAliveServer) handle(c net.Conn, stop <-chan struct{}) {
 				[]byte{byte(units >> 8), byte(units)})
 			eb = eb.Option(opt)
 		}
+		ed, err := eb.Build()
+		if err != nil {
+			return
+		}
 		respMsg, err := wire.NewBuilder().
 			ID(q.ID()).
 			Response(true).
 			RecursionAvailable(true).
 			Question(q.Questions()[0]).
-			EDNS(eb.Build()).
+			EDNS(ed).
 			Build()
 		if err != nil {
 			return

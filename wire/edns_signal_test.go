@@ -29,7 +29,7 @@ func TestRFC6975AlgorithmUnderstood(t *testing.T) {
 	require.Error(t, err)
 
 	// Round-trip through Marshal/Unmarshal: a query carrying DAU survives.
-	e := wire.NewEDNSBuilder().UDPSize(4096).DO(true).Option(dau).Build()
+	e := mustEDNS(t, wire.NewEDNSBuilder().UDPSize(4096).DO(true).Option(dau))
 	q, err := wire.NewBuilder().
 		ID(1).
 		Question(wire.NewQuestion(wirebb.MustParse("example.com"), rrtype.A)).

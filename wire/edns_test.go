@@ -15,11 +15,10 @@ func TestEDNSBuilder(t *testing.T) {
 	o, err := wire.NewEDNSOption(8, []byte{0xab, 0xcd})
 	require.NoError(t, err)
 
-	e := wire.NewEDNSBuilder().
+	e := mustEDNS(t, wire.NewEDNSBuilder().
 		UDPSize(1232).
 		DO(true).
-		Option(o).
-		Build()
+		Option(o))
 	require.Equal(t, uint16(1232), e.UDPSize())
 	require.True(t, e.DO())
 	require.Equal(t, uint8(0), e.Version())
@@ -30,7 +29,7 @@ func TestEDNSBuilder(t *testing.T) {
 func TestMessageWithEDNS(t *testing.T) {
 	t.Parallel()
 
-	e := wire.NewEDNSBuilder().UDPSize(4096).DO(true).Build()
+	e := mustEDNS(t, wire.NewEDNSBuilder().UDPSize(4096).DO(true))
 	q := wire.NewQuestion(wirebb.MustParse("example.com"), rrtype.A)
 	m, err := wire.NewBuilder().
 		ID(1).
@@ -52,12 +51,11 @@ func TestEDNSRoundTrip(t *testing.T) {
 	cookie, err := wire.NewEDNSOption(10, []byte{1, 2, 3, 4, 5, 6, 7, 8})
 	require.NoError(t, err)
 
-	e := wire.NewEDNSBuilder().
+	e := mustEDNS(t, wire.NewEDNSBuilder().
 		UDPSize(1232).
 		DO(true).
 		Version(0).
-		Option(cookie).
-		Build()
+		Option(cookie))
 	q := wire.NewQuestion(wirebb.MustParse("example.com"), rrtype.A)
 	m, err := wire.NewBuilder().
 		ID(0xbeef).
@@ -87,9 +85,8 @@ func TestEDNSRoundTrip(t *testing.T) {
 
 func TestEDNSExtendedRCODE(t *testing.T) {
 	t.Parallel()
-	e := wire.NewEDNSBuilder().
+	e := mustEDNS(t, wire.NewEDNSBuilder().
 		UDPSize(1232).
-		ExtendedRCODE(1). // upper bits push the effective RCODE > 15
-		Build()
+		ExtendedRCODE(1)) // upper bits push the effective RCODE > 15
 	require.Equal(t, uint8(1), e.ExtendedRCODE())
 }

@@ -85,14 +85,14 @@ func TestClientApplyAndObserveAndRetry(t *testing.T) {
 	// Apply on a fresh server emits a client-only cookie.
 	b := wire.NewEDNSBuilder()
 	b = c.Apply(server, b)
-	edns := b.Build()
+	edns := mustEDNS(t, b)
 	cc, sc, ok := findCookie(edns)
 	require.True(t, ok)
 	require.NotEqual(t, [8]byte{}, cc)
 	require.Empty(t, sc)
 
 	// Server replies with a cookie. Observe stores it.
-	respEDNS := wire.NewEDNSBuilder().Option(mustClientServer(t, cc, []byte{0xa, 0xb, 0xc, 0xd, 0xe, 0xf, 0x1, 0x2})).Build()
+	respEDNS := mustEDNS(t, wire.NewEDNSBuilder().Option(mustClientServer(t, cc, []byte{0xa, 0xb, 0xc, 0xd, 0xe, 0xf, 0x1, 0x2})))
 	resp, err := wire.NewBuilder().Response(true).EDNS(respEDNS).Build()
 	require.NoError(t, err)
 	c.Observe(server, resp)
@@ -100,7 +100,7 @@ func TestClientApplyAndObserveAndRetry(t *testing.T) {
 	// Next Apply now includes the server cookie.
 	b2 := wire.NewEDNSBuilder()
 	b2 = c.Apply(server, b2)
-	cc2, sc2, ok := findCookie(b2.Build())
+	cc2, sc2, ok := findCookie(mustEDNS(t, b2))
 	require.True(t, ok)
 	require.Equal(t, cc, cc2)
 	require.Equal(t, []byte{0xa, 0xb, 0xc, 0xd, 0xe, 0xf, 0x1, 0x2}, sc2)
@@ -110,10 +110,9 @@ func TestClientApplyAndObserveAndRetry(t *testing.T) {
 	// in the OPT pseudo-RR (RFC 6891 §6.1.3): low 4 bits in header (7),
 	// high 8 bits in EDNS.ExtendedRCODE (1).
 	freshSC := []byte{1, 1, 1, 1, 1, 1, 1, 1}
-	respEDNS2 := wire.NewEDNSBuilder().
+	respEDNS2 := mustEDNS(t, wire.NewEDNSBuilder().
 		ExtendedRCODE(1).
-		Option(mustClientServer(t, cc, freshSC)).
-		Build()
+		Option(mustClientServer(t, cc, freshSC)))
 	resp2, _ := wire.NewBuilder().Response(true).RCODE(7).EDNS(respEDNS2).Build()
 	ok, err = c.Retry(server, resp2)
 	require.NoError(t, err)

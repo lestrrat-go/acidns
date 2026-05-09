@@ -314,8 +314,12 @@ func (r *recursive) ServeDNS(ctx context.Context, w acidns.ResponseWriter, q wir
 		// DNSSEC bogus: map to SERVFAIL + EDE 6 (DNSSEC Bogus, RFC 8914).
 		if errors.Is(err, errBogusAnswer) {
 			ede := wire.NewExtendedError(wire.ExtendedErrorDNSSECBogus, "DNSSEC bogus")
-			edns := wire.NewEDNSBuilder().UDPSize(1232).Option(ede).Build()
-			_ = w.WriteMsg(must(b.RCODE(wire.RCODEServFail).EDNS(edns).Build()))
+			edns, eerr := wire.NewEDNSBuilder().UDPSize(1232).Option(ede).Build()
+			if eerr == nil {
+				_ = w.WriteMsg(must(b.RCODE(wire.RCODEServFail).EDNS(edns).Build()))
+			} else {
+				_ = w.WriteMsg(must(b.RCODE(wire.RCODEServFail).Build()))
+			}
 			return
 		}
 		_ = w.WriteMsg(must(b.RCODE(wire.RCODEServFail).Build()))
@@ -681,10 +685,14 @@ func (r *recursive) queryAny(ctx context.Context, servers []netip.AddrPort, name
 		if err != nil {
 			return nil, netip.AddrPort{}, err
 		}
+		ed, err := wire.NewEDNSBuilder().UDPSize(1232).Build()
+		if err != nil {
+			return nil, netip.AddrPort{}, err
+		}
 		q, err := wire.NewBuilder().
 			ID(id).
 			Question(wire.NewQuestion(name, t)).
-			EDNS(wire.NewEDNSBuilder().UDPSize(1232).Build()).
+			EDNS(ed).
 			Build()
 		if err != nil {
 			return nil, netip.AddrPort{}, err

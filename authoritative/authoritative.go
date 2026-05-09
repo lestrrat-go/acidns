@@ -327,7 +327,11 @@ func setRCODE(b *wire.Builder, q wire.Message, code wire.RCODE) *wire.Builder {
 	if hi := uint8(code) >> 4; hi != 0 {
 		eb = eb.ExtendedRCODE(hi)
 	}
-	return b.EDNS(eb.Build())
+	ed, err := eb.Build()
+	if err != nil {
+		return b
+	}
+	return b.EDNS(ed)
 }
 
 // echoEDNS attaches an OPT pseudo-RR to the response builder if the

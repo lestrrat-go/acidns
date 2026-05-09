@@ -94,7 +94,7 @@ func startMultiDoT(t *testing.T, idleTimeout time.Duration) (netip.AddrPort, *tl
 						Question(req.Questions()[0]).
 						Answer(wire.NewRecord(req.Questions()[0].Name(), time.Minute,
 							rdata.NewA(netip.MustParseAddr("198.51.100.99")))).
-						EDNS(eb.Build()).
+						EDNS(mustEDNS(t, eb)).
 						Build()
 					out, _ := wire.Marshal(resp)
 					binary.BigEndian.PutUint16(lenBuf[:], uint16(len(out)))

@@ -34,7 +34,7 @@ func TestSetRCODESplits12Bit(t *testing.T) {
 			q, err := wire.NewBuilder().
 				ID(1).
 				Question(wire.NewQuestion(wire.MustParseName("test.example"), rrtype.A)).
-				EDNS(wire.NewEDNSBuilder().UDPSize(1232).Build()).
+				EDNS(mustEDNS(t, wire.NewEDNSBuilder().UDPSize(1232))).
 				Build()
 			require.NoError(t, err)
 

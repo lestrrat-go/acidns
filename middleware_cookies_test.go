@@ -95,7 +95,7 @@ func TestCookiesAttachesServerCookieOnFirstContact(t *testing.T) {
 	q, err := wire.NewBuilder().
 		ID(2).
 		Question(wire.NewQuestion(wire.MustParseName("example.com"), rrtype.A)).
-		EDNS(wire.NewEDNSBuilder().Option(clientOpt).Build()).
+		EDNS(mustEDNS(t, wire.NewEDNSBuilder().Option(clientOpt))).
 		Build()
 	require.NoError(t, err)
 
@@ -122,7 +122,7 @@ func TestCookiesAcceptsValidServerCookie(t *testing.T) {
 	q, err := wire.NewBuilder().
 		ID(3).
 		Question(wire.NewQuestion(wire.MustParseName("example.com"), rrtype.A)).
-		EDNS(wire.NewEDNSBuilder().Option(cookieOpt).Build()).
+		EDNS(mustEDNS(t, wire.NewEDNSBuilder().Option(cookieOpt))).
 		Build()
 	require.NoError(t, err)
 
@@ -152,7 +152,7 @@ func TestCookiesRejectsInvalidServerCookieWithBADCOOKIE(t *testing.T) {
 	q, err := wire.NewBuilder().
 		ID(4).
 		Question(wire.NewQuestion(wire.MustParseName("example.com"), rrtype.A)).
-		EDNS(wire.NewEDNSBuilder().Option(cookieOpt).Build()).
+		EDNS(mustEDNS(t, wire.NewEDNSBuilder().Option(cookieOpt))).
 		Build()
 	require.NoError(t, err)
 

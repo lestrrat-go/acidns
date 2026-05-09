@@ -52,7 +52,7 @@ func TestBuilderFullSetters(t *testing.T) {
 
 func TestBuilderEDNS(t *testing.T) {
 	t.Parallel()
-	e := wire.NewEDNSBuilder().UDPSize(4096).DO(true).Build()
+	e := mustEDNS(t, wire.NewEDNSBuilder().UDPSize(4096).DO(true))
 	q := wire.NewQuestion(wirebb.MustParse("example.com"), rrtype.A)
 	m, err := wire.NewBuilder().ID(1).Question(q).EDNS(e).Build()
 	require.NoError(t, err)

@@ -165,18 +165,22 @@ func buildBadCookieResponse(q wire.Message, cc [8]byte, sc []byte) wire.Message 
 		ExtendedRCODE(badCookie >> 4).
 		Option(cookieOpt)
 
+	ed, err := eb.Build()
+	if err != nil {
+		fb, _ := wire.NewBuilder().Response(true).RCODE(wire.RCODEServFail).Build()
+		return fb
+	}
 	b := wire.NewBuilder().
 		ID(q.ID()).
 		Response(true).
 		RecursionDesired(q.Flags().RecursionDesired()).
 		RCODE(wire.RCODE(badCookie & 0x0f)).
-		EDNS(eb.Build())
+		EDNS(ed)
 	if qs := q.Questions(); len(qs) > 0 {
 		b = b.Question(qs[0])
 	}
 	out, err := b.Build()
 	if err != nil {
-		// Last resort — should not trigger in practice.
 		fb, _ := wire.NewBuilder().Response(true).RCODE(wire.RCODEServFail).Build()
 		return fb
 	}
@@ -210,10 +214,14 @@ func attachCookieOption(m wire.Message, cc [8]byte, sc []byte) wire.Message {
 	}
 	eb = eb.Option(cookieOpt)
 
+	ed, err := eb.Build()
+	if err != nil {
+		return m
+	}
 	b := wire.NewBuilder().
 		ID(m.ID()).
 		Flags(m.Flags()).
-		EDNS(eb.Build())
+		EDNS(ed)
 	for _, q := range m.Questions() {
 		b = b.Question(q)
 	}

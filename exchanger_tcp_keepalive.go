@@ -186,7 +186,11 @@ func ensureKeepAliveOption(q wire.Message) wire.Message {
 		}
 	}
 	eb = eb.Option(wire.NewTCPKeepalive(0))
-	b = b.EDNS(eb.Build())
+	ed, err := eb.Build()
+	if err != nil {
+		return q
+	}
+	b = b.EDNS(ed)
 
 	m, err := b.Build()
 	if err != nil {

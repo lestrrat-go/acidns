@@ -144,13 +144,9 @@ type EDNSBuilder interface {
 	Version(uint8) EDNSBuilder
 	DO(bool) EDNSBuilder
 	Option(EDNSOption) EDNSBuilder
-	// Build returns the EDNS payload. NOTE: the asymmetry with
-	// Builder.Build (which returns (Message, error)) is intentional —
-	// EDNS construction has no validation today. If validation is
-	// added later (e.g. duplicate option codes, oversized padding),
-	// the right move is a coordinated API break that aligns this
-	// signature with the rest of the builder family.
-	Build() EDNS
+	// Build returns the EDNS payload, or an error if validation
+	// fails (e.g. duplicate EDNS option code).
+	Build() (EDNS, error)
 }
 
 type ednsBuilder struct{ e edns }
@@ -164,10 +160,22 @@ func (b *ednsBuilder) ExtendedRCODE(v uint8) EDNSBuilder { b.e.extRCODE = v; ret
 func (b *ednsBuilder) Version(v uint8) EDNSBuilder       { b.e.version = v; return b }
 func (b *ednsBuilder) DO(v bool) EDNSBuilder             { b.e.do = v; return b }
 func (b *ednsBuilder) Option(o EDNSOption) EDNSBuilder   { b.e.opts = append(b.e.opts, o); return b }
-func (b *ednsBuilder) Build() EDNS {
+func (b *ednsBuilder) Build() (EDNS, error) {
+	// Reject duplicate option codes — RFC 6891 §6.1.2 doesn't
+	// expressly forbid them but the on-wire interpretation is
+	// ambiguous and a well-formed payload should carry each option
+	// at most once.
+	seen := make(map[uint16]struct{}, len(b.e.opts))
+	for _, o := range b.e.opts {
+		c := uint16(o.Code())
+		if _, dup := seen[c]; dup {
+			return nil, fmt.Errorf("wire: duplicate EDNS option code %d", c)
+		}
+		seen[c] = struct{}{}
+	}
 	cp := b.e
 	cp.opts = append([]EDNSOption(nil), b.e.opts...)
-	return &cp
+	return &cp, nil
 }
 
 // optTypeWire is the OPT pseudo-RR type code (RFC 6891 §6.1.2).

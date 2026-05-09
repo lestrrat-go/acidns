@@ -153,7 +153,7 @@ func TestUDPServerEDNSPayloadSize(t *testing.T) {
 	q, err := wire.NewBuilder().
 		ID(1).
 		Question(wire.NewQuestion(wire.MustParseName("example.com"), rrtype.TXT)).
-		EDNS(wire.NewEDNSBuilder().UDPSize(4096).Build()).
+		EDNS(mustEDNS(t, wire.NewEDNSBuilder().UDPSize(4096))).
 		Build()
 	require.NoError(t, err)
 

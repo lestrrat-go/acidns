@@ -17,7 +17,7 @@ func TestEDNSOPTEchoOnAnswer(t *testing.T) {
 		ID(99).
 		RecursionDesired(true).
 		Question(wire.NewQuestion(wire.MustParseName("www.example.com"), rrtype.A)).
-		EDNS(wire.NewEDNSBuilder().UDPSize(4096).DO(true).Build()).
+		EDNS(mustEDNS(t, wire.NewEDNSBuilder().UDPSize(4096).DO(true))).
 		Build()
 	require.NoError(t, err)
 
@@ -56,7 +56,7 @@ func TestEDNSExtendedRCODESplit(t *testing.T) {
 	q, err := wire.NewBuilder().
 		ID(7).
 		Question(wire.NewQuestion(wire.MustParseName("not-our-zone.test"), rrtype.A)).
-		EDNS(wire.NewEDNSBuilder().UDPSize(1232).Build()).
+		EDNS(mustEDNS(t, wire.NewEDNSBuilder().UDPSize(1232))).
 		Build()
 	require.NoError(t, err)
 	w := &inProcWriter{}
@@ -76,7 +76,7 @@ func TestEDNSOPTEchoOnRefusedNoZone(t *testing.T) {
 	q, err := wire.NewBuilder().
 		ID(123).
 		Question(wire.NewQuestion(wire.MustParseName("not-our-zone.test"), rrtype.A)).
-		EDNS(wire.NewEDNSBuilder().UDPSize(1232).Build()).
+		EDNS(mustEDNS(t, wire.NewEDNSBuilder().UDPSize(1232))).
 		Build()
 	require.NoError(t, err)
 
