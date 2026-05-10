@@ -62,6 +62,15 @@ type Forwarder struct {
 	// closed is set after Close returns; ServeDNS observes this and
 	// replies SERVFAIL rather than driving a now-dead upstream.
 	closed atomic.Bool
+
+	// closeCtx is cancelled by Close so in-flight upstream Exchange
+	// goroutines (which run under context.WithoutCancel of the caller
+	// to keep followers from starving) actually stop instead of
+	// running to queryTimeout. wg counts those goroutines so Close can
+	// wait for them.
+	closeCtx    context.Context
+	closeCancel context.CancelFunc
+	wg          sync.WaitGroup
 }
 
 type inflightCall struct {
@@ -135,6 +144,7 @@ func New(opts ...Option) (*Forwarder, error) {
 		c.logger = slog.New(slog.DiscardHandler)
 	}
 	h := &Forwarder{cfg: c, cache: newCache(c.cacheSize), inflight: make(map[string]*inflightCall)}
+	h.closeCtx, h.closeCancel = context.WithCancel(context.Background())
 	if c.maxInflight > 0 {
 		h.inflightSem = make(chan struct{}, c.maxInflight)
 	}
@@ -151,9 +161,13 @@ func (h *Forwarder) CacheSize() int { return h.cache.len() }
 // Close drops the cache and, if the configured upstream Exchanger
 // implements io.Closer, propagates the Close call to it. Subsequent
 // ServeDNS calls reply SERVFAIL rather than dispatch to the (now
-// possibly closed) upstream; in-flight ServeDNS goroutines that
-// passed the closed check before Close fired will continue to use
-// the upstream until they complete.
+// possibly closed) upstream.
+//
+// In-flight upstream Exchange goroutines are signalled via a Close-
+// scoped context so they unwind promptly instead of running to
+// queryTimeout, then Close blocks until every spawned goroutine has
+// returned. A Forwarder.Close that returns therefore guarantees no
+// further upstream traffic from this instance.
 //
 // Close is idempotent — repeated calls return the same upstream
 // Close error (nil if the upstream does not implement io.Closer).
@@ -161,6 +175,13 @@ func (h *Forwarder) Close() error {
 	h.closeOnce.Do(func() {
 		h.closed.Store(true)
 		h.cache.clear()
+		// Cancel in-flight upstream goroutines BEFORE closing the
+		// upstream itself so any blocked Exchange unwinds via ctx
+		// rather than via Closer-induced I/O errors.
+		if h.closeCancel != nil {
+			h.closeCancel()
+		}
+		h.wg.Wait()
 		if c, ok := h.cfg.upstream.(io.Closer); ok {
 			h.closeErr = c.Close()
 		}
@@ -309,7 +330,9 @@ func (h *Forwarder) exchangeSingleflight(ctx context.Context, in wire.Message, q
 // trace spans, etc. — for observers down the upstream stack. The
 // exchange is bounded by queryTimeout when configured.
 func (h *Forwarder) startExchange(callerCtx context.Context, call *inflightCall, key string, in wire.Message) {
+	h.wg.Add(1)
 	go func() {
+		defer h.wg.Done()
 		defer func() {
 			h.inflightMu.Lock()
 			delete(h.inflight, key)
@@ -319,8 +342,20 @@ func (h *Forwarder) startExchange(callerCtx context.Context, call *inflightCall,
 			}
 			close(call.done)
 		}()
+		// Detach from callerCtx so a leader cancel does not orphan
+		// followers; merge in closeCtx so Forwarder.Close still
+		// reaches in-flight upstream calls.
 		exchangeCtx, cancel := context.WithCancel(context.WithoutCancel(callerCtx))
 		defer cancel()
+		stopWatch := make(chan struct{})
+		defer close(stopWatch)
+		go func() {
+			select {
+			case <-h.closeCtx.Done():
+				cancel()
+			case <-stopWatch:
+			}
+		}()
 		if h.cfg.queryTimeout > 0 {
 			var c2 context.CancelFunc
 			exchangeCtx, c2 = context.WithTimeout(exchangeCtx, h.cfg.queryTimeout)
