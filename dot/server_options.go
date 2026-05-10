@@ -20,21 +20,23 @@ type dotServerOption struct{ option.Interface }
 func (dotServerOption) dotServerOption() {}
 
 type serverConfig struct {
-	tlsConfig         *tls.Config
-	handshakeTimeout  time.Duration
-	idleTimeout       time.Duration
-	writeTimeout      time.Duration
-	maxConnections    int
-	maxConnsPerSource int
-	maxMessageSize    int
-	maxQueriesPerConn int
-	maxConnLifetime   time.Duration
-	maxInflightPer    int
+	tlsConfig          *tls.Config
+	handshakeTimeout   time.Duration
+	idleTimeout        time.Duration
+	messageReadTimeout time.Duration
+	writeTimeout       time.Duration
+	maxConnections     int
+	maxConnsPerSource  int
+	maxMessageSize     int
+	maxQueriesPerConn  int
+	maxConnLifetime    time.Duration
+	maxInflightPer     int
 }
 
 type identServerTLSConfig struct{}
 type identServerHandshakeTimeout struct{}
 type identServerIdleTimeout struct{}
+type identServerMessageReadTimeout struct{}
 type identServerWriteTimeout struct{}
 type identServerMaxConnections struct{}
 type identServerMaxConnsPerSource struct{}
@@ -73,6 +75,20 @@ func WithServerHandshakeTimeout(d time.Duration) ServerOption {
 // idle timeout.
 func WithServerIdleTimeout(d time.Duration) ServerOption {
 	return dotServerOption{option.New(identServerIdleTimeout{}, d)}
+}
+
+// WithServerMessageReadTimeout caps how long the server will wait for
+// the body bytes of a single message after the 2-byte length prefix
+// has arrived. The idle timeout ([WithServerIdleTimeout]) governs the
+// wait between messages; once a length prefix is in hand the peer is
+// committed to delivering the body promptly, so this deadline is
+// tighter. Without this distinction a peer that sends the prefix and
+// then drips body bytes just under the idle interval can pin a slot
+// for hours (idle * maxQueriesPerConn). Default 5s; non-positive
+// disables the per-message deadline (falls back to the idle timeout
+// for the body read as well).
+func WithServerMessageReadTimeout(d time.Duration) ServerOption {
+	return dotServerOption{option.New(identServerMessageReadTimeout{}, d)}
 }
 
 // WithServerWriteTimeout caps how long a single response write may

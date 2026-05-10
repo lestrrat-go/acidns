@@ -72,13 +72,14 @@ func NewServer(addr netip.AddrPort, h acidns.Handler, opts ...ServerOption) (*Se
 		return nil, fmt.Errorf("dot: handler is nil")
 	}
 	cfg := serverConfig{
-		handshakeTimeout:  10 * time.Second,
-		idleTimeout:       10 * time.Second,
-		writeTimeout:      5 * time.Second,
-		maxConnections:    1024,
-		maxConnsPerSource: 32,
-		maxMessageSize:    16 * 1024,
-		maxInflightPer:    32,
+		handshakeTimeout:   10 * time.Second,
+		idleTimeout:        10 * time.Second,
+		messageReadTimeout: 5 * time.Second,
+		writeTimeout:       5 * time.Second,
+		maxConnections:     1024,
+		maxConnsPerSource:  32,
+		maxMessageSize:     16 * 1024,
+		maxInflightPer:     32,
 		// Match TCP defaults — DoT amortises TLS state across many
 		// queries on a long-lived connection, so an unbounded
 		// per-connection budget is at least as risky here as on TCP.
@@ -93,6 +94,8 @@ func NewServer(addr netip.AddrPort, h acidns.Handler, opts ...ServerOption) (*Se
 			cfg.handshakeTimeout = option.MustGet[time.Duration](o)
 		case identServerIdleTimeout{}:
 			cfg.idleTimeout = option.MustGet[time.Duration](o)
+		case identServerMessageReadTimeout{}:
+			cfg.messageReadTimeout = option.MustGet[time.Duration](o)
 		case identServerWriteTimeout{}:
 			cfg.writeTimeout = option.MustGet[time.Duration](o)
 		case identServerMaxConnections{}:
@@ -407,6 +410,22 @@ func (l *serverLoop) serveConn(ctx context.Context, raw net.Conn) {
 		n := int(binary.BigEndian.Uint16(hdr[:]))
 		if l.cfg.maxMessageSize > 0 && n > l.cfg.maxMessageSize {
 			return
+		}
+
+		// Once the length prefix has arrived, the peer is committed to
+		// delivering the body promptly. Tighten the read deadline to
+		// messageReadTimeout so a peer cannot drip body bytes at the
+		// idle-interval cadence and pin a slot for hours. Still respect
+		// the lifetime cap.
+		bodyDeadline := time.Time{}
+		if l.cfg.messageReadTimeout > 0 {
+			bodyDeadline = time.Now().Add(l.cfg.messageReadTimeout)
+		}
+		if !lifetimeDeadline.IsZero() && (bodyDeadline.IsZero() || lifetimeDeadline.Before(bodyDeadline)) {
+			bodyDeadline = lifetimeDeadline
+		}
+		if !bodyDeadline.IsZero() {
+			_ = conn.SetReadDeadline(bodyDeadline)
 		}
 
 		bufp, _ := l.bodyPool.Get().(*[]byte)

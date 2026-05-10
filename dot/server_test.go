@@ -191,6 +191,47 @@ func TestHandshakeTimeoutDeadlines(t *testing.T) {
 	require.Error(t, err) // EOF or RST after server's handshake timeout
 }
 
+// TestServerMessageReadTimeoutClosesBodySlowloris models a peer that
+// completes the TLS handshake and the 2-byte length prefix, then drips
+// body bytes slower than messageReadTimeout. The connection must be
+// closed within the per-message deadline rather than the (longer)
+// idle deadline.
+func TestServerMessageReadTimeoutClosesBodySlowloris(t *testing.T) {
+	t.Parallel()
+	cert, clientCfg := dotTestCerts(t)
+	srv, err := dot.NewServer(
+		netip.MustParseAddrPort("127.0.0.1:0"), &echoHandler{},
+		dot.WithServerTLSConfig(&tls.Config{Certificates: []tls.Certificate{cert}}),
+		dot.WithServerMessageReadTimeout(150*time.Millisecond),
+		dot.WithServerIdleTimeout(10*time.Second),
+	)
+	require.NoError(t, err)
+	ctx, cancel := context.WithCancel(t.Context())
+	t.Cleanup(cancel)
+	ctrl, err := srv.Run(ctx)
+	require.NoError(t, err)
+
+	// Direct TLS dial — we want the raw stream, not a DoT exchanger.
+	conn, err := tls.Dial("tcp", ctrl.Addr().String(), clientCfg)
+	require.NoError(t, err)
+	defer func() { _ = conn.Close() }()
+
+	// Announce a 100-byte message but never send the body.
+	_, err = conn.Write([]byte{0x00, 0x64})
+	require.NoError(t, err)
+
+	// The server must drop us within ~messageReadTimeout. If the body
+	// read inherited idleTimeout (10s) the read below would block until
+	// the test's outer deadline.
+	_ = conn.SetReadDeadline(time.Now().Add(2 * time.Second))
+	buf := make([]byte, 64)
+	start := time.Now()
+	_, err = conn.Read(buf)
+	require.Error(t, err, "server should have closed the connection")
+	require.Less(t, time.Since(start), 2*time.Second,
+		"connection drop took longer than the body deadline window")
+}
+
 // TestServerLifecycle verifies ctx cancellation cleanly stops the
 // server and Done fires.
 func TestServerLifecycle(t *testing.T) {
