@@ -3,6 +3,7 @@ package validator
 import (
 	"context"
 	"fmt"
+	"sync/atomic"
 
 	"github.com/lestrrat-go/acidns/wire"
 	"github.com/lestrrat-go/acidns/wire/rrtype"
@@ -81,18 +82,20 @@ type exchangerSource struct {
 	ex      Exchanger
 	udpSize uint16
 	idFn    func() uint16
-	counter uint16
+	counter atomic.Uint32
 }
 
 func (s *exchangerSource) nextID() uint16 {
 	if s.idFn != nil {
 		return s.idFn()
 	}
-	s.counter++
-	if s.counter == 0 {
-		s.counter = 1
+	// 16-bit counter that skips zero. Atomic Add returns the post-increment
+	// value; if the low 16 bits are zero (every 65536 calls), advance again.
+	id := uint16(s.counter.Add(1))
+	if id == 0 {
+		id = uint16(s.counter.Add(1))
 	}
-	return s.counter
+	return id
 }
 
 func (s *exchangerSource) Lookup(ctx context.Context, qname wire.Name, qtype rrtype.Type) (wire.Message, error) {

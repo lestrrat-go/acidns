@@ -82,10 +82,13 @@ func TestExtractNSEC3ParamsNoNSEC3(t *testing.T) {
 
 func TestExchangerSourceCounterOverflow(t *testing.T) {
 	t.Parallel()
-	// Drive nextID directly through the wrap branch.
-	s := &exchangerSource{counter: 0xFFFF}
+	// Drive nextID directly through the wrap branch. After the underlying
+	// uint32 hits 0xFFFF, the next Add wraps the low 16 bits to zero, which
+	// nextID re-advances to 1.
+	s := &exchangerSource{}
+	s.counter.Store(0xFFFF)
 	id := s.nextID()
-	require.Equal(t, uint16(1), id, "wrap should reset counter to 1")
+	require.Equal(t, uint16(1), id, "wrap should skip zero and resume at 1")
 }
 
 func TestNSEC3MatchAndCoverNotFound(t *testing.T) {

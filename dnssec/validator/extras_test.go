@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"net/netip"
+	"sync"
 	"testing"
 	"time"
 
@@ -95,6 +96,43 @@ func TestExchangerSourceFixedID(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, 1, calls)
 	require.Equal(t, uint16(42), ex.last.ID())
+}
+
+// stubExchanger is a minimal Exchanger with no shared mutable state, so the
+// only data race surfaced by concurrent Lookup against a single Source is
+// inside the Source itself.
+type stubExchanger struct {
+	resp wire.Message
+}
+
+func (s stubExchanger) Exchange(_ context.Context, _ wire.Message) (wire.Message, error) {
+	return s.resp, nil
+}
+
+// TestExchangerSourceConcurrentLookup exercises a single Source from many
+// goroutines. Walker fans out concurrent DNSKEY/DS chases through one
+// shared Source in production; this test makes that pattern visible to
+// `go test -race`.
+func TestExchangerSourceConcurrentLookup(t *testing.T) {
+	t.Parallel()
+	qname := wire.MustParseName("example.com.")
+	resp := newEmptyResponse(t, qname, rrtype.A)
+	src := validator.NewExchangerSource(stubExchanger{resp: resp})
+
+	const goroutines = 16
+	const perGoroutine = 64
+	var wg sync.WaitGroup
+	wg.Add(goroutines)
+	for range goroutines {
+		go func() {
+			defer wg.Done()
+			for range perGoroutine {
+				_, err := src.Lookup(t.Context(), qname, rrtype.A)
+				require.NoError(t, err)
+			}
+		}()
+	}
+	wg.Wait()
 }
 
 func TestExchangerSourceCounterIncrements(t *testing.T) {
