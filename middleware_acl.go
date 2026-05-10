@@ -112,7 +112,11 @@ func NewACL(inner Handler, opts ...ACLOption) (Handler, error) {
 }
 
 func (a *acl) ServeDNS(ctx context.Context, w ResponseWriter, q wire.Message) {
-	src := w.RemoteAddr().Addr()
+	// Unmap so a v4-mapped peer (typical for IPv4 traffic on a dual-stack
+	// `::` listener) is matched against the operator's IPv4 prefixes, not
+	// against `::ffff:0:0/96`. Without Unmap, an `WithACLAllow(10.0.0.0/24)`
+	// silently rejects every IPv4 client.
+	src := w.RemoteAddr().Addr().Unmap()
 	if !a.permit(src) {
 		if a.dropDenied {
 			return

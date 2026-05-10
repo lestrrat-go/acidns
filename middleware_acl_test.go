@@ -118,3 +118,20 @@ func TestNoRulesIsAnError(t *testing.T) {
 	_, err := acidns.NewACL(aclMkInner())
 	require.ErrorIs(t, err, acidns.ErrACLNoRules)
 }
+
+// TestAllowMatchesV4MappedV6Source covers the dual-stack case: a peer
+// connecting to a `::` listener with an IPv4 source arrives as
+// `::ffff:1.2.3.4`. Without Unmap, an `WithACLAllow(10.0.0.0/24)` rejects
+// it; with Unmap the v4 prefix matches.
+func TestAllowMatchesV4MappedV6Source(t *testing.T) {
+	t.Parallel()
+	h, err := acidns.NewACL(aclMkInner(),
+		acidns.WithACLAllow(netip.MustParsePrefix("10.0.0.0/8")),
+		acidns.WithACLDropDenied(false),
+	)
+	require.NoError(t, err)
+
+	w := &fakeWriter{src: netip.MustParseAddrPort("[::ffff:10.0.0.5]:1234")}
+	h.ServeDNS(context.Background(), w, aclMkQuery(t))
+	require.Equal(t, wire.RCODENoError, w.captured.Flags().RCODE(), "v4-mapped source must match v4 allow prefix")
+}

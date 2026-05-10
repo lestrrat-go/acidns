@@ -245,7 +245,10 @@ func (g *rrlWriter) WriteMsg(m wire.Message) error {
 		return g.ResponseWriter.WriteMsg(m)
 	}
 
-	src := g.ResponseWriter.RemoteAddr().Addr()
+	// Unmap v4-mapped sources so the v4 prefix branch in bucketKey actually
+	// fires; otherwise `::ffff:1.2.3.4` falls through to the v6 prefix and
+	// shares no bucket with a native v4 peer at the same real address.
+	src := g.ResponseWriter.RemoteAddr().Addr().Unmap()
 	respName := responseKeyName(m, g.q)
 	key := g.parent.bucketKey(src, respName, classify(m))
 

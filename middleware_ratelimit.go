@@ -156,7 +156,10 @@ func NewRateLimit(inner Handler, opts ...RateLimitOption) Handler {
 }
 
 func (l *limiter) ServeDNS(ctx context.Context, w ResponseWriter, q wire.Message) {
-	if !l.allow(w.RemoteAddr().Addr()) {
+	// Unmap v4-mapped sources before bucketing — otherwise every IPv4
+	// client on a dual-stack listener collapses into one shared `::`-rooted
+	// bucket and a single attacker starves all of them (or vice versa).
+	if !l.allow(w.RemoteAddr().Addr().Unmap()) {
 		if l.drop {
 			return
 		}
