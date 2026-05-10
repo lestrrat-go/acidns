@@ -11,36 +11,38 @@ import (
 // Anchor is a DNSSEC trust anchor: the apex of a zone the validator is
 // configured to trust together with the DS records that authenticate its
 // DNSKEY set. Multiple DS records cover algorithm rollovers at the parent
-// (e.g. the root has two KSKs during a rollover).
-type Anchor interface {
-	// Name returns the apex of the trusted zone.
-	Name() wire.Name
-	// DSs returns a copy of the DS records that authenticate any DNSKEY
-	// claimed by the zone. Mutating the returned slice does not affect
-	// the Anchor.
-	DSs() []rdata.DS
-}
-
-type anchor struct {
+// (e.g. the root has two KSKs during a rollover). Construct via
+// [NewAnchor]; the zero Anchor is invalid (use [Anchor.IsValid] to
+// distinguish).
+type Anchor struct {
 	name wire.Name
 	dss  []rdata.DS
 }
 
-func (a anchor) Name() wire.Name { return a.name }
-func (a anchor) DSs() []rdata.DS { return a.dss }
+// Name returns the apex of the trusted zone.
+func (a Anchor) Name() wire.Name { return a.name }
 
-// NewAnchor returns an Anchor with the supplied name and DS records. The DS
-// list is copied; an empty list is rejected because an anchor without DS
-// material cannot authenticate anything.
+// DSs returns the DS records that authenticate any DNSKEY claimed by
+// the zone. Aliases internal storage — callers MUST NOT mutate the
+// returned slice (consistent with the module-wide alias-by-default
+// accessor semantics).
+func (a Anchor) DSs() []rdata.DS { return a.dss }
+
+// IsValid reports whether a was constructed via [NewAnchor] (i.e.
+// has a valid name and at least one DS record).
+func (a Anchor) IsValid() bool { return a.name.IsValid() && len(a.dss) > 0 }
+
+// NewAnchor returns an Anchor with the supplied name and DS records.
+// An empty DS list is rejected because an anchor without DS material
+// cannot authenticate anything.
 func NewAnchor(name wire.Name, dss ...rdata.DS) (Anchor, error) {
 	if !name.IsValid() {
-		return nil, fmt.Errorf("validator: invalid anchor name")
+		return Anchor{}, fmt.Errorf("validator: invalid anchor name")
 	}
 	if len(dss) == 0 {
-		return nil, fmt.Errorf("validator: anchor %s has no DS records", name)
+		return Anchor{}, fmt.Errorf("validator: anchor %s has no DS records", name)
 	}
-	cp := append([]rdata.DS(nil), dss...)
-	return anchor{name: name, dss: cp}, nil
+	return Anchor{name: name, dss: dss}, nil
 }
 
 // IANARootKSK2017DS returns the DS record for the 2017 root KSK
@@ -101,5 +103,5 @@ func closestAnchor(anchors []Anchor, qname wire.Name) (Anchor, bool) {
 			best = a
 		}
 	}
-	return best, best != nil
+	return best, best.IsValid()
 }
