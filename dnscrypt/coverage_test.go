@@ -238,7 +238,7 @@ func TestNewUnsupportedESVersion(t *testing.T) {
 	)
 	require.NoError(t, err)
 	dnscrypt.SignCert(cert, providerSK) // marks verified=true
-	_, err = dnscrypt.New(netip.AddrPortFrom(netip.MustParseAddr("127.0.0.1"), 53), cert)
+	_, err = dnscrypt.New(netip.AddrPortFrom(netip.MustParseAddr("127.0.0.1"), 53), dnscrypt.WithCertificate(cert))
 	require.ErrorIs(t, err, dnscrypt.ErrUnsupportedESVersion)
 }
 
@@ -253,7 +253,7 @@ func TestNewRejectsUnverifiedCert(t *testing.T) {
 		dnscrypt.WithCertValidUntil(time.Now().Add(time.Hour)),
 	)
 	require.NoError(t, err)
-	_, err = dnscrypt.New(netip.AddrPortFrom(netip.MustParseAddr("127.0.0.1"), 53), cert)
+	_, err = dnscrypt.New(netip.AddrPortFrom(netip.MustParseAddr("127.0.0.1"), 53), dnscrypt.WithCertificate(cert))
 	require.ErrorIs(t, err, dnscrypt.ErrCertUnverified)
 }
 
@@ -284,7 +284,7 @@ func TestNewWithTimeoutOption(t *testing.T) {
 
 	a := pc.LocalAddr().(*net.UDPAddr)
 	addr := netip.AddrPortFrom(netip.MustParseAddr("127.0.0.1"), uint16(a.Port))
-	ex, err := dnscrypt.New(addr, cert, dnscrypt.WithTimeout(3*time.Second))
+	ex, err := dnscrypt.New(addr, dnscrypt.WithCertificate(cert), dnscrypt.WithTimeout(3*time.Second))
 	require.NoError(t, err)
 
 	q, _ := wire.NewMessageBuilder().
@@ -307,7 +307,7 @@ func TestExchangeDialFailure(t *testing.T) {
 	// Use a routeable but unreachable address; cancel ctx immediately so
 	// DialContext returns quickly with ctx.Err().
 	addr := netip.AddrPortFrom(netip.MustParseAddr("127.0.0.1"), 1)
-	ex, err := dnscrypt.New(addr, cert)
+	ex, err := dnscrypt.New(addr, dnscrypt.WithCertificate(cert))
 	require.NoError(t, err)
 
 	q, _ := wire.NewMessageBuilder().
@@ -339,7 +339,7 @@ func TestExchangeReadTimeout(t *testing.T) {
 
 	a := pc.LocalAddr().(*net.UDPAddr)
 	addr := netip.AddrPortFrom(netip.MustParseAddr("127.0.0.1"), uint16(a.Port))
-	ex, err := dnscrypt.New(addr, cert, dnscrypt.WithTimeout(50*time.Millisecond))
+	ex, err := dnscrypt.New(addr, dnscrypt.WithCertificate(cert), dnscrypt.WithTimeout(50*time.Millisecond))
 	require.NoError(t, err)
 
 	q, _ := wire.NewMessageBuilder().
@@ -378,7 +378,7 @@ func TestExchangeBadResponse(t *testing.T) {
 
 	a := pc.LocalAddr().(*net.UDPAddr)
 	addr := netip.AddrPortFrom(netip.MustParseAddr("127.0.0.1"), uint16(a.Port))
-	ex, err := dnscrypt.New(addr, cert)
+	ex, err := dnscrypt.New(addr, dnscrypt.WithCertificate(cert))
 	require.NoError(t, err)
 
 	q, _ := wire.NewMessageBuilder().
@@ -438,7 +438,7 @@ func TestExchangeUnmarshalFailure(t *testing.T) {
 
 	a := pc.LocalAddr().(*net.UDPAddr)
 	addr := netip.AddrPortFrom(netip.MustParseAddr("127.0.0.1"), uint16(a.Port))
-	ex, err := dnscrypt.New(addr, cert)
+	ex, err := dnscrypt.New(addr, dnscrypt.WithCertificate(cert))
 	require.NoError(t, err)
 
 	q, _ := wire.NewMessageBuilder().

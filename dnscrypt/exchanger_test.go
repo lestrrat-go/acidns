@@ -63,7 +63,7 @@ func TestExchangerEndToEnd(t *testing.T) {
 
 	a := pc.LocalAddr().(*net.UDPAddr)
 	addr := netip.AddrPortFrom(netip.MustParseAddr("127.0.0.1"), uint16(a.Port))
-	ex, err := dnscrypt.New(addr, cert)
+	ex, err := dnscrypt.New(addr, dnscrypt.WithCertificate(cert))
 	require.NoError(t, err)
 
 	q, _ := wire.NewMessageBuilder().

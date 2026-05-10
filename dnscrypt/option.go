@@ -17,14 +17,29 @@ type dnscryptOption struct{ option.Interface }
 func (dnscryptOption) dnscryptOption() {}
 
 type config struct {
+	cert      *Cert
 	timeout   time.Duration
 	now       func() time.Time
 	clockSkew time.Duration
 }
 
+type identCertificate struct{}
 type identTimeout struct{}
 type identClockSkew struct{}
 type identClock struct{}
+
+// WithCertificate supplies the verified [*Cert] this Client uses to
+// encrypt queries to the resolver. Required: [New] returns
+// [ErrCertRequired] when no WithCertificate option is passed.
+//
+// The caller MUST call [Cert.Verify] on the cert before passing it
+// here. New refuses to construct a Client from an unverified cert
+// because the resolver's short-term X25519 public key is the very
+// thing DNSCrypt's signature is meant to bind, and skipping
+// verification defeats the whole protocol.
+func WithCertificate(c *Cert) Option {
+	return dnscryptOption{option.New(identCertificate{}, c)}
+}
 
 // WithTimeout sets the per-exchange timeout when ctx has no deadline.
 func WithTimeout(d time.Duration) Option {

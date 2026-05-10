@@ -61,6 +61,7 @@ var (
 	ErrResponseMagic        = errors.New("dnscrypt: bad resolver magic in response")
 	ErrPlainTextTooShort    = errors.New("dnscrypt: response too short")
 	ErrCertUnverified       = errors.New("dnscrypt: cert not verified — call Cert.Verify first")
+	ErrCertRequired         = errors.New("dnscrypt: New requires WithCertificate")
 	// ErrLowOrderPoint indicates the X25519 shared-secret derivation
 	// produced an all-zero output, which means the peer supplied a
 	// Curve25519 low-order point. Accepting such a key would AEAD
@@ -390,26 +391,16 @@ type Client struct {
 	clockSkew time.Duration
 }
 
-// New returns a acidns.Exchanger that sends DNSCrypt-encrypted
-// queries to addr using the verified cert. The caller MUST call
-// [Cert.Verify] (with the provider's long-term Ed25519 public key)
-// before passing the cert here; New refuses to construct an
-// Exchanger from an unverified cert because the resolver's short-term
-// X25519 public key is the very thing DNSCrypt's signature is meant
-// to bind, and skipping verification defeats the whole protocol.
-func New(addr netip.AddrPort, cert *Cert, opts ...Option) (*Client, error) {
-	if cert == nil {
-		return nil, fmt.Errorf("dnscrypt: cert is nil")
-	}
-	if !cert.verified {
-		return nil, ErrCertUnverified
-	}
-	if cert.esVersion != ESVersion2 {
-		return nil, fmt.Errorf("%w: ES%d", ErrUnsupportedESVersion, cert.esVersion)
-	}
+// New returns a *Client that sends DNSCrypt-encrypted queries to
+// addr. The verified [*Cert] is supplied via [WithCertificate] and
+// is required — see that option for the caller's [Cert.Verify]
+// obligation. *Client satisfies [acidns.Exchanger].
+func New(addr netip.AddrPort, opts ...Option) (*Client, error) {
 	c := config{timeout: 5 * time.Second, now: time.Now, clockSkew: 5 * time.Second}
 	for _, o := range opts {
 		switch o.Ident() {
+		case identCertificate{}:
+			c.cert = option.MustGet[*Cert](o)
 		case identTimeout{}:
 			c.timeout = option.MustGet[time.Duration](o)
 		case identClockSkew{}:
@@ -418,10 +409,19 @@ func New(addr netip.AddrPort, cert *Cert, opts ...Option) (*Client, error) {
 			c.now = option.MustGet[func() time.Time](o)
 		}
 	}
+	if c.cert == nil {
+		return nil, ErrCertRequired
+	}
+	if !c.cert.verified {
+		return nil, ErrCertUnverified
+	}
+	if c.cert.esVersion != ESVersion2 {
+		return nil, fmt.Errorf("%w: ES%d", ErrUnsupportedESVersion, c.cert.esVersion)
+	}
 	if c.now == nil {
 		c.now = time.Now
 	}
-	return &Client{addr: addr, cert: cert, timeout: c.timeout, now: c.now, clockSkew: c.clockSkew}, nil
+	return &Client{addr: addr, cert: c.cert, timeout: c.timeout, now: c.now, clockSkew: c.clockSkew}, nil
 }
 
 // Exchange encrypts q, sends it via UDP, and decrypts the response.
