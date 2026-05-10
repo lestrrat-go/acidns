@@ -29,6 +29,13 @@ import (
 // [tsig.ErrVerify] so callers can match either form via errors.Is.
 var ErrTSIGVerify = tsig.ErrVerify
 
+// ErrTSIGMissing is returned when a NOTIFY response arrives without a
+// TSIG RR even though the request was TSIG-signed. Treating an
+// unsigned response as authentic when the secondary is supposed to
+// have signed it would let an off-path UDP-spoofer fake the ACK; this
+// package fails closed on that mismatch.
+var ErrTSIGMissing = fmt.Errorf("notify: response missing TSIG")
+
 // Send transmits a NOTIFY for zone over ex and waits for the ACK.
 func Send(ctx context.Context, ex acidns.Exchanger, zone wire.Name, opts ...Option) (wire.Message, error) {
 	c := config{timeout: 5 * time.Second, tsigFudge: 5 * time.Minute, tsigNow: time.Now}
@@ -82,7 +89,7 @@ func Send(ctx context.Context, ex acidns.Exchanger, zone wire.Name, opts ...Opti
 		if err != nil {
 			return wire.Message{}, err
 		}
-		if err := verifyResponseIfTSIG(resp, *c.tsigKey, requestMAC, c.tsigNow(), c.tsigFudge); err != nil {
+		if err := verifyResponseTSIG(resp, *c.tsigKey, requestMAC, c.tsigNow(), c.tsigFudge); err != nil {
 			return wire.Message{}, err
 		}
 		return resp, nil
@@ -110,16 +117,18 @@ func signMessage(m wire.Message, key tsig.Key, now time.Time, fudge time.Duratio
 	return signed, mac, nil
 }
 
-// verifyResponseIfTSIG verifies the response's TSIG MAC against the
-// request MAC. If the response carries no TSIG, this is a no-op (some
-// secondaries — and most error paths — answer unsigned).
-func verifyResponseIfTSIG(resp wire.Message, key tsig.Key, requestMAC []byte, now time.Time, fudge time.Duration) error {
+// verifyResponseTSIG verifies the response's TSIG MAC against the
+// request MAC. The request was signed by the caller, so the response
+// MUST carry its own TSIG — an unsigned response is rejected with
+// [ErrTSIGMissing] to deny off-path UDP spoofers a path to fake an
+// ACK by returning a TSIG-less reply.
+func verifyResponseTSIG(resp wire.Message, key tsig.Key, requestMAC []byte, now time.Time, fudge time.Duration) error {
+	if !hasTSIG(resp) {
+		return ErrTSIGMissing
+	}
 	raw, err := wire.Marshal(resp)
 	if err != nil {
 		return fmt.Errorf("%w: marshal response: %w", ErrTSIGVerify, err)
-	}
-	if !hasTSIG(resp) {
-		return nil
 	}
 	if _, _, _, err := tsig.VerifyResponse(raw, key, requestMAC, now, fudge); err != nil {
 		return fmt.Errorf("%w: %w", ErrTSIGVerify, err)
