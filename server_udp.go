@@ -29,12 +29,14 @@ type udpListenerConfig struct {
 	maxResponseLen int
 	maxInflight    int
 	writeTimeout   time.Duration
+	preParseFilter func(netip.AddrPort) bool
 }
 
 type identUDPListenerBufferSize struct{}
 type identUDPMaxResponse struct{}
 type identUDPMaxInflight struct{}
 type identUDPWriteTimeout struct{}
+type identUDPPreParseFilter struct{}
 
 // WithUDPListenerBufferSize sets the size of the read buffer per
 // packet. Defaults to 4096, large enough for an EDNS-extended
@@ -63,6 +65,21 @@ func WithUDPMaxResponse(n int) UDPListenerOption {
 // growth. A non-positive value disables the cap. Defaults to 4096.
 func WithUDPMaxInflight(n int) UDPListenerOption {
 	return udpListenerOption{option.New(identUDPMaxInflight{}, n)}
+}
+
+// WithUDPPreParseFilter installs a per-datagram source-address gate
+// that runs BEFORE wire.Unmarshal. A return of false drops the
+// datagram immediately, skipping every Handler middleware (ACL,
+// ratelimit, RRL, cookies, observe). Use this when an operator
+// relies on a source-prefix denylist to defend against floods of
+// spoofed datagrams whose per-packet parse cost would otherwise pin
+// CPU regardless of how strict the post-parse middleware is.
+//
+// The filter must be safe for concurrent use and should be O(1) —
+// it runs on the hot read path. Returning true falls through to
+// normal handler dispatch. A nil filter is a no-op.
+func WithUDPPreParseFilter(f func(netip.AddrPort) bool) UDPListenerOption {
+	return udpListenerOption{option.New(identUDPPreParseFilter{}, f)}
 }
 
 // WithUDPWriteTimeout caps how long a single response WriteTo may
@@ -120,6 +137,8 @@ func NewUDPServer(addr netip.AddrPort, h Handler, opts ...UDPListenerOption) (*U
 			cfg.maxInflight = option.MustGet[int](o)
 		case identUDPWriteTimeout{}:
 			cfg.writeTimeout = option.MustGet[time.Duration](o)
+		case identUDPPreParseFilter{}:
+			cfg.preParseFilter = option.MustGet[func(netip.AddrPort) bool](o)
 		}
 	}
 	return &UDPServer{addr: addr, handler: h, cfg: cfg}, nil
@@ -248,6 +267,10 @@ func (l *udpLoop) run(ctx context.Context) error {
 
 		ua, ok := src.(*net.UDPAddr)
 		if !ok {
+			l.bufPool.Put(bufp)
+			continue
+		}
+		if l.cfg.preParseFilter != nil && !l.cfg.preParseFilter(ua.AddrPort()) {
 			l.bufPool.Put(bufp)
 			continue
 		}
