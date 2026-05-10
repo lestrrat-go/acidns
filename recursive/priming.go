@@ -123,10 +123,20 @@ func primingAddrsFromResponse(resp wire.Message) []netip.AddrPort {
 //
 // This method BLOCKS until ctx is canceled. The name disambiguates
 // from the non-blocking server-side Run (e.g. UDPServer.Run).
+//
+// RunMaintenance must NOT be called concurrently for the same
+// [*Recursive] — a second concurrent call returns
+// [ErrMaintenanceAlreadyRunning] without doing any work, which would
+// otherwise spawn duplicate priming and sweep tickers and double
+// upstream load.
 func (r *Recursive) RunMaintenance(ctx context.Context) error {
 	if !r.rootPriming && !r.aggressiveNSEC {
 		return nil
 	}
+	if !r.maintenanceRunning.CompareAndSwap(false, true) {
+		return ErrMaintenanceAlreadyRunning
+	}
+	defer r.maintenanceRunning.Store(false)
 
 	if r.rootPriming {
 		// Initial prime — best-effort. If it fails the configured roots

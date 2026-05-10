@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"net/netip"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/lestrrat-go/acidns"
@@ -49,6 +50,13 @@ var ErrInflightFull = acidns.ErrInflightFull
 // server has been rate-limited by [WithUpstreamRateLimit] and there
 // were no remaining unrestricted servers to try.
 var ErrUpstreamRateLimited = errors.New("recursive: all upstream servers rate-limited")
+
+// ErrMaintenanceAlreadyRunning is returned by [Recursive.RunMaintenance]
+// when a previous call is still in progress on the same Recursive
+// instance. Wiring RunMaintenance into both an admin-driven start and
+// an autostart goroutine — the canonical way to hit this — would
+// otherwise double the priming and sweep cadences.
+var ErrMaintenanceAlreadyRunning = errors.New("recursive: RunMaintenance already running")
 
 // ChainValidator is the contract recursive expects from a DNSSEC
 // chain validator — an implementation that walks the chain of trust
@@ -163,6 +171,12 @@ type Recursive struct {
 	// chasing it.
 	nsInProgressMu sync.Mutex
 	nsInProgress   map[string]struct{}
+
+	// maintenanceRunning guards [Recursive.RunMaintenance] against
+	// double-entry. A second concurrent call returns
+	// [ErrMaintenanceAlreadyRunning] without spawning duplicate
+	// tickers.
+	maintenanceRunning atomic.Bool
 }
 
 // inflightCall coalesces concurrent resolveDepth invocations for the
