@@ -20,17 +20,17 @@ import (
 	"github.com/lestrrat-go/option/v3"
 )
 
-// TCPExchangerOption configures a TCP Exchanger.
-type TCPExchangerOption interface {
+// TCPClientOption configures a TCP Exchanger.
+type TCPClientOption interface {
 	option.Interface
-	tcpExchangerOption()
+	tcpClientOption()
 }
 
-type tcpExchangerOption struct{ option.Interface }
+type tcpClientOption struct{ option.Interface }
 
-func (tcpExchangerOption) tcpExchangerOption() {}
+func (tcpClientOption) tcpClientOption() {}
 
-type tcpExchangerConfig struct {
+type tcpClientConfig struct {
 	timeout time.Duration
 }
 
@@ -39,38 +39,38 @@ type identTCPTimeout struct{}
 // WithTCPTimeout sets a per-exchange timeout used when the caller's
 // context has no deadline. Defaults to 5 seconds. Pass 0 to disable
 // the fallback — see [WithUDPTimeout] for the same semantics.
-func WithTCPTimeout(d time.Duration) TCPExchangerOption {
-	return tcpExchangerOption{option.New(identTCPTimeout{}, d)}
+func WithTCPTimeout(d time.Duration) TCPClientOption {
+	return tcpClientOption{option.New(identTCPTimeout{}, d)}
 }
 
-// TCPExchanger talks TCP to a single fixed address using length-prefixed
+// TCPClient talks TCP to a single fixed address using length-prefixed
 // framing (RFC 1035 §4.2.2). Each Exchange dials a fresh connection;
-// callers wanting connection reuse should use [TCPKeepAliveExchanger].
+// callers wanting connection reuse should use [TCPKeepAliveClient].
 //
 // The concrete type is returned so callers can reach the streaming API
-// via [TCPExchanger.Stream] without an interface assertion.
-// [*TCPExchanger] satisfies [Exchanger] and [StreamExchanger].
-type TCPExchanger struct {
+// via [TCPClient.Stream] without an interface assertion.
+// [*TCPClient] satisfies [Exchanger] and [StreamExchanger].
+type TCPClient struct {
 	addr    netip.AddrPort
 	timeout time.Duration
 }
 
-// NewTCPExchanger returns a TCPExchanger talking to addr.
-func NewTCPExchanger(addr netip.AddrPort, opts ...TCPExchangerOption) (*TCPExchanger, error) {
+// NewTCPClient returns a TCPClient talking to addr.
+func NewTCPClient(addr netip.AddrPort, opts ...TCPClientOption) (*TCPClient, error) {
 	if !addr.IsValid() {
 		return nil, fmt.Errorf("acidns: invalid server address")
 	}
-	c := tcpExchangerConfig{timeout: 5 * time.Second}
+	c := tcpClientConfig{timeout: 5 * time.Second}
 	for _, o := range opts {
 		switch o.Ident() {
 		case identTCPTimeout{}:
 			c.timeout = option.MustGet[time.Duration](o)
 		}
 	}
-	return &TCPExchanger{addr: addr, timeout: c.timeout}, nil
+	return &TCPClient{addr: addr, timeout: c.timeout}, nil
 }
 
-func (e *TCPExchanger) Exchange(ctx context.Context, q wire.Message) (wire.Message, error) {
+func (e *TCPClient) Exchange(ctx context.Context, q wire.Message) (wire.Message, error) {
 	var d net.Dialer
 	conn, err := d.DialContext(ctx, "tcp", e.addr.String())
 	if err != nil {
@@ -82,7 +82,7 @@ func (e *TCPExchanger) Exchange(ctx context.Context, q wire.Message) (wire.Messa
 // Stream sends q over a fresh TCP connection and returns a MessageStream
 // from which the caller pulls responses. The stream MUST be closed by the
 // caller to release the connection.
-func (e *TCPExchanger) Stream(ctx context.Context, q wire.Message) (MessageStream, error) {
+func (e *TCPClient) Stream(ctx context.Context, q wire.Message) (MessageStream, error) {
 	var d net.Dialer
 	conn, err := d.DialContext(ctx, "tcp", e.addr.String())
 	if err != nil {

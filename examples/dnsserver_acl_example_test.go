@@ -52,7 +52,7 @@ www IN  A    192.0.2.42
 		ID(1).
 		Question(wire.NewQuestion(wire.MustParseName("www.example.com"), rrtype.A)).
 		Build()
-	ex, _ := acidns.NewUDPExchanger(ctrl.Addr())
+	ex, _ := acidns.NewUDPClient(ctrl.Addr())
 	qctx, qcancel := context.WithTimeout(ctx, 2*time.Second)
 	defer qcancel()
 	resp, err := ex.Exchange(qctx, q)

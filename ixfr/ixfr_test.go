@@ -54,7 +54,7 @@ func TestTransferAXFRFallback(t *testing.T) {
 	xferCtx, xcancel := context.WithTimeout(t.Context(), 5*time.Second)
 	defer xcancel()
 
-	ex, err := acidns.NewTCPExchanger(ctrl.Addr())
+	ex, err := acidns.NewTCPClient(ctrl.Addr())
 	require.NoError(t, err)
 
 	xfer, err := ixfr.Start(xferCtx, ex, wire.MustParseName("example.com"), clientSOA)

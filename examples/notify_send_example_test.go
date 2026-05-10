@@ -55,7 +55,7 @@ ns1 IN  A    192.0.2.10
 	}
 
 	// Send a NOTIFY using the dnsclient/notify helper.
-	ex, err := acidns.NewUDPExchanger(ctrl.Addr())
+	ex, err := acidns.NewUDPClient(ctrl.Addr())
 	if err != nil {
 		fmt.Println("dial:", err)
 		return

@@ -805,12 +805,12 @@ func TestUDPTCPFallbackOnTruncated(t *testing.T) {
 }
 
 // TestUDPUpstreamUDPDialFailure points the UDP upstream at an
-// unspecified zero address — both UDPExchanger and TCPExchanger should
+// unspecified zero address — both UDPClient and TCPClient should
 // reject it, surfacing the construction error via errExchanger on first
 // Exchange.
 func TestUDPUpstreamConstructionFailureSurfacedAsServFail(t *testing.T) {
 	t.Parallel()
-	// AddrPort{} is the zero value (invalid). NewUDPExchanger refuses
+	// AddrPort{} is the zero value (invalid). NewUDPClient refuses
 	// it, leaving the forwarder configured with an errExchanger.
 	h, err := forward.New(forward.WithUDPUpstream(netip.AddrPort{}))
 	require.NoError(t, err, "construction errors are deferred to first Exchange")

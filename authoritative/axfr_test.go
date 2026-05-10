@@ -58,7 +58,7 @@ func TestAXFROverTCP(t *testing.T) {
 
 	require.NoError(t, err)
 
-	ex, err := acidns.NewTCPExchanger(ctrl.Addr())
+	ex, err := acidns.NewTCPClient(ctrl.Addr())
 	require.NoError(t, err)
 
 	q, _ := wire.NewMessageBuilder().

@@ -73,7 +73,7 @@ func TestSearchListSuffixed(t *testing.T) {
 	t.Parallel()
 
 	addr, queries := startSearchServer(t, "host.example.com.")
-	ex, _ := acidns.NewUDPExchanger(addr)
+	ex, _ := acidns.NewUDPClient(addr)
 	r, err := acidns.NewResolver(
 		acidns.WithExchanger(ex),
 		acidns.WithSearchList(wire.MustParseName("example.com")),
@@ -96,7 +96,7 @@ func TestSearchListAbsoluteSkipsSearch(t *testing.T) {
 	t.Parallel()
 
 	addr, queries := startSearchServer(t, "host.")
-	ex, _ := acidns.NewUDPExchanger(addr)
+	ex, _ := acidns.NewUDPClient(addr)
 	r, err := acidns.NewResolver(
 		acidns.WithExchanger(ex),
 		acidns.WithSearchList(wire.MustParseName("example.com")),
@@ -119,7 +119,7 @@ func TestSearchListNdotsAbsoluteFirst(t *testing.T) {
 	t.Parallel()
 
 	addr, queries := startSearchServer(t, "a.b.c.")
-	ex, _ := acidns.NewUDPExchanger(addr)
+	ex, _ := acidns.NewUDPClient(addr)
 	r, err := acidns.NewResolver(
 		acidns.WithExchanger(ex),
 		acidns.WithSearchList(wire.MustParseName("example.com")),
@@ -155,7 +155,7 @@ func TestSearchListUnused(t *testing.T) {
 	t.Parallel()
 	// No search list configured → behave exactly as before.
 	addr, _ := startSearchServer(t, "host.")
-	ex, _ := acidns.NewUDPExchanger(addr)
+	ex, _ := acidns.NewUDPClient(addr)
 	r, err := acidns.NewResolver(acidns.WithExchanger(ex))
 	require.NoError(t, err)
 

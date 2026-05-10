@@ -67,7 +67,7 @@ func startServer(t *testing.T, v4 []netip.Addr, v6 []netip.Addr) netip.AddrPort 
 
 func newResolver(t *testing.T, addr netip.AddrPort) acidns.Resolver {
 	t.Helper()
-	ex, err := acidns.NewUDPExchanger(addr)
+	ex, err := acidns.NewUDPClient(addr)
 	require.NoError(t, err)
 	r, err := acidns.NewResolver(acidns.WithExchanger(ex))
 	require.NoError(t, err)

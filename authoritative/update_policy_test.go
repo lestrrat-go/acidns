@@ -35,7 +35,7 @@ func TestUpdateRefusedByDefault(t *testing.T) {
 
 	require.NoError(t, err)
 
-	ex, err := acidns.NewUDPExchanger(ctrl.Addr())
+	ex, err := acidns.NewUDPClient(ctrl.Addr())
 	require.NoError(t, err)
 	msg, err := update.NewBuilder(wire.MustParseName("example.com")).
 		AddRRset(wire.NewRecord(wire.MustParseName("blog.example.com"),
@@ -96,7 +96,7 @@ func TestUpdatePolicyReceivesRawRequest(t *testing.T) {
 
 	require.NoError(t, err)
 
-	ex, err := acidns.NewUDPExchanger(ctrl.Addr())
+	ex, err := acidns.NewUDPClient(ctrl.Addr())
 	require.NoError(t, err)
 	msg, err := update.NewBuilder(wire.MustParseName("example.com")).
 		AddRRset(wire.NewRecord(wire.MustParseName("blog.example.com"),
@@ -141,7 +141,7 @@ func TestUpdatePolicyAllowsExplicitOptIn(t *testing.T) {
 
 	require.NoError(t, err)
 
-	ex, err := acidns.NewUDPExchanger(ctrl.Addr())
+	ex, err := acidns.NewUDPClient(ctrl.Addr())
 	require.NoError(t, err)
 	msg, err := update.NewBuilder(wire.MustParseName("example.com")).
 		AddRRset(wire.NewRecord(wire.MustParseName("blog.example.com"),

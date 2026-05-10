@@ -54,7 +54,7 @@ func TestUpdateAddRRset(t *testing.T) {
 	added := wire.NewRecord(wire.MustParseName("blog.example.com"), 60*time.Second,
 		rdata.MustNewA(netip.MustParseAddr("198.51.100.5")))
 
-	ex, err := acidns.NewUDPExchanger(addr)
+	ex, err := acidns.NewUDPClient(addr)
 	require.NoError(t, err)
 	msg, err := update.NewBuilder(wire.MustParseName("example.com")).
 		AddRRset(added).
@@ -80,7 +80,7 @@ func TestUpdateDeleteRRset(t *testing.T) {
 	t.Parallel()
 	_, addr := startUpdatable(t)
 
-	ex, err := acidns.NewUDPExchanger(addr)
+	ex, err := acidns.NewUDPClient(addr)
 	require.NoError(t, err)
 	msg, err := update.NewBuilder(wire.MustParseName("example.com")).
 		DeleteRRset(wire.MustParseName("www.example.com"), rrtype.A).
@@ -104,7 +104,7 @@ func TestUpdatePrereqRRsetExistsFails(t *testing.T) {
 	t.Parallel()
 	_, addr := startUpdatable(t)
 
-	ex, err := acidns.NewUDPExchanger(addr)
+	ex, err := acidns.NewUDPClient(addr)
 	require.NoError(t, err)
 	msg, err := update.NewBuilder(wire.MustParseName("example.com")).
 		PrereqRRsetExists(wire.MustParseName("nope.example.com"), rrtype.A).
@@ -121,7 +121,7 @@ func TestUpdatePrereqRRsetAbsentSucceeds(t *testing.T) {
 	t.Parallel()
 	_, addr := startUpdatable(t)
 
-	ex, err := acidns.NewUDPExchanger(addr)
+	ex, err := acidns.NewUDPClient(addr)
 	require.NoError(t, err)
 	msg, err := update.NewBuilder(wire.MustParseName("example.com")).
 		PrereqRRsetAbsent(wire.MustParseName("blog.example.com"), rrtype.A).
@@ -157,7 +157,7 @@ func TestUpdateConcurrentWithQuery(t *testing.T) {
 		wg.Add(1)
 		go func(id int) {
 			defer wg.Done()
-			ex, err := acidns.NewUDPExchanger(addr)
+			ex, err := acidns.NewUDPClient(addr)
 			if err != nil {
 				return
 			}
@@ -180,7 +180,7 @@ func TestUpdateConcurrentWithQuery(t *testing.T) {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			ex, err := acidns.NewUDPExchanger(addr)
+			ex, err := acidns.NewUDPClient(addr)
 			if err != nil {
 				return
 			}
@@ -205,7 +205,7 @@ func TestUpdateConcurrentWithQuery(t *testing.T) {
 func TestUpdateOutOfZoneRefused(t *testing.T) {
 	t.Parallel()
 	_, addr := startUpdatable(t)
-	ex, err := acidns.NewUDPExchanger(addr)
+	ex, err := acidns.NewUDPClient(addr)
 	require.NoError(t, err)
 	msg, err := update.NewBuilder(wire.MustParseName("example.org")).
 		AddRRset(wire.NewRecord(wire.MustParseName("a.example.org"), 60*time.Second,

@@ -51,7 +51,7 @@ func TestSendNotifyAcks(t *testing.T) {
 		fired.Add(1)
 	})
 
-	ex, err := acidns.NewUDPExchanger(addr)
+	ex, err := acidns.NewUDPClient(addr)
 	require.NoError(t, err)
 	resp, err := notify.Send(t.Context(), ex, wire.MustParseName("example.com"))
 	require.NoError(t, err)
@@ -67,7 +67,7 @@ func TestSendNotifyAcks(t *testing.T) {
 func TestNotifyForUnservedZoneNotAuth(t *testing.T) {
 	t.Parallel()
 	addr := startSecondary(t, nil)
-	ex, err := acidns.NewUDPExchanger(addr)
+	ex, err := acidns.NewUDPClient(addr)
 	require.NoError(t, err)
 	resp, err := notify.Send(t.Context(), ex, wire.MustParseName("example.org"))
 	require.NoError(t, err)

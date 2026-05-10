@@ -574,11 +574,11 @@ func randomID() (uint16, error) {
 func buildFallover(servers []netip.AddrPort, attempts int, perAttempt time.Duration, use0x20 bool) (Exchanger, error) {
 	exs := make([]Exchanger, 0, len(servers))
 	for _, s := range servers {
-		uex, err := NewUDPExchanger(s, WithUDP0x20(use0x20))
+		uex, err := NewUDPClient(s, WithUDP0x20(use0x20))
 		if err != nil {
 			return nil, err
 		}
-		tex, err := NewTCPExchanger(s)
+		tex, err := NewTCPClient(s)
 		if err != nil {
 			return nil, err
 		}

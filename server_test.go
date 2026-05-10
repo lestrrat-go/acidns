@@ -52,7 +52,7 @@ func TestUDPServerEcho(t *testing.T) {
 	})
 	ctrl, _ := startUDP(t, h)
 
-	ex, err := acidns.NewUDPExchanger(ctrl.Addr())
+	ex, err := acidns.NewUDPClient(ctrl.Addr())
 	require.NoError(t, err)
 	resp, err := ex.Exchange(t.Context(), mkQuery(t, "example.com", rrtype.A))
 	require.NoError(t, err)
@@ -103,7 +103,7 @@ func TestUDPServerTruncation(t *testing.T) {
 	})
 	ctrl, _ := startUDP(t, h)
 
-	ex, err := acidns.NewUDPExchanger(ctrl.Addr())
+	ex, err := acidns.NewUDPClient(ctrl.Addr())
 	require.NoError(t, err)
 
 	// Send a query WITHOUT EDNS so the server caps at 512 bytes.
@@ -146,7 +146,7 @@ func TestUDPServerEDNSPayloadSize(t *testing.T) {
 	})
 	ctrl, _ := startUDP(t, h)
 
-	ex, err := acidns.NewUDPExchanger(ctrl.Addr())
+	ex, err := acidns.NewUDPClient(ctrl.Addr())
 	require.NoError(t, err)
 
 	// Query with EDNS advertising 4096 bytes — server should not truncate.

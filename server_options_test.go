@@ -32,7 +32,7 @@ func TestUDPListenWithOptions(t *testing.T) {
 
 	require.NoError(t, err)
 
-	ex, err := acidns.NewUDPExchanger(ctrl.Addr())
+	ex, err := acidns.NewUDPClient(ctrl.Addr())
 	require.NoError(t, err)
 	q, _ := wire.NewMessageBuilder().
 		ID(1).
@@ -57,7 +57,7 @@ func TestTCPListenWithOptions(t *testing.T) {
 
 	require.NoError(t, err)
 
-	ex, err := acidns.NewTCPExchanger(ctrl.Addr())
+	ex, err := acidns.NewTCPClient(ctrl.Addr())
 	require.NoError(t, err)
 	q, _ := wire.NewMessageBuilder().
 		ID(2).

@@ -51,7 +51,7 @@ func TestTransferLargeZone(t *testing.T) {
 
 	xferCtx, xcancel := context.WithTimeout(t.Context(), 10*time.Second)
 	defer xcancel()
-	ex, err := acidns.NewTCPExchanger(ctrl.Addr())
+	ex, err := acidns.NewTCPClient(ctrl.Addr())
 	require.NoError(t, err)
 	xfer, err := axfr.Start(xferCtx, ex, wire.MustParseName("big.example"))
 	require.NoError(t, err)

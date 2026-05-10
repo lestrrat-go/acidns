@@ -147,7 +147,7 @@ func TestKeepAliveReusesConnection(t *testing.T) {
 	addr, stop := startKeepAliveServer(t, srv)
 	defer stop()
 
-	ex, err := acidns.NewTCPKeepAliveExchanger(addr)
+	ex, err := acidns.NewTCPKeepAliveClient(addr)
 	require.NoError(t, err)
 
 	for range 3 {
@@ -166,7 +166,7 @@ func TestKeepAliveServerSignalsClose(t *testing.T) {
 	addr, stop := startKeepAliveServer(t, srv)
 	defer stop()
 
-	ex, err := acidns.NewTCPKeepAliveExchanger(addr)
+	ex, err := acidns.NewTCPKeepAliveClient(addr)
 	require.NoError(t, err)
 
 	for range 3 {
@@ -184,7 +184,7 @@ func TestKeepAliveLocalIdleFallback(t *testing.T) {
 	addr, stop := startKeepAliveServer(t, srv)
 	defer stop()
 
-	ex, err := acidns.NewTCPKeepAliveExchanger(addr,
+	ex, err := acidns.NewTCPKeepAliveClient(addr,
 		acidns.WithTCPKeepAliveIdle(50*time.Millisecond))
 	require.NoError(t, err)
 
@@ -203,7 +203,7 @@ func TestKeepAliveRespectsCancel(t *testing.T) {
 	addr, stop := startKeepAliveServer(t, srv)
 	defer stop()
 
-	ex, err := acidns.NewTCPKeepAliveExchanger(addr)
+	ex, err := acidns.NewTCPKeepAliveClient(addr)
 	require.NoError(t, err)
 	ctx, cancel := context.WithCancel(t.Context())
 	cancel()

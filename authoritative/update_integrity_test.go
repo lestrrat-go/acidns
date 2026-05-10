@@ -42,7 +42,7 @@ func TestUpdateRecordOutOfZoneNotZone(t *testing.T) {
 	t.Parallel()
 	_, addr := startUpdatable(t)
 
-	ex, err := acidns.NewUDPExchanger(addr)
+	ex, err := acidns.NewUDPClient(addr)
 	require.NoError(t, err)
 
 	// Targets example.com (we own it) but plants `evil.com` inside.
@@ -64,7 +64,7 @@ func TestUpdateApexCNAMEAddRejected(t *testing.T) {
 	t.Parallel()
 	_, addr := startUpdatable(t)
 
-	ex, err := acidns.NewUDPExchanger(addr)
+	ex, err := acidns.NewUDPClient(addr)
 	require.NoError(t, err)
 
 	msg, err := update.NewBuilder(wire.MustParseName("example.com")).
@@ -83,7 +83,7 @@ func TestUpdateApexCNAMEAddRejected(t *testing.T) {
 func TestUpdateValueDependentPrereqMatch(t *testing.T) {
 	t.Parallel()
 	_, addr := startUpdatable(t)
-	ex, err := acidns.NewUDPExchanger(addr)
+	ex, err := acidns.NewUDPClient(addr)
 	require.NoError(t, err)
 
 	// www.example.com IN A 192.0.2.42 — see the fixture.
@@ -108,7 +108,7 @@ func TestUpdateValueDependentPrereqMatch(t *testing.T) {
 func TestUpdateValueDependentPrereqMismatch(t *testing.T) {
 	t.Parallel()
 	_, addr := startUpdatable(t)
-	ex, err := acidns.NewUDPExchanger(addr)
+	ex, err := acidns.NewUDPClient(addr)
 	require.NoError(t, err)
 
 	// www.example.com IN A 192.0.2.42 in the zone; we claim 192.0.2.99.
@@ -155,7 +155,7 @@ func TestUpdateBumpsSOAOnChange(t *testing.T) {
 	require.NoError(t, err)
 	addr := ctrl.Addr()
 
-	ex, err := acidns.NewUDPExchanger(addr)
+	ex, err := acidns.NewUDPClient(addr)
 	require.NoError(t, err)
 
 	added := wire.NewRecord(wire.MustParseName("blog.example.com"), 60*time.Second,

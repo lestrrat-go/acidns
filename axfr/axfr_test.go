@@ -31,7 +31,7 @@ mail IN MX   10 mail.example.com.
 
 func newStreamEx(t *testing.T, addr netip.AddrPort) acidns.StreamExchanger {
 	t.Helper()
-	ex, err := acidns.NewTCPExchanger(addr)
+	ex, err := acidns.NewTCPClient(addr)
 	require.NoError(t, err)
 	return ex
 }

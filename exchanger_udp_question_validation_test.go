@@ -14,11 +14,11 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// TestUDPExchangerRejectsMismatchedQuestion confirms that a response
+// TestUDPClientRejectsMismatchedQuestion confirms that a response
 // whose ID matches but whose question section does not is dropped. RFC
 // 5452 §9.2: ID-only validation lets an attacker who guesses the 16-bit
 // transaction ID poison the cache; the question section must also match.
-func TestUDPExchangerRejectsMismatchedQuestion(t *testing.T) {
+func TestUDPClientRejectsMismatchedQuestion(t *testing.T) {
 	t.Parallel()
 
 	pc, err := net.ListenPacket("udp", "127.0.0.1:0")
@@ -59,7 +59,7 @@ func TestUDPExchangerRejectsMismatchedQuestion(t *testing.T) {
 		netip.MustParseAddr("127.0.0.1"),
 		uint16(pc.LocalAddr().(*net.UDPAddr).Port))
 
-	ex, err := acidns.NewUDPExchanger(addr, acidns.WithUDPTimeout(300*time.Millisecond))
+	ex, err := acidns.NewUDPClient(addr, acidns.WithUDPTimeout(300*time.Millisecond))
 	require.NoError(t, err)
 
 	q, err := wire.NewMessageBuilder().

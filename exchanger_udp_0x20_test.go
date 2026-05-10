@@ -28,7 +28,7 @@ func TestUDP0x20RandomizesAndVerifies(t *testing.T) {
 	t.Run("preserved", func(t *testing.T) {
 		t.Parallel()
 		addr := startCaseEchoServer(t, true /* preserve case */)
-		ex, err := acidns.NewUDPExchanger(addr, acidns.WithUDP0x20(true))
+		ex, err := acidns.NewUDPClient(addr, acidns.WithUDP0x20(true))
 		require.NoError(t, err)
 		q := mkUDPQuery(t, "case.test.")
 		ctx, cancel := context.WithTimeout(t.Context(), 2*time.Second)
@@ -40,7 +40,7 @@ func TestUDP0x20RandomizesAndVerifies(t *testing.T) {
 	t.Run("mangled", func(t *testing.T) {
 		t.Parallel()
 		addr := startCaseEchoServer(t, false /* lowercase the qname */)
-		ex, err := acidns.NewUDPExchanger(addr,
+		ex, err := acidns.NewUDPClient(addr,
 			acidns.WithUDP0x20(true),
 			acidns.WithUDPTimeout(500*time.Millisecond),
 		)
@@ -62,7 +62,7 @@ func TestUDP0x20OutboundHasMixedCase(t *testing.T) {
 	captured := make(chan []byte, 64)
 	addr := startQNameCaptureServer(t, captured)
 
-	ex, err := acidns.NewUDPExchanger(addr, acidns.WithUDP0x20(true))
+	ex, err := acidns.NewUDPClient(addr, acidns.WithUDP0x20(true))
 	require.NoError(t, err)
 
 	const trials = 16

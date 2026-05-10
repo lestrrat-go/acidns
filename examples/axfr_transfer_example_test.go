@@ -51,7 +51,7 @@ www IN  A    192.0.2.42
 	}
 
 	// Client side: open a TCP stream-exchanger and pull records.
-	tx, err := acidns.NewTCPExchanger(ctrl.Addr())
+	tx, err := acidns.NewTCPClient(ctrl.Addr())
 	if err != nil {
 		fmt.Println("dial:", err)
 		return

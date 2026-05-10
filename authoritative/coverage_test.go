@@ -227,7 +227,7 @@ func TestAXFRMultiMessageFlush(t *testing.T) {
 
 	require.NoError(t, err)
 
-	ex, err := acidns.NewTCPExchanger(ctrl.Addr())
+	ex, err := acidns.NewTCPClient(ctrl.Addr())
 	require.NoError(t, err)
 	q, _ := wire.NewMessageBuilder().
 		ID(0xb160).
@@ -327,7 +327,7 @@ func startUpdatableLocal(t *testing.T) (*authoritative.Authoritative, netip.Addr
 func TestUpdatePrereqNameInUseFailsNXDomain(t *testing.T) {
 	t.Parallel()
 	_, addr := startUpdatableLocal(t)
-	ex, err := acidns.NewUDPExchanger(addr)
+	ex, err := acidns.NewUDPClient(addr)
 	require.NoError(t, err)
 	msg, err := update.NewBuilder(wire.MustParseName("example.com")).
 		PrereqNameInUse(wire.MustParseName("ghost.example.com")).
@@ -344,7 +344,7 @@ func TestUpdatePrereqNameInUseFailsNXDomain(t *testing.T) {
 func TestUpdatePrereqNameNotInUseFailsYXDomain(t *testing.T) {
 	t.Parallel()
 	_, addr := startUpdatableLocal(t)
-	ex, err := acidns.NewUDPExchanger(addr)
+	ex, err := acidns.NewUDPClient(addr)
 	require.NoError(t, err)
 	msg, err := update.NewBuilder(wire.MustParseName("example.com")).
 		PrereqNameNotInUse(wire.MustParseName("www.example.com")).
@@ -362,7 +362,7 @@ func TestUpdatePrereqNameNotInUseFailsYXDomain(t *testing.T) {
 func TestUpdatePrereqRRsetExistsSucceeds(t *testing.T) {
 	t.Parallel()
 	_, addr := startUpdatableLocal(t)
-	ex, err := acidns.NewUDPExchanger(addr)
+	ex, err := acidns.NewUDPClient(addr)
 	require.NoError(t, err)
 	msg, err := update.NewBuilder(wire.MustParseName("example.com")).
 		PrereqRRsetExists(wire.MustParseName("www.example.com"), rrtype.A).
@@ -379,7 +379,7 @@ func TestUpdatePrereqRRsetExistsSucceeds(t *testing.T) {
 func TestUpdatePrereqRRsetAbsentFailsYXRRSet(t *testing.T) {
 	t.Parallel()
 	_, addr := startUpdatableLocal(t)
-	ex, err := acidns.NewUDPExchanger(addr)
+	ex, err := acidns.NewUDPClient(addr)
 	require.NoError(t, err)
 	msg, err := update.NewBuilder(wire.MustParseName("example.com")).
 		PrereqRRsetAbsent(wire.MustParseName("www.example.com"), rrtype.A).
@@ -396,7 +396,7 @@ func TestUpdatePrereqRRsetAbsentFailsYXRRSet(t *testing.T) {
 func TestUpdateDeleteAllAtName(t *testing.T) {
 	t.Parallel()
 	_, addr := startUpdatableLocal(t)
-	ex, err := acidns.NewUDPExchanger(addr)
+	ex, err := acidns.NewUDPClient(addr)
 	require.NoError(t, err)
 	msg, err := update.NewBuilder(wire.MustParseName("example.com")).
 		DeleteAll(wire.MustParseName("www.example.com")).
@@ -420,7 +420,7 @@ func TestUpdateDeleteAllAtName(t *testing.T) {
 func TestUpdateDeleteRecordSpecific(t *testing.T) {
 	t.Parallel()
 	_, addr := startUpdatableLocal(t)
-	ex, err := acidns.NewUDPExchanger(addr)
+	ex, err := acidns.NewUDPClient(addr)
 	require.NoError(t, err)
 
 	// First add a second A at www (so we can verify only one specific
@@ -461,7 +461,7 @@ func TestUpdateDeleteRecordSpecific(t *testing.T) {
 func TestUpdatePrereqRRsetExistsNameExistsTypeMiss(t *testing.T) {
 	t.Parallel()
 	_, addr := startUpdatableLocal(t)
-	ex, err := acidns.NewUDPExchanger(addr)
+	ex, err := acidns.NewUDPClient(addr)
 	require.NoError(t, err)
 	// www.example.com has A but not AAAA.
 	msg, err := update.NewBuilder(wire.MustParseName("example.com")).
@@ -481,7 +481,7 @@ func TestUpdatePrereqRRsetExistsNameExistsTypeMiss(t *testing.T) {
 func TestUpdateDeleteRecordRemovesLast(t *testing.T) {
 	t.Parallel()
 	_, addr := startUpdatableLocal(t)
-	ex, err := acidns.NewUDPExchanger(addr)
+	ex, err := acidns.NewUDPClient(addr)
 	require.NoError(t, err)
 
 	// Add a fresh name with a single A.
@@ -517,7 +517,7 @@ func TestUpdateDeleteRecordRemovesLast(t *testing.T) {
 func TestUpdateDeleteRecordMissingName(t *testing.T) {
 	t.Parallel()
 	_, addr := startUpdatableLocal(t)
-	ex, err := acidns.NewUDPExchanger(addr)
+	ex, err := acidns.NewUDPClient(addr)
 	require.NoError(t, err)
 	msg, err := update.NewBuilder(wire.MustParseName("example.com")).
 		DeleteRecord(wire.NewRecord(wire.MustParseName("ghost.example.com"), 0,
@@ -533,7 +533,7 @@ func TestUpdateDeleteRecordMissingName(t *testing.T) {
 func TestUpdateDeleteRRsetMissingName(t *testing.T) {
 	t.Parallel()
 	_, addr := startUpdatableLocal(t)
-	ex, err := acidns.NewUDPExchanger(addr)
+	ex, err := acidns.NewUDPClient(addr)
 	require.NoError(t, err)
 	msg, err := update.NewBuilder(wire.MustParseName("example.com")).
 		DeleteRRset(wire.MustParseName("ghost.example.com"), rrtype.A).
@@ -549,7 +549,7 @@ func TestUpdateDeleteRRsetMissingName(t *testing.T) {
 func TestUpdateDeleteOneRRsetKeepsOthers(t *testing.T) {
 	t.Parallel()
 	_, addr := startUpdatableLocal(t)
-	ex, err := acidns.NewUDPExchanger(addr)
+	ex, err := acidns.NewUDPClient(addr)
 	require.NoError(t, err)
 
 	// First add a TXT at www.
@@ -587,7 +587,7 @@ func TestUpdateDeleteOneRRsetKeepsOthers(t *testing.T) {
 func TestUpdateDeleteRecordNoMatch(t *testing.T) {
 	t.Parallel()
 	_, addr := startUpdatableLocal(t)
-	ex, err := acidns.NewUDPExchanger(addr)
+	ex, err := acidns.NewUDPClient(addr)
 	require.NoError(t, err)
 	msg, err := update.NewBuilder(wire.MustParseName("example.com")).
 		DeleteRecord(wire.NewRecord(wire.MustParseName("www.example.com"), 0,

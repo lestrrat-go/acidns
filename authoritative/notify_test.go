@@ -47,7 +47,7 @@ func TestServeNotifyAcksAndCallsHandler(t *testing.T) {
 
 	require.NoError(t, err)
 
-	ex, err := acidns.NewUDPExchanger(ctrl.Addr())
+	ex, err := acidns.NewUDPClient(ctrl.Addr())
 	require.NoError(t, err)
 	resp, err := notify.Send(t.Context(), ex, wire.MustParseName("example.com"))
 	require.NoError(t, err)
@@ -69,7 +69,7 @@ func TestServeNotifyRefusesUnknownZone(t *testing.T) {
 
 	require.NoError(t, err)
 
-	ex, err := acidns.NewUDPExchanger(ctrl.Addr())
+	ex, err := acidns.NewUDPClient(ctrl.Addr())
 	require.NoError(t, err)
 	resp, err := notify.Send(t.Context(), ex, wire.MustParseName("example.org"))
 	require.NoError(t, err)

@@ -43,7 +43,7 @@ func TestTCPServerEcho(t *testing.T) {
 	})
 	ctrl := startTCP(t, h)
 
-	ex, err := acidns.NewTCPExchanger(ctrl.Addr())
+	ex, err := acidns.NewTCPClient(ctrl.Addr())
 	require.NoError(t, err)
 	resp, err := ex.Exchange(t.Context(), mkQuery(t, "example.com", rrtype.A))
 	require.NoError(t, err)
@@ -256,7 +256,7 @@ func TestTCPServerNoTruncation(t *testing.T) {
 	})
 	ctrl := startTCP(t, h)
 
-	ex, err := acidns.NewTCPExchanger(ctrl.Addr())
+	ex, err := acidns.NewTCPClient(ctrl.Addr())
 	require.NoError(t, err)
 
 	q, _ := wire.NewMessageBuilder().

@@ -43,7 +43,7 @@ func Example_dnsserver_chaos() {
 		ID(1).
 		Question(wire.NewQuestionClass(wire.MustParseName("id.server."), rrtype.TXT, rrtype.ClassCH)).
 		Build()
-	ex, _ := acidns.NewUDPExchanger(ctrl.Addr())
+	ex, _ := acidns.NewUDPClient(ctrl.Addr())
 	qctx, qcancel := context.WithTimeout(ctx, 2*time.Second)
 	defer qcancel()
 	resp, err := ex.Exchange(qctx, q)

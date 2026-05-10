@@ -422,7 +422,7 @@ func TestServeDNSWithAuthorityAndAdditional(t *testing.T) {
 		Question(wire.NewQuestion(wire.MustParseName("nope.example."), rrtype.A)).
 		Build()
 	require.NoError(t, err)
-	ex, err := acidns.NewUDPExchanger(ctrl.Addr())
+	ex, err := acidns.NewUDPClient(ctrl.Addr())
 	require.NoError(t, err)
 	qctx, qcancel := context.WithTimeout(ctx, 2*time.Second)
 	defer qcancel()
@@ -467,7 +467,7 @@ func TestServeDNSBogusServfailWithEDE(t *testing.T) {
 		Question(wire.NewQuestion(wire.MustParseName("www.example."), rrtype.A)).
 		Build()
 	require.NoError(t, err)
-	ex, err := acidns.NewUDPExchanger(ctrl.Addr())
+	ex, err := acidns.NewUDPClient(ctrl.Addr())
 	require.NoError(t, err)
 	qctx, qcancel := context.WithTimeout(ctx, 2*time.Second)
 	defer qcancel()

@@ -20,24 +20,24 @@ import (
 	"github.com/lestrrat-go/option/v3"
 )
 
-// UDPExchangerOption configures a UDP Exchanger.
-type UDPExchangerOption interface {
+// UDPClientOption configures a UDP Exchanger.
+type UDPClientOption interface {
 	option.Interface
-	udpExchangerOption()
+	udpClientOption()
 }
 
-type udpExchangerOption struct{ option.Interface }
+type udpClientOption struct{ option.Interface }
 
-func (udpExchangerOption) udpExchangerOption() {}
+func (udpClientOption) udpClientOption() {}
 
-type udpExchangerConfig struct {
+type udpClientConfig struct {
 	timeout    time.Duration
 	bufferSize int
 	use0x20    bool
 }
 
 type identUDPTimeout struct{}
-type identUDPExchangerBufferSize struct{}
+type identUDPClientBufferSize struct{}
 type identUDP0x20 struct{}
 
 // WithUDPTimeout sets a per-exchange timeout that takes effect when
@@ -45,14 +45,14 @@ type identUDP0x20 struct{}
 // to 5 seconds. Pass 0 to disable the fallback (the context deadline
 // or kernel socket timeout becomes the only bound — typically what
 // you want only in tests or with a hard ctx deadline).
-func WithUDPTimeout(d time.Duration) UDPExchangerOption {
-	return udpExchangerOption{option.New(identUDPTimeout{}, d)}
+func WithUDPTimeout(d time.Duration) UDPClientOption {
+	return udpClientOption{option.New(identUDPTimeout{}, d)}
 }
 
-// WithUDPExchangerBufferSize sets the size of the UDP read buffer in bytes. Defaults
+// WithUDPClientBufferSize sets the size of the UDP read buffer in bytes. Defaults
 // to 4096, which fits a typical EDNS-extended response.
-func WithUDPExchangerBufferSize(n int) UDPExchangerOption {
-	return udpExchangerOption{option.New(identUDPExchangerBufferSize{}, n)}
+func WithUDPClientBufferSize(n int) UDPClientOption {
+	return udpClientOption{option.New(identUDPClientBufferSize{}, n)}
 }
 
 // WithUDP0x20 toggles RFC 5452 §9.3 0x20 hardening: the exchanger
@@ -63,44 +63,44 @@ func WithUDPExchangerBufferSize(n int) UDPExchangerOption {
 // the per-query search space by 2^N for an N-letter qname.
 //
 // Defaults to true so the safe behaviour is uniform across every
-// construction path ([NewUDPExchanger] direct, [NewResolver] with
+// construction path ([NewUDPClient] direct, [NewResolver] with
 // [WithServers], [recursive.New]). Pass [WithUDP0x20](false) to opt
 // out for upstreams known to silently lowercase the qname in
 // responses (rare).
-func WithUDP0x20(v bool) UDPExchangerOption {
-	return udpExchangerOption{option.New(identUDP0x20{}, v)}
+func WithUDP0x20(v bool) UDPClientOption {
+	return udpClientOption{option.New(identUDP0x20{}, v)}
 }
 
-type UDPExchanger struct {
+type UDPClient struct {
 	addr    netip.AddrPort
 	timeout time.Duration
 	bufsize int
 	use0x20 bool
 }
 
-// NewUDPExchanger returns a *UDPExchanger that talks UDP to addr.
+// NewUDPClient returns a *UDPClient that talks UDP to addr.
 // The concrete pointer is returned so callers can reach
 // implementation-specific affordances (e.g. future Close, statistics)
-// without an interface assertion; *UDPExchanger satisfies [Exchanger].
-func NewUDPExchanger(addr netip.AddrPort, opts ...UDPExchangerOption) (*UDPExchanger, error) {
+// without an interface assertion; *UDPClient satisfies [Exchanger].
+func NewUDPClient(addr netip.AddrPort, opts ...UDPClientOption) (*UDPClient, error) {
 	if !addr.IsValid() {
 		return nil, fmt.Errorf("acidns: invalid server address")
 	}
-	c := udpExchangerConfig{timeout: 5 * time.Second, bufferSize: 4096, use0x20: true}
+	c := udpClientConfig{timeout: 5 * time.Second, bufferSize: 4096, use0x20: true}
 	for _, o := range opts {
 		switch o.Ident() {
 		case identUDPTimeout{}:
 			c.timeout = option.MustGet[time.Duration](o)
-		case identUDPExchangerBufferSize{}:
+		case identUDPClientBufferSize{}:
 			c.bufferSize = option.MustGet[int](o)
 		case identUDP0x20{}:
 			c.use0x20 = option.MustGet[bool](o)
 		}
 	}
-	return &UDPExchanger{addr: addr, timeout: c.timeout, bufsize: c.bufferSize, use0x20: c.use0x20}, nil
+	return &UDPClient{addr: addr, timeout: c.timeout, bufsize: c.bufferSize, use0x20: c.use0x20}, nil
 }
 
-func (e *UDPExchanger) Exchange(ctx context.Context, q wire.Message) (wire.Message, error) {
+func (e *UDPClient) Exchange(ctx context.Context, q wire.Message) (wire.Message, error) {
 	msg, err := wire.Marshal(q)
 	if err != nil {
 		return wire.Message{}, fmt.Errorf("acidns: marshal query: %w", err)

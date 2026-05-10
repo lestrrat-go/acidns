@@ -144,7 +144,7 @@ func buildResolver(o opts) (acidns.Resolver, error) {
 		if err != nil {
 			return nil, err
 		}
-		ex, err := acidns.NewTCPExchanger(addr)
+		ex, err := acidns.NewTCPClient(addr)
 		if err != nil {
 			return nil, err
 		}
@@ -157,7 +157,7 @@ func buildResolver(o opts) (acidns.Resolver, error) {
 		if err != nil {
 			return nil, err
 		}
-		ex, err = acidns.NewUDPExchanger(addr)
+		ex, err = acidns.NewUDPClient(addr)
 		if err != nil {
 			return nil, err
 		}

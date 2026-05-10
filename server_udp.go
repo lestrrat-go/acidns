@@ -40,7 +40,7 @@ type identUDPPreParseFilter struct{}
 
 // WithUDPListenerBufferSize sets the size of the read buffer per
 // packet. Defaults to 4096, large enough for an EDNS-extended
-// request. The client-side counterpart is [WithUDPExchangerBufferSize];
+// request. The client-side counterpart is [WithUDPClientBufferSize];
 // the names diverge because Go disallows two top-level functions
 // with the same identifier in the same package, so the listener
 // form takes the explicit Listener prefix.

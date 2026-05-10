@@ -72,7 +72,7 @@ func TestPreflightFormErrOnZeroQuestionsUDP(t *testing.T) {
 
 	q, err := wire.NewMessageBuilder().ID(0x4242).RecursionDesired(true).Build()
 	require.NoError(t, err)
-	ex, err := acidns.NewUDPExchanger(ctrl.Addr())
+	ex, err := acidns.NewUDPClient(ctrl.Addr())
 	require.NoError(t, err)
 	qctx, qcancel := context.WithTimeout(t.Context(), time.Second)
 	defer qcancel()
@@ -102,7 +102,7 @@ func TestPreflightFormErrClampsUDPSize(t *testing.T) {
 		Build()
 	require.NoError(t, err)
 
-	ex, err := acidns.NewUDPExchanger(ctrl.Addr())
+	ex, err := acidns.NewUDPClient(ctrl.Addr())
 	require.NoError(t, err)
 	qctx, qcancel := context.WithTimeout(t.Context(), time.Second)
 	defer qcancel()
@@ -125,7 +125,7 @@ func TestPreflightAcceptsValidQuery(t *testing.T) {
 	ctrl, _ := startUDP(t, h)
 
 	q := mkQuery(t, "a.test.", rrtype.A)
-	ex, err := acidns.NewUDPExchanger(netip.AddrPortFrom(ctrl.Addr().Addr(), ctrl.Addr().Port()))
+	ex, err := acidns.NewUDPClient(netip.AddrPortFrom(ctrl.Addr().Addr(), ctrl.Addr().Port()))
 	require.NoError(t, err)
 	qctx, qcancel := context.WithTimeout(t.Context(), time.Second)
 	defer qcancel()

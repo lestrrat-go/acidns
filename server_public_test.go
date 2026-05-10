@@ -67,7 +67,7 @@ func TestNewPublicUDPServer_HappyPath(t *testing.T) {
 	require.NoError(t, err)
 
 	// Allowed source: full round trip works.
-	ex, err := acidns.NewUDPExchanger(ctrl.Addr())
+	ex, err := acidns.NewUDPClient(ctrl.Addr())
 	require.NoError(t, err)
 	q, err := wire.NewMessageBuilder().
 		ID(0x4242).

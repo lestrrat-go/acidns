@@ -15,7 +15,7 @@ import (
 func TestTCPStream(t *testing.T) {
 	t.Parallel()
 	addr := startTCPEcho(t)
-	ex, err := acidns.NewTCPExchanger(addr, acidns.WithTCPTimeout(2*time.Second))
+	ex, err := acidns.NewTCPClient(addr, acidns.WithTCPTimeout(2*time.Second))
 	require.NoError(t, err)
 
 	q, err := wire.NewMessageBuilder().
@@ -34,13 +34,13 @@ func TestTCPStream(t *testing.T) {
 
 func TestTCPNewInvalidAddr(t *testing.T) {
 	t.Parallel()
-	_, err := acidns.NewTCPExchanger(netip.AddrPort{})
+	_, err := acidns.NewTCPClient(netip.AddrPort{})
 	require.Error(t, err)
 }
 
 func TestTCPDialFailure(t *testing.T) {
 	t.Parallel()
-	ex, err := acidns.NewTCPExchanger(netip.MustParseAddrPort("127.0.0.1:1"))
+	ex, err := acidns.NewTCPClient(netip.MustParseAddrPort("127.0.0.1:1"))
 	require.NoError(t, err)
 	q, _ := wire.NewMessageBuilder().ID(1).
 		Question(wire.NewQuestion(wire.MustParseName("example.com"), rrtype.A)).

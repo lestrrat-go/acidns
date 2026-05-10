@@ -49,7 +49,7 @@ func TestUDPResponseWriterAddrAccessors(t *testing.T) {
 
 	require.NoError(t, err)
 
-	ex, err := acidns.NewUDPExchanger(ctrl.Addr())
+	ex, err := acidns.NewUDPClient(ctrl.Addr())
 	require.NoError(t, err)
 	q, _ := wire.NewMessageBuilder().
 		ID(0xab12).
@@ -93,7 +93,7 @@ func TestUDPWriteMsgTwiceFails(t *testing.T) {
 
 	require.NoError(t, err)
 
-	ex, err := acidns.NewUDPExchanger(ctrl.Addr())
+	ex, err := acidns.NewUDPClient(ctrl.Addr())
 	require.NoError(t, err)
 	q, _ := wire.NewMessageBuilder().
 		ID(0xab13).
@@ -144,7 +144,7 @@ func TestTCPResponseWriterAddrAccessors(t *testing.T) {
 
 	require.NoError(t, err)
 
-	ex, err := acidns.NewTCPExchanger(ctrl.Addr())
+	ex, err := acidns.NewTCPClient(ctrl.Addr())
 	require.NoError(t, err)
 	q, _ := wire.NewMessageBuilder().
 		ID(0xcd34).
@@ -239,7 +239,7 @@ func TestKeepAliveOptionsApply(t *testing.T) {
 	addr, stop := startKeepAliveServer(t, srv)
 	defer stop()
 
-	ex, err := acidns.NewTCPKeepAliveExchanger(addr,
+	ex, err := acidns.NewTCPKeepAliveClient(addr,
 		acidns.WithTCPKeepAliveTimeout(2*time.Second),
 		acidns.WithTCPKeepAliveAdvertise(false),
 		acidns.WithTCPKeepAliveIdle(5*time.Second),
@@ -258,7 +258,7 @@ func TestKeepAliveCloseReleasesConn(t *testing.T) {
 	addr, stop := startKeepAliveServer(t, srv)
 	defer stop()
 
-	ex, err := acidns.NewTCPKeepAliveExchanger(addr)
+	ex, err := acidns.NewTCPKeepAliveClient(addr)
 	require.NoError(t, err)
 
 	_, err = ex.Exchange(t.Context(), newQuery(t, "example.com"))
@@ -277,7 +277,7 @@ func TestKeepAliveCloseReleasesConn(t *testing.T) {
 // TestKeepAliveInvalidAddr exercises the constructor error branch.
 func TestKeepAliveInvalidAddr(t *testing.T) {
 	t.Parallel()
-	_, err := acidns.NewTCPKeepAliveExchanger(netip.AddrPort{})
+	_, err := acidns.NewTCPKeepAliveClient(netip.AddrPort{})
 	require.ErrorContains(t, err, "invalid server address")
 }
 
@@ -289,7 +289,7 @@ func TestKeepAlivePreservesExistingOption(t *testing.T) {
 	addr, stop := startKeepAliveServer(t, srv)
 	defer stop()
 
-	ex, err := acidns.NewTCPKeepAliveExchanger(addr)
+	ex, err := acidns.NewTCPKeepAliveClient(addr)
 	require.NoError(t, err)
 
 	q, err := wire.NewMessageBuilder().
@@ -330,7 +330,7 @@ func startKeepAliveBrokenServer(t *testing.T) netip.AddrPort {
 func TestKeepAliveExchangeIOError(t *testing.T) {
 	t.Parallel()
 	addr := startKeepAliveBrokenServer(t)
-	ex, err := acidns.NewTCPKeepAliveExchanger(addr,
+	ex, err := acidns.NewTCPKeepAliveClient(addr,
 		acidns.WithTCPKeepAliveTimeout(500*time.Millisecond))
 	require.NoError(t, err)
 	_, err = ex.Exchange(t.Context(), newQuery(t, "example.com"))
@@ -378,7 +378,7 @@ func TestKeepAliveIDMismatch(t *testing.T) {
 		_, _ = c.Write(raw)
 	}()
 
-	ex, err := acidns.NewTCPKeepAliveExchanger(
+	ex, err := acidns.NewTCPKeepAliveClient(
 		ln.Addr().(*net.TCPAddr).AddrPort(),
 		acidns.WithTCPKeepAliveTimeout(500*time.Millisecond),
 	)
@@ -391,7 +391,7 @@ func TestKeepAliveIDMismatch(t *testing.T) {
 func TestKeepAliveDialFailure(t *testing.T) {
 	t.Parallel()
 	// Pick an addr that should refuse — system port not bound.
-	ex, err := acidns.NewTCPKeepAliveExchanger(netip.MustParseAddrPort("127.0.0.1:1"))
+	ex, err := acidns.NewTCPKeepAliveClient(netip.MustParseAddrPort("127.0.0.1:1"))
 	require.NoError(t, err)
 	ctx, cancel := context.WithTimeout(t.Context(), 200*time.Millisecond)
 	defer cancel()
@@ -403,7 +403,7 @@ func TestKeepAliveDialFailure(t *testing.T) {
 // TestUDPNewInvalidAddr exercises the UDP exchanger validation branch.
 func TestUDPNewInvalidAddr(t *testing.T) {
 	t.Parallel()
-	_, err := acidns.NewUDPExchanger(netip.AddrPort{})
+	_, err := acidns.NewUDPClient(netip.AddrPort{})
 	require.ErrorContains(t, err, "invalid server address")
 }
 
@@ -413,7 +413,7 @@ func TestUDPNewInvalidAddr(t *testing.T) {
 func TestUDPDialFailure(t *testing.T) {
 	t.Parallel()
 	// "0.0.0.0:0" is invalid as a destination; DialContext will report.
-	ex, err := acidns.NewUDPExchanger(netip.MustParseAddrPort("0.0.0.0:0"))
+	ex, err := acidns.NewUDPClient(netip.MustParseAddrPort("0.0.0.0:0"))
 	require.NoError(t, err)
 	q, _ := wire.NewMessageBuilder().ID(1).
 		Question(wire.NewQuestion(wire.MustParseName("example.com"), rrtype.A)).
@@ -462,7 +462,7 @@ func TestUDPDropsMalformedThenDelivers(t *testing.T) {
 		_, _ = pc.WriteTo(gw, src)
 	}()
 
-	ex, err := acidns.NewUDPExchanger(addr, acidns.WithUDPTimeout(2*time.Second))
+	ex, err := acidns.NewUDPClient(addr, acidns.WithUDPTimeout(2*time.Second))
 	require.NoError(t, err)
 	q, _ := wire.NewMessageBuilder().
 		ID(0x4321).

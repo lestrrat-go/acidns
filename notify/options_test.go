@@ -22,7 +22,7 @@ func TestSendWithSOAAndTimeout(t *testing.T) {
 	addr := startSecondary(t, func(_ context.Context, q wire.Question, _ authoritative.NotifySource) {
 		got.Store(&q)
 	})
-	ex, err := acidns.NewUDPExchanger(addr)
+	ex, err := acidns.NewUDPClient(addr)
 	require.NoError(t, err)
 
 	soa := rdata.MustNewSOA(
@@ -48,7 +48,7 @@ func TestBroadcast(t *testing.T) {
 	}
 	exs := make([]acidns.Exchanger, len(addrs))
 	for i, a := range addrs {
-		ex, err := acidns.NewUDPExchanger(a)
+		ex, err := acidns.NewUDPClient(a)
 		require.NoError(t, err)
 		exs[i] = ex
 	}

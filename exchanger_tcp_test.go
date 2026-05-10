@@ -72,7 +72,7 @@ func TestTCPExchange(t *testing.T) {
 	t.Parallel()
 	addr := startTCPEcho(t)
 
-	ex, err := acidns.NewTCPExchanger(addr)
+	ex, err := acidns.NewTCPClient(addr)
 	require.NoError(t, err)
 
 	q, err := wire.NewMessageBuilder().
@@ -96,7 +96,7 @@ func TestTCPContextDeadline(t *testing.T) {
 	t.Cleanup(func() { _ = ln.Close() })
 	a := ln.Addr().(*net.TCPAddr)
 
-	ex, err := acidns.NewTCPExchanger(netip.AddrPortFrom(netip.MustParseAddr("127.0.0.1"), uint16(a.Port)))
+	ex, err := acidns.NewTCPClient(netip.AddrPortFrom(netip.MustParseAddr("127.0.0.1"), uint16(a.Port)))
 	require.NoError(t, err)
 
 	q, _ := wire.NewMessageBuilder().

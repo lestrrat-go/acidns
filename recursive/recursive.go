@@ -341,7 +341,7 @@ type defaultDialer struct {
 }
 
 func (d defaultDialer) Exchange(ctx context.Context, server netip.AddrPort, q wire.Message) (wire.Message, error) {
-	uex, err := acidns.NewUDPExchanger(server,
+	uex, err := acidns.NewUDPClient(server,
 		acidns.WithUDP0x20(d.use0x20),
 	)
 	if err != nil {
@@ -360,7 +360,7 @@ func (d defaultDialer) Exchange(ctx context.Context, server netip.AddrPort, q wi
 	// have been the records that didn't fit). Surface an error so the
 	// caller can move on to the next candidate server rather than
 	// quietly accept a degraded answer.
-	tex, terr := acidns.NewTCPExchanger(server)
+	tex, terr := acidns.NewTCPClient(server)
 	if terr != nil {
 		return wire.Message{}, fmt.Errorf("%w: tcp dial: %v", ErrTruncatedAfterTCPFail, terr)
 	}
