@@ -39,7 +39,7 @@ var ErrNoResolver = errors.New("acidns: no exchanger or servers configured")
 // gracefully when they are absent.
 //
 // Resolver implementations MUST be safe for concurrent use by multiple
-// goroutines. The resolver returned by NewResolver and SystemResolver
+// goroutines. The resolver returned by NewResolver and NewSystemResolver
 // satisfies this contract.
 type Resolver interface {
 	// Resolve performs a single query and returns the matched records along
@@ -368,16 +368,16 @@ func NewResolver(opts ...ResolverOption) (Resolver, error) {
 	}, nil
 }
 
-// SystemResolver is the zero-config entry point: it loads /etc/resolv.conf
-// for nameservers, search list, and ndots, and returns a ready-to-use
-// Resolver. Additional options are applied after WithSystemResolvers and
-// can override any field (e.g. WithExchanger to replace the default UDP
-// transport with DoT/DoH/DoQ).
+// NewSystemResolver is the zero-config entry point: it loads
+// /etc/resolv.conf for nameservers, search list, and ndots, and returns
+// a ready-to-use Resolver. Additional options are applied after
+// WithSystemResolvers and can override any field (e.g. WithExchanger to
+// replace the default UDP transport with DoT/DoH/DoQ).
 //
 // It is the analogue of Go's net.DefaultResolver — fine for one-off
-// programs, CLI tools, and tests. Long-running daemons that want explicit
-// control should call NewResolver directly.
-func SystemResolver(opts ...ResolverOption) (Resolver, error) {
+// programs, CLI tools, and tests. Long-running daemons that want
+// explicit control should call NewResolver directly.
+func NewSystemResolver(opts ...ResolverOption) (Resolver, error) {
 	full := make([]ResolverOption, 0, len(opts)+1)
 	full = append(full, WithSystemResolvers())
 	full = append(full, opts...)
