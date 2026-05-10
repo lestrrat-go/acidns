@@ -71,15 +71,18 @@ func WithUDP0x20(v bool) UDPExchangerOption {
 	return udpExchangerOption{option.New(identUDP0x20{}, v)}
 }
 
-type udpExchanger struct {
+type UDPExchanger struct {
 	addr    netip.AddrPort
 	timeout time.Duration
 	bufsize int
 	use0x20 bool
 }
 
-// NewUDPExchanger returns an Exchanger that talks UDP to addr.
-func NewUDPExchanger(addr netip.AddrPort, opts ...UDPExchangerOption) (Exchanger, error) {
+// NewUDPExchanger returns a *UDPExchanger that talks UDP to addr.
+// The concrete pointer is returned so callers can reach
+// implementation-specific affordances (e.g. future Close, statistics)
+// without an interface assertion; *UDPExchanger satisfies [Exchanger].
+func NewUDPExchanger(addr netip.AddrPort, opts ...UDPExchangerOption) (*UDPExchanger, error) {
 	if !addr.IsValid() {
 		return nil, fmt.Errorf("acidns: invalid server address")
 	}
@@ -94,10 +97,10 @@ func NewUDPExchanger(addr netip.AddrPort, opts ...UDPExchangerOption) (Exchanger
 			c.use0x20 = option.MustGet[bool](o)
 		}
 	}
-	return &udpExchanger{addr: addr, timeout: c.timeout, bufsize: c.bufferSize, use0x20: c.use0x20}, nil
+	return &UDPExchanger{addr: addr, timeout: c.timeout, bufsize: c.bufferSize, use0x20: c.use0x20}, nil
 }
 
-func (e *udpExchanger) Exchange(ctx context.Context, q wire.Message) (wire.Message, error) {
+func (e *UDPExchanger) Exchange(ctx context.Context, q wire.Message) (wire.Message, error) {
 	msg, err := wire.Marshal(q)
 	if err != nil {
 		return wire.Message{}, fmt.Errorf("acidns: marshal query: %w", err)
