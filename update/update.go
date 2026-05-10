@@ -3,7 +3,7 @@
 // QUESTION, PREREQUISITE in place of ANSWER, UPDATE in place of AUTHORITY —
 // with the opcode set to UPDATE (5).
 //
-// UpdateBuilder.Build returns a wire.Message ready for shipping over a
+// Builder.Build returns a wire.Message ready for shipping over a
 // acidns.Exchanger or signing via tsig.SignMessage.
 //
 // This package focuses on the most commonly used prerequisite forms and
@@ -20,25 +20,25 @@ import (
 	"github.com/lestrrat-go/acidns/wire/rrtype"
 )
 
-// UpdateBuilder constructs an UPDATE message piece-by-piece.
-type UpdateBuilder struct {
+// Builder constructs an UPDATE message piece-by-piece.
+type Builder struct {
 	zone    wire.Name
 	prereqs []wire.Record
 	updates []wire.Record
 }
 
-// NewUpdateBuilder returns a UpdateBuilder targeting the named zone.
-func NewUpdateBuilder(zone wire.Name) *UpdateBuilder { return &UpdateBuilder{zone: zone} }
+// NewBuilder returns a Builder targeting the named zone.
+func NewBuilder(zone wire.Name) *Builder { return &Builder{zone: zone} }
 
 // AddRRset queues a record-set addition (RFC 2136 §2.5.1).
-func (b *UpdateBuilder) AddRRset(rec wire.Record) *UpdateBuilder {
+func (b *Builder) AddRRset(rec wire.Record) *Builder {
 	b.updates = append(b.updates, rec)
 	return b
 }
 
 // DeleteRRset queues the removal of every record at name with the given
 // type (RFC 2136 §2.5.2): CLASS=ANY, TTL=0, empty rdata.
-func (b *UpdateBuilder) DeleteRRset(name wire.Name, t rrtype.Type) *UpdateBuilder {
+func (b *Builder) DeleteRRset(name wire.Name, t rrtype.Type) *Builder {
 	b.updates = append(b.updates,
 		wire.NewRecordClass(name, rrtype.ClassANY, 0, rdata.NewUnknown(t, nil)))
 	return b
@@ -46,7 +46,7 @@ func (b *UpdateBuilder) DeleteRRset(name wire.Name, t rrtype.Type) *UpdateBuilde
 
 // DeleteAll queues the removal of every RRset at name (RFC 2136 §2.5.3):
 // TYPE=ANY, CLASS=ANY, TTL=0, empty rdata.
-func (b *UpdateBuilder) DeleteAll(name wire.Name) *UpdateBuilder {
+func (b *Builder) DeleteAll(name wire.Name) *Builder {
 	b.updates = append(b.updates,
 		wire.NewRecordClass(name, rrtype.ClassANY, 0, rdata.NewUnknown(rrtype.ANY, nil)))
 	return b
@@ -54,7 +54,7 @@ func (b *UpdateBuilder) DeleteAll(name wire.Name) *UpdateBuilder {
 
 // DeleteRecord queues removal of one specific record (RFC 2136 §2.5.4):
 // CLASS=NONE, TTL=0, original rdata.
-func (b *UpdateBuilder) DeleteRecord(rec wire.Record) *UpdateBuilder {
+func (b *Builder) DeleteRecord(rec wire.Record) *Builder {
 	b.updates = append(b.updates,
 		wire.NewRecordClass(rec.Name(), rrtype.ClassNONE, 0, rec.RData()))
 	return b
@@ -62,7 +62,7 @@ func (b *UpdateBuilder) DeleteRecord(rec wire.Record) *UpdateBuilder {
 
 // PrereqRRsetExists adds a prerequisite that an RRset of the given type
 // is present at name (RFC 2136 §2.4.1).
-func (b *UpdateBuilder) PrereqRRsetExists(name wire.Name, t rrtype.Type) *UpdateBuilder {
+func (b *Builder) PrereqRRsetExists(name wire.Name, t rrtype.Type) *Builder {
 	b.prereqs = append(b.prereqs,
 		wire.NewRecordClass(name, rrtype.ClassANY, 0, rdata.NewUnknown(t, nil)))
 	return b
@@ -70,7 +70,7 @@ func (b *UpdateBuilder) PrereqRRsetExists(name wire.Name, t rrtype.Type) *Update
 
 // PrereqRRsetAbsent adds a prerequisite that no RRset of the given type
 // exists at name (RFC 2136 §2.4.3).
-func (b *UpdateBuilder) PrereqRRsetAbsent(name wire.Name, t rrtype.Type) *UpdateBuilder {
+func (b *Builder) PrereqRRsetAbsent(name wire.Name, t rrtype.Type) *Builder {
 	b.prereqs = append(b.prereqs,
 		wire.NewRecordClass(name, rrtype.ClassNONE, 0, rdata.NewUnknown(t, nil)))
 	return b
@@ -78,7 +78,7 @@ func (b *UpdateBuilder) PrereqRRsetAbsent(name wire.Name, t rrtype.Type) *Update
 
 // PrereqNameInUse adds a prerequisite that name has at least one RRset
 // (RFC 2136 §2.4.4).
-func (b *UpdateBuilder) PrereqNameInUse(name wire.Name) *UpdateBuilder {
+func (b *Builder) PrereqNameInUse(name wire.Name) *Builder {
 	b.prereqs = append(b.prereqs,
 		wire.NewRecordClass(name, rrtype.ClassANY, 0, rdata.NewUnknown(rrtype.ANY, nil)))
 	return b
@@ -86,14 +86,14 @@ func (b *UpdateBuilder) PrereqNameInUse(name wire.Name) *UpdateBuilder {
 
 // PrereqNameNotInUse adds a prerequisite that name has no RRsets
 // (RFC 2136 §2.4.5).
-func (b *UpdateBuilder) PrereqNameNotInUse(name wire.Name) *UpdateBuilder {
+func (b *Builder) PrereqNameNotInUse(name wire.Name) *Builder {
 	b.prereqs = append(b.prereqs,
 		wire.NewRecordClass(name, rrtype.ClassNONE, 0, rdata.NewUnknown(rrtype.ANY, nil)))
 	return b
 }
 
 // Build returns the encoded UPDATE message ready for marshaling.
-func (b *UpdateBuilder) Build() (wire.Message, error) {
+func (b *Builder) Build() (wire.Message, error) {
 	id, err := randomID()
 	if err != nil {
 		return wire.Message{}, err

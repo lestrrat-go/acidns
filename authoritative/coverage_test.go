@@ -329,7 +329,7 @@ func TestUpdatePrereqNameInUseFailsNXDomain(t *testing.T) {
 	_, addr := startUpdatableLocal(t)
 	ex, err := acidns.NewUDPExchanger(addr)
 	require.NoError(t, err)
-	msg, err := update.NewUpdateBuilder(wire.MustParseName("example.com")).
+	msg, err := update.NewBuilder(wire.MustParseName("example.com")).
 		PrereqNameInUse(wire.MustParseName("ghost.example.com")).
 		AddRRset(wire.NewRecord(wire.MustParseName("blog.example.com"), 60*time.Second,
 			rdata.MustNewA(netip.MustParseAddr("198.51.100.1")))).
@@ -346,7 +346,7 @@ func TestUpdatePrereqNameNotInUseFailsYXDomain(t *testing.T) {
 	_, addr := startUpdatableLocal(t)
 	ex, err := acidns.NewUDPExchanger(addr)
 	require.NoError(t, err)
-	msg, err := update.NewUpdateBuilder(wire.MustParseName("example.com")).
+	msg, err := update.NewBuilder(wire.MustParseName("example.com")).
 		PrereqNameNotInUse(wire.MustParseName("www.example.com")).
 		AddRRset(wire.NewRecord(wire.MustParseName("blog.example.com"), 60*time.Second,
 			rdata.MustNewA(netip.MustParseAddr("198.51.100.1")))).
@@ -364,7 +364,7 @@ func TestUpdatePrereqRRsetExistsSucceeds(t *testing.T) {
 	_, addr := startUpdatableLocal(t)
 	ex, err := acidns.NewUDPExchanger(addr)
 	require.NoError(t, err)
-	msg, err := update.NewUpdateBuilder(wire.MustParseName("example.com")).
+	msg, err := update.NewBuilder(wire.MustParseName("example.com")).
 		PrereqRRsetExists(wire.MustParseName("www.example.com"), rrtype.A).
 		AddRRset(wire.NewRecord(wire.MustParseName("blog.example.com"), 60*time.Second,
 			rdata.MustNewA(netip.MustParseAddr("198.51.100.2")))).
@@ -381,7 +381,7 @@ func TestUpdatePrereqRRsetAbsentFailsYXRRSet(t *testing.T) {
 	_, addr := startUpdatableLocal(t)
 	ex, err := acidns.NewUDPExchanger(addr)
 	require.NoError(t, err)
-	msg, err := update.NewUpdateBuilder(wire.MustParseName("example.com")).
+	msg, err := update.NewBuilder(wire.MustParseName("example.com")).
 		PrereqRRsetAbsent(wire.MustParseName("www.example.com"), rrtype.A).
 		AddRRset(wire.NewRecord(wire.MustParseName("blog.example.com"), 60*time.Second,
 			rdata.MustNewA(netip.MustParseAddr("198.51.100.3")))).
@@ -398,7 +398,7 @@ func TestUpdateDeleteAllAtName(t *testing.T) {
 	_, addr := startUpdatableLocal(t)
 	ex, err := acidns.NewUDPExchanger(addr)
 	require.NoError(t, err)
-	msg, err := update.NewUpdateBuilder(wire.MustParseName("example.com")).
+	msg, err := update.NewBuilder(wire.MustParseName("example.com")).
 		DeleteAll(wire.MustParseName("www.example.com")).
 		Build()
 	require.NoError(t, err)
@@ -427,7 +427,7 @@ func TestUpdateDeleteRecordSpecific(t *testing.T) {
 	// record is removed).
 	add := wire.NewRecord(wire.MustParseName("www.example.com"), 60*time.Second,
 		rdata.MustNewA(netip.MustParseAddr("198.51.100.10")))
-	addMsg, err := update.NewUpdateBuilder(wire.MustParseName("example.com")).
+	addMsg, err := update.NewBuilder(wire.MustParseName("example.com")).
 		AddRRset(add).
 		Build()
 	require.NoError(t, err)
@@ -435,7 +435,7 @@ func TestUpdateDeleteRecordSpecific(t *testing.T) {
 	require.NoError(t, err)
 
 	// Now delete the original 192.0.2.42 specifically.
-	delMsg, err := update.NewUpdateBuilder(wire.MustParseName("example.com")).
+	delMsg, err := update.NewBuilder(wire.MustParseName("example.com")).
 		DeleteRecord(wire.NewRecord(wire.MustParseName("www.example.com"), 0,
 			rdata.MustNewA(netip.MustParseAddr("192.0.2.42")))).
 		Build()
@@ -464,7 +464,7 @@ func TestUpdatePrereqRRsetExistsNameExistsTypeMiss(t *testing.T) {
 	ex, err := acidns.NewUDPExchanger(addr)
 	require.NoError(t, err)
 	// www.example.com has A but not AAAA.
-	msg, err := update.NewUpdateBuilder(wire.MustParseName("example.com")).
+	msg, err := update.NewBuilder(wire.MustParseName("example.com")).
 		PrereqRRsetExists(wire.MustParseName("www.example.com"), rrtype.AAAA).
 		AddRRset(wire.NewRecord(wire.MustParseName("blog.example.com"), 60*time.Second,
 			rdata.MustNewA(netip.MustParseAddr("198.51.100.4")))).
@@ -487,7 +487,7 @@ func TestUpdateDeleteRecordRemovesLast(t *testing.T) {
 	// Add a fresh name with a single A.
 	addRec := wire.NewRecord(wire.MustParseName("solo.example.com"), 60*time.Second,
 		rdata.MustNewA(netip.MustParseAddr("198.51.100.50")))
-	addMsg, err := update.NewUpdateBuilder(wire.MustParseName("example.com")).
+	addMsg, err := update.NewBuilder(wire.MustParseName("example.com")).
 		AddRRset(addRec).
 		Build()
 	require.NoError(t, err)
@@ -495,7 +495,7 @@ func TestUpdateDeleteRecordRemovesLast(t *testing.T) {
 	require.NoError(t, err)
 
 	// Delete that one record specifically.
-	delMsg, err := update.NewUpdateBuilder(wire.MustParseName("example.com")).
+	delMsg, err := update.NewBuilder(wire.MustParseName("example.com")).
 		DeleteRecord(addRec).
 		Build()
 	require.NoError(t, err)
@@ -519,7 +519,7 @@ func TestUpdateDeleteRecordMissingName(t *testing.T) {
 	_, addr := startUpdatableLocal(t)
 	ex, err := acidns.NewUDPExchanger(addr)
 	require.NoError(t, err)
-	msg, err := update.NewUpdateBuilder(wire.MustParseName("example.com")).
+	msg, err := update.NewBuilder(wire.MustParseName("example.com")).
 		DeleteRecord(wire.NewRecord(wire.MustParseName("ghost.example.com"), 0,
 			rdata.MustNewA(netip.MustParseAddr("192.0.2.99")))).
 		Build()
@@ -535,7 +535,7 @@ func TestUpdateDeleteRRsetMissingName(t *testing.T) {
 	_, addr := startUpdatableLocal(t)
 	ex, err := acidns.NewUDPExchanger(addr)
 	require.NoError(t, err)
-	msg, err := update.NewUpdateBuilder(wire.MustParseName("example.com")).
+	msg, err := update.NewBuilder(wire.MustParseName("example.com")).
 		DeleteRRset(wire.MustParseName("ghost.example.com"), rrtype.A).
 		Build()
 	require.NoError(t, err)
@@ -555,7 +555,7 @@ func TestUpdateDeleteOneRRsetKeepsOthers(t *testing.T) {
 	// First add a TXT at www.
 	txt, err := rdata.NewTXT("hello")
 	require.NoError(t, err)
-	addMsg, err := update.NewUpdateBuilder(wire.MustParseName("example.com")).
+	addMsg, err := update.NewBuilder(wire.MustParseName("example.com")).
 		AddRRset(wire.NewRecord(wire.MustParseName("www.example.com"), 60*time.Second, txt)).
 		Build()
 	require.NoError(t, err)
@@ -563,7 +563,7 @@ func TestUpdateDeleteOneRRsetKeepsOthers(t *testing.T) {
 	require.NoError(t, err)
 
 	// Delete the A RRset; TXT must survive.
-	delMsg, err := update.NewUpdateBuilder(wire.MustParseName("example.com")).
+	delMsg, err := update.NewBuilder(wire.MustParseName("example.com")).
 		DeleteRRset(wire.MustParseName("www.example.com"), rrtype.A).
 		Build()
 	require.NoError(t, err)
@@ -589,7 +589,7 @@ func TestUpdateDeleteRecordNoMatch(t *testing.T) {
 	_, addr := startUpdatableLocal(t)
 	ex, err := acidns.NewUDPExchanger(addr)
 	require.NoError(t, err)
-	msg, err := update.NewUpdateBuilder(wire.MustParseName("example.com")).
+	msg, err := update.NewBuilder(wire.MustParseName("example.com")).
 		DeleteRecord(wire.NewRecord(wire.MustParseName("www.example.com"), 0,
 			rdata.MustNewA(netip.MustParseAddr("203.0.113.99")))).
 		Build()

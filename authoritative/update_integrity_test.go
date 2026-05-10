@@ -46,7 +46,7 @@ func TestUpdateRecordOutOfZoneNotZone(t *testing.T) {
 	require.NoError(t, err)
 
 	// Targets example.com (we own it) but plants `evil.com` inside.
-	msg, err := update.NewUpdateBuilder(wire.MustParseName("example.com")).
+	msg, err := update.NewBuilder(wire.MustParseName("example.com")).
 		AddRRset(wire.NewRecord(wire.MustParseName("evil.com"), 60*time.Second,
 			rdata.MustNewA(netip.MustParseAddr("198.51.100.99")))).
 		Build()
@@ -67,7 +67,7 @@ func TestUpdateApexCNAMEAddRejected(t *testing.T) {
 	ex, err := acidns.NewUDPExchanger(addr)
 	require.NoError(t, err)
 
-	msg, err := update.NewUpdateBuilder(wire.MustParseName("example.com")).
+	msg, err := update.NewBuilder(wire.MustParseName("example.com")).
 		AddRRset(wire.NewRecord(wire.MustParseName("example.com"), 60*time.Second,
 			rdata.MustNewCNAME(wire.MustParseName("other.example.com")))).
 		Build()
@@ -160,7 +160,7 @@ func TestUpdateBumpsSOAOnChange(t *testing.T) {
 
 	added := wire.NewRecord(wire.MustParseName("blog.example.com"), 60*time.Second,
 		rdata.MustNewA(netip.MustParseAddr("198.51.100.5")))
-	msg, err := update.NewUpdateBuilder(wire.MustParseName("example.com")).
+	msg, err := update.NewBuilder(wire.MustParseName("example.com")).
 		AddRRset(added).
 		Build()
 	require.NoError(t, err)

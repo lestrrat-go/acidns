@@ -12,7 +12,7 @@ import (
 )
 
 func Example_dnsupdate_build() {
-	// update.UpdateBuilder constructs an RFC 2136 UPDATE message. Add a
+	// update.Builder constructs an RFC 2136 UPDATE message. Add a
 	// prerequisite, an addition, and a delete; Build returns a wire.Message
 	// you can ship over any acidns.Exchanger.
 	zone := wire.MustParseName("example.com")
@@ -22,7 +22,7 @@ func Example_dnsupdate_build() {
 		rdata.MustNewA(netip.MustParseAddr("198.51.100.5")),
 	)
 
-	msg, err := update.NewUpdateBuilder(zone).
+	msg, err := update.NewBuilder(zone).
 		PrereqNameNotInUse(wire.MustParseName("blog.example.com")).
 		AddRRset(rec).
 		Build()
