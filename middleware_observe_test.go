@@ -48,11 +48,11 @@ func TestNewObservedCapturesEvent(t *testing.T) {
 		mu  sync.Mutex
 		got acidns.QueryEvent
 	)
-	wrapped := acidns.NewObserved(inner, func(e acidns.QueryEvent) {
+	wrapped := acidns.NewObserved(inner, acidns.WithObserver(func(e acidns.QueryEvent) {
 		mu.Lock()
 		got = e
 		mu.Unlock()
-	})
+	}))
 
 	q, err := wire.NewMessageBuilder().
 		ID(0xdead).
@@ -80,7 +80,7 @@ func TestNewObservedNilObsReturnsInner(t *testing.T) {
 	inner := acidns.HandlerFunc(func(context.Context, acidns.ResponseWriter, wire.Message) {
 		called = true
 	})
-	wrapped := acidns.NewObserved(inner, nil)
+	wrapped := acidns.NewObserved(inner, acidns.WithObserver(nil))
 
 	q, err := wire.NewMessageBuilder().
 		ID(1).

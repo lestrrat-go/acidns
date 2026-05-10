@@ -7,7 +7,28 @@ import (
 	"time"
 
 	"github.com/lestrrat-go/acidns/wire"
+	"github.com/lestrrat-go/option/v3"
 )
+
+// ObserveOption configures an [NewObserved] middleware.
+type ObserveOption interface {
+	option.Interface
+	observeOption()
+}
+
+type observeOption struct{ option.Interface }
+
+func (observeOption) observeOption() {}
+
+type identObserver struct{}
+
+// WithObserver registers the [QueryObserver] callback invoked once per
+// [Handler] ServeDNS call. Required — [NewObserved] without an
+// observer returns the inner handler unchanged. Pass nil to opt out
+// explicitly (also returns inner unchanged).
+func WithObserver(obs QueryObserver) ObserveOption {
+	return observeOption{option.New(identObserver{}, obs)}
+}
 
 // QueryEvent is the data passed to a [QueryObserver] for each request /
 // response pair. Latency is measured from the moment the inner handler
@@ -139,13 +160,22 @@ func (b *QueryEventBuilder) Build() (QueryEvent, error) {
 // note before deriving metric labels from message contents.
 type QueryObserver func(QueryEvent)
 
-// NewObserved wraps inner so that obs is invoked once after each
-// ServeDNS call. The wrapper transparently captures the response
-// written through the [ResponseWriter] (so the observer sees the
-// outgoing message) without altering inner's view of the writer.
+// NewObserved wraps inner so that an observer registered via
+// [WithObserver] is invoked once after each ServeDNS call. The wrapper
+// transparently captures the response written through the
+// [ResponseWriter] (so the observer sees the outgoing message) without
+// altering inner's view of the writer.
 //
-// A nil obs returns inner unchanged.
-func NewObserved(inner Handler, obs QueryObserver) Handler {
+// If no [WithObserver] option is supplied (or it carries a nil
+// callback), inner is returned unchanged.
+func NewObserved(inner Handler, opts ...ObserveOption) Handler {
+	var obs QueryObserver
+	for _, o := range opts {
+		switch o.Ident() {
+		case identObserver{}:
+			obs = option.MustGet[QueryObserver](o)
+		}
+	}
 	if obs == nil {
 		return inner
 	}
