@@ -506,5 +506,19 @@ func (e *exchanger) Exchange(ctx context.Context, q wire.Message) (wire.Message,
 	if err != nil {
 		return wire.Message{}, err
 	}
-	return wire.Unmarshal(plain)
+	resp, err := wire.Unmarshal(plain)
+	if err != nil {
+		return wire.Message{}, err
+	}
+	// AEAD only proves the resolver's short-term key signed *some* DNS
+	// message — not necessarily the one we asked. Bind the response to
+	// the request the same way every other transport in this repo does
+	// (UDP exchanger, streamframe, DoH, DoQ).
+	if resp.ID() != q.ID() {
+		return wire.Message{}, fmt.Errorf("dnscrypt: response id %d != request id %d", resp.ID(), q.ID())
+	}
+	if !wire.QuestionsMatch(q, resp) {
+		return wire.Message{}, fmt.Errorf("dnscrypt: response question does not match request")
+	}
+	return resp, nil
 }
