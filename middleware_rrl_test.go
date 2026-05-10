@@ -15,6 +15,7 @@ import (
 
 type rrlCapturingWriter struct {
 	src      netip.AddrPort
+	network  string
 	captured wire.Message
 	written  bool
 }
@@ -26,7 +27,12 @@ func (w *rrlCapturingWriter) WriteMsg(m wire.Message) error {
 }
 func (w *rrlCapturingWriter) RemoteAddr() netip.AddrPort { return w.src }
 func (*rrlCapturingWriter) LocalAddr() netip.AddrPort    { return netip.AddrPort{} }
-func (*rrlCapturingWriter) Network() string              { return netUDP }
+func (w *rrlCapturingWriter) Network() string {
+	if w.network == "" {
+		return netUDP
+	}
+	return w.network
+}
 
 func rrlPositiveAnswer() acidns.Handler {
 	return acidns.HandlerFunc(func(_ context.Context, w acidns.ResponseWriter, q wire.Message) {
@@ -187,4 +193,24 @@ func TestRRLAggregatesByPrefix(t *testing.T) {
 	h.ServeDNS(context.Background(), w2, rrlQuery(t, "victim.example."))
 	require.False(t, w2.written,
 		"second source in same /24 should share the exhausted bucket")
+}
+
+// TestRRLPassesThroughOnTCP exercises the fix that gates RRL to datagram
+// transports only. Slipping a TC=1 stub on TCP would be RFC 7766-illegal
+// and would corrupt AXFR/IXFR streams.
+func TestRRLPassesThroughOnTCP(t *testing.T) {
+	t.Parallel()
+	h := acidns.NewRRL(rrlPositiveAnswer(),
+		acidns.WithRRLQPS(0.0001),
+		acidns.WithRRLBurst(0),         // every UDP request would slip
+		acidns.WithRRLSlipRate(1.0),    // ...as TC=1
+	)
+
+	src := netip.MustParseAddrPort("203.0.113.50:1")
+	for i := range 5 {
+		w := &rrlCapturingWriter{src: src, network: "tcp"}
+		h.ServeDNS(context.Background(), w, rrlQuery(t, "victim.example."))
+		require.True(t, w.written, "TCP response %d must pass through unconditionally", i+1)
+		require.False(t, w.captured.Flags().Truncated(), "TCP response must never be slipped to TC=1")
+	}
 }

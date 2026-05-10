@@ -239,6 +239,19 @@ func (g *rrlWriter) WriteMsg(m wire.Message) error {
 	}
 	g.wrote = true
 
+	// RRL exists to defeat reflection/amplification on path-unverified
+	// datagram transports. Stream transports (TCP, DoT, DoH, DoQ) have
+	// per-connection path validation, so an attacker cannot spoof the
+	// source. Slipping a TC=1 stub here is also actively wrong: RFC 7766
+	// forbids TC over TCP, and AXFR/IXFR multi-envelope streams break
+	// outright. Pass through unconditionally on non-datagram networks.
+	switch g.ResponseWriter.Network() {
+	case "udp", "dnscrypt":
+		// fall through to RRL
+	default:
+		return g.ResponseWriter.WriteMsg(m)
+	}
+
 	rate := g.parent.rateFor(m)
 	if rate <= 0 {
 		// Class disabled (rate 0): treat as unrestricted.
