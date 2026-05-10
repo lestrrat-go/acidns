@@ -121,14 +121,17 @@ func ExchangeOnConn(ctx context.Context, conn net.Conn, q wire.Message, fallback
 type ConnStream struct {
 	conn      net.Conn
 	expect    uint16
-	stop      chan struct{}
-	stopOnce  sync.Once
 	closeOnce sync.Once
 }
 
 // NewConnStream sets the conn deadline (from ctx or fallbackTimeout), spins
-// up a goroutine that bumps the deadline if ctx is cancelled, sends q as a
-// length-prefixed frame, and returns a ConnStream ready for Next().
+// up a transient watcher that bumps the deadline if ctx is cancelled
+// during the initial WriteFrame, sends q as a length-prefixed frame, and
+// returns a ConnStream ready for Next(). The construction-time watcher
+// joins before NewConnStream returns; subsequent Next calls install
+// their own per-call watcher so the stream does not hold a long-lived
+// goroutine tied to the construction ctx (which would race with Next's
+// own SetDeadline if both fired at once).
 //
 // On error the conn is closed before NewConnStream returns.
 func NewConnStream(ctx context.Context, conn net.Conn, q wire.Message, fallbackTimeout time.Duration) (*ConnStream, error) {
@@ -138,19 +141,23 @@ func NewConnStream(ctx context.Context, conn net.Conn, q wire.Message, fallbackT
 		_ = conn.SetDeadline(time.Now().Add(fallbackTimeout))
 	}
 	stop := make(chan struct{})
+	done := make(chan struct{})
 	go func() {
+		defer close(done)
 		select {
 		case <-ctx.Done():
 			_ = conn.SetDeadline(time.Now())
 		case <-stop:
 		}
 	}()
-	if err := WriteFrame(conn, q); err != nil {
-		close(stop)
+	err := WriteFrame(conn, q)
+	close(stop)
+	<-done
+	if err != nil {
 		_ = conn.Close()
 		return nil, err
 	}
-	return &ConnStream{conn: conn, expect: q.ID(), stop: stop}, nil
+	return &ConnStream{conn: conn, expect: q.ID()}, nil
 }
 
 // Next reads the next response frame. ctx cancellation is honored by
@@ -184,7 +191,6 @@ func (s *ConnStream) Next(ctx context.Context) (wire.Message, error) {
 
 // Close releases the underlying connection. Idempotent.
 func (s *ConnStream) Close() error {
-	s.stopOnce.Do(func() { close(s.stop) })
 	var err error
 	s.closeOnce.Do(func() { err = s.conn.Close() })
 	return err

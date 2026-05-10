@@ -272,7 +272,7 @@ func TestNewConnStreamWriteError(t *testing.T) {
 	require.ErrorIs(t, err, io.ErrClosedPipe)
 }
 
-func TestNewConnStreamCtxCancelClosesConn(t *testing.T) {
+func TestConnStreamNextCtxCancel(t *testing.T) {
 	t.Parallel()
 	c1, c2 := net.Pipe()
 	defer func() { _ = c2.Close() }()
@@ -280,16 +280,16 @@ func TestNewConnStreamCtxCancelClosesConn(t *testing.T) {
 	// Server reads but doesn't reply, just to keep the conn alive.
 	go func() { _, _ = streamframe.ReadFrame(c2) }()
 
-	ctx, cancel := context.WithCancel(t.Context())
-	stream, err := streamframe.NewConnStream(ctx, c1, mustQ(t, 0x55), time.Hour)
+	stream, err := streamframe.NewConnStream(t.Context(), c1, mustQ(t, 0x55), time.Hour)
 	require.NoError(t, err)
 
-	// Cancel ctx, then Next should observe a cancelled context error.
+	// The construction-time ctx no longer affects later Next calls
+	// (it watched only during the initial WriteFrame). The per-call
+	// ctx passed to Next is what governs cancellation.
+	ctx, cancel := context.WithCancel(t.Context())
 	cancel()
-	_, err = stream.Next(t.Context())
-	// Cancel races the conn close — surfaces as either context.Canceled or
-	// io.ErrClosedPipe depending on which path the read goroutine takes.
-	require.Error(t, err)
+	_, err = stream.Next(ctx)
+	require.ErrorIs(t, err, context.Canceled)
 	require.NoError(t, stream.Close())
 }
 
