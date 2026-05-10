@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/lestrrat-go/acidns"
+	"github.com/lestrrat-go/acidns/authoritative"
 	"github.com/lestrrat-go/acidns/notify"
 	"github.com/lestrrat-go/acidns/wire"
 	"github.com/lestrrat-go/acidns/wire/rdata"
@@ -18,7 +19,7 @@ func TestSendWithSOAAndTimeout(t *testing.T) {
 	t.Parallel()
 
 	var got atomic.Pointer[wire.Question]
-	addr := startSecondary(t, func(_ context.Context, q wire.Question, _ acidns.ResponseWriter) {
+	addr := startSecondary(t, func(_ context.Context, q wire.Question, _ authoritative.NotifySource) {
 		got.Store(&q)
 	})
 	ex, err := acidns.NewUDPExchanger(addr)

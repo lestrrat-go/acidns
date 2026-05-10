@@ -2,10 +2,35 @@ package authoritative
 
 import (
 	"context"
+	"net/netip"
 
 	"github.com/lestrrat-go/acidns"
 	"github.com/lestrrat-go/acidns/wire"
 )
+
+// NotifySource carries identifying information about the peer that
+// sent a NOTIFY. It supersedes the live ResponseWriter that earlier
+// versions of this API passed to [NotifyHandler]: by the time a
+// handler runs, the ACK has already been flushed and the request
+// goroutine has returned, so a ResponseWriter would be unsafe to
+// write through. Remote address, local address, and transport name
+// are sufficient for the typical handler's needs (selecting an
+// upstream to AXFR from based on the primary's source).
+type NotifySource struct {
+	remote  netip.AddrPort
+	local   netip.AddrPort
+	network string
+}
+
+// Remote is the address of the peer that sent the NOTIFY.
+func (s NotifySource) Remote() netip.AddrPort { return s.remote }
+
+// Local is the local address the NOTIFY was received on.
+func (s NotifySource) Local() netip.AddrPort { return s.local }
+
+// Network is the underlying transport name ("udp", "tcp", "dot",
+// "doh", "doq").
+func (s NotifySource) Network() string { return s.network }
 
 // NotifyHandler is invoked once per RFC 1996 NOTIFY received for a zone
 // that this server holds. The default behaviour is to ACK the NOTIFY
@@ -24,7 +49,12 @@ import (
 // [context.WithoutCancel] so the handler is not killed when the UDP
 // response is flushed; caller-installed values (slog correlation
 // IDs, trace spans) propagate intact.
-type NotifyHandler func(ctx context.Context, zone wire.Question, src acidns.ResponseWriter)
+//
+// src is a [NotifySource] value snapshot — the live transport
+// ResponseWriter is intentionally not exposed because by the time
+// the handler runs the ACK is already out and on TCP the connection
+// may be closed.
+type NotifyHandler func(ctx context.Context, zone wire.Question, src NotifySource)
 
 // serveNotify acknowledges a NOTIFY for a zone the server hosts. NOTIFY
 // queries from peers about zones we don't hold receive REFUSED.
@@ -80,10 +110,15 @@ func (a *Authoritative) serveNotify(ctx context.Context, w acidns.ResponseWriter
 		}
 	}
 	handlerCtx := context.WithoutCancel(ctx)
+	src := NotifySource{
+		remote:  w.RemoteAddr(),
+		local:   w.LocalAddr(),
+		network: w.Network(),
+	}
 	go func() {
 		if sem != nil {
 			defer func() { <-sem }()
 		}
-		handler(handlerCtx, zoneQ, w)
+		handler(handlerCtx, zoneQ, src)
 	}()
 }

@@ -33,7 +33,7 @@ ns1 IN  A    192.0.2.10
 	h, err := authoritative.New(
 		authoritative.WithZone(z),
 		authoritative.WithNotifyPolicy(func(_ context.Context, _ acidns.ResponseWriter, _ wire.Message) bool { return true }),
-		authoritative.WithNotifyHandler(func(_ context.Context, _ wire.Question, _ acidns.ResponseWriter) {
+		authoritative.WithNotifyHandler(func(_ context.Context, _ wire.Question, _ authoritative.NotifySource) {
 			fired.Add(1)
 		}),
 	)
