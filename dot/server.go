@@ -48,8 +48,10 @@ import (
 )
 
 // ErrServerClosed is recorded on the [Controller] after a clean
-// shutdown via context cancellation.
-var ErrServerClosed = errors.New("dot: server closed")
+// shutdown via context cancellation. Aliased to
+// [acidns.ErrServerClosed] so transport-agnostic callers can match
+// either form via errors.Is.
+var ErrServerClosed = acidns.ErrServerClosed
 
 // Server is an immutable configuration holder for a DoT server. The
 // type carries the bind address, the [acidns.Handler], and applied

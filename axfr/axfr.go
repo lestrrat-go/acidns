@@ -59,8 +59,9 @@ var ErrMissingLeadingSOA = errors.New("axfr: stream must begin with SOA")
 var ErrRCODE = errors.New("axfr: server returned error rcode")
 
 // ErrTSIGVerify is returned when a stream envelope's TSIG signature
-// fails to verify against the key supplied via [WithTSIGKey].
-var ErrTSIGVerify = errors.New("axfr: TSIG verification failed")
+// fails to verify against the key supplied via [WithTSIGKey]. Aliased
+// to [tsig.ErrVerify] so callers can match either form via errors.Is.
+var ErrTSIGVerify = tsig.ErrVerify
 
 // Start sends an AXFR query for zone over ex and returns a Transfer
 // iterator positioned just past the leading SOA.

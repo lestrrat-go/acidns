@@ -70,8 +70,10 @@ import (
 )
 
 // ErrServerClosed is recorded on the [Controller] after a clean
-// shutdown via context cancellation.
-var ErrServerClosed = errors.New("doh: server closed")
+// shutdown via context cancellation. Aliased to
+// [acidns.ErrServerClosed] so transport-agnostic callers can match
+// either form via errors.Is.
+var ErrServerClosed = acidns.ErrServerClosed
 
 // MaxRequestBytes caps the request body the handler is willing to
 // read. RFC 8484 carries one DNS message, whose wire form is

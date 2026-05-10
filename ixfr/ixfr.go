@@ -72,8 +72,9 @@ var ErrMissingSubDiffSOA = errors.New("ixfr: expected SOA at sub-diff boundary")
 var ErrRCODE = errors.New("ixfr: server returned error rcode")
 
 // ErrTSIGVerify is returned when a stream envelope's TSIG signature
-// fails to verify against the key supplied via [WithTSIGKey].
-var ErrTSIGVerify = errors.New("ixfr: TSIG verification failed")
+// fails to verify against the key supplied via [WithTSIGKey]. Aliased
+// to [tsig.ErrVerify] so callers can match either form via errors.Is.
+var ErrTSIGVerify = tsig.ErrVerify
 
 // Kind describes the shape of an IXFR response, queryable on the Transfer
 // once Start has read the first message.

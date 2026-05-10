@@ -112,6 +112,13 @@ var ErrBadTruncation = errors.New("tsig: MAC shorter than allowed")
 // algorithm the verifier cannot actually compute.
 var ErrUnsupportedAlgorithm = errors.New("tsig: unsupported algorithm")
 
+// ErrVerify is the umbrella sentinel for a TSIG verification failure
+// observed at a higher layer (AXFR/IXFR stream envelopes, NOTIFY
+// responses, etc.). The streaming sub-packages re-export this value
+// under their own ErrTSIGVerify so callers can match either form via
+// errors.Is.
+var ErrVerify = errors.New("tsig: verification failed")
+
 const (
 	tsigType  uint16 = 250
 	tsigClass uint16 = 255 // ANY

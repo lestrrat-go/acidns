@@ -13,7 +13,6 @@ import (
 	"context"
 	"crypto/rand"
 	"encoding/binary"
-	"errors"
 	"fmt"
 	"time"
 
@@ -26,8 +25,9 @@ import (
 )
 
 // ErrTSIGVerify is returned when the response's TSIG signature fails
-// to verify against the key supplied via [WithTSIGKey].
-var ErrTSIGVerify = errors.New("notify: TSIG verification failed")
+// to verify against the key supplied via [WithTSIGKey]. Aliased to
+// [tsig.ErrVerify] so callers can match either form via errors.Is.
+var ErrTSIGVerify = tsig.ErrVerify
 
 // Send transmits a NOTIFY for zone over ex and waits for the ACK.
 func Send(ctx context.Context, ex acidns.Exchanger, zone wire.Name, opts ...Option) (wire.Message, error) {

@@ -47,8 +47,10 @@ import (
 )
 
 // ErrServerClosed is recorded on the [ServerController] after a
-// clean shutdown via context cancellation.
-var ErrServerClosed = errors.New("dnscrypt: server closed")
+// clean shutdown via context cancellation. Aliased to
+// [acidns.ErrServerClosed] so transport-agnostic callers can match
+// either form via errors.Is.
+var ErrServerClosed = acidns.ErrServerClosed
 
 // Server is an immutable configuration carrier for a DNSCrypt
 // server. The bound cert + resolver private key live here; runtime

@@ -41,8 +41,9 @@ var ErrTruncatedAfterTCPFail = errors.New("recursive: TC=1 with TCP fallback fai
 // configured WithMaxInflight cap is saturated. Surfaces as SERVFAIL
 // to clients via the ServeDNS handler. RFC 1035 doesn't define a
 // specific RCODE for resource exhaustion; SERVFAIL matches operator
-// expectations.
-var ErrInflightFull = errors.New("recursive: max inflight cache-miss queries reached")
+// expectations. Aliased to [acidns.ErrInflightFull] so callers can
+// match either form via errors.Is.
+var ErrInflightFull = acidns.ErrInflightFull
 
 // ErrUpstreamRateLimited is returned when every candidate upstream
 // server has been rate-limited by [WithUpstreamRateLimit] and there
@@ -859,7 +860,7 @@ func (r *Recursive) serversFromReferral(ctx context.Context, resp wire.Message, 
 		if !ok {
 			continue
 		}
-		target := ns.NSDName()
+		target := ns.Target()
 		if zone.IsValid() && inBailiwick(zone, target) {
 			if addrs := glueFor(target, resp.Additionals(), zone); len(addrs) > 0 {
 				glued = append(glued, addrs...)
@@ -1202,7 +1203,7 @@ func bailiwickFilter(qname wire.Name, resp wire.Message) (answers, authority, ad
 	}
 	for _, r := range authority {
 		if ns, ok := wire.RDataAs[rdata.NS](r); ok {
-			referenced[nameKey(ns.NSDName())] = struct{}{}
+			referenced[nameKey(ns.Target())] = struct{}{}
 		}
 	}
 

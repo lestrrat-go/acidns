@@ -27,8 +27,9 @@ var ErrNoUpstream = errors.New("forward: no upstream configured")
 
 // ErrInflightFull is returned when a cache miss arrives while the
 // configured WithMaxInflight cap is saturated. Surfaces as SERVFAIL
-// to the inbound peer.
-var ErrInflightFull = errors.New("forward: max inflight upstream calls reached")
+// to the inbound peer. Aliased to [acidns.ErrInflightFull] so callers
+// can match either form via errors.Is.
+var ErrInflightFull = acidns.ErrInflightFull
 
 // Compile-time assertion that *Forwarder satisfies acidns.Handler.
 // Renamed from Handler to Forwarder so the type does not shadow the

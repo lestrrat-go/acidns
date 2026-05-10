@@ -39,7 +39,18 @@ import (
 // accept loop exits because ctx was cancelled or the listener was
 // closed for an expected reason. It is NOT returned from Run itself —
 // Run only returns errors that happened during socket bind.
+//
+// The transport sub-packages ([dot], [doh], [doq], [dnscrypt]) re-export
+// this sentinel under their own package's ErrServerClosed so
+// errors.Is(err, dot.ErrServerClosed) and errors.Is(err,
+// acidns.ErrServerClosed) both match the same closed-server error.
 var ErrServerClosed = errors.New("acidns: server closed")
+
+// ErrInflightFull is the canonical sentinel for "max inflight upstream
+// calls reached" returned by the [forward] and [recursive] caching
+// layers. The sub-packages re-export this value so a caller that does
+// errors.Is(err, acidns.ErrInflightFull) matches both layers.
+var ErrInflightFull = errors.New("acidns: max inflight upstream calls reached")
 
 // Handler is the interface implemented by anything that answers DNS queries.
 //
