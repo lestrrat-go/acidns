@@ -61,7 +61,7 @@ func WithServerName(name string) Option {
 }
 
 // WithInsecure disables TLS certificate verification on outbound
-// connections. By default the exchanger requires a valid chain to a
+// connections. By default the Client requires a valid chain to a
 // system root or to the RootCAs configured via [WithTLSConfig]; pass
 // true here to skip that check entirely. Use only against a known
 // loopback / test endpoint — disabling verification on a public

@@ -17,7 +17,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/lestrrat-go/acidns"
 	"github.com/lestrrat-go/acidns/dot"
 	"github.com/lestrrat-go/acidns/wire"
 	"github.com/lestrrat-go/acidns/wire/rdata"
@@ -151,7 +150,7 @@ func TestDoTNewInvalidAddr(t *testing.T) {
 }
 
 // TestDoTNewDefaultServerName confirms that constructing a DoT
-// exchanger against an IP-literal address without a ServerName is a
+// Client against an IP-literal address without a ServerName is a
 // hard error (the implicit "use the IP as SNI" fallback is unsafe and
 // has been removed).
 func TestDoTNewDefaultServerName(t *testing.T) {
@@ -211,8 +210,7 @@ func TestDoTStreamDialError(t *testing.T) {
 		Question(wire.NewQuestion(wire.MustParseName("example.com"), rrtype.A)).
 		Build()
 
-	se, ok := ex.(acidns.StreamExchanger)
-	require.True(t, ok)
+	se := ex
 	ctx, cancel := context.WithTimeout(t.Context(), 500*time.Millisecond)
 	defer cancel()
 	_, err = se.Stream(ctx, q)
@@ -239,8 +237,7 @@ func TestDoTStreamWriteError(t *testing.T) {
 		Question(wire.NewQuestion(wire.MustParseName("example.com"), rrtype.A)).
 		Build()
 
-	se, ok := ex.(acidns.StreamExchanger)
-	require.True(t, ok)
+	se := ex
 	// Allow a generous timeout — the failure mode here is the server
 	// closing the connection mid-write or reset on first read.
 	ctx, cancel := context.WithTimeout(t.Context(), 2*time.Second)

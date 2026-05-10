@@ -29,7 +29,7 @@ import (
 // queries per connection — same fixture shape as startDoT but the
 // connection-handler loop reads frames until the client closes. The
 // server also counts the number of inbound TCP connections so tests
-// can verify the keep-alive exchanger reuses one across exchanges.
+// can verify the keep-alive Client reuses one across exchanges.
 func startMultiDoT(t *testing.T, idleTimeout time.Duration) (netip.AddrPort, *tls.Config, *atomic.Int32) {
 	t.Helper()
 

@@ -211,7 +211,7 @@ func TestServerMessageReadTimeoutClosesBodySlowloris(t *testing.T) {
 	ctrl, err := srv.Run(ctx)
 	require.NoError(t, err)
 
-	// Direct TLS dial — we want the raw stream, not a DoT exchanger.
+	// Direct TLS dial — we want the raw stream, not a DoT Client.
 	conn, err := tls.Dial("tcp", ctrl.Addr().String(), clientCfg)
 	require.NoError(t, err)
 	defer func() { _ = conn.Close() }()

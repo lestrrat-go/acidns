@@ -70,7 +70,7 @@ func WithKeepAliveTLSConfig(tc *tls.Config) KeepAliveOption {
 
 // WithKeepAliveServerName sets the SNI / certificate verification name.
 // Required when addr is an IP literal and no ServerName was set on the
-// pre-supplied *tls.Config — the exchanger refuses construction
+// pre-supplied *tls.Config — the Client refuses construction
 // otherwise (see [New] for the same rule).
 func WithKeepAliveServerName(name string) KeepAliveOption {
 	return dotKeepAliveOption{option.New(identKAServerName{}, name)}
@@ -89,7 +89,7 @@ func WithKeepAlivePadding(v bool) KeepAliveOption {
 // re-dialled transparently when the server-advertised idle window
 // elapses or any I/O error breaks framing.
 //
-// Returned exchanger is safe for concurrent callers but serialises
+// Returned Client is safe for concurrent callers but serialises
 // exchanges over the single connection (no pipelining).
 func NewKeepAliveExchanger(addr netip.AddrPort, opts ...KeepAliveOption) (acidns.Exchanger, error) {
 	if !addr.IsValid() {

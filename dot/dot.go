@@ -8,7 +8,7 @@
 // Each Exchange opens a fresh TLS connection on top of TCP. Connection
 // reuse, idle timeouts, and pipelining are out of scope for this
 // primitive transport — for keep-alive, use the TCP keep-alive
-// exchanger from the root acidns package and wrap it with TLS yourself,
+// Client from the root acidns package and wrap it with TLS yourself,
 // or wait for a future dot.NewKeepAlive helper.
 //
 // Stream returns a MessageStream so the caller can pull AXFR / IXFR
@@ -49,17 +49,20 @@ import (
 	"github.com/lestrrat-go/option/v3"
 )
 
-type exchanger struct {
+type Client struct {
 	addr      netip.AddrPort
 	timeout   time.Duration
 	tlsConfig *tls.Config
 	padding   bool
 }
 
-// New returns an Exchanger that talks DoT to addr. addr is typically
-// "host:853" — DoT does not auto-default the port, but addresses without a
-// port resolve to 853 in the higher-level Resolver wiring.
-func New(addr netip.AddrPort, opts ...Option) (acidns.Exchanger, error) {
+// New returns a *Client that talks DoT to addr. addr is typically
+// "host:853" — DoT does not auto-default the port, but addresses
+// without a port resolve to 853 in the higher-level Resolver wiring.
+// *Client satisfies [acidns.Exchanger]; the concrete pointer is
+// returned so callers can reach implementation-specific affordances
+// without an interface assertion.
+func New(addr netip.AddrPort, opts ...Option) (*Client, error) {
 	if !addr.IsValid() {
 		return nil, ErrInvalidAddress
 	}
@@ -115,7 +118,7 @@ func New(addr netip.AddrPort, opts ...Option) (acidns.Exchanger, error) {
 		tcfg.InsecureSkipVerify = true
 	}
 
-	return &exchanger{addr: addr, timeout: c.timeout, tlsConfig: tcfg, padding: c.padding}, nil
+	return &Client{addr: addr, timeout: c.timeout, tlsConfig: tcfg, padding: c.padding}, nil
 }
 
 // isHostnameAddr reports whether addr is a hostname:port form rather
@@ -131,7 +134,7 @@ func containsALPN(list []string, p string) bool {
 	return slices.Contains(list, p)
 }
 
-func (e *exchanger) Exchange(ctx context.Context, q wire.Message) (wire.Message, error) {
+func (e *Client) Exchange(ctx context.Context, q wire.Message) (wire.Message, error) {
 	if e.padding {
 		q = wire.PadEncrypted(q)
 	}
@@ -146,7 +149,7 @@ func (e *exchanger) Exchange(ctx context.Context, q wire.Message) (wire.Message,
 // Stream sends q over a fresh TLS connection and returns a MessageStream
 // from which the caller pulls responses. Implements XoT (RFC 9103) when
 // q is an AXFR/IXFR query.
-func (e *exchanger) Stream(ctx context.Context, q wire.Message) (acidns.MessageStream, error) {
+func (e *Client) Stream(ctx context.Context, q wire.Message) (acidns.MessageStream, error) {
 	if e.padding {
 		q = wire.PadEncrypted(q)
 	}
