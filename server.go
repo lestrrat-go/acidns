@@ -30,6 +30,7 @@ import (
 	"context"
 	"errors"
 	"net/netip"
+	"sync/atomic"
 
 	"github.com/lestrrat-go/acidns/internal/serverctl"
 	"github.com/lestrrat-go/acidns/wire"
@@ -94,13 +95,34 @@ type ResponseWriter interface {
 // UDPController is the runtime handle returned by [UDPServer.Run].
 // It is the only path to the running UDP server instance: cancelling
 // the ctx passed to Run is the only way to stop the instance, and
-// Done() / Err() / Addr() are the only public observations.
-//
-// Future protocol-specific runtime queries (e.g. inflight-handler
-// count, packets dropped at the semaphore) belong on this type.
+// Done() / Err() / Addr() and the metric accessors are the only
+// public observations.
 type UDPController struct {
 	serverctl.Core
+
+	parseDrops    atomic.Uint64
+	inflightDrops atomic.Uint64
+	preFilterDrops atomic.Uint64
 }
+
+// PacketsDroppedParseError returns the cumulative count of inbound
+// UDP datagrams that failed [wire.Unmarshal]. Under attack a sudden
+// rise here is the canonical "someone is throwing garbage at the
+// listener" signal; under normal operation the number stays at 0
+// modulo the occasional ICMP-driven mangled datagram.
+func (c *UDPController) PacketsDroppedParseError() uint64 { return c.parseDrops.Load() }
+
+// PacketsDroppedAtSemaphore returns the cumulative count of inbound
+// datagrams refused at the [WithUDPMaxInflight] cap. Steady growth
+// means the listener is pinned at its concurrency bound — either the
+// handler is slow, the workload is too large for the configured
+// inflight cap, or the listener is being flooded.
+func (c *UDPController) PacketsDroppedAtSemaphore() uint64 { return c.inflightDrops.Load() }
+
+// PacketsDroppedByPreFilter returns the cumulative count of datagrams
+// rejected by the [WithUDPPreParseFilter] gate. Useful to measure
+// the effectiveness of an operator's source-prefix denylist.
+func (c *UDPController) PacketsDroppedByPreFilter() uint64 { return c.preFilterDrops.Load() }
 
 // TCPController is the runtime handle returned by [TCPServer.Run].
 // It is the only path to the running TCP server instance: cancelling

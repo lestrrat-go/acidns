@@ -183,6 +183,7 @@ func (s *UDPServer) Run(ctx context.Context) (*UDPController, error) {
 		addr:    bound,
 		handler: s.handler,
 		cfg:     s.cfg,
+		ctrl:    ctrl,
 	}
 	if s.cfg.maxInflight > 0 {
 		loop.sem = make(chan struct{}, s.cfg.maxInflight)
@@ -221,6 +222,7 @@ type udpLoop struct {
 	bufPool sync.Pool
 	wg      sync.WaitGroup
 	writeMu sync.Mutex
+	ctrl    *UDPController
 }
 
 func (l *udpLoop) run(ctx context.Context) error {
@@ -285,6 +287,9 @@ func (l *udpLoop) run(ctx context.Context) error {
 		}
 		if l.cfg.preParseFilter != nil && !l.cfg.preParseFilter(ua.AddrPort()) {
 			l.bufPool.Put(bufp)
+			if l.ctrl != nil {
+				l.ctrl.preFilterDrops.Add(1)
+			}
 			continue
 		}
 		if l.sem != nil {
@@ -292,6 +297,9 @@ func (l *udpLoop) run(ctx context.Context) error {
 			case l.sem <- struct{}{}:
 			default:
 				l.bufPool.Put(bufp) // at concurrency cap — drop & recycle
+				if l.ctrl != nil {
+					l.ctrl.inflightDrops.Add(1)
+				}
 				continue
 			}
 		}
@@ -312,6 +320,9 @@ func (l *udpLoop) run(ctx context.Context) error {
 func (l *udpLoop) handlePacket(ctx context.Context, body []byte, src netip.AddrPort) {
 	q, err := wire.Unmarshal(body)
 	if err != nil {
+		if l.ctrl != nil {
+			l.ctrl.parseDrops.Add(1)
+		}
 		return // malformed → drop silently
 	}
 
