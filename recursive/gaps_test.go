@@ -298,6 +298,26 @@ func TestAllServersLame(t *testing.T) {
 	defer cancel()
 	_, err := r.ResolveEntry(rctx, wire.MustParseName("nope.example."), rrtype.A)
 	require.ErrorIs(t, err, recursive.ErrAllServersLame)
+
+	// The wrapper exposes per-server entries: every queried root
+	// should appear in Servers() with RCODE=SERVFAIL.
+	var ae *recursive.AllServersLameError
+	require.ErrorAs(t, err, &ae)
+	servers := ae.Servers()
+	require.NotEmpty(t, servers)
+	seen := make(map[netip.AddrPort]wire.RCODE, len(servers))
+	for _, s := range servers {
+		require.Equal(t, wire.RCODEServFail, s.RCODE())
+		seen[s.Addr()] = s.RCODE()
+	}
+	require.Contains(t, seen, a)
+	require.Contains(t, seen, b)
+
+	// Single-LameServer extraction: errors.As surfaces the first
+	// server's entry.
+	var ls *recursive.LameServer
+	require.ErrorAs(t, err, &ls)
+	require.Equal(t, wire.RCODEServFail, ls.RCODE())
 }
 
 // TestRefusedTreatedAsLame exercises the REFUSED branch in addition to

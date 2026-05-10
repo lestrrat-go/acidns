@@ -26,9 +26,94 @@ var ErrIterationLimit = errors.New("recursive: iteration limit reached")
 // cap.
 var ErrCNAMELoop = errors.New("recursive: CNAME loop or chain too deep")
 
-// ErrAllServersLame is returned when every candidate server returned an
-// unusable response (REFUSED, SERVFAIL, or no progress).
+// ErrAllServersLame is the sentinel matched by [errors.Is] when every
+// candidate server returned an unusable response (REFUSED, SERVFAIL,
+// or no progress). The actual returned error is a concrete
+// [*AllServersLameError] that wraps the per-server failures so
+// callers can branch via the sentinel AND inspect each server's
+// contribution via [errors.As] / [AllServersLameError.Servers].
 var ErrAllServersLame = errors.New("recursive: all candidate servers lame")
+
+// LameServer describes one server's contribution to an
+// [AllServersLameError]: the address that was queried and the RCODE
+// that classified the server as lame.
+type LameServer struct {
+	addr  netip.AddrPort
+	rcode wire.RCODE
+}
+
+// Addr is the address of the lame server.
+func (e *LameServer) Addr() netip.AddrPort { return e.addr }
+
+// RCODE is the unusable RCODE the server returned (REFUSED or
+// SERVFAIL).
+func (e *LameServer) RCODE() wire.RCODE { return e.rcode }
+
+// Error implements error.
+func (e *LameServer) Error() string {
+	return fmt.Sprintf("server %s: %s", e.addr, e.rcode)
+}
+
+// AllServersLameError is the concrete error type returned by the
+// recursive resolver when every candidate server returned an
+// unusable response. It wraps a [errors.Join] of [*LameServer]
+// entries so callers can:
+//
+//   - match the sentinel: [errors.Is](err, [ErrAllServersLame])
+//   - extract the bundle: var ae *AllServersLameError; [errors.As](err, &ae)
+//   - find a single server: var ls *LameServer; [errors.As](err, &ls)
+//     (returns the first lame server in the bundle)
+//   - walk every server: ae.Servers() returns the full slice
+type AllServersLameError struct {
+	// joined is the result of errors.Join(*LameServer, ...). The
+	// joined value's Unwrap() []error is what errors.Is/As walks
+	// when searching for a per-server error.
+	joined error
+	// servers caches the typed slice so Servers() doesn't have to
+	// re-walk joined; same backing data, typed.
+	servers []*LameServer
+}
+
+// Servers returns the per-server entries in the order they were
+// recorded. The returned slice ALIASES the wrapper's storage —
+// callers MUST NOT mutate it.
+func (e *AllServersLameError) Servers() []*LameServer { return e.servers }
+
+// Error renders the sentinel headline followed by each per-server
+// entry on its own line (delegated to errors.Join's stringer).
+func (e *AllServersLameError) Error() string {
+	if e.joined == nil {
+		return ErrAllServersLame.Error()
+	}
+	return ErrAllServersLame.Error() + "\n" + e.joined.Error()
+}
+
+// Unwrap returns the joined per-server error so [errors.Is] and
+// [errors.As] walk into the bundle.
+func (e *AllServersLameError) Unwrap() error { return e.joined }
+
+// Is reports whether target is [ErrAllServersLame]. Without this
+// method, [errors.Is] would only walk the joined per-server entries
+// and never match the package-level sentinel.
+func (e *AllServersLameError) Is(target error) bool {
+	return target == ErrAllServersLame
+}
+
+// newAllServersLameError builds an [*AllServersLameError] from the
+// per-server entries accumulated during a resolveDepthInner walk.
+// Returns a non-nil error even when servers is empty (callers should
+// not invoke this with no entries; the empty case still produces a
+// usable sentinel-matching error rather than nil).
+func newAllServersLameError(servers []*LameServer) *AllServersLameError {
+	errs := make([]error, len(servers))
+	for i, s := range servers {
+		errs[i] = s
+	}
+	return &AllServersLameError{
+		joined:  errors.Join(errs...),
+		servers: servers,
+	}
+}
 
 // ErrTruncatedAfterTCPFail is returned when a UDP response had TC=1 and
 // the TCP fallback failed: the truncated answer is incomplete and must
@@ -684,6 +769,13 @@ func (r *Recursive) resolveDepthInner(ctx context.Context, target wire.Name, t r
 	// — see RFC 9156 §2.4 fallback rules). When set, every
 	// subsequent query in this resolution sends target directly.
 	fellBack := !r.qnameMin
+	// lameServers accumulates one [*LameServer] per server that
+	// returned an unusable response. On all-exhausted return the
+	// slice is wrapped in an [*AllServersLameError] so callers can
+	// inspect every server's contribution. Survives the minimised →
+	// fallback transition so the operator sees both passes' failures
+	// when both are exhausted.
+	var lameServers []*LameServer
 
 	for range r.maxIterations {
 		if len(servers) == 0 {
@@ -709,6 +801,7 @@ func (r *Recursive) resolveDepthInner(ctx context.Context, target wire.Name, t r
 		// Lame check: REFUSED or SERVFAIL → mark and try next server set.
 		if rcode == wire.RCODERefused || rcode == wire.RCODEServFail {
 			r.stats.Record(used, 0, false)
+			lameServers = append(lameServers, &LameServer{addr: used, rcode: rcode})
 			servers = removeServer(ranked, used)
 			if len(servers) == 0 {
 				// RFC 9156 §2.4.3: if the upstream chain refuses a
@@ -719,7 +812,7 @@ func (r *Recursive) resolveDepthInner(ctx context.Context, target wire.Name, t r
 					servers = ranked
 					continue
 				}
-				return Entry{}, ErrAllServersLame
+				return Entry{}, newAllServersLameError(lameServers)
 			}
 			continue
 		}
