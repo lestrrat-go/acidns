@@ -109,7 +109,10 @@ func TestWriteFrameOversized(t *testing.T) {
 	var buf bytes.Buffer
 	err := streamframe.WriteFrame(&buf, m)
 	require.Error(t, err)
-	require.Contains(t, err.Error(), "too large")
+	// wire.Marshal now caps oversized output before streamframe sees
+	// it; the error wraps wire.ErrInvalidMessage rather than the
+	// streamframe-specific "too large" message.
+	require.Contains(t, err.Error(), "exceeds wire limit")
 }
 
 func TestWriteFrameLengthWriteError(t *testing.T) {

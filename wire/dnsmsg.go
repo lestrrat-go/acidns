@@ -111,7 +111,17 @@ func Marshal(m Message) ([]byte, error) {
 			return nil, err
 		}
 	}
-	return p.Bytes(), nil
+	out := p.Bytes()
+	// A TCP frame's 16-bit length prefix caps the whole message at
+	// 65535 bytes; UDP can carry less still. streamframe.WriteFrame
+	// catches the TCP case at send time, but raw-UDP / raw-buffer
+	// callers do not — enforce the hard wire limit here so an
+	// oversize Marshal fails loudly rather than producing bytes no
+	// transport can carry.
+	if len(out) > 0xffff {
+		return nil, fmt.Errorf("%w: message %d bytes exceeds wire limit (65535)", ErrInvalidMessage, len(out))
+	}
+	return out, nil
 }
 
 // Unmarshal decodes a wire-format DNS message.
