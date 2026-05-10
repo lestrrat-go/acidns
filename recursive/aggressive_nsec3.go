@@ -51,10 +51,13 @@ import (
 	"github.com/lestrrat-go/acidns/wire/rrtype"
 )
 
+// nsec3HashSHA1 deprecated alias kept for narrow internal use; new code
+// should use [rdata.NSEC3HashSHA1].
+//
 // nsec3HashSHA1 is the only NSEC3 hash algorithm registered with
 // IANA (RFC 5155 §11.2). Cached records with any other algorithm
 // are not usable for synthesis.
-const nsec3HashSHA1 uint8 = 1
+const nsec3HashSHA1 = rdata.NSEC3HashSHA1
 
 // maxNSEC3Iterations matches the validator's bound (RFC 9276 §3.1).
 // A cached NSEC3 with a higher count is dropped — we couldn't have
@@ -65,7 +68,7 @@ const maxNSEC3Iterations uint16 = 100
 // nsec3Params bundles the (alg, iterations, salt) tuple that all
 // NSEC3 records in a single zone share (RFC 5155 §4.1).
 type nsec3Params struct {
-	alg        uint8
+	alg        rdata.NSEC3HashAlgorithm
 	iterations uint16
 	salt       []byte
 }

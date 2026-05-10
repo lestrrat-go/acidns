@@ -43,15 +43,15 @@ func TestRRSIGAccessors(t *testing.T) {
 
 func TestNSEC3PARAMAccessors(t *testing.T) {
 	t.Parallel()
-	p := rdata.MustNewNSEC3PARAM(1, 0, 100, []byte{0xca, 0xfe})
-	require.Equal(t, uint8(1), p.HashAlgorithm())
+	p := rdata.MustNewNSEC3PARAM(rdata.NSEC3HashSHA1, 0, 100, []byte{0xca, 0xfe})
+	require.Equal(t, rdata.NSEC3HashSHA1, p.HashAlgorithm())
 	require.Equal(t, uint8(0), p.Flags())
 }
 
 func TestNSEC3Accessors(t *testing.T) {
 	t.Parallel()
-	n := rdata.MustNewNSEC3(1, 2, 3, []byte{0x01}, []byte{0x02}, []rrtype.Type{rrtype.A})
-	require.Equal(t, uint8(1), n.HashAlgorithm())
+	n := rdata.MustNewNSEC3(rdata.NSEC3HashSHA1, 2, 3, []byte{0x01}, []byte{0x02}, []rrtype.Type{rrtype.A})
+	require.Equal(t, rdata.NSEC3HashSHA1, n.HashAlgorithm())
 	require.Equal(t, uint8(2), n.Flags())
 	require.Equal(t, uint16(3), n.Iterations())
 }

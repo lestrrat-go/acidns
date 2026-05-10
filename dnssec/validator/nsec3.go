@@ -13,10 +13,11 @@ import (
 	"github.com/lestrrat-go/acidns/wire/rrtype"
 )
 
-// NSEC3HashSHA1 is the hash algorithm code for SHA-1 (RFC 5155 §11.2). It
-// is the only NSEC3 hash algorithm registered with IANA; modern zones
-// continue to use it because no successor has been standardised.
-const NSEC3HashSHA1 = 1
+// NSEC3HashSHA1 re-exports [rdata.NSEC3HashSHA1] under the validator
+// package for callers that already import this package and don't want
+// to add a second import. RFC 5155 §11.2 — only registered NSEC3 hash
+// algorithm.
+const NSEC3HashSHA1 = rdata.NSEC3HashSHA1
 
 // NSEC3FlagOptOut marks an NSEC3 record as opt-out (RFC 5155 §6). When set,
 // unsigned delegations may exist between the record's owner-hash and its
@@ -126,7 +127,7 @@ func nsec3Cover(name wire.Name, params nsec3Params, records []wire.Record) (rdat
 // records in a zone (RFC 5155 §4.1.1; mismatched parameters are a protocol
 // violation that validators MUST reject).
 type nsec3Params struct {
-	alg        uint8
+	alg        rdata.NSEC3HashAlgorithm
 	iterations uint16
 	salt       []byte
 }

@@ -409,11 +409,27 @@ func decodeTypeBitmap(u *wirebb.Unpacker, n int) ([]rrtype.Type, error) {
 	return out, nil
 }
 
+// NSEC3HashAlgorithm is the IANA NSEC3-Hash-Algorithms registry value
+// (RFC 5155 §11.2). SHA-1 is the only registered algorithm.
+type NSEC3HashAlgorithm uint8
+
+// NSEC3HashSHA1 is the only NSEC3 hash algorithm registered with IANA
+// (RFC 5155 §11.2).
+const NSEC3HashSHA1 NSEC3HashAlgorithm = 1
+
+// String returns a short human-readable name for the algorithm.
+func (a NSEC3HashAlgorithm) String() string {
+	if a == NSEC3HashSHA1 {
+		return "SHA1"
+	}
+	return fmt.Sprintf("NSEC3-Hash-%d", uint8(a))
+}
+
 // NSEC3 is the hashed authenticated denial-of-existence rdata
 // (RFC 5155 §3.2). Salt and NextHashedOwner are stored as raw bytes; the
 // caller is responsible for any base32hex encoding.
 type NSEC3 struct {
-	hashAlg    uint8
+	hashAlg    NSEC3HashAlgorithm
 	flags      uint8
 	iterations uint16
 	salt       []byte
@@ -421,16 +437,16 @@ type NSEC3 struct {
 	types      []rrtype.Type
 }
 
-func (NSEC3) Type() rrtype.Type         { return rrtype.NSEC3 }
-func (NSEC3) typedRData()               {}
-func (n NSEC3) HashAlgorithm() uint8    { return n.hashAlg }
+func (NSEC3) Type() rrtype.Type                 { return rrtype.NSEC3 }
+func (NSEC3) typedRData()                       {}
+func (n NSEC3) HashAlgorithm() NSEC3HashAlgorithm { return n.hashAlg }
 func (n NSEC3) Flags() uint8            { return n.flags }
 func (n NSEC3) Iterations() uint16      { return n.iterations }
 func (n NSEC3) Salt() []byte            { return slices.Clone(n.salt) }
 func (n NSEC3) NextHashedOwner() []byte { return slices.Clone(n.nextOwner) }
 func (n NSEC3) Types() []rrtype.Type    { return slices.Clone(n.types) }
 func (n NSEC3) Pack(p *wirebb.Packer) {
-	p.Uint8(n.hashAlg)
+	p.Uint8(uint8(n.hashAlg))
 	p.Uint8(n.flags)
 	p.Uint16(n.iterations)
 	p.Uint8(uint8(len(n.salt)))
@@ -444,7 +460,7 @@ func (n NSEC3) Pack(p *wirebb.Packer) {
 // salt or nextOwner exceeds 255 bytes (RFC 5155 §3.1: both lengths
 // are wire-encoded as uint8). The previous shape silently truncated
 // via uint8(len(...)) at Pack time, corrupting the rdata.
-func NewNSEC3(hashAlg, flags uint8, iterations uint16, salt, nextOwner []byte, types []rrtype.Type) (NSEC3, error) {
+func NewNSEC3(hashAlg NSEC3HashAlgorithm, flags uint8, iterations uint16, salt, nextOwner []byte, types []rrtype.Type) (NSEC3, error) {
 	if len(salt) > 255 {
 		return NSEC3{}, fmt.Errorf("%w: NSEC3 salt %d bytes exceeds 255-byte limit", ErrInvalidRData, len(salt))
 	}
@@ -462,7 +478,7 @@ func NewNSEC3(hashAlg, flags uint8, iterations uint16, salt, nextOwner []byte, t
 
 // MustNewNSEC3 is the panic-on-error variant of [NewNSEC3], for
 // static fixtures and tests.
-func MustNewNSEC3(hashAlg, flags uint8, iterations uint16, salt, nextOwner []byte, types []rrtype.Type) NSEC3 {
+func MustNewNSEC3(hashAlg NSEC3HashAlgorithm, flags uint8, iterations uint16, salt, nextOwner []byte, types []rrtype.Type) NSEC3 {
 	n, err := NewNSEC3(hashAlg, flags, iterations, salt, nextOwner, types)
 	if err != nil {
 		panic(err)
@@ -519,7 +535,7 @@ func unpackNSEC3(u *wirebb.Unpacker, rdlen int) (NSEC3, error) {
 	hashCp := make([]byte, len(hash))
 	copy(hashCp, hash)
 	return NSEC3{
-		hashAlg: alg, flags: flags, iterations: iters,
+		hashAlg: NSEC3HashAlgorithm(alg), flags: flags, iterations: iters,
 		salt: saltCp, nextOwner: hashCp, types: types,
 	}, nil
 }
