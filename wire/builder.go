@@ -1,5 +1,7 @@
 package wire
 
+import "fmt"
+
 // Builder constructs a Message in stages. All setter methods return the
 // receiver so calls can be chained; Build returns the immutable Message.
 //
@@ -50,10 +52,51 @@ func (b *Builder) CheckingDisabled(v bool) *Builder {
 }
 func (b *Builder) RCODE(r RCODE) *Builder       { b.flags = b.flags.WithRCODE(r); return b }
 func (b *Builder) Question(q Question) *Builder { b.questions = append(b.questions, q); return b }
-func (b *Builder) Answer(r Record) *Builder     { b.answers = append(b.answers, r); return b }
-func (b *Builder) Authority(r Record) *Builder  { b.authorities = append(b.authorities, r); return b }
-func (b *Builder) Additional(r Record) *Builder { b.additionals = append(b.additionals, r); return b }
-func (b *Builder) EDNS(e EDNS) *Builder         { b.edns = e; b.hasEDNS = true; return b }
+
+// Answer appends a Record to the answer section. A zero-value Record
+// (no rdata attached) is rejected — Marshal would panic on the nil
+// rdata interface, so failing fast here surfaces the bug at the build
+// site instead of deep inside the encoder.
+func (b *Builder) Answer(r Record) *Builder {
+	if r.IsZero() {
+		b.setErr(fmt.Errorf("wire: Builder.Answer received zero Record"))
+		return b
+	}
+	b.answers = append(b.answers, r)
+	return b
+}
+
+// Authority appends a Record to the authority section. See [Builder.Answer]
+// for the zero-Record rejection rationale.
+func (b *Builder) Authority(r Record) *Builder {
+	if r.IsZero() {
+		b.setErr(fmt.Errorf("wire: Builder.Authority received zero Record"))
+		return b
+	}
+	b.authorities = append(b.authorities, r)
+	return b
+}
+
+// Additional appends a Record to the additional section. See
+// [Builder.Answer] for the zero-Record rejection rationale.
+func (b *Builder) Additional(r Record) *Builder {
+	if r.IsZero() {
+		b.setErr(fmt.Errorf("wire: Builder.Additional received zero Record"))
+		return b
+	}
+	b.additionals = append(b.additionals, r)
+	return b
+}
+func (b *Builder) EDNS(e EDNS) *Builder { b.edns = e; b.hasEDNS = true; return b }
+
+// setErr stores the first error seen by the Builder so subsequent
+// chained calls can keep returning b without obscuring the original
+// failure.
+func (b *Builder) setErr(err error) {
+	if b.err == nil {
+		b.err = err
+	}
+}
 
 func (b *Builder) Build() (Message, error) {
 	if b.err != nil {
