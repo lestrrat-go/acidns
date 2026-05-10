@@ -109,6 +109,62 @@ func TestAnnounceConflictAborts(t *testing.T) {
 	require.ErrorIs(t, err, mdns.ErrConflict)
 }
 
+// TestAnnounceTiebreakLoserAborts: a simultaneous probe whose proposed
+// records sort lexically later than ours wins the §8.2 compare; we
+// abort with ErrConflict.
+func TestAnnounceTiebreakLoserAborts(t *testing.T) {
+	t.Parallel()
+	tr := newFakeTransport()
+	a, err := mdns.NewAnnouncer(
+		mdns.WithAnnouncerTransport(tr),
+		mdns.WithProbeTiming(50*time.Millisecond, 3),
+		mdns.WithAnnounceTiming(time.Millisecond, 2),
+	)
+	require.NoError(t, err)
+
+	// Theirs proposes A=255.255.255.254, lexically larger than our
+	// 192.0.2.10 → they win the byte-compare.
+	probe, _ := wire.NewMessageBuilder().
+		Question(wire.NewQuestionClass(wire.MustParseName("Living Room TV._http._tcp.local."), rrtype.ANY, rrtype.ClassIN)).
+		Authority(wire.NewRecord(wire.MustParseName("tv-living-room.local."),
+			120*time.Second,
+			rdata.MustNewA(netip.MustParseAddr("255.255.255.254")))).
+		Build()
+	tr.inbox <- probe
+
+	ctx, cancel := context.WithTimeout(t.Context(), time.Second)
+	defer cancel()
+	err = a.Announce(ctx, samplePublication())
+	require.ErrorIs(t, err, mdns.ErrConflict)
+}
+
+// TestAnnounceTiebreakWinnerProceeds: a simultaneous probe whose records
+// sort lexically earlier than ours loses the compare; we proceed.
+func TestAnnounceTiebreakWinnerProceeds(t *testing.T) {
+	t.Parallel()
+	tr := newFakeTransport()
+	a, err := mdns.NewAnnouncer(
+		mdns.WithAnnouncerTransport(tr),
+		mdns.WithProbeTiming(time.Millisecond, 3),
+		mdns.WithAnnounceTiming(time.Millisecond, 2),
+	)
+	require.NoError(t, err)
+
+	// Theirs proposes A=0.0.0.1, lexically smaller than our
+	// 192.0.2.10 → we win.
+	probe, _ := wire.NewMessageBuilder().
+		Question(wire.NewQuestionClass(wire.MustParseName("Living Room TV._http._tcp.local."), rrtype.ANY, rrtype.ClassIN)).
+		Authority(wire.NewRecord(wire.MustParseName("tv-living-room.local."),
+			120*time.Second,
+			rdata.MustNewA(netip.MustParseAddr("0.0.0.1")))).
+		Build()
+	tr.inbox <- probe
+
+	ctx, cancel := context.WithTimeout(t.Context(), time.Second)
+	defer cancel()
+	require.NoError(t, a.Announce(ctx, samplePublication()))
+}
+
 func TestAnnouncementSetsCacheFlushBit(t *testing.T) {
 	t.Parallel()
 	tr := newFakeTransport()

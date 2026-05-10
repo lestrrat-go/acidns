@@ -1,11 +1,14 @@
 package mdns
 
 import (
+	"bytes"
 	"context"
+	"encoding/binary"
 	"errors"
 	"fmt"
 	"net/netip"
 	"slices"
+	"sort"
 	"sync"
 	"time"
 
@@ -282,7 +285,16 @@ func (a *announcer) Withdraw(ctx context.Context) error {
 }
 
 // listenForConflict drains transport.Recv until ctx expires, returning
-// (true, nil) if any record names ours with conflicting rdata.
+// (true, nil) if a conflict resolves with us as the loser.
+//
+// Two paths:
+//
+//   - ANSWER section: a record from someone's existing announcement
+//     names ours with conflicting rdata. RFC 6762 §9 says we MUST
+//     defer; abort with ErrConflict.
+//   - AUTHORITY section: a probe from a simultaneous announcer with
+//     conflicting proposed records. RFC 6762 §8.2 calls for a
+//     lexicographic tiebreak — only the loser of the compare aborts.
 func (a *announcer) listenForConflict(ctx context.Context, p Publication) (bool, error) {
 	for {
 		msg, err := a.cfg.transport.Recv(ctx)
@@ -292,12 +304,83 @@ func (a *announcer) listenForConflict(ctx context.Context, p Publication) (bool,
 			}
 			return false, err
 		}
-		// Inspect ANSWER section. We treat any record that names our
-		// instance/host with rdata DIFFERENT from ours as a conflict.
 		if conflictsWith(msg.Answers(), p) {
 			return true, nil
 		}
+		theirs := pertinentRecords(msg.Authorities(), p)
+		if len(theirs) == 0 {
+			continue
+		}
+		ours := pertinentRecords(publicationRecords(p, false), p)
+		if !setsAreEquivalent(theirs, ours) && proberWinsTiebreak(theirs, ours) {
+			return true, nil
+		}
+		// We win or tie — ignore the probe and keep listening.
 	}
+}
+
+// pertinentRecords filters to records owned by our instance/host (the
+// "complete record set" RFC 6762 §8.2 calls out for the tiebreak).
+// Includes SRV/TXT at the instance and A/AAAA at the host; PTR records
+// are shared-set per RFC 6762 §10.2 and don't participate.
+func pertinentRecords(records []wire.Record, p Publication) []wire.Record {
+	var out []wire.Record
+	for _, r := range records {
+		if r.Name().Equal(p.instance) || r.Name().Equal(p.host) {
+			out = append(out, r)
+		}
+	}
+	return out
+}
+
+// setsAreEquivalent reports whether ours and theirs have the same
+// canonical record content. Equivalent sets imply both probers are
+// proposing identical records — there is no conflict, just two
+// honestly-uncoordinated copies, and the announce phase's cache-flush
+// bit will reconcile them at the consumer.
+func setsAreEquivalent(a, b []wire.Record) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	abs := canonicalSetBytes(a)
+	bbs := canonicalSetBytes(b)
+	return bytes.Equal(abs, bbs)
+}
+
+// proberWinsTiebreak runs the RFC 6762 §8.2 lexicographic compare.
+// Returns true when 'theirs' (the incoming probe's records) sorts
+// lexicographically later than ours — meaning they win, and we must
+// defer.
+func proberWinsTiebreak(theirs, ours []wire.Record) bool {
+	tBytes := canonicalSetBytes(theirs)
+	oBytes := canonicalSetBytes(ours)
+	return bytes.Compare(tBytes, oBytes) > 0
+}
+
+// canonicalSetBytes produces a deterministic bytewise representation
+// of a record set for §8.2 tiebreak comparison: each record encoded
+// as class(2) || type(2) || canonical-rdata, sorted ascending, then
+// concatenated. Owner names are excluded from the per-record bytes
+// because both parties' records share the conflicting owner; the
+// compare hinges on rdata + class + type.
+func canonicalSetBytes(records []wire.Record) []byte {
+	if len(records) == 0 {
+		return nil
+	}
+	parts := make([][]byte, 0, len(records))
+	for _, r := range records {
+		buf := make([]byte, 4)
+		binary.BigEndian.PutUint16(buf[0:], uint16(r.Class())&0x7fff)
+		binary.BigEndian.PutUint16(buf[2:], uint16(r.Type()))
+		buf = append(buf, rdata.Pack(r.RData())...)
+		parts = append(parts, buf)
+	}
+	sort.Slice(parts, func(i, j int) bool { return bytes.Compare(parts[i], parts[j]) < 0 })
+	var out []byte
+	for _, p := range parts {
+		out = append(out, p...)
+	}
+	return out
 }
 
 // conflictsWith inspects records for any that name our publication's
