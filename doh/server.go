@@ -279,7 +279,8 @@ func NewServer(addr netip.AddrPort, h acidns.Handler, opts ...ServerOption) (*Se
 		writeTimeout:         30 * time.Second,
 		idleTimeout:          60 * time.Second,
 		maxConnections:       1024,
-		maxConcurrentStreams: 100,
+		maxConnsPerSource:    32,
+		maxConcurrentStreams: 32,
 	}
 	for _, o := range opts {
 		switch o.Ident() {
@@ -299,6 +300,8 @@ func NewServer(addr netip.AddrPort, h acidns.Handler, opts ...ServerOption) (*Se
 			cfg.idleTimeout = option.MustGet[time.Duration](o)
 		case identServerMaxConnections{}:
 			cfg.maxConnections = option.MustGet[int](o)
+		case identServerMaxConnsPerSource{}:
+			cfg.maxConnsPerSource = option.MustGet[int](o)
 		case identServerMaxConcurrentStreams{}:
 			cfg.maxConcurrentStreams = option.MustGet[uint32](o)
 		}
@@ -340,8 +343,16 @@ func (s *Server) Run(ctx context.Context) (*Controller, error) {
 	}
 	bound := netip.AddrPortFrom(la.AddrPort().Addr(), uint16(la.Port))
 
-	if s.cfg.maxConnections > 0 {
-		ln = newLimitListener(ln, s.cfg.maxConnections)
+	if s.cfg.maxConnections > 0 || s.cfg.maxConnsPerSource > 0 {
+		// limitListener gracefully handles either knob being zero.
+		// We always wrap when the per-source cap is set so the
+		// per-source bookkeeping fires; the global cap defaults to
+		// math.MaxInt32 in that case to keep behaviour identical.
+		globalCap := s.cfg.maxConnections
+		if globalCap <= 0 {
+			globalCap = 1 << 30
+		}
+		ln = newLimitListener(ln, globalCap, s.cfg.maxConnsPerSource)
 	}
 
 	mux := http.NewServeMux()

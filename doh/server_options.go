@@ -51,6 +51,7 @@ type serverConfig struct {
 	writeTimeout         time.Duration
 	idleTimeout          time.Duration
 	maxConnections       int
+	maxConnsPerSource    int
 	maxConcurrentStreams uint32
 }
 
@@ -62,6 +63,7 @@ type identServerReadTimeout struct{}
 type identServerWriteTimeout struct{}
 type identServerIdleTimeout struct{}
 type identServerMaxConnections struct{}
+type identServerMaxConnsPerSource struct{}
 type identServerMaxConcurrentStreams struct{}
 
 // WithServerTLSConfig installs the TLS configuration. The supplied
@@ -122,11 +124,25 @@ func WithServerMaxConnections(n int) ServerOption {
 	return dohServerOption{option.New(identServerMaxConnections{}, n)}
 }
 
+// WithServerMaxConnsPerSource caps the number of concurrently-open
+// connections accepted from a single client IP (v4-mapped v6
+// addresses fold into their v4 form). Without this, a single
+// HTTP/1.1 peer can occupy every slot in [WithServerMaxConnections]
+// and starve all other clients — sibling transports DoT and the
+// plain TCP server already cap at 32/source by default. Defaults to
+// 32; a non-positive value disables the cap.
+func WithServerMaxConnsPerSource(n int) ServerOption {
+	return dohServerOption{option.New(identServerMaxConnsPerSource{}, n)}
+}
+
 // WithServerMaxConcurrentStreams caps HTTP/2's per-connection
 // concurrent stream count. Without this, a single TLS session can
 // open ~100 streams (Go's http2 default) and pin that many
-// concurrent ServeDNS goroutines per peer. A non-positive value
-// disables the cap (http2 default applies).
+// concurrent ServeDNS goroutines per peer. The default is 32 to
+// match the per-connection inflight caps used by the TCP and DoT
+// servers; the worst-case memory ceiling per connection is
+// roughly maxConcurrentStreams × WithServerMaxRequestBytes. A
+// non-positive value disables the cap (http2 default applies).
 func WithServerMaxConcurrentStreams(n uint32) ServerOption {
 	return dohServerOption{option.New(identServerMaxConcurrentStreams{}, n)}
 }

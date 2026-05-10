@@ -220,3 +220,62 @@ func TestNewServerRejectsMissingTLS(t *testing.T) {
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "WithServerTLSConfig is required")
 }
+
+// TestServerMaxConnsPerSourceCap models a single source occupying every
+// per-source slot. Once the cap is hit the server must drop additional
+// connections from the same source while still admitting other sources.
+// Verifies one peer can no longer starve the global slot pool.
+func TestServerMaxConnsPerSourceCap(t *testing.T) {
+	t.Parallel()
+	cert, clientCfg := dohTestCerts(t)
+	srv, err := doh.NewServer(
+		netip.MustParseAddrPort("127.0.0.1:0"), &echoHandler{},
+		doh.WithServerTLSConfig(&tls.Config{Certificates: []tls.Certificate{cert}}),
+		doh.WithServerMaxConnsPerSource(2),
+	)
+	require.NoError(t, err)
+	ctx, cancel := context.WithCancel(t.Context())
+	t.Cleanup(cancel)
+	ctrl, err := srv.Run(ctx)
+	require.NoError(t, err)
+
+	// Wait briefly for the listener to be ready.
+	time.Sleep(50 * time.Millisecond)
+
+	// Open two concurrent TLS connections and complete the handshake.
+	// Both occupy per-source slots for 127.0.0.1.
+	dial := func() *tls.Conn {
+		c, err := tls.Dial("tcp", ctrl.Addr().String(), clientCfg)
+		require.NoError(t, err)
+		require.NoError(t, c.Handshake())
+		return c
+	}
+	c1 := dial()
+	defer func() { _ = c1.Close() }()
+	c2 := dial()
+	defer func() { _ = c2.Close() }()
+
+	// The third connection should be admitted by the kernel + the
+	// limit listener but immediately closed by the server because the
+	// per-source cap has been hit. Either Handshake or the first read
+	// must return an error.
+	c3, err := tls.Dial("tcp", ctrl.Addr().String(), clientCfg)
+	if err == nil {
+		_ = c3.SetDeadline(time.Now().Add(2 * time.Second))
+		hsErr := c3.Handshake()
+		if hsErr == nil {
+			buf := make([]byte, 8)
+			_, hsErr = c3.Read(buf)
+		}
+		_ = c3.Close()
+		require.Error(t, hsErr, "third concurrent connection from same source must be dropped")
+	}
+
+	// Closing one occupant frees a slot — a new connection succeeds.
+	require.NoError(t, c1.Close())
+	time.Sleep(50 * time.Millisecond)
+	c4, err := tls.Dial("tcp", ctrl.Addr().String(), clientCfg)
+	require.NoError(t, err)
+	require.NoError(t, c4.Handshake(), "slot should free after closing first conn")
+	_ = c4.Close()
+}
