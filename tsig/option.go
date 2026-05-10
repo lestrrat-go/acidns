@@ -47,3 +47,27 @@ func WithReplayCacheSize(n int) ReplayCacheOption {
 func WithReplayClock(now func() time.Time) ReplayCacheOption {
 	return tsigReplayCacheOption{option.New(identReplayClock{}, now)}
 }
+
+// KeyOption configures a [Key] at construction.
+type KeyOption interface {
+	option.Interface
+	tsigKeyOption()
+}
+
+type tsigKeyOption struct{ option.Interface }
+
+func (tsigKeyOption) tsigKeyOption() {}
+
+type identKeyAllowSHA1 struct{}
+
+// WithAllowSHA1 marks a Key as permitted to operate under
+// [HMACSHA1]. RFC 8945 §6 still lists HMAC-SHA1 as
+// MUST-implement, but it is operationally deprecated and
+// discouraged for new deployments. By default a Key constructed
+// with HMACSHA1 fails Sign and Verify with [ErrSHA1Disabled];
+// passing this option (with true) re-enables SHA-1 for
+// interoperability with legacy peers. Has no effect on keys
+// using stronger algorithms.
+func WithAllowSHA1(allow bool) KeyOption {
+	return tsigKeyOption{option.New(identKeyAllowSHA1{}, allow)}
+}

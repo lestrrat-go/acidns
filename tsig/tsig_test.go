@@ -40,7 +40,11 @@ func TestSignVerifyRoundTrip(t *testing.T) {
 	} {
 		t.Run(string(alg), func(t *testing.T) {
 			t.Parallel()
-			key := tsig.NewKey(wire.MustParseName("test.key"), alg, mkSecret(t, 32))
+			var keyOpts []tsig.KeyOption
+			if alg == tsig.HMACSHA1 {
+				keyOpts = append(keyOpts, tsig.WithAllowSHA1(true))
+			}
+			key := tsig.NewKey(wire.MustParseName("test.key"), alg, mkSecret(t, 32), keyOpts...)
 			msg := mkMessage(t)
 			now := time.Now().Truncate(time.Second)
 
@@ -59,6 +63,21 @@ func TestSignVerifyRoundTrip(t *testing.T) {
 			require.Equal(t, 1, len(m.Questions()))
 		})
 	}
+}
+
+// TestSHA1DisabledByDefault confirms a key constructed with HMACSHA1
+// fails Sign/Verify with ErrSHA1Disabled unless WithAllowSHA1 is set.
+func TestSHA1DisabledByDefault(t *testing.T) {
+	t.Parallel()
+	key := tsig.NewKey(wire.MustParseName("legacy.key"), tsig.HMACSHA1, mkSecret(t, 20))
+	_, err := tsig.Sign(mkMessage(t), key, time.Now(), 5*time.Minute)
+	require.ErrorIs(t, err, tsig.ErrSHA1Disabled)
+
+	allowed := tsig.NewKey(wire.MustParseName("legacy.key"), tsig.HMACSHA1, mkSecret(t, 20),
+		tsig.WithAllowSHA1(true))
+	signed, err := tsig.Sign(mkMessage(t), allowed, time.Now(), 5*time.Minute)
+	require.NoError(t, err)
+	require.NotEmpty(t, signed)
 }
 
 func TestVerifyFailsOnTamper(t *testing.T) {

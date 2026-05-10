@@ -51,6 +51,7 @@ import (
 	"time"
 
 	"github.com/lestrrat-go/acidns/wire"
+	"github.com/lestrrat-go/option/v3"
 )
 
 // Algorithm names the HMAC variant (canonical form per RFC 8945 §6).
@@ -74,15 +75,27 @@ type Key struct {
 	name      wire.Name
 	algorithm Algorithm
 	secret    []byte
+	allowSHA1 bool
 }
 
 // NewKey returns a Key with the supplied identity material. The
 // secret slice is copied so a later mutation of the caller's slice
 // does not leak into TSIG signing/verification.
-func NewKey(name wire.Name, alg Algorithm, secret []byte) Key {
+//
+// HMAC-SHA1 keys are rejected by Sign and Verify with
+// [ErrSHA1Disabled] unless the key is constructed with
+// [WithAllowSHA1] (true).
+func NewKey(name wire.Name, alg Algorithm, secret []byte, opts ...KeyOption) Key {
 	s := make([]byte, len(secret))
 	copy(s, secret)
-	return Key{name: name, algorithm: alg, secret: s}
+	k := Key{name: name, algorithm: alg, secret: s}
+	for _, o := range opts {
+		switch o.Ident() {
+		case identKeyAllowSHA1{}:
+			k.allowSHA1 = option.MustGet[bool](o)
+		}
+	}
+	return k
 }
 
 // Name returns the key name (the DNS name used as the TSIG owner).
@@ -111,6 +124,12 @@ var ErrBadTruncation = errors.New("tsig: MAC shorter than allowed")
 // passing verification with a generic short-MAC floor against an
 // algorithm the verifier cannot actually compute.
 var ErrUnsupportedAlgorithm = errors.New("tsig: unsupported algorithm")
+
+// ErrSHA1Disabled is returned by Sign/Verify when the supplied Key
+// uses [HMACSHA1] without opting in via [WithAllowSHA1]. HMAC-SHA1
+// is operationally deprecated; the package fails closed against it
+// so a routine NewKey call cannot accept SHA-1 by accident.
+var ErrSHA1Disabled = errors.New("tsig: HMAC-SHA1 disabled (construct the Key with WithAllowSHA1(true))")
 
 // ErrVerify is the umbrella sentinel for a TSIG verification failure
 // observed at a higher layer (AXFR/IXFR stream envelopes, NOTIFY
@@ -371,6 +390,9 @@ func computeHMAC(key Key, payload []byte) ([]byte, error) {
 	var h hash.Hash
 	switch key.algorithm {
 	case HMACSHA1:
+		if !key.allowSHA1 {
+			return nil, ErrSHA1Disabled
+		}
 		h = hmac.New(sha1.New, key.secret)
 	case HMACSHA256:
 		h = hmac.New(sha256.New, key.secret)
