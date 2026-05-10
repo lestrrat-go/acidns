@@ -56,16 +56,19 @@ func WithTCPKeepAliveAdvertise(v bool) TCPKeepAliveOption {
 	return tcpKeepAliveOption{option.New(identTCPKeepAliveAdvertise{}, v)}
 }
 
-// NewTCPKeepAliveExchanger returns an Exchanger that maintains a single
-// persistent TCP connection per addr, advertising edns-tcp-keepalive on
-// outgoing queries and honoring the timeout returned by the server (RFC
-// 7766 §3, RFC 7828). The connection is closed and re-dialled
-// transparently when the server-advertised idle window elapses or any
-// I/O error breaks framing.
+// NewTCPKeepAliveExchanger returns a TCPKeepAliveExchanger that
+// maintains a single persistent TCP connection per addr, advertising
+// edns-tcp-keepalive on outgoing queries and honoring the timeout
+// returned by the server (RFC 7766 §3, RFC 7828). The connection is
+// closed and re-dialled transparently when the server-advertised idle
+// window elapses or any I/O error breaks framing.
 //
-// The returned exchanger is safe for concurrent callers but serialises
-// exchanges over the single connection (no pipelining).
-func NewTCPKeepAliveExchanger(addr netip.AddrPort, opts ...TCPKeepAliveOption) (Exchanger, error) {
+// The concrete type is returned so callers can call Close to release
+// the cached connection without an interface assertion.
+// [*TCPKeepAliveExchanger] satisfies [Exchanger]. It is safe for
+// concurrent callers but serialises exchanges over the single
+// connection (no pipelining).
+func NewTCPKeepAliveExchanger(addr netip.AddrPort, opts ...TCPKeepAliveOption) (*TCPKeepAliveExchanger, error) {
 	if !addr.IsValid() {
 		return nil, fmt.Errorf("acidns: invalid server address")
 	}
@@ -84,10 +87,10 @@ func NewTCPKeepAliveExchanger(addr netip.AddrPort, opts ...TCPKeepAliveOption) (
 			c.advertise = option.MustGet[bool](o)
 		}
 	}
-	return &tcpKAExchanger{addr: addr, cfg: c}, nil
+	return &TCPKeepAliveExchanger{addr: addr, cfg: c}, nil
 }
 
-type tcpKAExchanger struct {
+type TCPKeepAliveExchanger struct {
 	addr netip.AddrPort
 	cfg  tcpKAConfig
 
@@ -104,7 +107,7 @@ type tcpKAExchanger struct {
 	exchangeMu sync.Mutex
 }
 
-func (e *tcpKAExchanger) Exchange(ctx context.Context, q wire.Message) (wire.Message, error) {
+func (e *TCPKeepAliveExchanger) Exchange(ctx context.Context, q wire.Message) (wire.Message, error) {
 	if e.cfg.advertise {
 		q = ensureKeepAliveOption(q)
 	}
@@ -151,7 +154,7 @@ func (e *tcpKAExchanger) Exchange(ctx context.Context, q wire.Message) (wire.Mes
 // acquireConn returns a usable connection, dialing outside dialMu so a
 // stalled handshake does not pin concurrent callers. Concurrent
 // callers dedupe via the dialing channel.
-func (e *tcpKAExchanger) acquireConn(ctx context.Context) (net.Conn, error) {
+func (e *TCPKeepAliveExchanger) acquireConn(ctx context.Context) (net.Conn, error) {
 	for {
 		e.dialMu.Lock()
 		if e.conn != nil {
@@ -196,7 +199,7 @@ func (e *tcpKAExchanger) acquireConn(ctx context.Context) (net.Conn, error) {
 	}
 }
 
-func (e *tcpKAExchanger) dropConn(conn net.Conn) {
+func (e *TCPKeepAliveExchanger) dropConn(conn net.Conn) {
 	e.dialMu.Lock()
 	defer e.dialMu.Unlock()
 	if e.conn == conn {
@@ -208,7 +211,7 @@ func (e *tcpKAExchanger) dropConn(conn net.Conn) {
 
 // Close releases any cached connection. Subsequent Exchange calls will
 // dial fresh.
-func (e *tcpKAExchanger) Close() error {
+func (e *TCPKeepAliveExchanger) Close() error {
 	e.dialMu.Lock()
 	defer e.dialMu.Unlock()
 	if e.conn != nil {

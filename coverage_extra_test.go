@@ -264,11 +264,9 @@ func TestKeepAliveCloseReleasesConn(t *testing.T) {
 	_, err = ex.Exchange(t.Context(), newQuery(t, "example.com"))
 	require.NoError(t, err)
 
-	closer, ok := ex.(interface{ Close() error })
-	require.True(t, ok, "keepalive exchanger should expose Close()")
-	require.NoError(t, closer.Close())
+	require.NoError(t, ex.Close())
 	// Closing an already-closed exchanger should be a no-op.
-	require.NoError(t, closer.Close())
+	require.NoError(t, ex.Close())
 
 	_, err = ex.Exchange(t.Context(), newQuery(t, "example.com"))
 	require.NoError(t, err)

@@ -24,9 +24,7 @@ func TestTCPStream(t *testing.T) {
 		Build()
 	require.NoError(t, err)
 
-	se, ok := ex.(acidns.StreamExchanger)
-	require.True(t, ok)
-	stream, err := se.Stream(t.Context(), q)
+	stream, err := ex.Stream(t.Context(), q)
 	require.NoError(t, err)
 	defer func() { _ = stream.Close() }()
 	resp, err := stream.Next(t.Context())
@@ -49,8 +47,6 @@ func TestTCPDialFailure(t *testing.T) {
 		Build()
 	ctx, cancel := context.WithTimeout(t.Context(), 200*time.Millisecond)
 	defer cancel()
-	se, ok := ex.(acidns.StreamExchanger)
-	require.True(t, ok)
-	_, err = se.Stream(ctx, q)
+	_, err = ex.Stream(ctx, q)
 	require.Error(t, err)
 }

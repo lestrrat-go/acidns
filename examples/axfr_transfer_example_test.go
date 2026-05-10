@@ -56,11 +56,9 @@ www IN  A    192.0.2.42
 		fmt.Println("dial:", err)
 		return
 	}
-	sx := tx.(acidns.StreamExchanger)
-
 	xferCtx, xcancel := context.WithTimeout(ctx, 5*time.Second)
 	defer xcancel()
-	xfer, err := axfr.Start(xferCtx, sx, wire.MustParseName("example.com"))
+	xfer, err := axfr.Start(xferCtx, tx, wire.MustParseName("example.com"))
 	if err != nil {
 		fmt.Println("axfr start:", err)
 		return

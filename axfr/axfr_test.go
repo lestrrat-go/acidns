@@ -33,9 +33,7 @@ func newStreamEx(t *testing.T, addr netip.AddrPort) acidns.StreamExchanger {
 	t.Helper()
 	ex, err := acidns.NewTCPExchanger(addr)
 	require.NoError(t, err)
-	sx, ok := ex.(acidns.StreamExchanger)
-	require.True(t, ok, "tcp must implement StreamExchanger")
-	return sx
+	return ex
 }
 
 func TestTransferRoundTrip(t *testing.T) {

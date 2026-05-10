@@ -43,13 +43,20 @@ func WithTCPTimeout(d time.Duration) TCPExchangerOption {
 	return tcpExchangerOption{option.New(identTCPTimeout{}, d)}
 }
 
-type tcpExchanger struct {
+// TCPExchanger talks TCP to a single fixed address using length-prefixed
+// framing (RFC 1035 §4.2.2). Each Exchange dials a fresh connection;
+// callers wanting connection reuse should use [TCPKeepAliveExchanger].
+//
+// The concrete type is returned so callers can reach the streaming API
+// via [TCPExchanger.Stream] without an interface assertion.
+// [*TCPExchanger] satisfies [Exchanger] and [StreamExchanger].
+type TCPExchanger struct {
 	addr    netip.AddrPort
 	timeout time.Duration
 }
 
-// NewTCPExchanger returns an Exchanger that talks TCP to addr.
-func NewTCPExchanger(addr netip.AddrPort, opts ...TCPExchangerOption) (Exchanger, error) {
+// NewTCPExchanger returns a TCPExchanger talking to addr.
+func NewTCPExchanger(addr netip.AddrPort, opts ...TCPExchangerOption) (*TCPExchanger, error) {
 	if !addr.IsValid() {
 		return nil, fmt.Errorf("acidns: invalid server address")
 	}
@@ -60,10 +67,10 @@ func NewTCPExchanger(addr netip.AddrPort, opts ...TCPExchangerOption) (Exchanger
 			c.timeout = option.MustGet[time.Duration](o)
 		}
 	}
-	return &tcpExchanger{addr: addr, timeout: c.timeout}, nil
+	return &TCPExchanger{addr: addr, timeout: c.timeout}, nil
 }
 
-func (e *tcpExchanger) Exchange(ctx context.Context, q wire.Message) (wire.Message, error) {
+func (e *TCPExchanger) Exchange(ctx context.Context, q wire.Message) (wire.Message, error) {
 	var d net.Dialer
 	conn, err := d.DialContext(ctx, "tcp", e.addr.String())
 	if err != nil {
@@ -75,7 +82,7 @@ func (e *tcpExchanger) Exchange(ctx context.Context, q wire.Message) (wire.Messa
 // Stream sends q over a fresh TCP connection and returns a MessageStream
 // from which the caller pulls responses. The stream MUST be closed by the
 // caller to release the connection.
-func (e *tcpExchanger) Stream(ctx context.Context, q wire.Message) (MessageStream, error) {
+func (e *TCPExchanger) Stream(ctx context.Context, q wire.Message) (MessageStream, error) {
 	var d net.Dialer
 	conn, err := d.DialContext(ctx, "tcp", e.addr.String())
 	if err != nil {

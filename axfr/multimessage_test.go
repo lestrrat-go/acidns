@@ -53,8 +53,7 @@ func TestTransferLargeZone(t *testing.T) {
 	defer xcancel()
 	ex, err := acidns.NewTCPExchanger(ctrl.Addr())
 	require.NoError(t, err)
-	sx := ex.(acidns.StreamExchanger)
-	xfer, err := axfr.Start(xferCtx, sx, wire.MustParseName("big.example"))
+	xfer, err := axfr.Start(xferCtx, ex, wire.MustParseName("big.example"))
 	require.NoError(t, err)
 	defer func() { _ = xfer.Close() }()
 

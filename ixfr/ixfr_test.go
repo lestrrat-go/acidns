@@ -56,10 +56,8 @@ func TestTransferAXFRFallback(t *testing.T) {
 
 	ex, err := acidns.NewTCPExchanger(ctrl.Addr())
 	require.NoError(t, err)
-	sx, ok := ex.(acidns.StreamExchanger)
-	require.True(t, ok, "tcp exchanger must implement StreamExchanger")
 
-	xfer, err := ixfr.Start(xferCtx, sx, wire.MustParseName("example.com"), clientSOA)
+	xfer, err := ixfr.Start(xferCtx, ex, wire.MustParseName("example.com"), clientSOA)
 	require.NoError(t, err)
 	defer func() { _ = xfer.Close() }()
 
