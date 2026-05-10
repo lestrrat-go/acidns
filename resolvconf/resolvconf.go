@@ -14,7 +14,6 @@ import (
 	"io"
 	"net/netip"
 	"os"
-	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -38,11 +37,11 @@ type Config struct {
 // Nameservers returns the parsed nameserver entries in source order. The
 // returned slice is a copy; callers may mutate it without affecting the
 // Config.
-func (c *Config) Nameservers() []netip.AddrPort { return slices.Clone(c.nameservers) }
+func (c *Config) Nameservers() []netip.AddrPort { return c.nameservers }
 
 // Search returns the parsed search-list entries. The returned slice is a
 // copy; callers may mutate it without affecting the Config.
-func (c *Config) Search() []wire.Name { return slices.Clone(c.search) }
+func (c *Config) Search() []wire.Name { return c.search }
 
 // Ndots returns the ndots option value.
 func (c *Config) Ndots() int { return c.ndots }
@@ -57,7 +56,7 @@ func (c *Config) Attempts() int { return c.attempts }
 // preserved verbatim so callers may surface them or pass them through. The
 // returned slice is a copy; callers may mutate it without affecting the
 // Config.
-func (c *Config) Verbatim() []string { return slices.Clone(c.verbatim) }
+func (c *Config) Verbatim() []string { return c.verbatim }
 
 // Default values used when a field is absent or zero.
 const (
@@ -177,15 +176,18 @@ func NewConfigBuilder() *ConfigBuilder {
 	}}
 }
 
-// Nameservers replaces the nameserver list.
+// Nameservers replaces the nameserver list. The slice is aliased,
+// not copied — callers who plan to mutate ns afterwards must
+// [slices.Clone] before passing.
 func (b *ConfigBuilder) Nameservers(ns ...netip.AddrPort) *ConfigBuilder {
-	b.cfg.nameservers = append(b.cfg.nameservers[:0], ns...)
+	b.cfg.nameservers = ns
 	return b
 }
 
-// Search replaces the search list.
+// Search replaces the search list. The slice is aliased — see
+// [ConfigBuilder.Nameservers] for the alias-vs-clone contract.
 func (b *ConfigBuilder) Search(s ...wire.Name) *ConfigBuilder {
-	b.cfg.search = append(b.cfg.search[:0], s...)
+	b.cfg.search = s
 	return b
 }
 
@@ -208,14 +210,22 @@ func (b *ConfigBuilder) Attempts(n int) *ConfigBuilder {
 }
 
 // Verbatim replaces the verbatim list of unrecognised directives.
+// The slice is aliased — see [ConfigBuilder.Nameservers].
 func (b *ConfigBuilder) Verbatim(v ...string) *ConfigBuilder {
-	b.cfg.verbatim = append(b.cfg.verbatim[:0], v...)
+	b.cfg.verbatim = v
 	return b
 }
 
-// Build returns the assembled Config. The error return is reserved
-// for future validation; today it is always nil.
+// Build returns the assembled Config and resets b to the zero state
+// — single-shot semantics. The Config's slice fields ALIAS the
+// slices passed to the builder's setters. The error return is
+// reserved for future validation; today it is always nil.
 func (b *ConfigBuilder) Build() (*Config, error) {
 	out := b.cfg
+	*b = ConfigBuilder{cfg: Config{
+		ndots:    defaultNdots,
+		timeout:  defaultTimeout,
+		attempts: defaultAttempts,
+	}}
 	return &out, nil
 }

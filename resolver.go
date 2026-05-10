@@ -15,7 +15,6 @@ import (
 	"fmt"
 	"log/slog"
 	"net/netip"
-	"slices"
 	"time"
 
 	"github.com/lestrrat-go/acidns/resolvconf"
@@ -77,7 +76,7 @@ func (a *Answer) Question() wire.Question { return a.q }
 // Records returns a copy of the matched record list. The returned
 // slice is owned by the caller; mutating it does not affect the
 // Answer.
-func (a *Answer) Records() []wire.Record { return slices.Clone(a.records) }
+func (a *Answer) Records() []wire.Record { return a.records }
 func (a *Answer) Raw() wire.Message      { return a.raw }
 func (a *Answer) RCODE() wire.RCODE      { return a.raw.Flags().RCODE() }
 func (a *Answer) Authoritative() bool    { return a.raw.Flags().Authoritative() }
@@ -559,7 +558,7 @@ func matchAnswers(answers []wire.Record, qname wire.Name, qtype rrtype.Type) []w
 // SearchList satisfies SearchLister so package-level helpers (LookupHost,
 // future search-list-aware lookups) can expand short names against the
 // resolver's configured suffixes.
-func (r *resolver) SearchList() []wire.Name { return slices.Clone(r.searchList) }
+func (r *resolver) SearchList() []wire.Name { return r.searchList }
 
 // Ndots satisfies SearchLister.
 func (r *resolver) Ndots() int { return r.ndots }

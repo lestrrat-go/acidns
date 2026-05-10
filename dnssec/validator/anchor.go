@@ -2,7 +2,6 @@ package validator
 
 import (
 	"fmt"
-	"slices"
 
 	"github.com/lestrrat-go/acidns/dnssec/validator/validatorbb"
 	"github.com/lestrrat-go/acidns/wire"
@@ -28,7 +27,7 @@ type anchor struct {
 }
 
 func (a anchor) Name() wire.Name { return a.name }
-func (a anchor) DSs() []rdata.DS { return slices.Clone(a.dss) }
+func (a anchor) DSs() []rdata.DS { return a.dss }
 
 // NewAnchor returns an Anchor with the supplied name and DS records. The DS
 // list is copied; an empty list is rejected because an anchor without DS

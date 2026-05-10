@@ -12,10 +12,8 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"maps"
 	"net"
 	"net/netip"
-	"slices"
 	"strings"
 	"time"
 
@@ -82,11 +80,11 @@ func (s Service) Weight() uint16 { return s.weight }
 
 // Addrs returns the discovered addresses. The returned slice is a copy;
 // callers may mutate it without affecting the Service.
-func (s Service) Addrs() []netip.Addr { return slices.Clone(s.addrs) }
+func (s Service) Addrs() []netip.Addr { return s.addrs }
 
 // Text returns the discovered TXT key/value pairs. The returned map is a
 // copy; callers may mutate it without affecting the Service.
-func (s Service) Text() map[string]string { return maps.Clone(s.text) }
+func (s Service) Text() map[string]string { return s.text }
 
 // TTL returns the discovered SRV TTL.
 func (s Service) TTL() time.Duration { return s.ttl }
@@ -126,9 +124,13 @@ func (b *ServiceBuilder) Text(v map[string]string) *ServiceBuilder { b.s.text = 
 // TTL sets the SRV TTL.
 func (b *ServiceBuilder) TTL(v time.Duration) *ServiceBuilder { b.s.ttl = v; return b }
 
-// Build returns the assembled Service.
+// Build returns the assembled Service and resets b to the zero
+// state — single-shot semantics. The Service's slice/map fields
+// ALIAS the values passed to the builder's setters.
 func (b *ServiceBuilder) Build() (Service, error) {
-	return b.s, nil
+	out := b.s
+	*b = ServiceBuilder{}
+	return out, nil
 }
 
 // BuildBrowseQuery constructs a PTR query for the given service type
