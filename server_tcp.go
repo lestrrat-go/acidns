@@ -417,6 +417,10 @@ func remoteAddrFromConn(c net.Conn) netip.AddrPort {
 }
 
 func (l *tcpLoop) serveConn(ctx context.Context, conn net.Conn) {
+	// LIFO-load-bearing: this defer must come BEFORE the connWg.Wait
+	// defer below. defers run LIFO so connWg.Wait runs first (handler
+	// goroutines drain), THEN conn.Close. Reordering would let
+	// pipelined handler writes hit a closed conn.
 	defer func() { _ = conn.Close() }()
 
 	connCtx, connCancel := context.WithCancel(ctx)
