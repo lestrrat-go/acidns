@@ -407,6 +407,15 @@ func decodeTypeBitmap(u *wirebb.Unpacker, n int) ([]rrtype.Type, error) {
 		if ln == 0 || ln > 32 {
 			return nil, fmt.Errorf("%w: NSEC bitmap length %d", ErrInvalidRData, ln)
 		}
+		// Bound the bitmap read against the rdata window. u.Bytes only
+		// checks the message-wide bound, so a truncated rdata where the
+		// declared bitmap length runs past the window's end would
+		// silently consume bytes belonging to the next record before
+		// the outer rdlen check catches the off!=end mismatch. Reject
+		// here so the failure surfaces at the per-record level instead.
+		if u.Off()+int(ln) > end {
+			return nil, fmt.Errorf("%w: NSEC bitmap length %d exceeds rdata window", ErrInvalidRData, ln)
+		}
 		bm, err := u.Bytes(int(ln))
 		if err != nil {
 			return nil, err

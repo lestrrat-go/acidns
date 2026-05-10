@@ -905,10 +905,19 @@ func (w *walker) validateNoDataNSEC(qname wire.Name, qtype rrtype.Type, parentKe
 	}
 
 	// Case 2 (RFC 4035 §3.1.3.4 / RFC 7129 §5.5): qname is an Empty
-	// Non-Terminal. Proven by an NSEC whose NextDomainName is a strict
-	// descendant of qname — qname must exist as an interior name to be
-	// skipped over by the chain — and an ENT has no records of any type,
-	// so NoData for qtype follows automatically.
+	// Non-Terminal. Proven by an NSEC whose owner is a proper ancestor
+	// of qname AND whose NextDomainName is a strict descendant of qname
+	// — qname must exist as an interior name to be skipped over by the
+	// chain — and an ENT has no records of any type, so NoData for
+	// qtype follows automatically.
+	//
+	// The owner-is-ancestor check is non-negotiable: without it, a
+	// hostile authoritative for the same zone could synthesise an NSEC
+	// whose Next happens to be a subdomain of qname but whose owner
+	// has no relation, which would falsely satisfy "ENT NoData" for
+	// names that should NXDOMAIN. The signature-bound nature of the
+	// NSEC limits the attack surface to a compromised or malicious
+	// in-zone signer, but the structural check costs us nothing.
 	for _, r := range allNSECs {
 		nsec, ok := wire.RDataAs[rdata.NSEC](r)
 		if !ok {
@@ -916,6 +925,14 @@ func (w *walker) validateNoDataNSEC(qname wire.Name, qtype rrtype.Type, parentKe
 		}
 		next := nsec.NextDomainName()
 		if next.Equal(qname) {
+			continue
+		}
+		owner := r.Name()
+		// Owner must be a strict ancestor of qname (not equal, not
+		// unrelated). Using NameSuffixEqualOrSubdomain with owner ==
+		// qname is filtered above by Case 1; here we additionally
+		// require qname is a proper subdomain of owner.
+		if !validatorbb.NameSuffixEqualOrSubdomain(qname, owner) || owner.Equal(qname) {
 			continue
 		}
 		if validatorbb.NameSuffixEqualOrSubdomain(next, qname) {

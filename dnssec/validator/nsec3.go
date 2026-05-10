@@ -147,7 +147,13 @@ func extractNSEC3Params(records []wire.Record) (nsec3Params, bool) {
 		}
 		n3, ok := wire.RDataAs[rdata.NSEC3](r)
 		if !ok {
-			continue
+			// A malformed NSEC3 in the set means the denial proof is
+			// uninterpretable. Silently skipping the record would let
+			// a hostile signer place a malformed NSEC3 ahead of the
+			// legitimate one and thereby pick which legitimate group's
+			// params drive the proof — small attack surface but free
+			// to close.
+			return nsec3Params{}, false
 		}
 		if n3.HashAlgorithm() != NSEC3HashSHA1 {
 			// Reject the entire denial proof rather than per-record:
