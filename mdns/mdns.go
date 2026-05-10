@@ -193,7 +193,7 @@ func ParseBrowseResponse(m wire.Message) []Service {
 		if !ok {
 			continue
 		}
-		instanceName := ptr.PtrDName()
+		instanceName := ptr.Target()
 		key := instanceName.String()
 		s, haveSRV := srvByOwner[key]
 		if !haveSRV {

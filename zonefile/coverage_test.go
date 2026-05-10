@@ -478,7 +478,7 @@ ptr IN  PTR  host.example.com.
 			require.Equal(t, "other.example.com.", r.RData().(rdata.CNAME).Target().String())
 		case rrtype.PTR:
 			foundPTR = true
-			require.Equal(t, "host.example.com.", r.RData().(rdata.PTR).PtrDName().String())
+			require.Equal(t, "host.example.com.", r.RData().(rdata.PTR).Target().String())
 		}
 	}
 	require.True(t, foundCNAME)

@@ -658,7 +658,7 @@ func (z *zoneIndex) collectGlue(nsRecs []wire.Record) []wire.Record {
 		if !ok {
 			continue
 		}
-		recs, ok := z.byName[nameKey(nsRD.NSDName())]
+		recs, ok := z.byName[nameKey(nsRD.Target())]
 		if !ok {
 			continue
 		}

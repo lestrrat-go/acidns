@@ -63,14 +63,14 @@ func TestNS(t *testing.T) {
 	t.Parallel()
 	r := rdata.MustNewNS(wirebb.MustParse("ns1.example.com"))
 	got := packUnpack(t, r).(rdata.NS)
-	require.True(t, r.NSDName().Equal(got.NSDName()))
+	require.True(t, r.Target().Equal(got.Target()))
 }
 
 func TestPTR(t *testing.T) {
 	t.Parallel()
 	r := rdata.MustNewPTR(wirebb.MustParse("host.example.com"))
 	got := packUnpack(t, r).(rdata.PTR)
-	require.True(t, r.PtrDName().Equal(got.PtrDName()))
+	require.True(t, r.Target().Equal(got.Target()))
 }
 
 func TestMX(t *testing.T) {

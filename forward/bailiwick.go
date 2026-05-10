@@ -86,7 +86,7 @@ func filterBailiwick(qname wire.Name, resp wire.Message) wire.Message {
 	}
 	for _, r := range keptAuthority {
 		if ns, ok := wire.RDataAs[rdata.NS](r); ok {
-			referenced[nameKey(ns.NSDName())] = struct{}{}
+			referenced[nameKey(ns.Target())] = struct{}{}
 		}
 	}
 

@@ -86,11 +86,11 @@ func stripLeadingLabels(n wire.Name, count int) wire.Name {
 func canonicalRData(rd rdata.RData) []byte {
 	switch v := rd.(type) {
 	case rdata.NS:
-		return v.NSDName().AppendWire(nil)
+		return v.Target().AppendWire(nil)
 	case rdata.CNAME:
 		return v.Target().AppendWire(nil)
 	case rdata.PTR:
-		return v.PtrDName().AppendWire(nil)
+		return v.Target().AppendWire(nil)
 	case rdata.SOA:
 		var buf bytes.Buffer
 		buf.Write(v.MName().AppendWire(nil))

@@ -46,7 +46,7 @@ type NS struct{ name wirebb.Name }
 
 func (NS) Type() rrtype.Type       { return rrtype.NS }
 func (NS) typedRData()             {}
-func (n NS) NSDName() wirebb.Name  { return n.name }
+func (n NS) Target() wirebb.Name   { return n.name }
 func (n NS) Pack(p *wirebb.Packer) { p.Name(n.name) }
 
 // NewNS returns an NS rdata. The nsdname must be a valid name.
@@ -80,7 +80,7 @@ type PTR struct{ name wirebb.Name }
 
 func (PTR) Type() rrtype.Type        { return rrtype.PTR }
 func (PTR) typedRData()              {}
-func (p PTR) PtrDName() wirebb.Name  { return p.name }
+func (p PTR) Target() wirebb.Name    { return p.name }
 func (p PTR) Pack(pk *wirebb.Packer) { pk.Name(p.name) }
 
 // NewPTR returns a PTR rdata. The ptrdname must be a valid name.

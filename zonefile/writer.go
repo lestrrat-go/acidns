@@ -92,9 +92,9 @@ func formatRDataPresentation(rd rdata.RData, _ wire.Name) (string, error) {
 	case rdata.CNAME:
 		return v.Target().String(), nil
 	case rdata.NS:
-		return v.NSDName().String(), nil
+		return v.Target().String(), nil
 	case rdata.PTR:
-		return v.PtrDName().String(), nil
+		return v.Target().String(), nil
 	case rdata.MX:
 		return fmt.Sprintf("%d %s", v.Preference(), v.Exchange()), nil
 	case rdata.TXT:

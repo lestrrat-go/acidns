@@ -244,9 +244,9 @@ func formatRData(rd rdata.RData) string {
 	case rdata.CNAME:
 		return v.Target().String()
 	case rdata.NS:
-		return v.NSDName().String()
+		return v.Target().String()
 	case rdata.PTR:
-		return v.PtrDName().String()
+		return v.Target().String()
 	case rdata.MX:
 		return fmt.Sprintf("%d %s", v.Preference(), v.Exchange())
 	case rdata.TXT:

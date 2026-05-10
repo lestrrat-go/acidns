@@ -94,7 +94,7 @@ func primingAddrsFromResponse(resp wire.Message) []netip.AddrPort {
 			if !ok {
 				continue
 			}
-			wantedNS[nameKey(ns.NSDName())] = struct{}{}
+			wantedNS[nameKey(ns.Target())] = struct{}{}
 		}
 	}
 	if len(wantedNS) == 0 {

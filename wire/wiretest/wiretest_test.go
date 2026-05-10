@@ -102,7 +102,7 @@ func TestRecordHelpers(t *testing.T) {
 
 	ns, ok := wire.RDataAs[rdata.NS](wiretest.NSRecord(name, time.Minute, target))
 	require.True(t, ok)
-	require.Equal(t, target, ns.NSDName())
+	require.Equal(t, target, ns.Target())
 
 	mx, ok := wire.RDataAs[rdata.MX](wiretest.MXRecord(name, time.Minute, 10, target))
 	require.True(t, ok)
