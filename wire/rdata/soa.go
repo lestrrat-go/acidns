@@ -62,13 +62,14 @@ func MustNewSOA(mname, rname wirebb.Name, serial uint32, refresh, retry, expire,
 	return s
 }
 
-func unpackSOA(u *wirebb.Unpacker) (SOA, error) {
+func unpackSOA(u *wirebb.Unpacker, rdlen int) (SOA, error) {
 	var zero SOA
-	mname, err := u.Name()
+	end := u.Off() + rdlen
+	mname, err := u.NameInRange(end)
 	if err != nil {
 		return zero, err
 	}
-	rname, err := u.Name()
+	rname, err := u.NameInRange(end)
 	if err != nil {
 		return zero, err
 	}

@@ -60,9 +60,9 @@ func MustNewNSAPPTR(owner wirebb.Name) NSAPPTR {
 	return n
 }
 
-func unpackNSAPPTR(u *wirebb.Unpacker) (NSAPPTR, error) {
+func unpackNSAPPTR(u *wirebb.Unpacker, rdlen int) (NSAPPTR, error) {
 	var zero NSAPPTR
-	n, err := u.Name()
+	n, err := u.NameInRange(u.Off() + rdlen)
 	if err != nil {
 		return zero, err
 	}

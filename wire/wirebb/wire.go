@@ -204,6 +204,37 @@ func (u *Unpacker) UncompressedName() (Name, error) {
 	return n, nil
 }
 
+// NameInRange is [Unpacker.Name] with an explicit upper bound on
+// the on-the-wire encoding (the inline portion at u.off, including
+// any trailing compression pointer). Pointer destinations are NOT
+// bounded by end — they may resolve to a name elsewhere in the
+// message, which is the whole point of compression.
+//
+// Use NameInRange for compressed names embedded in an
+// RDLENGTH-bounded rdata window (CNAME / NS / PTR / SOA / MX / RP /
+// NSAP-PTR targets) so a name whose inline encoding extends past
+// the window does not silently read the next record's bytes.
+//
+// If the inline encoding extends past end, [ErrTruncated] is
+// returned. The caller passes len(msg) for the un-bounded form.
+func (u *Unpacker) NameInRange(end int) (Name, error) {
+	if end < 0 || end > len(u.msg) {
+		end = len(u.msg)
+	}
+	if u.off > end {
+		return Name{}, ErrTruncated
+	}
+	n, next, err := DecodeWire(u.msg, u.off)
+	if err != nil {
+		return Name{}, err
+	}
+	if next > end {
+		return Name{}, ErrTruncated
+	}
+	u.off = next
+	return n, nil
+}
+
 // UncompressedNameInRange is [Unpacker.UncompressedName] with an
 // explicit upper bound. Useful for names embedded in an
 // RDLENGTH-bounded rdata window (IPSECKEY gateway-name, AMTRELAY

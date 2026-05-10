@@ -83,17 +83,17 @@ func unpackTyped(t rrtype.Type, u *wirebb.Unpacker, rdlen int) (RData, error) {
 	case rrtype.AAAA:
 		return unpackAAAA(u, rdlen)
 	case rrtype.CNAME:
-		return unpackCNAME(u)
+		return unpackCNAME(u, rdlen)
 	case rrtype.NS:
-		return unpackNS(u)
+		return unpackNS(u, rdlen)
 	case rrtype.PTR:
-		return unpackPTR(u)
+		return unpackPTR(u, rdlen)
 	case rrtype.MX:
 		return unpackMX(u, rdlen)
 	case rrtype.TXT:
 		return unpackTXT(u, rdlen)
 	case rrtype.SOA:
-		return unpackSOA(u)
+		return unpackSOA(u, rdlen)
 	case rrtype.SVCB, rrtype.HTTPS:
 		return unpackSVCB(t, u, rdlen)
 	case rrtype.CAA:
@@ -115,7 +115,7 @@ func unpackTyped(t rrtype.Type, u *wirebb.Unpacker, rdlen int) (RData, error) {
 	case rrtype.NAPTR:
 		return unpackNAPTR(u, rdlen)
 	case rrtype.RP:
-		return unpackRP(u)
+		return unpackRP(u, rdlen)
 	case rrtype.AFSDB:
 		return unpackAFSDB(u, rdlen)
 	case rrtype.X25:
@@ -127,7 +127,7 @@ func unpackTyped(t rrtype.Type, u *wirebb.Unpacker, rdlen int) (RData, error) {
 	case rrtype.NSAP:
 		return unpackNSAP(u, rdlen)
 	case rrtype.NSAPPTR:
-		return unpackNSAPPTR(u)
+		return unpackNSAPPTR(u, rdlen)
 	case rrtype.LOC:
 		return unpackLOC(u, rdlen)
 	case rrtype.APL:

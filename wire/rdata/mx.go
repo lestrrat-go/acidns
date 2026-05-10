@@ -49,11 +49,12 @@ func unpackMX(u *wirebb.Unpacker, rdlen int) (MX, error) {
 	if rdlen < 3 {
 		return zero, fmt.Errorf("%w: MX rdlen=%d, want >=3", ErrInvalidRData, rdlen)
 	}
+	end := u.Off() + rdlen
 	pref, err := u.Uint16()
 	if err != nil {
 		return zero, err
 	}
-	n, err := u.Name()
+	n, err := u.NameInRange(end)
 	if err != nil {
 		return zero, err
 	}

@@ -32,9 +32,9 @@ func MustNewCNAME(target wirebb.Name) CNAME {
 	return c
 }
 
-func unpackCNAME(u *wirebb.Unpacker) (CNAME, error) {
+func unpackCNAME(u *wirebb.Unpacker, rdlen int) (CNAME, error) {
 	var zero CNAME
-	n, err := u.Name()
+	n, err := u.NameInRange(u.Off() + rdlen)
 	if err != nil {
 		return zero, err
 	}
@@ -66,9 +66,9 @@ func MustNewNS(name wirebb.Name) NS {
 	return n
 }
 
-func unpackNS(u *wirebb.Unpacker) (NS, error) {
+func unpackNS(u *wirebb.Unpacker, rdlen int) (NS, error) {
 	var zero NS
-	n, err := u.Name()
+	n, err := u.NameInRange(u.Off() + rdlen)
 	if err != nil {
 		return zero, err
 	}
@@ -100,9 +100,9 @@ func MustNewPTR(name wirebb.Name) PTR {
 	return p
 }
 
-func unpackPTR(u *wirebb.Unpacker) (PTR, error) {
+func unpackPTR(u *wirebb.Unpacker, rdlen int) (PTR, error) {
 	var zero PTR
-	n, err := u.Name()
+	n, err := u.NameInRange(u.Off() + rdlen)
 	if err != nil {
 		return zero, err
 	}

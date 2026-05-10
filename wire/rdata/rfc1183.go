@@ -42,13 +42,14 @@ func MustNewRP(mbox, txt wirebb.Name) RP {
 	return r
 }
 
-func unpackRP(u *wirebb.Unpacker) (RP, error) {
+func unpackRP(u *wirebb.Unpacker, rdlen int) (RP, error) {
 	var zero RP
-	mbox, err := u.Name()
+	end := u.Off() + rdlen
+	mbox, err := u.NameInRange(end)
 	if err != nil {
 		return zero, err
 	}
-	txt, err := u.Name()
+	txt, err := u.NameInRange(end)
 	if err != nil {
 		return zero, err
 	}
