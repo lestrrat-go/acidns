@@ -278,6 +278,7 @@ func (l *limiter) refuse(w ResponseWriter, q wire.Message) {
 	if len(q.Questions()) > 0 {
 		b = b.Question(q.Questions()[0])
 	}
+	b = echoOPT(b, q)
 	resp, err := b.Build()
 	if err != nil {
 		return

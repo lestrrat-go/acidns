@@ -153,6 +153,7 @@ func (a *acl) refuse(w ResponseWriter, q wire.Message) {
 	if len(q.Questions()) > 0 {
 		b = b.Question(q.Questions()[0])
 	}
+	b = echoOPT(b, q)
 	resp, err := b.Build()
 	if err != nil {
 		// Builder failure is implausible for a fixed-shape REFUSED;

@@ -92,6 +92,28 @@ type ResponseWriter interface {
 	Network() string
 }
 
+// echoOPT attaches an OPT pseudo-RR to b when q carried EDNS, so an
+// EDNS-aware client receives a response with EDNS support intact. RFC
+// 6891 §6.1.1 requires servers that understand EDNS to return an OPT
+// even on error responses; without it, EDNS-aware clients downgrade
+// on subsequent queries. Used by middleware refuse paths (ACL,
+// rate-limit) where the request is rejected without reaching the
+// inner handler.
+func echoOPT(b *wire.MessageBuilder, q wire.Message) *wire.MessageBuilder {
+	qe, ok := q.EDNS()
+	if !ok {
+		return b
+	}
+	ed, err := wire.NewEDNSBuilder().
+		UDPSize(1232). // DNS Flag Day 2020 default
+		DO(qe.DO()).
+		Build()
+	if err != nil {
+		return b
+	}
+	return b.EDNS(ed)
+}
+
 // UDPController is the runtime handle returned by [UDPServer.Run].
 // It is the only path to the running UDP server instance: cancelling
 // the ctx passed to Run is the only way to stop the instance, and
@@ -100,9 +122,10 @@ type ResponseWriter interface {
 type UDPController struct {
 	serverctl.Core
 
-	parseDrops    atomic.Uint64
-	inflightDrops atomic.Uint64
+	parseDrops     atomic.Uint64
+	inflightDrops  atomic.Uint64
 	preFilterDrops atomic.Uint64
+	preflightDrops atomic.Uint64
 }
 
 // PacketsDroppedParseError returns the cumulative count of inbound
@@ -123,6 +146,15 @@ func (c *UDPController) PacketsDroppedAtSemaphore() uint64 { return c.inflightDr
 // rejected by the [WithUDPPreParseFilter] gate. Useful to measure
 // the effectiveness of an operator's source-prefix denylist.
 func (c *UDPController) PacketsDroppedByPreFilter() uint64 { return c.preFilterDrops.Load() }
+
+// PacketsDroppedByPreflight returns the cumulative count of inbound
+// datagrams parsed successfully but rejected by [PreflightRequest]
+// (chiefly QR=1 spoofed responses, malformed opcodes, or zero-question
+// queries). Steady growth here is the canonical "someone is firing
+// spoofed responses at the listener" signal — the most common
+// reflection-attack participation primitive — and is invisible at the
+// parseDrops counter because the wire format is well-formed.
+func (c *UDPController) PacketsDroppedByPreflight() uint64 { return c.preflightDrops.Load() }
 
 // TCPController is the runtime handle returned by [TCPServer.Run].
 // It is the only path to the running TCP server instance: cancelling
