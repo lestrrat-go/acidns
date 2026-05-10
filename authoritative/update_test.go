@@ -56,7 +56,7 @@ func TestUpdateAddRRset(t *testing.T) {
 
 	ex, err := acidns.NewUDPExchanger(addr)
 	require.NoError(t, err)
-	msg, err := update.NewBuilder(wire.MustParseName("example.com")).
+	msg, err := update.NewUpdateBuilder(wire.MustParseName("example.com")).
 		AddRRset(added).
 		Build()
 	require.NoError(t, err)
@@ -82,7 +82,7 @@ func TestUpdateDeleteRRset(t *testing.T) {
 
 	ex, err := acidns.NewUDPExchanger(addr)
 	require.NoError(t, err)
-	msg, err := update.NewBuilder(wire.MustParseName("example.com")).
+	msg, err := update.NewUpdateBuilder(wire.MustParseName("example.com")).
 		DeleteRRset(wire.MustParseName("www.example.com"), rrtype.A).
 		Build()
 	require.NoError(t, err)
@@ -106,7 +106,7 @@ func TestUpdatePrereqRRsetExistsFails(t *testing.T) {
 
 	ex, err := acidns.NewUDPExchanger(addr)
 	require.NoError(t, err)
-	msg, err := update.NewBuilder(wire.MustParseName("example.com")).
+	msg, err := update.NewUpdateBuilder(wire.MustParseName("example.com")).
 		PrereqRRsetExists(wire.MustParseName("nope.example.com"), rrtype.A).
 		AddRRset(wire.NewRecord(wire.MustParseName("blog.example.com"), 60*time.Second,
 			rdata.MustNewA(netip.MustParseAddr("198.51.100.7")))).
@@ -123,7 +123,7 @@ func TestUpdatePrereqRRsetAbsentSucceeds(t *testing.T) {
 
 	ex, err := acidns.NewUDPExchanger(addr)
 	require.NoError(t, err)
-	msg, err := update.NewBuilder(wire.MustParseName("example.com")).
+	msg, err := update.NewUpdateBuilder(wire.MustParseName("example.com")).
 		PrereqRRsetAbsent(wire.MustParseName("blog.example.com"), rrtype.A).
 		AddRRset(wire.NewRecord(wire.MustParseName("blog.example.com"), 60*time.Second,
 			rdata.MustNewA(netip.MustParseAddr("198.51.100.8")))).
@@ -164,7 +164,7 @@ func TestUpdateConcurrentWithQuery(t *testing.T) {
 			ip := netip.AddrFrom4([4]byte{198, 51, 100, byte(10 + id)})
 			rec := wire.NewRecord(wire.MustParseName("blog.example.com"), 60*time.Second, rdata.MustNewA(ip))
 			for ctx.Err() == nil {
-				msg, err := update.NewBuilder(wire.MustParseName("example.com")).AddRRset(rec).Build()
+				msg, err := update.NewUpdateBuilder(wire.MustParseName("example.com")).AddRRset(rec).Build()
 				if err != nil {
 					return
 				}
@@ -207,7 +207,7 @@ func TestUpdateOutOfZoneRefused(t *testing.T) {
 	_, addr := startUpdatable(t)
 	ex, err := acidns.NewUDPExchanger(addr)
 	require.NoError(t, err)
-	msg, err := update.NewBuilder(wire.MustParseName("example.org")).
+	msg, err := update.NewUpdateBuilder(wire.MustParseName("example.org")).
 		AddRRset(wire.NewRecord(wire.MustParseName("a.example.org"), 60*time.Second,
 			rdata.MustNewA(netip.MustParseAddr("198.51.100.9")))).
 		Build()

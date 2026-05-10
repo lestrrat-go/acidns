@@ -14,7 +14,7 @@ import (
 
 func TestBuilderDeleteRRset(t *testing.T) {
 	t.Parallel()
-	msg, err := update.NewBuilder(wire.MustParseName("example.com")).
+	msg, err := update.NewUpdateBuilder(wire.MustParseName("example.com")).
 		DeleteRRset(wire.MustParseName("a.example.com"), rrtype.A).
 		Build()
 	require.NoError(t, err)
@@ -27,7 +27,7 @@ func TestBuilderDeleteRRset(t *testing.T) {
 
 func TestBuilderDeleteAll(t *testing.T) {
 	t.Parallel()
-	msg, err := update.NewBuilder(wire.MustParseName("example.com")).
+	msg, err := update.NewUpdateBuilder(wire.MustParseName("example.com")).
 		DeleteAll(wire.MustParseName("a.example.com")).
 		Build()
 	require.NoError(t, err)
@@ -40,7 +40,7 @@ func TestBuilderDeleteRecord(t *testing.T) {
 	t.Parallel()
 	rec := wire.NewRecord(wire.MustParseName("a.example.com"), 60*time.Second,
 		rdata.MustNewA(netip.MustParseAddr("192.0.2.1")))
-	msg, err := update.NewBuilder(wire.MustParseName("example.com")).
+	msg, err := update.NewUpdateBuilder(wire.MustParseName("example.com")).
 		DeleteRecord(rec).
 		Build()
 	require.NoError(t, err)
@@ -51,7 +51,7 @@ func TestBuilderDeleteRecord(t *testing.T) {
 
 func TestBuilderPrerequisites(t *testing.T) {
 	t.Parallel()
-	msg, err := update.NewBuilder(wire.MustParseName("example.com")).
+	msg, err := update.NewUpdateBuilder(wire.MustParseName("example.com")).
 		PrereqRRsetExists(wire.MustParseName("a.example.com"), rrtype.A).
 		PrereqRRsetAbsent(wire.MustParseName("b.example.com"), rrtype.AAAA).
 		PrereqNameInUse(wire.MustParseName("c.example.com")).

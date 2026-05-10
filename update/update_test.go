@@ -25,7 +25,7 @@ func TestSignedUpdate(t *testing.T) {
 		rdata.MustNewA(netip.MustParseAddr("198.51.100.5")))
 
 	now := time.Now().Truncate(time.Second)
-	msg, err := update.NewBuilder(wire.MustParseName("example.com")).
+	msg, err := update.NewUpdateBuilder(wire.MustParseName("example.com")).
 		AddRRset(rec).
 		Build()
 	require.NoError(t, err)
