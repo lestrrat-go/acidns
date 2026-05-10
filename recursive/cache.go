@@ -265,8 +265,14 @@ func (c *MemoryCache) Get(name wire.Name, cl rrtype.Class, t rrtype.Type) (Entry
 	now := c.now()
 	remaining := e.expiresAt.Sub(now)
 	if remaining <= 0 {
+		// Re-check expiry under the write lock: between the RUnlock
+		// above and the Lock below a concurrent Put may have
+		// installed a fresh entry under the same key. Deleting
+		// unconditionally would erase the new entry.
 		sh.mu.Lock()
-		delete(sh.entries, k)
+		if cur, ok := sh.entries[k]; ok && !cur.expiresAt.After(now) {
+			delete(sh.entries, k)
+		}
 		sh.mu.Unlock()
 		return Entry{}, false
 	}
