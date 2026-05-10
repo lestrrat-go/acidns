@@ -324,8 +324,11 @@ func New(opts ...Option) (*Recursive, error) {
 	return r, nil
 }
 
-// DefaultDialer returns the built-in Dialer.
-func DefaultDialer() Dialer { return defaultDialer{} }
+// DefaultDialer returns the built-in Dialer with the same defaults
+// New() applies: RFC 5452 §9.3 0x20 case randomization on. Callers
+// composing their own Recursive (e.g. with [WithDialer]) get the same
+// spoofing defence as the package-default path.
+func DefaultDialer() Dialer { return defaultDialer{use0x20: true} }
 
 // defaultDialer is the Resolver's built-in Dialer. It is per-request
 // stateless (no connection reuse) and constructs a fresh UDP
