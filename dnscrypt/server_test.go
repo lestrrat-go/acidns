@@ -228,7 +228,7 @@ func TestRunRejectsExpiredCert(t *testing.T) {
 	require.ErrorIs(t, err, dnscrypt.ErrCertExpired)
 }
 
-// TestServerRotate verifies that ServerController.Rotate atomically
+// TestServerRotate verifies that Controller.Rotate atomically
 // swaps the active material: queries against the OLD ClientMagic
 // stop being decryptable, queries against the NEW ClientMagic now
 // succeed, all without rebinding the socket.

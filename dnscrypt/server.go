@@ -46,7 +46,7 @@ import (
 	"github.com/lestrrat-go/option/v3"
 )
 
-// ErrServerClosed is recorded on the [ServerController] after a
+// ErrServerClosed is recorded on the [Controller] after a
 // clean shutdown via context cancellation. Aliased to
 // [acidns.ErrServerClosed] so transport-agnostic callers can match
 // either form via errors.Is.
@@ -54,7 +54,7 @@ var ErrServerClosed = acidns.ErrServerClosed
 
 // Server is an immutable configuration carrier for a DNSCrypt
 // server. The bound cert + resolver private key live here; runtime
-// state lives entirely on the [*ServerController] returned by
+// state lives entirely on the [*Controller] returned by
 // [Server.Run].
 type Server struct {
 	addr       netip.AddrPort
@@ -149,7 +149,7 @@ func NewServer(addr netip.AddrPort, h acidns.Handler, opts ...ServerOption) (*Se
 
 // Run binds a fresh UDP socket and spawns the dispatch goroutine.
 // Cancelling ctx is the only way to stop the instance.
-func (s *Server) Run(ctx context.Context) (*ServerController, error) {
+func (s *Server) Run(ctx context.Context) (*Controller, error) {
 	now := s.cfg.now()
 	if !certWithinWindow(now, s.cert, s.cfg.clockSkew) {
 		return nil, fmt.Errorf("%w: now=%s window=[%s, %s] skew=%s",
@@ -184,7 +184,7 @@ func (s *Server) Run(ctx context.Context) (*ServerController, error) {
 		return &b
 	}
 
-	ctrl := &ServerController{
+	ctrl := &Controller{
 		Core: serverctl.New(bound),
 		loop: loop,
 	}
@@ -208,13 +208,13 @@ type keyMaterial struct {
 	resolverSK [32]byte
 }
 
-// ServerController is the runtime handle returned by [Server.Run].
+// Controller is the runtime handle returned by [Server.Run].
 // The name is prefixed Server because the dnscrypt package's other
 // long-lived runtime type is the client [Cert]; ambiguity is worse
 // than verbosity here. Embeds [serverctl.Core] (Addr / Done / Err /
 // Wait); dnscrypt-specific runtime queries (Rotate) belong on this
 // type.
-type ServerController struct {
+type Controller struct {
 	serverctl.Core
 	loop *serverLoop
 }
@@ -230,7 +230,7 @@ type ServerController struct {
 // decrypted under the new material. Returns an error if the new
 // cert is missing or outside its validity window; the previous
 // material remains active in that case.
-func (c *ServerController) Rotate(cert *Cert, resolverSK [32]byte) error {
+func (c *Controller) Rotate(cert *Cert, resolverSK [32]byte) error {
 	if cert == nil {
 		return fmt.Errorf("dnscrypt: Rotate: cert is nil")
 	}
