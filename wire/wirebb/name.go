@@ -54,8 +54,13 @@ func (n Name) NumLabels() int {
 	return count
 }
 
-// Labels returns an iterator over the wire-format labels of n. The yielded
-// byte slices alias the receiver's internal storage; do not modify them.
+// Labels returns an iterator over the wire-format labels of n. Each
+// yielded slice is a fresh copy of the label bytes — the receiver's
+// internal storage is a string, so the conversion is unavoidably a
+// per-label allocation. Callers may freely retain or mutate the
+// returned slices; for tight inner loops that compare names rather
+// than read them, prefer [Name.Equal] / [Name.NumLabels] / similar
+// allocation-free helpers.
 func (n Name) Labels() iter.Seq[[]byte] {
 	return func(yield func([]byte) bool) {
 		if !n.IsValid() {
