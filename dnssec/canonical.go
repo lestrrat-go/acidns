@@ -83,6 +83,19 @@ func stripLeadingLabels(n wire.Name, count int) wire.Name {
 
 // canonicalRData returns the canonical-form RDATA bytes for r — names
 // inside the RDATA are lowercased and uncompressed per RFC 4034 §6.2.
+//
+// The explicit cases below exist because rdata.Pack for some types
+// (e.g. SOA) emits length-tagged compressed names via the
+// caller-supplied [wirebb.Packer]'s compression table — we override
+// here with NameUncompressed-equivalent bytes to satisfy canonical
+// form. For types not listed, the default branch relies on the
+// [wirebb.Name] invariant that names are stored as their lowercase
+// wire encoding (every Name entry point — Parse, FromLabels,
+// DecodeWire, DecodeWireUncompressed — folds ASCII case via
+// foldByte). Embedded names that route through Name's AppendWire
+// therefore already emit canonical bytes; types like
+// DNAME/RP/AFSDB/RT/KX/SRV/NAPTR/NSEC use NameUncompressed-style
+// packing and are canonical-safe through this fallback.
 func canonicalRData(rd rdata.RData) []byte {
 	switch v := rd.(type) {
 	case rdata.NS:
