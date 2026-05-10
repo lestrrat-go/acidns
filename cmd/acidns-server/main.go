@@ -32,10 +32,11 @@ func main() {
 }
 
 type opts struct {
-	mode      string
-	listen    string
-	zoneFiles []string
-	roots     []string
+	mode        string
+	listen      string
+	zoneFiles   []string
+	roots       []string
+	allowPublic bool
 
 	upstream    string
 	upstreamTLS string
@@ -63,6 +64,8 @@ func run(argv []string) error {
 		"forward mode: SNI / cert-verify name for -upstream-tls (e.g. dns.google)")
 	fs.IntVar(&o.cacheSize, "cache-size", 4096,
 		"forward mode: number of cached answers retained (0 disables caching)")
+	fs.BoolVar(&o.allowPublic, "allow-public", false,
+		"required to bind a non-loopback address in recursive/hybrid/forward mode (acknowledges that a wide-open recursive resolver is a known DDoS amplifier and that the operator has wired in their own ACL/RRL/cookies)")
 	fs.Usage = func() {
 		fmt.Fprintf(os.Stderr, "usage: acidns-server [options]\n\noptions:\n")
 		fs.PrintDefaults()
@@ -83,6 +86,18 @@ func run(argv []string) error {
 	addr, err := netip.ParseAddrPort(o.listen)
 	if err != nil {
 		return fmt.Errorf("parse listen address: %w", err)
+	}
+
+	// Recursive / hybrid / forward modes can be abused as DDoS
+	// amplifiers when bound to a public address without ACL / rate
+	// limiting / cookies. Force the operator to acknowledge the risk
+	// via -allow-public; that flag is intentionally not paired with
+	// any "make it safe" wiring — operators must compose their own
+	// middleware stack (acidns.NewACL, acidns.NewRateLimit,
+	// acidns.NewRRL, acidns.NewCookies) for production deployments.
+	if needsPublicAck(o.mode) && !addr.Addr().IsLoopback() && !o.allowPublic {
+		return fmt.Errorf("-mode=%s on a non-loopback address %s is a known DDoS amplifier; pass -allow-public to acknowledge after wiring your own ACL/RRL/cookies, or bind to 127.0.0.1/::1",
+			o.mode, addr.Addr())
 	}
 
 	handler, err := buildHandler(o)
@@ -256,8 +271,23 @@ var modeFlags = map[string]map[string]struct{}{
 
 // universalFlags are valid in every mode.
 var universalFlags = map[string]struct{}{
-	"mode":   {},
-	"listen": {},
+	"mode":         {},
+	"listen":       {},
+	"allow-public": {},
+}
+
+// needsPublicAck reports whether the given mode is amplification-prone
+// (recursive answers can be many KB regardless of query size, and
+// without source verification an attacker spoofs UDP queries from a
+// victim address). Authoritative mode is exempt only because it serves
+// configured zones; an operator who deliberately exposes
+// authoritative is making a different (and less amplifying) choice.
+func needsPublicAck(mode string) bool {
+	switch mode {
+	case "recursive", "hybrid", "forward":
+		return true
+	}
+	return false
 }
 
 func validateFlagsForMode(fs *flag.FlagSet, mode string) error {
