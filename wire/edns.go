@@ -3,7 +3,6 @@ package wire
 import (
 	"encoding/binary"
 	"fmt"
-	"slices"
 
 	"github.com/lestrrat-go/acidns/wire/wirebb"
 )
@@ -23,8 +22,10 @@ type EDNSOption struct {
 // Code returns the IANA option code.
 func (o EDNSOption) Code() uint16 { return o.code }
 
-// Data returns a copy of the option's payload.
-func (o EDNSOption) Data() []byte { return slices.Clone(o.data) }
+// Data returns the option's payload. Aliases internal storage —
+// callers MUST NOT mutate it. [slices.Clone] the result if
+// independent ownership is needed.
+func (o EDNSOption) Data() []byte { return o.data }
 
 // IsZero reports whether o is the zero value.
 func (o EDNSOption) IsZero() bool { return o.code == 0 && o.data == nil }
@@ -147,8 +148,10 @@ func (e EDNS) Version() uint8 { return e.version }
 // DO reports whether the DNSSEC OK flag is set.
 func (e EDNS) DO() bool { return e.do }
 
-// Options returns a copy of the option list.
-func (e EDNS) Options() []EDNSOption { return slices.Clone(e.opts) }
+// Options returns the option list. Aliases internal storage —
+// callers MUST NOT mutate it. [slices.Clone] the result if
+// independent ownership is needed.
+func (e EDNS) Options() []EDNSOption { return e.opts }
 
 // EDNSBuilder constructs an EDNS payload. Like [MessageBuilder], an
 // EDNSBuilder is owned by a single goroutine and is NOT safe for
@@ -175,8 +178,12 @@ func (b *EDNSBuilder) DO(v bool) *EDNSBuilder { b.e.do = v; return b }
 // Option appends an EDNS option to the OPT rdata.
 func (b *EDNSBuilder) Option(o EDNSOption) *EDNSBuilder { b.e.opts = append(b.e.opts, o); return b }
 
-// Build returns the EDNS payload, or an error if validation
-// fails (e.g. duplicate EDNS option code).
+// Build returns the EDNS payload and resets b to the zero state
+// — single-shot semantics. The returned EDNS's option slice ALIASES
+// the slice the builder accumulated; the reset ensures a subsequent
+// reuse of b cannot mutate the previously-built EDNS via append
+// grow-in-place. Returns an error if validation fails (e.g.
+// duplicate EDNS option code).
 func (b *EDNSBuilder) Build() (EDNS, error) {
 	// Reject duplicate option codes — RFC 6891 §6.1.2 doesn't
 	// expressly forbid them but the on-wire interpretation is
@@ -186,13 +193,14 @@ func (b *EDNSBuilder) Build() (EDNS, error) {
 	for _, o := range b.e.opts {
 		c := o.Code()
 		if _, dup := seen[c]; dup {
+			*b = EDNSBuilder{}
 			return EDNS{}, fmt.Errorf("wire: duplicate EDNS option code %d", c)
 		}
 		seen[c] = struct{}{}
 	}
-	cp := b.e
-	cp.opts = append([]EDNSOption(nil), b.e.opts...)
-	return cp, nil
+	out := b.e
+	*b = EDNSBuilder{}
+	return out, nil
 }
 
 // optTypeWire is the OPT pseudo-RR type code (RFC 6891 §6.1.2).

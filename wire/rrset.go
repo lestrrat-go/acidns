@@ -2,7 +2,6 @@ package wire
 
 import (
 	"fmt"
-	"slices"
 	"time"
 
 	"github.com/lestrrat-go/acidns/wire/rdata"
@@ -42,8 +41,9 @@ func (s RRset) Class() rrtype.Class { return s.class }
 // TTL returns the harmonised TTL (the minimum of all members' TTLs).
 func (s RRset) TTL() time.Duration { return s.ttl }
 
-// Records returns a copy of the member records.
-func (s RRset) Records() []Record { return slices.Clone(s.records) }
+// Records returns the member records. Aliases internal storage —
+// callers MUST NOT mutate the returned slice.
+func (s RRset) Records() []Record { return s.records }
 
 // Len reports the number of member records.
 func (s RRset) Len() int { return len(s.records) }

@@ -2,7 +2,6 @@ package wire
 
 import (
 	"fmt"
-	"slices"
 
 	"github.com/lestrrat-go/acidns/wire/wirebb"
 )
@@ -10,6 +9,16 @@ import (
 // Message is a DNS protocol message. Value type — copy-friendly,
 // returned by value from [Unmarshal] and [Builder.Build]. Construct
 // via [NewMessageBuilder] so callers do not depend on field layout.
+//
+// # Section accessor semantics
+//
+// Accessors that return a section slice (Questions / Answers /
+// Authorities / Additionals) ALIAS the Message's internal storage.
+// Callers MUST NOT mutate the returned slice; [slices.Clone] the
+// result if independent ownership is needed. The alias-by-default
+// semantics avoids per-call allocations on hot paths (validator
+// chain walks, AXFR streaming, middleware) where the caller is
+// inspecting, not mutating.
 type Message struct {
 	id          uint16
 	flags       Flags
@@ -28,20 +37,18 @@ type Message struct {
 // gets a fresh spoof window per retry rather than three guesses at the
 // same target.
 //
-// The returned Message shares no mutable storage with m — section
-// slices are cloned. EDNS is treated as immutable and copied by value.
+// The returned Message's section slices ALIAS m's (consistent with
+// the rest of the package's alias-by-default semantics — see
+// [Message]). Section slices are never mutated through the public
+// API of either value, so the alias is observationally equivalent
+// to a clone for any caller that obeys the contract.
 func WithID(m Message, id uint16) Message {
-	cp := Message{
-		id:          id,
-		flags:       m.flags,
-		questions:   slices.Clone(m.questions),
-		answers:     slices.Clone(m.answers),
-		authorities: slices.Clone(m.authorities),
-		additionals: slices.Clone(m.additionals),
-		edns:        m.edns,
-		hasEDNS:     m.hasEDNS,
-	}
-	return cp
+	// m is a value-receiver copy already (Go pass-by-value), so
+	// mutating m.id here cannot affect the caller's variable —
+	// it's idiomatic shorthand for "make a copy, change one field,
+	// return the copy."
+	m.id = id
+	return m
 }
 
 // ID returns the transaction ID.
@@ -50,18 +57,21 @@ func (m Message) ID() uint16 { return m.id }
 // Flags returns the message header flags.
 func (m Message) Flags() Flags { return m.flags }
 
-// Questions returns a copy of the question section.
-func (m Message) Questions() []Question { return slices.Clone(m.questions) }
+// Questions returns the question section. The returned slice ALIASES
+// the Message's internal storage; callers MUST NOT mutate it.
+// [slices.Clone] the result if independent ownership is needed.
+func (m Message) Questions() []Question { return m.questions }
 
-// Answers returns a copy of the answer section.
-func (m Message) Answers() []Record { return slices.Clone(m.answers) }
+// Answers returns the answer section. Aliases internal storage —
+// see [Message.Questions] for the alias-vs-clone contract.
+func (m Message) Answers() []Record { return m.answers }
 
-// Authorities returns a copy of the authority section.
-func (m Message) Authorities() []Record { return slices.Clone(m.authorities) }
+// Authorities returns the authority section. Aliases internal storage.
+func (m Message) Authorities() []Record { return m.authorities }
 
-// Additionals returns a copy of the additional section, excluding any
-// OPT pseudo-RR (surfaced via [Message.EDNS]).
-func (m Message) Additionals() []Record { return slices.Clone(m.additionals) }
+// Additionals returns the additional section, excluding any OPT
+// pseudo-RR (surfaced via [Message.EDNS]). Aliases internal storage.
+func (m Message) Additionals() []Record { return m.additionals }
 
 // EDNS returns the parsed OPT payload and a bool indicating whether
 // the message carried one.
