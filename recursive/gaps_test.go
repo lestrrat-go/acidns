@@ -115,7 +115,7 @@ func TestRankServersUntestedFirst(t *testing.T) {
 	)
 	rctx, cancel := context.WithTimeout(t.Context(), 2*time.Second)
 	defer cancel()
-	_, err := r.Resolve(rctx, wire.MustParseName("nope.example."), rrtype.A)
+	_, err := r.ResolveEntry(rctx, wire.MustParseName("nope.example."), rrtype.A)
 	require.NoError(t, err)
 	mu.Lock()
 	defer mu.Unlock()
@@ -144,7 +144,7 @@ func TestCNAMEChainWithMaxDepthZero(t *testing.T) {
 	)
 	rctx, cancel := context.WithTimeout(t.Context(), 2*time.Second)
 	defer cancel()
-	_, err := r.Resolve(rctx, wire.MustParseName("a.example."), rrtype.A)
+	_, err := r.ResolveEntry(rctx, wire.MustParseName("a.example."), rrtype.A)
 	require.ErrorIs(t, err, recursive.ErrCNAMELoop)
 }
 
@@ -204,7 +204,7 @@ func TestUnglueOutOfBailiwickReferral(t *testing.T) {
 	)
 	rctx, cancel := context.WithTimeout(t.Context(), 2*time.Second)
 	defer cancel()
-	entry, err := r.Resolve(rctx, wire.MustParseName("www.example."), rrtype.A)
+	entry, err := r.ResolveEntry(rctx, wire.MustParseName("www.example."), rrtype.A)
 	require.NoError(t, err)
 	require.Equal(t, 1, len(entry.Answer()))
 	require.Equal(t, "192.0.2.55", entry.Answer()[0].RData().(rdata.A).Addr().String())
@@ -248,7 +248,7 @@ func TestGlueAAAA(t *testing.T) {
 	)
 	rctx, cancel := context.WithTimeout(t.Context(), 2*time.Second)
 	defer cancel()
-	entry, err := r.Resolve(rctx, wire.MustParseName("www.example."), rrtype.A)
+	entry, err := r.ResolveEntry(rctx, wire.MustParseName("www.example."), rrtype.A)
 	require.NoError(t, err)
 	require.Equal(t, 1, len(entry.Answer()))
 }
@@ -272,7 +272,7 @@ func TestEmptyReferral(t *testing.T) {
 	)
 	rctx, cancel := context.WithTimeout(t.Context(), 2*time.Second)
 	defer cancel()
-	_, err := r.Resolve(rctx, wire.MustParseName("www.example."), rrtype.A)
+	_, err := r.ResolveEntry(rctx, wire.MustParseName("www.example."), rrtype.A)
 	require.ErrorContains(t, err, "empty referral")
 }
 
@@ -296,7 +296,7 @@ func TestAllServersLame(t *testing.T) {
 	)
 	rctx, cancel := context.WithTimeout(t.Context(), 2*time.Second)
 	defer cancel()
-	_, err := r.Resolve(rctx, wire.MustParseName("nope.example."), rrtype.A)
+	_, err := r.ResolveEntry(rctx, wire.MustParseName("nope.example."), rrtype.A)
 	require.ErrorIs(t, err, recursive.ErrAllServersLame)
 }
 
@@ -328,7 +328,7 @@ func TestRefusedTreatedAsLame(t *testing.T) {
 	)
 	rctx, cancel := context.WithTimeout(t.Context(), 2*time.Second)
 	defer cancel()
-	entry, err := r.Resolve(rctx, wire.MustParseName("www.example."), rrtype.A)
+	entry, err := r.ResolveEntry(rctx, wire.MustParseName("www.example."), rrtype.A)
 	require.NoError(t, err)
 	require.Equal(t, 1, len(entry.Answer()))
 }
@@ -350,7 +350,7 @@ func TestQueryAnyAllError(t *testing.T) {
 	)
 	rctx, cancel := context.WithTimeout(t.Context(), 2*time.Second)
 	defer cancel()
-	_, err := r.Resolve(rctx, wire.MustParseName("www.example."), rrtype.A)
+	_, err := r.ResolveEntry(rctx, wire.MustParseName("www.example."), rrtype.A)
 	require.ErrorContains(t, err, "synthetic dial failure")
 }
 
@@ -372,7 +372,7 @@ func TestQueryAnyContextCancelled(t *testing.T) {
 		),
 		recursive.WithDialer(dialer),
 	)
-	_, err := r.Resolve(rctx, wire.MustParseName("www.example."), rrtype.A)
+	_, err := r.ResolveEntry(rctx, wire.MustParseName("www.example."), rrtype.A)
 	require.ErrorIs(t, err, context.Canceled)
 }
 
@@ -498,7 +498,7 @@ func TestValidatorErrorPropagated(t *testing.T) {
 	)
 	rctx, cancel := context.WithTimeout(t.Context(), 2*time.Second)
 	defer cancel()
-	_, err := r.Resolve(rctx, wire.MustParseName("www.example."), rrtype.A)
+	_, err := r.ResolveEntry(rctx, wire.MustParseName("www.example."), rrtype.A)
 	require.ErrorIs(t, err, myErr)
 }
 
@@ -621,7 +621,7 @@ func TestNonAAResponseTreatedAsAuthoritative(t *testing.T) {
 	)
 	rctx, cancel := context.WithTimeout(t.Context(), 2*time.Second)
 	defer cancel()
-	entry, err := r.Resolve(rctx, wire.MustParseName("www.example."), rrtype.A)
+	entry, err := r.ResolveEntry(rctx, wire.MustParseName("www.example."), rrtype.A)
 	require.NoError(t, err)
 	require.Equal(t, 1, len(entry.Answer()))
 	require.False(t, entry.AA())
@@ -648,7 +648,7 @@ func TestResolveCNAMEDirectly(t *testing.T) {
 	)
 	rctx, cancel := context.WithTimeout(t.Context(), 2*time.Second)
 	defer cancel()
-	entry, err := r.Resolve(rctx, wire.MustParseName("www.example."), rrtype.CNAME)
+	entry, err := r.ResolveEntry(rctx, wire.MustParseName("www.example."), rrtype.CNAME)
 	require.NoError(t, err)
 	require.Equal(t, 1, len(entry.Answer()))
 	require.Equal(t, rrtype.CNAME, entry.Answer()[0].Type())
@@ -678,7 +678,7 @@ func TestNegativeCacheTTLTakesRecordTTLWhenSmaller(t *testing.T) {
 	)
 	rctx, cancel := context.WithTimeout(t.Context(), 2*time.Second)
 	defer cancel()
-	entry, err := r.Resolve(rctx, wire.MustParseName("nope.example."), rrtype.A)
+	entry, err := r.ResolveEntry(rctx, wire.MustParseName("nope.example."), rrtype.A)
 	require.NoError(t, err)
 	require.Equal(t, wire.RCODENXDomain, entry.RCODE())
 	// Expires within ~6s (record TTL 5s).
@@ -715,7 +715,7 @@ func TestHasAnswerForCNAMEAtOwner(t *testing.T) {
 	)
 	rctx, cancel := context.WithTimeout(t.Context(), 2*time.Second)
 	defer cancel()
-	entry, err := r.Resolve(rctx, wire.MustParseName("www.example."), rrtype.A)
+	entry, err := r.ResolveEntry(rctx, wire.MustParseName("www.example."), rrtype.A)
 	require.NoError(t, err)
 	require.GreaterOrEqual(t, len(entry.Answer()), 1)
 }
@@ -749,7 +749,7 @@ func TestIterationLimitReached(t *testing.T) {
 	)
 	rctx, cancel := context.WithTimeout(t.Context(), 2*time.Second)
 	defer cancel()
-	_, err := r.Resolve(rctx, wire.MustParseName("www.example."), rrtype.A)
+	_, err := r.ResolveEntry(rctx, wire.MustParseName("www.example."), rrtype.A)
 	require.ErrorIs(t, err, recursive.ErrIterationLimit)
 }
 
@@ -793,7 +793,7 @@ func TestResolveSingleflightCoalesces(t *testing.T) {
 			defer wg.Done()
 			rctx, cancel := context.WithTimeout(t.Context(), 2*time.Second)
 			defer cancel()
-			_, err := r.Resolve(rctx, wire.MustParseName("herd.example."), rrtype.A)
+			_, err := r.ResolveEntry(rctx, wire.MustParseName("herd.example."), rrtype.A)
 			results[i] = err
 		}(i)
 	}

@@ -65,7 +65,7 @@ func TestCNAMEChainFollowed(t *testing.T) {
 	r := mustRecursive(t, recursive.WithRoots(ctrl.Addr()))
 	rctx, rcancel := context.WithTimeout(t.Context(), 5*time.Second)
 	defer rcancel()
-	entry, err := r.Resolve(rctx, wire.MustParseName("www.example."), rrtype.A)
+	entry, err := r.ResolveEntry(rctx, wire.MustParseName("www.example."), rrtype.A)
 	require.NoError(t, err)
 	// Walk the answer set: should contain the CNAME and the A.
 	var sawA, sawCNAME bool
@@ -100,7 +100,7 @@ func TestCNAMELoopDetected(t *testing.T) {
 	r := mustRecursive(t, recursive.WithRoots(ctrl.Addr()), recursive.WithMaxCNAMEDepth(4))
 	rctx, rcancel := context.WithTimeout(t.Context(), 5*time.Second)
 	defer rcancel()
-	_, err = r.Resolve(rctx, wire.MustParseName("a.example."), rrtype.A)
+	_, err = r.ResolveEntry(rctx, wire.MustParseName("a.example."), rrtype.A)
 	require.ErrorIs(t, err, recursive.ErrCNAMELoop)
 }
 
@@ -134,7 +134,7 @@ www IN  A    192.0.2.43
 	)
 	rctx, rcancel := context.WithTimeout(t.Context(), 5*time.Second)
 	defer rcancel()
-	_, err := r.Resolve(rctx, wire.MustParseName("www.example.com"), rrtype.A)
+	_, err := r.ResolveEntry(rctx, wire.MustParseName("www.example.com"), rrtype.A)
 	require.NoError(t, err)
 }
 
@@ -197,7 +197,7 @@ www IN  A    192.0.2.42
 	)
 	rctx, rcancel := context.WithTimeout(t.Context(), 5*time.Second)
 	defer rcancel()
-	_, err := r.Resolve(rctx, wire.MustParseName("www.example.com"), rrtype.A)
+	_, err := r.ResolveEntry(rctx, wire.MustParseName("www.example.com"), rrtype.A)
 	require.Error(t, err)
 }
 
@@ -216,7 +216,7 @@ www IN  A    192.0.2.42
 	)
 	rctx, rcancel := context.WithTimeout(t.Context(), 5*time.Second)
 	defer rcancel()
-	entry, err := r.Resolve(rctx, wire.MustParseName("www.example.com"), rrtype.A)
+	entry, err := r.ResolveEntry(rctx, wire.MustParseName("www.example.com"), rrtype.A)
 	require.NoError(t, err)
 	require.True(t, entry.AD())
 }
@@ -237,7 +237,7 @@ www IN  A    192.0.2.42
 	)
 	rctx, rcancel := context.WithTimeout(t.Context(), 5*time.Second)
 	defer rcancel()
-	_, err := r.Resolve(rctx, wire.MustParseName("www.example.com"), rrtype.A)
+	_, err := r.ResolveEntry(rctx, wire.MustParseName("www.example.com"), rrtype.A)
 	require.NoError(t, err)
 	score := stats.Score(addr)
 	require.Greater(t, score.RTT().Nanoseconds(), int64(0), "expected non-zero RTT recorded")
@@ -273,6 +273,6 @@ func TestQueryTimeoutSurvivesContextRespect(t *testing.T) {
 	)
 	rctx, rcancel := context.WithTimeout(t.Context(), 5*time.Second)
 	defer rcancel()
-	_, err = r.Resolve(rctx, wire.MustParseName("www.example."), rrtype.A)
+	_, err = r.ResolveEntry(rctx, wire.MustParseName("www.example."), rrtype.A)
 	require.Error(t, err)
 }

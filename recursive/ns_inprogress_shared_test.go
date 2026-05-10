@@ -85,7 +85,7 @@ func TestNSInProgressSharedAcrossResolves(t *testing.T) {
 			qname := wire.MustParseName(
 				wire.MustParseName("a" +
 					string(rune('0'+(i%10))) + ".trap.example.").String())
-			_, _ = r.Resolve(ctx, qname, rrtype.A)
+			_, _ = r.ResolveEntry(ctx, qname, rrtype.A)
 		}(i)
 	}
 	wg.Wait()

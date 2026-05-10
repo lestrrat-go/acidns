@@ -74,7 +74,7 @@ func TestQNameMinimisationSendsMinimisedQueries(t *testing.T) {
 
 	ctx, cancel := context.WithTimeout(t.Context(), 2*time.Second)
 	defer cancel()
-	entry, err := r.Resolve(ctx, wire.MustParseName("www.example.com."), rrtype.A)
+	entry, err := r.ResolveEntry(ctx, wire.MustParseName("www.example.com."), rrtype.A)
 	require.NoError(t, err)
 	require.Equal(t, 1, len(entry.Answer()))
 
@@ -138,7 +138,7 @@ func TestQNameMinimisationDisabled(t *testing.T) {
 
 	ctx, cancel := context.WithTimeout(t.Context(), 2*time.Second)
 	defer cancel()
-	_, err := r.Resolve(ctx, wire.MustParseName("www.example.com."), rrtype.A)
+	_, err := r.ResolveEntry(ctx, wire.MustParseName("www.example.com."), rrtype.A)
 	require.NoError(t, err)
 
 	mu.Lock()
@@ -182,7 +182,7 @@ func TestQNameMinimisationFallsBackOnNXDOMAIN(t *testing.T) {
 	)
 	ctx, cancel := context.WithTimeout(t.Context(), 2*time.Second)
 	defer cancel()
-	_, err := r.Resolve(ctx, wire.MustParseName("www.example.com."), rrtype.A)
+	_, err := r.ResolveEntry(ctx, wire.MustParseName("www.example.com."), rrtype.A)
 	require.NoError(t, err, "resolver must fall back to full qname after intermediate NXDOMAIN")
 	require.True(t, seenFullTarget, "fallback path must reach the full target qname")
 }

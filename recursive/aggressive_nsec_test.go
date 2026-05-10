@@ -96,14 +96,14 @@ func TestAggressiveNSECSynthesisesNXDOMAIN(t *testing.T) {
 	// Priming: c.example. → NXDOMAIN, validated, cached + indexed.
 	ctx, cancel := context.WithTimeout(t.Context(), 2*time.Second)
 	defer cancel()
-	prime, err := r.Resolve(ctx, wire.MustParseName("c.example."), rrtype.A)
+	prime, err := r.ResolveEntry(ctx, wire.MustParseName("c.example."), rrtype.A)
 	require.NoError(t, err)
 	require.Equal(t, wire.RCODENXDomain, prime.RCODE())
 	require.True(t, prime.AD())
 	priming := upstreamCalls.Load()
 
 	// Aggressive use: b.example. — never queried — must synthesise.
-	syn, err := r.Resolve(ctx, wire.MustParseName("b.example."), rrtype.A)
+	syn, err := r.ResolveEntry(ctx, wire.MustParseName("b.example."), rrtype.A)
 	require.NoError(t, err)
 	require.Equal(t, wire.RCODENXDomain, syn.RCODE())
 	require.True(t, syn.AD(), "synthesised entry must carry AD")
@@ -148,11 +148,11 @@ func TestAggressiveNSECDisabledByDefault(t *testing.T) {
 
 	ctx, cancel := context.WithTimeout(t.Context(), 2*time.Second)
 	defer cancel()
-	_, err := r.Resolve(ctx, wire.MustParseName("c.example."), rrtype.A)
+	_, err := r.ResolveEntry(ctx, wire.MustParseName("c.example."), rrtype.A)
 	require.NoError(t, err)
 	primed := upstreamCalls.Load()
 
-	_, err = r.Resolve(ctx, wire.MustParseName("b.example."), rrtype.A)
+	_, err = r.ResolveEntry(ctx, wire.MustParseName("b.example."), rrtype.A)
 	require.NoError(t, err)
 	require.Greater(t, upstreamCalls.Load(), primed,
 		"without WithAggressiveNSEC the second name must consult upstream")

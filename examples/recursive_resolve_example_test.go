@@ -59,7 +59,7 @@ func Example_recursive_resolve() {
 
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 	defer cancel()
-	entry, err := r.Resolve(ctx, wire.MustParseName("www.example.com"), rrtype.A)
+	entry, err := r.ResolveEntry(ctx, wire.MustParseName("www.example.com"), rrtype.A)
 	if err != nil {
 		fmt.Println("resolve:", err)
 		return

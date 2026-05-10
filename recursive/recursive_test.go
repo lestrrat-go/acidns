@@ -54,7 +54,7 @@ www IN  A    192.0.2.42
 	r := mustRecursive(t, recursive.WithRoots(childAddr))
 	ctx, cancel := context.WithTimeout(t.Context(), 5*time.Second)
 	defer cancel()
-	entry, err := r.Resolve(ctx, wire.MustParseName("www.example.com"), rrtype.A)
+	entry, err := r.ResolveEntry(ctx, wire.MustParseName("www.example.com"), rrtype.A)
 	require.NoError(t, err)
 	require.Equal(t, wire.RCODENoError, entry.RCODE())
 	require.True(t, entry.AA())
@@ -118,7 +118,7 @@ www IN  A    192.0.2.55
 	)
 	ctx, cancel := context.WithTimeout(t.Context(), 5*time.Second)
 	defer cancel()
-	entry, err := r.Resolve(ctx, wire.MustParseName("www.example.com"), rrtype.A)
+	entry, err := r.ResolveEntry(ctx, wire.MustParseName("www.example.com"), rrtype.A)
 	require.NoError(t, err)
 	require.Equal(t, wire.RCODENoError, entry.RCODE())
 	require.True(t, entry.AA())
@@ -150,9 +150,9 @@ www IN  A    192.0.2.42
 	ctx, cancel := context.WithTimeout(t.Context(), 5*time.Second)
 	defer cancel()
 
-	a, err := r.Resolve(ctx, wire.MustParseName("www.example.com"), rrtype.A)
+	a, err := r.ResolveEntry(ctx, wire.MustParseName("www.example.com"), rrtype.A)
 	require.NoError(t, err)
-	b, err := r.Resolve(ctx, wire.MustParseName("www.example.com"), rrtype.A)
+	b, err := r.ResolveEntry(ctx, wire.MustParseName("www.example.com"), rrtype.A)
 	require.NoError(t, err)
 	require.Equal(t, a.ExpiresAt(), b.ExpiresAt(), "second lookup must come from cache")
 }
@@ -168,7 +168,7 @@ ns1 IN  A    192.0.2.10
 	r := mustRecursive(t, recursive.WithRoots(addr))
 	ctx, cancel := context.WithTimeout(t.Context(), 5*time.Second)
 	defer cancel()
-	entry, err := r.Resolve(ctx, wire.MustParseName("nope.example.com"), rrtype.A)
+	entry, err := r.ResolveEntry(ctx, wire.MustParseName("nope.example.com"), rrtype.A)
 	require.NoError(t, err)
 	require.Equal(t, wire.RCODENXDomain, entry.RCODE())
 	// SOA MINIMUM is 5s, the smallest cap so negative TTL must be ≤ 5s.
@@ -189,7 +189,7 @@ www  IN A   192.0.2.20
 	defer cancel()
 	// www has A but not AAAA — NODATA. SOA MINIMUM=7s caps the negative
 	// cache TTL even though everything else (TTL=600) is much higher.
-	entry, err := r.Resolve(ctx, wire.MustParseName("www.example.com"), rrtype.AAAA)
+	entry, err := r.ResolveEntry(ctx, wire.MustParseName("www.example.com"), rrtype.AAAA)
 	require.NoError(t, err)
 	require.Equal(t, wire.RCODENoError, entry.RCODE())
 	require.Equal(t, 0, len(entry.Answer()))

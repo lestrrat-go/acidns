@@ -409,7 +409,7 @@ func (r *Recursive) ServeDNS(ctx context.Context, w acidns.ResponseWriter, q wir
 		return
 	}
 
-	entry, err := r.Resolve(ctx, question.Name(), question.Type())
+	entry, err := r.ResolveEntry(ctx, question.Name(), question.Type())
 	if err != nil {
 		// DNSSEC bogus: map to SERVFAIL + EDE 6 (DNSSEC Bogus, RFC 8914).
 		if errors.Is(err, errBogusAnswer) {
@@ -455,8 +455,16 @@ func must(m wire.Message, err error) wire.Message {
 // Handler maps it to SERVFAIL+EDE6.
 var errBogusAnswer = errors.New("recursive: dnssec bogus")
 
-// Resolve returns a cached or freshly-iterated entry for (name, t).
-func (r *Recursive) Resolve(ctx context.Context, name wire.Name, t rrtype.Type) (Entry, error) {
+// ResolveEntry returns a cached or freshly-iterated entry for (name, t).
+//
+// This signature deliberately differs from [acidns.Resolver.Resolve]:
+// the cached [Entry] carries fields (authority, additional, AD bit,
+// expiry) that an *acidns.Answer cannot represent. Callers that want
+// Resolver semantics should construct an [acidns.Resolver] over this
+// recursive instance via the resolver convenience layer; using
+// ResolveEntry for the rich, cache-aware view is the recommended path
+// for backend consumers.
+func (r *Recursive) ResolveEntry(ctx context.Context, name wire.Name, t rrtype.Type) (Entry, error) {
 	if r.resolveBudget > 0 {
 		var cancel context.CancelFunc
 		ctx, cancel = context.WithTimeout(ctx, r.resolveBudget)

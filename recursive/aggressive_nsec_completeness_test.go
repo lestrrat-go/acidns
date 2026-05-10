@@ -97,7 +97,7 @@ func TestAggressiveNSECNoDataSynthesis(t *testing.T) {
 	// Priming with MX query at a.example — gets NoData.
 	ctx, cancel := context.WithTimeout(t.Context(), 2*time.Second)
 	defer cancel()
-	prime, err := r.Resolve(ctx, wire.MustParseName("a.example."), rrtype.MX)
+	prime, err := r.ResolveEntry(ctx, wire.MustParseName("a.example."), rrtype.MX)
 	require.NoError(t, err)
 	require.Equal(t, wire.RCODENoError, prime.RCODE())
 	require.Empty(t, prime.Answer())
@@ -105,7 +105,7 @@ func TestAggressiveNSECNoDataSynthesis(t *testing.T) {
 
 	// Re-query the same name + qtype — must hit the regular cache,
 	// upstream untouched.
-	again, err := r.Resolve(ctx, wire.MustParseName("a.example."), rrtype.MX)
+	again, err := r.ResolveEntry(ctx, wire.MustParseName("a.example."), rrtype.MX)
 	require.NoError(t, err)
 	require.Equal(t, wire.RCODENoError, again.RCODE())
 	require.Empty(t, again.Answer())
@@ -163,13 +163,13 @@ func TestAggressiveNSECRefusesWithoutWildcardDenial(t *testing.T) {
 
 	ctx, cancel := context.WithTimeout(t.Context(), 2*time.Second)
 	defer cancel()
-	_, err := r.Resolve(ctx, wire.MustParseName("c.example."), rrtype.A)
+	_, err := r.ResolveEntry(ctx, wire.MustParseName("c.example."), rrtype.A)
 	require.NoError(t, err)
 	primed := upstreamCalls.Load()
 
 	// b.example would be covered by the cached NSEC, but synthesis
 	// must be refused because no wildcard-denying NSEC is cached.
-	_, err = r.Resolve(ctx, wire.MustParseName("b.example."), rrtype.A)
+	_, err = r.ResolveEntry(ctx, wire.MustParseName("b.example."), rrtype.A)
 	require.NoError(t, err)
 	require.Greater(t, upstreamCalls.Load(), primed,
 		"incomplete proof must NOT be aggressively used")
@@ -231,14 +231,14 @@ func TestAggressiveNSEC3NoData(t *testing.T) {
 
 	ctx, cancel := context.WithTimeout(t.Context(), 2*time.Second)
 	defer cancel()
-	prime, err := r.Resolve(ctx, qname, rrtype.A)
+	prime, err := r.ResolveEntry(ctx, qname, rrtype.A)
 	require.NoError(t, err)
 	require.Equal(t, wire.RCODENoError, prime.RCODE())
 	require.Empty(t, prime.Answer())
 	primed := upstreamCalls.Load()
 
 	// Same name + same type → cached entry serves it.
-	again, err := r.Resolve(ctx, qname, rrtype.A)
+	again, err := r.ResolveEntry(ctx, qname, rrtype.A)
 	require.NoError(t, err)
 	require.Equal(t, wire.RCODENoError, again.RCODE())
 	require.Empty(t, again.Answer())

@@ -57,7 +57,7 @@ func TestPrimeReplacesRoots(t *testing.T) {
 	<-called
 
 	// A subsequent resolve must hit one of the new addresses.
-	_, _ = r.Resolve(context.Background(), wire.MustParseName("example.test."), rrtype.A)
+	_, _ = r.ResolveEntry(context.Background(), wire.MustParseName("example.test."), rrtype.A)
 	select {
 	case got := <-called:
 		require.True(t, got.Addr() == newA || got.Addr() == newB,
