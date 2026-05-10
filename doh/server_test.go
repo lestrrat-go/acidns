@@ -178,7 +178,7 @@ func TestHandlerNilHandlerDegradesTo500(t *testing.T) {
 }
 
 // TestServerEndToEnd verifies the convenience Server wrapper works
-// over actual TLS with the doh client exchanger.
+// over actual TLS with the doh client Client.
 func TestServerEndToEnd(t *testing.T) {
 	t.Parallel()
 	cert, clientCfg := dohTestCerts(t)

@@ -46,7 +46,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/lestrrat-go/acidns"
 	"github.com/lestrrat-go/acidns/wire"
 	"github.com/lestrrat-go/option/v3"
 )
@@ -108,7 +107,7 @@ const (
 	MethodGET  Method = http.MethodGet
 )
 
-type exchanger struct {
+type Client struct {
 	endpoint  string
 	client    *http.Client
 	method    Method
@@ -116,9 +115,10 @@ type exchanger struct {
 	padding   bool
 }
 
-// New returns an Exchanger that talks DoH to the given endpoint URL
-// (e.g. "https://cloudflare-dns.com/dns-query").
-func New(endpoint string, opts ...Option) (acidns.Exchanger, error) {
+// New returns a *Client that talks DoH to the given endpoint URL
+// (e.g. "https://cloudflare-dns.com/dns-query"). *Client satisfies
+// [acidns.Exchanger].
+func New(endpoint string, opts ...Option) (*Client, error) {
 	u, err := url.Parse(endpoint)
 	if err != nil {
 		return nil, fmt.Errorf("%w: %v", ErrInvalidEndpoint, err)
@@ -184,10 +184,10 @@ func New(endpoint string, opts ...Option) (acidns.Exchanger, error) {
 		tCopy.Proxy = nil
 		clientCopy.Transport = tCopy
 	}
-	return &exchanger{endpoint: endpoint, client: &clientCopy, method: c.method, userAgent: c.userAgent, padding: c.padding}, nil
+	return &Client{endpoint: endpoint, client: &clientCopy, method: c.method, userAgent: c.userAgent, padding: c.padding}, nil
 }
 
-func (e *exchanger) Exchange(ctx context.Context, q wire.Message) (wire.Message, error) {
+func (e *Client) Exchange(ctx context.Context, q wire.Message) (wire.Message, error) {
 	if e.padding {
 		q = wire.PadEncrypted(q)
 	}
@@ -253,7 +253,7 @@ func (e *exchanger) Exchange(ctx context.Context, q wire.Message) (wire.Message,
 	return m, nil
 }
 
-func (e *exchanger) buildRequest(ctx context.Context, msg []byte) (*http.Request, error) {
+func (e *Client) buildRequest(ctx context.Context, msg []byte) (*http.Request, error) {
 	switch e.method {
 	case MethodGET:
 		// RFC 8484 §4.1: dns parameter, base64url-encoded, no padding.
