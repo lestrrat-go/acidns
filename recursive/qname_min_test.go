@@ -36,7 +36,7 @@ func TestQNameMinimisationSendsMinimisedQueries(t *testing.T) {
 			switch qname.String() {
 			case "com.":
 				// Root referral to com.
-				return mkResp(t, q, func(b *wire.Builder) *wire.Builder {
+				return mkResp(t, q, func(b *wire.MessageBuilder) *wire.MessageBuilder {
 					ns := wire.NewRecord(wire.MustParseName("com."), time.Hour,
 						rdata.MustNewNS(wire.MustParseName("ns.com.")))
 					glue := wire.NewRecord(wire.MustParseName("ns.com."), time.Hour,
@@ -45,7 +45,7 @@ func TestQNameMinimisationSendsMinimisedQueries(t *testing.T) {
 				}), nil
 			case "example.com.":
 				// com. referral to example.com.
-				return mkResp(t, q, func(b *wire.Builder) *wire.Builder {
+				return mkResp(t, q, func(b *wire.MessageBuilder) *wire.MessageBuilder {
 					ns := wire.NewRecord(wire.MustParseName("example.com."), time.Hour,
 						rdata.MustNewNS(wire.MustParseName("ns.example.com.")))
 					glue := wire.NewRecord(wire.MustParseName("ns.example.com."), time.Hour,
@@ -54,14 +54,14 @@ func TestQNameMinimisationSendsMinimisedQueries(t *testing.T) {
 				}), nil
 			case "www.example.com.":
 				// example.com. authoritative answer.
-				return mkResp(t, q, func(b *wire.Builder) *wire.Builder {
+				return mkResp(t, q, func(b *wire.MessageBuilder) *wire.MessageBuilder {
 					a := wire.NewRecord(qname, time.Minute,
 						rdata.MustNewA(netip.MustParseAddr("203.0.113.5")))
 					return b.Authoritative(true).Answer(a)
 				}), nil
 			}
 			// Unhandled name — empty NoError to force fallback.
-			return mkResp(t, q, func(b *wire.Builder) *wire.Builder {
+			return mkResp(t, q, func(b *wire.MessageBuilder) *wire.MessageBuilder {
 				return b.Authoritative(true)
 			}), nil
 		},
@@ -105,7 +105,7 @@ func TestQNameMinimisationDisabled(t *testing.T) {
 			// com., com. referrals to example.com., final answer.
 			switch len(sentQNames) {
 			case 1:
-				return mkResp(t, q, func(b *wire.Builder) *wire.Builder {
+				return mkResp(t, q, func(b *wire.MessageBuilder) *wire.MessageBuilder {
 					ns := wire.NewRecord(wire.MustParseName("com."), time.Hour,
 						rdata.MustNewNS(wire.MustParseName("ns.com.")))
 					glue := wire.NewRecord(wire.MustParseName("ns.com."), time.Hour,
@@ -113,7 +113,7 @@ func TestQNameMinimisationDisabled(t *testing.T) {
 					return b.Authority(ns).Additional(glue)
 				}), nil
 			case 2:
-				return mkResp(t, q, func(b *wire.Builder) *wire.Builder {
+				return mkResp(t, q, func(b *wire.MessageBuilder) *wire.MessageBuilder {
 					ns := wire.NewRecord(wire.MustParseName("example.com."), time.Hour,
 						rdata.MustNewNS(wire.MustParseName("ns.example.com.")))
 					glue := wire.NewRecord(wire.MustParseName("ns.example.com."), time.Hour,
@@ -121,7 +121,7 @@ func TestQNameMinimisationDisabled(t *testing.T) {
 					return b.Authority(ns).Additional(glue)
 				}), nil
 			default:
-				return mkResp(t, q, func(b *wire.Builder) *wire.Builder {
+				return mkResp(t, q, func(b *wire.MessageBuilder) *wire.MessageBuilder {
 					a := wire.NewRecord(question.Name(), time.Minute,
 						rdata.MustNewA(netip.MustParseAddr("203.0.113.5")))
 					return b.Authoritative(true).Answer(a)
@@ -162,7 +162,7 @@ func TestQNameMinimisationFallsBackOnNXDOMAIN(t *testing.T) {
 			qname := q.Questions()[0].Name()
 			if qname.String() == "www.example.com." {
 				seenFullTarget = true
-				return mkResp(t, q, func(b *wire.Builder) *wire.Builder {
+				return mkResp(t, q, func(b *wire.MessageBuilder) *wire.MessageBuilder {
 					a := wire.NewRecord(qname, time.Minute,
 						rdata.MustNewA(netip.MustParseAddr("203.0.113.7")))
 					return b.Authoritative(true).Answer(a)
@@ -170,7 +170,7 @@ func TestQNameMinimisationFallsBackOnNXDOMAIN(t *testing.T) {
 			}
 			// Any intermediate query: misimplemented ENT — return NXDOMAIN
 			// from an authoritative source.
-			return mkResp(t, q, func(b *wire.Builder) *wire.Builder {
+			return mkResp(t, q, func(b *wire.MessageBuilder) *wire.MessageBuilder {
 				return b.Authoritative(true).RCODE(wire.RCODENXDomain)
 			}), nil
 		},

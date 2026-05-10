@@ -68,7 +68,7 @@ func TestAggressiveNSECSynthesisesNXDOMAIN(t *testing.T) {
 				// Priming query: the response proves c.example doesn't
 				// exist via the NSEC interval [a, d) and proves no
 				// wildcard match via the NSEC at example. itself.
-				return mkResp(t, q, func(b *wire.Builder) *wire.Builder {
+				return mkResp(t, q, func(b *wire.MessageBuilder) *wire.MessageBuilder {
 					return b.Authoritative(true).
 						RCODE(wire.RCODENXDomain).
 						Authority(soa).
@@ -79,7 +79,7 @@ func TestAggressiveNSECSynthesisesNXDOMAIN(t *testing.T) {
 			// Any other query: this should never run for b.example
 			// because the aggressive cache must intercept it.
 			t.Errorf("unexpected upstream query for %s", qname)
-			return mkResp(t, q, func(b *wire.Builder) *wire.Builder {
+			return mkResp(t, q, func(b *wire.MessageBuilder) *wire.MessageBuilder {
 				return b.Authoritative(true).RCODE(wire.RCODENXDomain).Authority(soa)
 			}), nil
 		},
@@ -129,7 +129,7 @@ func TestAggressiveNSECDisabledByDefault(t *testing.T) {
 				))
 			nsec := wire.NewRecord(wire.MustParseName("a.example."), 5*time.Minute,
 				rdata.NewNSEC(wire.MustParseName("d.example."), nil))
-			return mkResp(t, q, func(b *wire.Builder) *wire.Builder {
+			return mkResp(t, q, func(b *wire.MessageBuilder) *wire.MessageBuilder {
 				return b.Authoritative(true).
 					RCODE(wire.RCODENXDomain).
 					Authority(soa).

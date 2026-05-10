@@ -74,7 +74,7 @@ func TestAggressiveNSECNoDataSynthesis(t *testing.T) {
 				// Wildcard denial.
 				wcNSEC := wire.NewRecord(wire.MustParseName("example."), 5*time.Minute,
 					rdata.NewNSEC(wire.MustParseName("a.example."), nil))
-				return mkResp(t, q, func(b *wire.Builder) *wire.Builder {
+				return mkResp(t, q, func(b *wire.MessageBuilder) *wire.MessageBuilder {
 					return b.Authoritative(true).
 						Authority(soa).
 						Authority(nsec).
@@ -82,7 +82,7 @@ func TestAggressiveNSECNoDataSynthesis(t *testing.T) {
 				}), nil
 			}
 			t.Errorf("unexpected upstream query for %s/%s", qname, question.Type())
-			return mkResp(t, q, func(b *wire.Builder) *wire.Builder { return b }), nil
+			return mkResp(t, q, func(b *wire.MessageBuilder) *wire.MessageBuilder { return b }), nil
 		},
 	}
 
@@ -135,7 +135,7 @@ func TestAggressiveNSECRefusesWithoutWildcardDenial(t *testing.T) {
 			if qname.Equal(wire.MustParseName("c.example.")) && !primingDone.Load() {
 				primingDone.Store(true)
 				// Priming response — INCOMPLETE: no wildcard NSEC.
-				return mkResp(t, q, func(b *wire.Builder) *wire.Builder {
+				return mkResp(t, q, func(b *wire.MessageBuilder) *wire.MessageBuilder {
 					return b.Authoritative(true).
 						RCODE(wire.RCODENXDomain).
 						Authority(soa).
@@ -144,7 +144,7 @@ func TestAggressiveNSECRefusesWithoutWildcardDenial(t *testing.T) {
 			}
 			// Second query — the resolver must consult us, not
 			// synthesise from the incomplete proof.
-			return mkResp(t, q, func(b *wire.Builder) *wire.Builder {
+			return mkResp(t, q, func(b *wire.MessageBuilder) *wire.MessageBuilder {
 				return b.Authoritative(true).
 					RCODE(wire.RCODENXDomain).
 					Authority(soa).
@@ -210,14 +210,14 @@ func TestAggressiveNSEC3NoData(t *testing.T) {
 			upstreamCalls.Add(1)
 			question := q.Questions()[0]
 			if question.Name().Equal(qname) && question.Type() == rrtype.A {
-				return mkResp(t, q, func(b *wire.Builder) *wire.Builder {
+				return mkResp(t, q, func(b *wire.MessageBuilder) *wire.MessageBuilder {
 					return b.Authoritative(true).
 						Authority(soaForExample()).
 						Authority(nsec3Match)
 				}), nil
 			}
 			t.Errorf("unexpected upstream query for %s/%s", question.Name(), question.Type())
-			return mkResp(t, q, func(b *wire.Builder) *wire.Builder { return b }), nil
+			return mkResp(t, q, func(b *wire.MessageBuilder) *wire.MessageBuilder { return b }), nil
 		},
 	}
 

@@ -48,13 +48,13 @@ func TestNSInProgressSharedAcrossResolves(t *testing.T) {
 				case <-time.After(50 * time.Millisecond):
 				case <-time.After(time.Second): // backstop
 				}
-				return mkResp(t, q, func(b *wire.Builder) *wire.Builder {
+				return mkResp(t, q, func(b *wire.MessageBuilder) *wire.MessageBuilder {
 					return b.Authoritative(true) // empty answer; resolution fails
 				}), nil
 			}
 			// All other qnames receive a referral to the trap zone
 			// with an out-of-bailiwick NS that requires recursing.
-			return mkResp(t, q, func(b *wire.Builder) *wire.Builder {
+			return mkResp(t, q, func(b *wire.MessageBuilder) *wire.MessageBuilder {
 				ns := wire.NewRecord(wire.MustParseName("trap.example."),
 					60*time.Second,
 					rdata.MustNewNS(wire.MustParseName("ns.trap.example.")))

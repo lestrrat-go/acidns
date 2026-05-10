@@ -202,7 +202,7 @@ func StreamAXFR(w acidns.ResponseWriter, q wire.Message, soa wire.Record, body [
 		return fmt.Errorf("authoritative: StreamAXFR: request has no question")
 	}
 	question := q.Questions()[0]
-	header := func() *wire.Builder {
+	header := func() *wire.MessageBuilder {
 		return wire.NewMessageBuilder().
 			ID(q.ID()).
 			Response(true).
@@ -253,7 +253,7 @@ func StreamAXFR(w acidns.ResponseWriter, q wire.Message, soa wire.Record, body [
 // reassembles the zone by concatenating answer sections in arrival order.
 func (a *Authoritative) serveAXFR(ctx context.Context, w acidns.ResponseWriter, q wire.Message) {
 	question := q.Questions()[0]
-	header := func() *wire.Builder {
+	header := func() *wire.MessageBuilder {
 		return wire.NewMessageBuilder().
 			ID(q.ID()).
 			Response(true).
@@ -368,7 +368,7 @@ func buildRFC8482HINFO(qname wire.Name, z *zoneIndex) wire.Record {
 // RCODE into the header's low 4 bits and the OPT's 8-bit extended RCODE
 // (RFC 6891 §6.1.3). For RCODE values that fit in 4 bits the OPT's
 // extended-RCODE field is zero, matching the no-EDNS encoding.
-func setRCODE(b *wire.Builder, q wire.Message, code wire.RCODE) *wire.Builder {
+func setRCODE(b *wire.MessageBuilder, q wire.Message, code wire.RCODE) *wire.MessageBuilder {
 	b = b.RCODE(wire.RCODE(uint8(code) & 0x0f))
 	qe, ok := q.EDNS()
 	if !ok {
@@ -391,7 +391,7 @@ func setRCODE(b *wire.Builder, q wire.Message, code wire.RCODE) *wire.Builder {
 // request carried one. Used by code paths that don't carry an explicit
 // RCODE (e.g. successful AXFR envelopes); for paths that set a RCODE
 // use [setRCODE] instead so the extended bits are not silently dropped.
-func echoEDNS(b *wire.Builder, q wire.Message) *wire.Builder {
+func echoEDNS(b *wire.MessageBuilder, q wire.Message) *wire.MessageBuilder {
 	return setRCODE(b, q, wire.RCODENoError)
 }
 
@@ -400,7 +400,7 @@ func echoEDNS(b *wire.Builder, q wire.Message) *wire.Builder {
 // requires the question section to be copied from the request, and an
 // unsolicited response with no question is dropped by clients that index
 // outstanding queries by ID+question.
-func mustBuild(b *wire.Builder, q wire.Message) wire.Message {
+func mustBuild(b *wire.MessageBuilder, q wire.Message) wire.Message {
 	m, err := b.Build()
 	if err == nil {
 		return m

@@ -150,7 +150,7 @@ func (e EDNS) DO() bool { return e.do }
 // Options returns a copy of the option list.
 func (e EDNS) Options() []EDNSOption { return slices.Clone(e.opts) }
 
-// EDNSBuilder constructs an EDNS payload. Like [Builder], an
+// EDNSBuilder constructs an EDNS payload. Like [MessageBuilder], an
 // EDNSBuilder is owned by a single goroutine and is NOT safe for
 // concurrent use; the EDNS value returned by Build is immutable and
 // may be shared.

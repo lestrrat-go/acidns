@@ -16,7 +16,7 @@ import (
 func primingResponseDialer(t *testing.T, newA, newB netip.Addr) stubDialer {
 	t.Helper()
 	return stubDialer{fn: func(_ context.Context, _ netip.AddrPort, q wire.Message) (wire.Message, error) {
-		return mkResp(t, q, func(b *wire.Builder) *wire.Builder {
+		return mkResp(t, q, func(b *wire.MessageBuilder) *wire.MessageBuilder {
 			ns1 := wire.NewRecord(wire.RootName(), 86400*time.Second,
 				rdata.MustNewNS(wire.MustParseName("a.root-servers.test.")))
 			ns2 := wire.NewRecord(wire.RootName(), 86400*time.Second,
@@ -72,7 +72,7 @@ func TestPrimeFailureKeepsRoots(t *testing.T) {
 	seedRoot := netip.MustParseAddrPort("198.51.100.1:53")
 
 	dialer := stubDialer{fn: func(_ context.Context, _ netip.AddrPort, q wire.Message) (wire.Message, error) {
-		return mkResp(t, q, func(b *wire.Builder) *wire.Builder {
+		return mkResp(t, q, func(b *wire.MessageBuilder) *wire.MessageBuilder {
 			return b.RCODE(wire.RCODEServFail)
 		}), nil
 	}}
@@ -98,7 +98,7 @@ func TestRunWithoutPrimingReturnsImmediately(t *testing.T) {
 func TestRunCancelsOnContextDone(t *testing.T) {
 	t.Parallel()
 	dialer := stubDialer{fn: func(_ context.Context, _ netip.AddrPort, q wire.Message) (wire.Message, error) {
-		return mkResp(t, q, func(b *wire.Builder) *wire.Builder { return b }), nil
+		return mkResp(t, q, func(b *wire.MessageBuilder) *wire.MessageBuilder { return b }), nil
 	}}
 	r := mustRecursive(t,
 		recursive.WithRoots(netip.MustParseAddrPort("198.51.100.1:53")),
