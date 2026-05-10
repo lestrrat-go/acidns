@@ -54,7 +54,15 @@ func WithUDPListenerBufferSize(n int) UDPListenerOption {
 // IPv6 minimum MTU minus headers avoids IP fragmentation, which is the
 // vector for the well-documented amplification and frag-attack classes.
 // Raise this only if you understand the trade.
+//
+// Non-positive values are silently clamped to the default 1232 — a
+// caller passing 0 (a zero-valued config field) must not end up with
+// truncation disabled, which would expose the listener as an
+// amplification primitive serving up to the wire ceiling (65535).
 func WithUDPMaxResponse(n int) UDPListenerOption {
+	if n <= 0 {
+		n = 1232
+	}
 	return udpListenerOption{option.New(identUDPMaxResponse{}, n)}
 }
 
@@ -132,7 +140,12 @@ func NewUDPServer(addr netip.AddrPort, h Handler, opts ...UDPListenerOption) (*U
 		case identUDPListenerBufferSize{}:
 			cfg.bufferSize = option.MustGet[int](o)
 		case identUDPMaxResponse{}:
-			cfg.maxResponseLen = option.MustGet[int](o)
+			n := option.MustGet[int](o)
+			if n > 0 {
+				cfg.maxResponseLen = n
+			}
+			// Non-positive: keep the default to avoid an open
+			// amplification surface.
 		case identUDPMaxInflight{}:
 			cfg.maxInflight = option.MustGet[int](o)
 		case identUDPWriteTimeout{}:
