@@ -443,6 +443,30 @@ func (s *serverImpl) Validate(serverCookie []byte, clientCookie [8]byte, clientA
 		return time.Time{}, fmt.Errorf("%w: version %d", ErrCookieMalformed, serverCookie[0])
 	}
 	ts := time.Unix(int64(binary.BigEndian.Uint32(serverCookie[4:8])), 0).UTC()
+	// MAC-before-time: verify the HMAC against every secret in the pool
+	// before consulting the time-window. Symmetric with the TSIG
+	// verifier (tsig/tsig.go) which deliberately denies a BADTIME
+	// timing oracle by computing the MAC unconditionally. The cookie's
+	// timestamp is plaintext so the leak is small in absolute terms,
+	// but matching the TSIG ordering keeps the project's crypto
+	// patterns uniform — easier to audit, harder to regress.
+	//
+	// Canonicalise v4-mapped IPv6 ("::ffff:1.2.3.4") to plain IPv4
+	// before binding so a client that reconnects via the un-mapped
+	// form still validates the cookie minted under the mapped form
+	// (and vice versa).
+	addr := clientAddr.Unmap()
+	matched := false
+	for _, sec := range s.pool.All() {
+		want := mintCookie(sec, clientCookie, addr, ts)
+		if hmac.Equal(want[8:], serverCookie[8:]) {
+			matched = true
+			break
+		}
+	}
+	if !matched {
+		return time.Time{}, ErrCookieMismatch
+	}
 	if now.Sub(ts) > s.maxAge {
 		return time.Time{}, ErrCookieExpired
 	}
@@ -450,18 +474,7 @@ func (s *serverImpl) Validate(serverCookie []byte, clientCookie [8]byte, clientA
 		// Cookie issued in the (substantial) future → invalid.
 		return time.Time{}, ErrCookieExpired
 	}
-	// Canonicalise v4-mapped IPv6 ("::ffff:1.2.3.4") to plain IPv4
-	// before binding so a client that reconnects via the un-mapped
-	// form still validates the cookie minted under the mapped form
-	// (and vice versa).
-	addr := clientAddr.Unmap()
-	for _, sec := range s.pool.All() {
-		want := mintCookie(sec, clientCookie, addr, ts)
-		if hmac.Equal(want[8:], serverCookie[8:]) {
-			return ts, nil
-		}
-	}
-	return time.Time{}, ErrCookieMismatch
+	return ts, nil
 }
 
 // mintCookie constructs the 16-byte RFC 9018 server cookie:
