@@ -47,7 +47,17 @@ type errStreamExchangerOpens struct{ s acidns.MessageStream }
 func (e *errStreamExchangerOpens) Exchange(_ context.Context, _ wire.Message) (wire.Message, error) {
 	return wire.Message{}, io.EOF
 }
-func (e *errStreamExchangerOpens) Stream(_ context.Context, _ wire.Message) (acidns.MessageStream, error) {
+func (e *errStreamExchangerOpens) Stream(_ context.Context, q wire.Message) (acidns.MessageStream, error) {
+	// recReader requires every continuation envelope to echo the
+	// request transaction ID. Stamp pre-built test fixtures.
+	if fts, ok := e.s.(*firstThenErrStream); ok {
+		fts.first = wire.WithID(fts.first, q.ID())
+	}
+	if fs, ok := e.s.(*fakeStream); ok {
+		for i, m := range fs.msgs {
+			fs.msgs[i] = wire.WithID(m, q.ID())
+		}
+	}
 	return e.s, nil
 }
 

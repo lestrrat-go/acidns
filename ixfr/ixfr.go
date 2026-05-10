@@ -76,6 +76,13 @@ var ErrRCODE = errors.New("ixfr: server returned error rcode")
 // to [tsig.ErrVerify] so callers can match either form via errors.Is.
 var ErrTSIGVerify = tsig.ErrVerify
 
+// ErrEnvelopeMismatch is returned when a continuation envelope's
+// transaction ID or echoed question does not match the original IXFR
+// request. Without this check, a hostile or connection-pooling
+// upstream could splice records from another in-flight transfer
+// into the stream.
+var ErrEnvelopeMismatch = errors.New("ixfr: response envelope id or question does not match request")
+
 // Kind describes the shape of an IXFR response, queryable on the Transfer
 // once Start has read the first message.
 type Kind int
@@ -195,7 +202,12 @@ func Start(ctx context.Context, ex acidns.StreamExchanger, zone wire.Name, clien
 	if err != nil {
 		return nil, fmt.Errorf("ixfr: open stream: %w", err)
 	}
-	t := &transfer{stream: stream, reader: &recReader{stream: stream, verifier: verifier}}
+	t := &transfer{stream: stream, reader: &recReader{
+		stream:   stream,
+		verifier: verifier,
+		wantID:   q.ID(),
+		wantQ:    q.Questions()[0],
+	}}
 	if err := t.init(ctx, clientSOA.Serial()); err != nil {
 		_ = stream.Close()
 		return nil, err
@@ -379,6 +391,8 @@ type recReader struct {
 	pushback []wire.Record
 	msgEOF   bool
 	verifier *tsigVerifier
+	wantID   uint16
+	wantQ    wire.Question
 }
 
 func (rr *recReader) Read(ctx context.Context) (wire.Record, error) {
@@ -403,6 +417,14 @@ func (rr *recReader) Read(ctx context.Context) (wire.Record, error) {
 				return wire.Record{}, io.EOF
 			}
 			return wire.Record{}, err
+		}
+		if msg.ID() != rr.wantID {
+			return wire.Record{}, fmt.Errorf("%w: id %d != %d", ErrEnvelopeMismatch, msg.ID(), rr.wantID)
+		}
+		if qs := msg.Questions(); len(qs) > 0 {
+			if qs[0].Type() != rr.wantQ.Type() || qs[0].Class() != rr.wantQ.Class() || !qs[0].Name().Equal(rr.wantQ.Name()) {
+				return wire.Record{}, fmt.Errorf("%w: question mismatch", ErrEnvelopeMismatch)
+			}
 		}
 		if rcode := msg.Flags().RCODE(); rcode != wire.RCODENoError {
 			return wire.Record{}, fmt.Errorf("%w: %s", ErrRCODE, rcode)

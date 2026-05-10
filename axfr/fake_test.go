@@ -47,12 +47,29 @@ type fakeStreamEx struct {
 	stream acidns.MessageStream
 	err    error
 	called bool
+	// reqID captures the originating request ID so tests can stamp
+	// matching IDs onto canned response envelopes.
+	reqID uint16
+	// reqQ captures the originating question; tests can omit the
+	// echoed question on continuations or stamp this exact one.
+	reqQ wire.Question
 }
 
-func (f *fakeStreamEx) Stream(_ context.Context, _ wire.Message) (acidns.MessageStream, error) {
+func (f *fakeStreamEx) Stream(_ context.Context, q wire.Message) (acidns.MessageStream, error) {
 	f.called = true
+	f.reqID = q.ID()
+	if qs := q.Questions(); len(qs) > 0 {
+		f.reqQ = qs[0]
+	}
 	if f.err != nil {
 		return nil, f.err
+	}
+	// Stamp every pre-built fakeStream envelope with the request ID so
+	// the recReader's RFC 5936 §3.4 envelope-ID check passes.
+	if fs, ok := f.stream.(*fakeStream); ok {
+		for i, m := range fs.msgs {
+			fs.msgs[i] = wire.WithID(m, f.reqID)
+		}
 	}
 	return f.stream, nil
 }
@@ -310,3 +327,4 @@ func TestNextMismatchedClosingSOA(t *testing.T) {
 	// Leading SOA, mismatched mid SOA, A, closing SOA.
 	require.Equal(t, []rrtype.Type{rrtype.SOA, rrtype.SOA, rrtype.A, rrtype.SOA}, types)
 }
+

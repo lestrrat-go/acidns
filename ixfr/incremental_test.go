@@ -36,7 +36,13 @@ type fakeStreamExchanger struct{ stream *fakeStream }
 func (f *fakeStreamExchanger) Exchange(_ context.Context, _ wire.Message) (wire.Message, error) {
 	return wire.Message{}, io.EOF
 }
-func (f *fakeStreamExchanger) Stream(_ context.Context, _ wire.Message) (acidns.MessageStream, error) {
+func (f *fakeStreamExchanger) Stream(_ context.Context, q wire.Message) (acidns.MessageStream, error) {
+	// recReader now requires every continuation envelope to echo the
+	// request transaction ID. Stamp every pre-built test fixture with
+	// the real request ID so the check passes.
+	for i, m := range f.stream.msgs {
+		f.stream.msgs[i] = wire.WithID(m, q.ID())
+	}
 	return f.stream, nil
 }
 

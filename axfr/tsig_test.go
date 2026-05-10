@@ -60,7 +60,15 @@ func (p *programmableStreamEx) Stream(_ context.Context, q wire.Message) (acidns
 	if err != nil {
 		return nil, err
 	}
-	return &fakeStream{msgs: p.makeMsg(mac)}, nil
+	msgs := p.makeMsg(mac)
+	// Stamp the originating request ID onto each canned envelope so the
+	// recReader's RFC 5936 §3.4 envelope-ID check accepts them.
+	for i, m := range msgs {
+		if m.ID() == 0 {
+			msgs[i] = wire.WithID(m, q.ID())
+		}
+	}
+	return &fakeStream{msgs: msgs}, nil
 }
 
 func TestAXFRTSIGSignedQueryAndVerifiedResponse(t *testing.T) {

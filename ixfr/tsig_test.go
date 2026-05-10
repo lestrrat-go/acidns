@@ -36,7 +36,11 @@ func (p *programmableStreamEx) Stream(_ context.Context, q wire.Message) (acidns
 	if err != nil {
 		return nil, err
 	}
-	return &fakeStream{msgs: p.makeMsg(mac)}, nil
+	msgs := p.makeMsg(mac)
+	for i, m := range msgs {
+		msgs[i] = wire.WithID(m, q.ID())
+	}
+	return &fakeStream{msgs: msgs}, nil
 }
 
 func signResp(t *testing.T, m wire.Message, key tsig.Key, requestMAC []byte, now time.Time, fudge time.Duration) wire.Message {

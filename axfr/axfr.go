@@ -63,6 +63,15 @@ var ErrRCODE = errors.New("axfr: server returned error rcode")
 // to [tsig.ErrVerify] so callers can match either form via errors.Is.
 var ErrTSIGVerify = tsig.ErrVerify
 
+// ErrEnvelopeMismatch is returned when a continuation envelope's
+// transaction ID or echoed question does not match the original AXFR
+// request. RFC 5936 §3.4: every response message in the AXFR response
+// stream MUST have the same ID as the request, and (when present) the
+// question MUST match the original. Without this check, a hostile
+// upstream — or one multiplexing concurrent transfers on the same
+// connection — could splice records from another zone into the stream.
+var ErrEnvelopeMismatch = errors.New("axfr: response envelope id or question does not match request")
+
 // Start sends an AXFR query for zone over ex and returns a Transfer
 // iterator positioned just past the leading SOA.
 func Start(ctx context.Context, ex acidns.StreamExchanger, zone wire.Name, opts ...Option) (Transfer, error) {
@@ -110,7 +119,12 @@ func Start(ctx context.Context, ex acidns.StreamExchanger, zone wire.Name, opts 
 		if err != nil {
 			return nil, fmt.Errorf("axfr: open stream: %w", err)
 		}
-		reader := &recReader{stream: stream, verifier: newTSIGVerifier(*c.tsigKey, mac, c.tsigNow, c.tsigFudge)}
+		reader := &recReader{
+			stream:   stream,
+			verifier: newTSIGVerifier(*c.tsigKey, mac, c.tsigNow, c.tsigFudge),
+			wantID:   q.ID(),
+			wantQ:    q.Questions()[0],
+		}
 		t := &transfer{stream: stream, reader: reader}
 		if err := t.init(ctx); err != nil {
 			_ = stream.Close()
@@ -123,7 +137,11 @@ func Start(ctx context.Context, ex acidns.StreamExchanger, zone wire.Name, opts 
 	if err != nil {
 		return nil, fmt.Errorf("axfr: open stream: %w", err)
 	}
-	t := &transfer{stream: stream, reader: &recReader{stream: stream}}
+	t := &transfer{stream: stream, reader: &recReader{
+		stream: stream,
+		wantID: q.ID(),
+		wantQ:  q.Questions()[0],
+	}}
 	if err := t.init(ctx); err != nil {
 		_ = stream.Close()
 		return nil, err
@@ -187,6 +205,12 @@ type recReader struct {
 	pushback []wire.Record
 	msgEOF   bool
 	verifier *tsigVerifier
+	// wantID and wantQ identify the originating AXFR request; every
+	// continuation envelope must echo them so a hostile or
+	// connection-pooling upstream cannot splice records from another
+	// in-flight transfer into our stream.
+	wantID uint16
+	wantQ  wire.Question
 }
 
 func (rr *recReader) Read(ctx context.Context) (wire.Record, error) {
@@ -211,6 +235,18 @@ func (rr *recReader) Read(ctx context.Context) (wire.Record, error) {
 				return wire.Record{}, io.EOF
 			}
 			return wire.Record{}, err
+		}
+		if msg.ID() != rr.wantID {
+			return wire.Record{}, fmt.Errorf("%w: id %d != %d", ErrEnvelopeMismatch, msg.ID(), rr.wantID)
+		}
+		// RFC 5936 §3.4 allows continuation envelopes to either echo the
+		// question or omit it. When present, it must match the original
+		// (same name, type, class) — otherwise records from a different
+		// transfer have been spliced in.
+		if qs := msg.Questions(); len(qs) > 0 {
+			if qs[0].Type() != rr.wantQ.Type() || qs[0].Class() != rr.wantQ.Class() || !qs[0].Name().Equal(rr.wantQ.Name()) {
+				return wire.Record{}, fmt.Errorf("%w: question mismatch", ErrEnvelopeMismatch)
+			}
 		}
 		if rcode := msg.Flags().RCODE(); rcode != wire.RCODENoError {
 			return wire.Record{}, fmt.Errorf("%w: %s", ErrRCODE, rcode)

@@ -35,7 +35,15 @@ type fakeIXFRExchanger struct{ s acidns.MessageStream }
 func (f *fakeIXFRExchanger) Exchange(_ context.Context, _ wire.Message) (wire.Message, error) {
 	return wire.Message{}, io.EOF
 }
-func (f *fakeIXFRExchanger) Stream(_ context.Context, _ wire.Message) (acidns.MessageStream, error) {
+func (f *fakeIXFRExchanger) Stream(_ context.Context, q wire.Message) (acidns.MessageStream, error) {
+	// recReader requires every continuation envelope to echo the
+	// request transaction ID. Stamp the canned messages with the
+	// real request ID so the check passes.
+	if fs, ok := f.s.(*fakeIXFRStream); ok {
+		for i, m := range fs.msgs {
+			fs.msgs[i] = wire.WithID(m, q.ID())
+		}
+	}
 	return f.s, nil
 }
 
