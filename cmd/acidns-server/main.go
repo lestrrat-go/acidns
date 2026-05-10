@@ -296,8 +296,20 @@ func buildServers(addr netip.AddrPort, handler acidns.Handler, allowPublic bool)
 		netip.MustParsePrefix("0.0.0.0/0"),
 		netip.MustParsePrefix("::/0"),
 	}
+	// Per-source rate limit defaults for the public stack. Without
+	// prefix grouping a /24 or /56 of attackers gets one budget per
+	// address (256× / 2^72×); RRL covers the response-side
+	// amplification primitive but per-source budgets need their own
+	// prefix bucketing to stop a contiguous-range flood. The drop
+	// default avoids returning REFUSED on UDP (a small amplification
+	// primitive against spoofed sources).
 	publicOpts := []acidns.PublicServerOption{
 		acidns.WithPublicACLOptions(acidns.WithACLAllow(allowAll...)),
+		acidns.WithPublicRateLimitOptions(
+			acidns.WithRateLimitV4Prefix(24),
+			acidns.WithRateLimitV6Prefix(56),
+			acidns.WithRateLimitDrop(true),
+		),
 	}
 	udp, err := acidns.NewPublicUDPServer(addr, handler, publicOpts...)
 	if err != nil {
@@ -349,8 +361,11 @@ func validateFlagsForMode(fs *flag.FlagSet, mode string) error {
 			strings.Join(stray, ", "), mode)
 	}
 	if mode == "forward" {
-		// -tls-name only makes sense paired with -upstream-tls; it would
-		// otherwise be silently dropped on the plaintext path.
+		// -tls-name and -upstream-tls must travel together. -tls-name
+		// alone has no plaintext-path effect; -upstream-tls alone
+		// produces an empty SNI / unpinned cert verification, which
+		// silently weakens the upstream auth — fail loudly so the
+		// operator notices.
 		var tlsNameSet, upstreamTLSSet bool
 		fs.Visit(func(f *flag.Flag) {
 			switch f.Name {
@@ -362,6 +377,9 @@ func validateFlagsForMode(fs *flag.FlagSet, mode string) error {
 		})
 		if tlsNameSet && !upstreamTLSSet {
 			return fmt.Errorf("-tls-name requires -upstream-tls")
+		}
+		if upstreamTLSSet && !tlsNameSet {
+			return fmt.Errorf("-upstream-tls requires -tls-name (empty SNI weakens cert verification)")
 		}
 	}
 	return nil
