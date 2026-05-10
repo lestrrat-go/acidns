@@ -222,14 +222,18 @@ func ParseBrowseResponse(m wire.Message) []Service {
 //
 // Browse deduplicates services by (instance, type) across responses.
 func Browse(ctx context.Context, service string, opts ...BrowseOption) ([]Service, error) {
-	cfg := browseConfig{
-		openConn: func() (net.PacketConn, error) { return openMulticast() },
-	}
+	cfg := browseConfig{}
 	for _, opt := range opts {
 		switch opt.Ident() {
 		case identBrowseConn{}:
 			cfg.openConn = option.MustGet[func() (net.PacketConn, error)](opt)
+		case identMulticastInterface{}:
+			cfg.multiIfce = option.MustGet[*net.Interface](opt)
 		}
+	}
+	if cfg.openConn == nil {
+		ifce := cfg.multiIfce
+		cfg.openConn = func() (net.PacketConn, error) { return openMulticast(ifce) }
 	}
 
 	q, err := BuildBrowseQuery(service)
@@ -292,9 +296,9 @@ func Browse(ctx context.Context, service string, opts ...BrowseOption) ([]Servic
 	return out, nil
 }
 
-func openMulticast() (*net.UDPConn, error) {
+func openMulticast(ifce *net.Interface) (*net.UDPConn, error) {
 	addr := &net.UDPAddr{IP: net.ParseIP(GroupV4), Port: Port}
-	return net.ListenMulticastUDP("udp4", nil, addr)
+	return net.ListenMulticastUDP("udp4", ifce, addr)
 }
 
 // serviceName normalises a user-supplied service spec. Accepts "_http._tcp",

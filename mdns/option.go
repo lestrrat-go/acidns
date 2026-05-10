@@ -18,10 +18,12 @@ type browseOption struct{ option.Interface }
 func (browseOption) browseOption() {}
 
 type browseConfig struct {
-	openConn func() (net.PacketConn, error)
+	openConn  func() (net.PacketConn, error)
+	multiIfce *net.Interface
 }
 
 type identBrowseConn struct{}
+type identMulticastInterface struct{}
 
 // WithBrowseConn injects the function used to open the listening
 // socket. The default opens the IPv4 mDNS multicast group on udp4. Tests
@@ -29,6 +31,16 @@ type identBrowseConn struct{}
 // multicast group.
 func WithBrowseConn(open func() (net.PacketConn, error)) BrowseOption {
 	return browseOption{option.New(identBrowseConn{}, open)}
+}
+
+// WithMulticastInterface pins the multicast group join to the named
+// interface. The default (nil) lets the kernel choose, which on a
+// multi-homed host (VPN tunnel, container with several bridges) is
+// non-deterministic and may expose mDNS responses to networks the
+// operator did not intend. No-op when [WithBrowseConn] is supplied —
+// the caller's factory chooses the binding.
+func WithMulticastInterface(ifce *net.Interface) BrowseOption {
+	return browseOption{option.New(identMulticastInterface{}, ifce)}
 }
 
 // AnnouncerOption configures NewAnnouncer.
