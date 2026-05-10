@@ -23,6 +23,7 @@ import (
 	"github.com/lestrrat-go/acidns/wire/rdata"
 	"github.com/lestrrat-go/acidns/wire/rrtype"
 	"github.com/lestrrat-go/option/v3"
+	"golang.org/x/net/ipv4"
 )
 
 // Default mDNS link-local addresses (RFC 6762 §3).
@@ -250,6 +251,20 @@ func Browse(ctx context.Context, service string, opts ...BrowseOption) ([]Servic
 		return nil, err
 	}
 	defer func() { _ = conn.Close() }()
+
+	// When the caller has pinned an interface for receive, also pin it
+	// for transmit. Without IP_MULTICAST_IF the kernel routes 224.0.0.251
+	// out the default-route interface, which on a multi-homed host
+	// (VPN, container bridge) is unrelated to the receive interface —
+	// peers on the intended LAN never see the question. Best-effort:
+	// any error from the type assertion or the syscall just means we
+	// fall back to kernel default, matching the previous behaviour.
+	if cfg.multiIfce != nil {
+		if uc, ok := conn.(*net.UDPConn); ok {
+			pc := ipv4.NewPacketConn(uc)
+			_ = pc.SetMulticastInterface(cfg.multiIfce)
+		}
+	}
 
 	dst := &net.UDPAddr{IP: net.ParseIP(GroupV4), Port: Port}
 	if _, err := conn.WriteTo(msg, dst); err != nil {
