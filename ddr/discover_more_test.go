@@ -28,7 +28,7 @@ func (e *errResolver) Resolve(_ context.Context, _ wire.Name, _ rrtype.Type) (*a
 func TestDiscover_ResolverError(t *testing.T) {
 	t.Parallel()
 	sentinel := errors.New("upstream boom")
-	endpoints, err := ddr.Discover(t.Context(), &errResolver{err: sentinel})
+	endpoints, err := ddr.DiscoverUnverified(t.Context(), &errResolver{err: sentinel})
 	require.ErrorIs(t, err, sentinel)
 	require.Nil(t, endpoints)
 }
@@ -54,7 +54,7 @@ func TestDiscover_SkipsNonSVCB(t *testing.T) {
 	r := &fakeResolver{answer: newFakeAnswer(wire.Question{}, []wire.Record{
 		aRec, aliasRec, goodRec,
 	})}
-	endpoints, err := ddr.Discover(t.Context(), r)
+	endpoints, err := ddr.DiscoverUnverified(t.Context(), r)
 	require.NoError(t, err)
 	require.Len(t, endpoints, 1)
 	require.Equal(t, ddr.ProtoDoT, endpoints[0].Protocol())
@@ -77,7 +77,7 @@ func TestDiscover_SortsByPriority(t *testing.T) {
 		wire.NewRecord(ddr.ResolverDomain(), 60*time.Second, mid),
 	}
 	r := &fakeResolver{answer: newFakeAnswer(wire.Question{}, records)}
-	endpoints, err := ddr.Discover(t.Context(), r)
+	endpoints, err := ddr.DiscoverUnverified(t.Context(), r)
 	require.NoError(t, err)
 	require.Len(t, endpoints, 3)
 	require.Equal(t, uint16(1), endpoints[0].Priority())
@@ -120,7 +120,7 @@ func TestDiscover_InferProtocolVariants(t *testing.T) {
 		wire.NewRecord(ddr.ResolverDomain(), 60*time.Second, mixedSVCB),
 	}
 	r := &fakeResolver{answer: newFakeAnswer(wire.Question{}, records)}
-	endpoints, err := ddr.Discover(t.Context(), r)
+	endpoints, err := ddr.DiscoverUnverified(t.Context(), r)
 	require.NoError(t, err)
 	require.Len(t, endpoints, 5)
 
@@ -149,7 +149,7 @@ func TestDiscover_IPv6Hints(t *testing.T) {
 	)
 	rec := wire.NewRecord(ddr.ResolverDomain(), 60*time.Second, s)
 	r := &fakeResolver{answer: newFakeAnswer(wire.Question{}, []wire.Record{rec})}
-	endpoints, err := ddr.Discover(t.Context(), r)
+	endpoints, err := ddr.DiscoverUnverified(t.Context(), r)
 	require.NoError(t, err)
 	require.Len(t, endpoints, 1)
 	require.Equal(t, ddr.ProtoDoT, endpoints[0].Protocol())

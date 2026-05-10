@@ -3,6 +3,7 @@ package examples_test
 import (
 	"context"
 	"fmt"
+	"net/netip"
 	"time"
 
 	"github.com/lestrrat-go/acidns"
@@ -26,10 +27,12 @@ func Example_ddr_discover() {
 	// Build a SVCB record advertising a DoH endpoint, exactly as a
 	// production resolver would emit it from _dns.resolver.arpa.
 	alpn, _ := rdata.NewSvcParamALPN("h2")
+	v4hint, _ := rdata.NewSvcParamIPv4Hint(netip.MustParseAddr("192.0.2.1"))
 	svcb, err := rdata.NewSVCB(1, wire.MustParseName("doh.example.net"),
 		alpn,
 		rdata.NewSvcParamPort(443),
 		rdata.NewSvcParamDOHPath("/dns-query{?dns}"),
+		v4hint,
 	)
 	if err != nil {
 		fmt.Println("svcb:", err)
@@ -39,7 +42,11 @@ func Example_ddr_discover() {
 		wire.NewRecord(ddr.ResolverDomain(), 60*time.Second, svcb),
 	}}
 
-	endpoints, err := ddr.Discover(context.Background(), r)
+	// Verified discovery: the bootstrap IP must appear in the endpoint's
+	// IPv4Hints/IPv6Hints (RFC 9462 §6.2). Pass the same address as the
+	// upstream resolver the caller is currently using.
+	bootstrap := netip.MustParseAddr("192.0.2.1")
+	endpoints, err := ddr.Discover(context.Background(), r, bootstrap)
 	if err != nil {
 		fmt.Println("discover:", err)
 		return

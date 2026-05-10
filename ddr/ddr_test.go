@@ -52,9 +52,21 @@ func TestDiscover(t *testing.T) {
 	rec2 := wire.NewRecord(ddr.ResolverDomain(), 60*time.Second, dotSVCB)
 
 	r := &fakeResolver{answer: newFakeAnswer(wire.Question{}, []wire.Record{rec1, rec2})}
-	endpoints, err := ddr.Discover(context.Background(), r)
+	endpoints, err := ddr.DiscoverUnverified(context.Background(), r)
 	require.NoError(t, err)
 	require.Len(t, endpoints, 2)
+
+	// Verified path: bootstrap = 192.0.2.1 matches the DoH IPv4 hint
+	// only. The DoT entry (no hints) is filtered out.
+	verified, err := ddr.Discover(context.Background(), r, netip.MustParseAddr("192.0.2.1"))
+	require.NoError(t, err)
+	require.Len(t, verified, 1)
+	require.Equal(t, ddr.ProtoDoH, verified[0].Protocol())
+
+	// Verified with a non-matching bootstrap: empty result.
+	verifiedNone, err := ddr.Discover(context.Background(), r, netip.MustParseAddr("198.51.100.1"))
+	require.NoError(t, err)
+	require.Empty(t, verifiedNone)
 
 	require.Equal(t, ddr.ProtoDoH, endpoints[0].Protocol())
 	require.Equal(t, "/dns-query{?dns}", endpoints[0].DOHPath())

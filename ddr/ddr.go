@@ -1,14 +1,17 @@
 // Package ddr discovers Designated Resolvers per RFC 9462. Clients call
-// Discover with a Resolver bound to the unencrypted resolver they currently
-// use; Discover queries the special name "_dns.resolver.arpa." for SVCB
-// records, parses the SvcParams (RFC 9461), and returns one Endpoint per
-// designated alternative transport.
+// [Discover] with a Resolver bound to the unencrypted resolver they
+// currently use AND the bootstrap resolver's address. Discover queries
+// _dns.resolver.arpa. for SVCB records, parses the SvcParams
+// (RFC 9461), and returns one Endpoint per designated alternative
+// transport — but only those whose IPv4Hints/IPv6Hints contain the
+// bootstrap address (RFC 9462 §6.2 "Verified Discovery").
 //
-// Validation against the IP-hints constraint of RFC 9462 §4 (the discovered
-// endpoint's address must match the address of the original resolver, or
-// be authenticated some other way) is the caller's responsibility — the
-// Endpoint's IPv4Hints / IPv6Hints expose the candidate set so callers
-// can compare against their bootstrap address.
+// The bootstrap-bound API is the safe default: returning unfiltered
+// endpoints lets a downgrade attacker on the unsigned _dns.resolver.arpa
+// path point clients at an upstream they control. [DiscoverUnverified]
+// is provided for callers that want to do the IP-hint check themselves
+// (or accept the downgrade risk knowingly), and is named to make that
+// trade-off explicit at the call site.
 package ddr
 
 import (
@@ -128,10 +131,46 @@ func (b *EndpointBuilder) Build() (Endpoint, error) {
 	return b.e, nil
 }
 
-// Discover queries _dns.resolver.arpa via r and returns the Endpoints sorted
-// by priority (lowest first; priority 0 has special meaning per RFC 9460 and
-// is filtered out — those are AliasMode SVCB entries).
-func Discover(ctx context.Context, r acidns.Resolver) ([]Endpoint, error) {
+// Discover queries _dns.resolver.arpa via r and returns the
+// designated-resolver Endpoints whose IPv4Hints or IPv6Hints contain
+// bootstrap (the address of the unencrypted resolver the caller is
+// currently using). RFC 9462 §6.2 "Verified Discovery" requires this
+// match before promoting traffic to the encrypted endpoint; without
+// it, a man-in-the-middle on the unsigned _dns.resolver.arpa path can
+// redirect clients to an attacker-controlled upstream.
+//
+// Priority-0 (AliasMode) responses are filtered out; the remaining
+// endpoints are sorted by priority (lowest first).
+//
+// Returns an empty slice (no error) when no endpoint advertises the
+// bootstrap address — this is operationally indistinguishable from
+// "no DDR available", which is the safe default.
+func Discover(ctx context.Context, r acidns.Resolver, bootstrap netip.Addr) ([]Endpoint, error) {
+	all, err := DiscoverUnverified(ctx, r)
+	if err != nil {
+		return nil, err
+	}
+	if !bootstrap.IsValid() {
+		return nil, errInvalidBootstrap
+	}
+	bootstrap = bootstrap.Unmap()
+	out := all[:0]
+	for _, e := range all {
+		if endpointMatchesBootstrap(e, bootstrap) {
+			out = append(out, e)
+		}
+	}
+	return out, nil
+}
+
+// DiscoverUnverified is the unsafe variant: it returns every
+// designated-resolver endpoint advertised on _dns.resolver.arpa
+// without filtering by bootstrap address. The caller MUST do the
+// RFC 9462 §6.2 IP-hint match itself (or have an out-of-band reason
+// to trust the response, e.g. a DNSSEC chain that the caller
+// validated). Prefer [Discover] unless you specifically need the
+// raw set.
+func DiscoverUnverified(ctx context.Context, r acidns.Resolver) ([]Endpoint, error) {
 	ans, err := r.Resolve(ctx, resolverDomainName, rrtype.SVCB)
 	if err != nil {
 		return nil, err
@@ -155,6 +194,32 @@ func Discover(ctx context.Context, r acidns.Resolver) ([]Endpoint, error) {
 	sort.SliceStable(out, func(i, j int) bool { return out[i].priority < out[j].priority })
 	return out, nil
 }
+
+// endpointMatchesBootstrap reports whether e advertises bootstrap in
+// either its IPv4Hints or IPv6Hints. Hints are compared after Unmap
+// so a v4-mapped bootstrap matches against an IPv4 hint and vice versa.
+func endpointMatchesBootstrap(e Endpoint, bootstrap netip.Addr) bool {
+	if bootstrap.Is4() {
+		for _, a := range e.ipv4Hints {
+			if a.Unmap() == bootstrap {
+				return true
+			}
+		}
+		return false
+	}
+	for _, a := range e.ipv6Hints {
+		if a.Unmap() == bootstrap {
+			return true
+		}
+	}
+	return false
+}
+
+var errInvalidBootstrap = errInvalid("ddr: bootstrap address is invalid")
+
+type errInvalid string
+
+func (e errInvalid) Error() string { return string(e) }
 
 func endpointFromSVCB(s rdata.SVCB) Endpoint {
 	b := NewEndpointBuilder().
