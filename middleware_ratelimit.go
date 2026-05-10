@@ -34,17 +34,19 @@ type rateLimitOption struct{ option.Interface }
 func (rateLimitOption) rateLimitOption() {}
 
 type rateLimitConfig struct {
-	qps     float64
-	burst   int
-	drop    bool
-	prefix  int // CIDR mask applied before keying (e.g. 24 → group v4 by /24)
-	maxKeys int
+	qps      float64
+	burst    int
+	drop     bool
+	v4Prefix int // CIDR mask applied to IPv4 sources (0 disables; 1..32 valid)
+	v6Prefix int // CIDR mask applied to IPv6 sources (0 disables; 1..128 valid)
+	maxKeys  int
 }
 
 type identRateLimitQPS struct{}
 type identRateLimitBurst struct{}
 type identRateLimitDrop struct{}
-type identRateLimitGroupPrefix struct{}
+type identRateLimitV4Prefix struct{}
+type identRateLimitV6Prefix struct{}
 type identRateLimitMaxKeys struct{}
 
 // WithRateLimitQPS sets the average queries-per-second rate per source. Defaults to
@@ -65,11 +67,20 @@ func WithRateLimitDrop(v bool) RateLimitOption {
 	return rateLimitOption{option.New(identRateLimitDrop{}, v)}
 }
 
-// WithRateLimitGroupPrefix coalesces sources by the given CIDR mask before keying
-// the bucket — useful so a single misbehaving /24 isn't permitted to
-// multiply a budget by 256.
-func WithRateLimitGroupPrefix(maskBits int) RateLimitOption {
-	return rateLimitOption{option.New(identRateLimitGroupPrefix{}, maskBits)}
+// WithRateLimitV4Prefix coalesces IPv4 sources by the given CIDR mask
+// before keying the bucket — useful so a single misbehaving /24 isn't
+// permitted to multiply a budget by 256. The mask is clamped to [0, 32]
+// at construction; 0 (the default) disables prefix grouping for IPv4.
+func WithRateLimitV4Prefix(maskBits int) RateLimitOption {
+	return rateLimitOption{option.New(identRateLimitV4Prefix{}, maskBits)}
+}
+
+// WithRateLimitV6Prefix coalesces IPv6 sources by the given CIDR mask
+// before keying the bucket. /48 or /64 are the typical aggregation
+// boundaries on the public internet. The mask is clamped to [0, 128]
+// at construction; 0 (the default) disables prefix grouping for IPv6.
+func WithRateLimitV6Prefix(maskBits int) RateLimitOption {
+	return rateLimitOption{option.New(identRateLimitV6Prefix{}, maskBits)}
 }
 
 // WithRateLimitMaxKeys caps the total number of distinct source buckets
@@ -95,14 +106,15 @@ type limiterShard struct {
 }
 
 type limiter struct {
-	inner   Handler
-	qps     float64
-	burst   float64
-	drop    bool
-	prefix  int
-	maxKeys int // per-shard cap (config / numLimiterShards)
-	seed    maphash.Seed
-	shards  [numLimiterShards]*limiterShard
+	inner    Handler
+	qps      float64
+	burst    float64
+	drop     bool
+	v4Prefix int
+	v6Prefix int
+	maxKeys  int // per-shard cap (config / numLimiterShards)
+	seed     maphash.Seed
+	shards   [numLimiterShards]*limiterShard
 }
 
 // NewRateLimit returns a Handler that applies the configured rate limit before
@@ -117,19 +129,22 @@ func NewRateLimit(inner Handler, opts ...RateLimitOption) Handler {
 			c.burst = option.MustGet[int](o)
 		case identRateLimitDrop{}:
 			c.drop = option.MustGet[bool](o)
-		case identRateLimitGroupPrefix{}:
-			c.prefix = option.MustGet[int](o)
+		case identRateLimitV4Prefix{}:
+			c.v4Prefix = option.MustGet[int](o)
+		case identRateLimitV6Prefix{}:
+			c.v6Prefix = option.MustGet[int](o)
 		case identRateLimitMaxKeys{}:
 			c.maxKeys = option.MustGet[int](o)
 		}
 	}
 	l := &limiter{
-		inner:  inner,
-		qps:    c.qps,
-		burst:  float64(c.burst),
-		drop:   c.drop,
-		prefix: c.prefix,
-		seed:   maphash.MakeSeed(),
+		inner:    inner,
+		qps:      c.qps,
+		burst:    float64(c.burst),
+		drop:     c.drop,
+		v4Prefix: clampPrefix(c.v4Prefix, 32),
+		v6Prefix: clampPrefix(c.v6Prefix, 128),
+		seed:     maphash.MakeSeed(),
 	}
 	if c.maxKeys > 0 {
 		l.maxKeys = (c.maxKeys + numLimiterShards - 1) / numLimiterShards
@@ -220,13 +235,35 @@ func (l *limiter) evictLocked(sh *limiterShard, now time.Time) {
 }
 
 func (l *limiter) key(src netip.Addr) string {
-	if l.prefix <= 0 {
+	bits := l.v4Prefix
+	if src.Is6() && !src.Is4In6() {
+		bits = l.v6Prefix
+	}
+	if bits <= 0 {
 		return src.String()
 	}
-	if pfx, err := src.Prefix(l.prefix); err == nil {
-		return pfx.String()
+	pfx, err := src.Prefix(bits)
+	if err != nil {
+		// Should not happen — bits is clamped to family-max at NewRateLimit
+		// time. If a future refactor breaks the invariant we fall back to
+		// per-address keying rather than silently disabling the limiter.
+		return src.String()
 	}
-	return src.String()
+	return pfx.String()
+}
+
+// clampPrefix bounds maskBits into [0, max]. Negative values become 0
+// (disabled); values above max are clamped to max so an operator who
+// requests /128 on an IPv4-only deployment gets per-address keying
+// instead of silent fall-through to no grouping at all.
+func clampPrefix(maskBits, max int) int {
+	if maskBits < 0 {
+		return 0
+	}
+	if maskBits > max {
+		return max
+	}
+	return maskBits
 }
 
 func (l *limiter) refuse(w ResponseWriter, q wire.Message) {
