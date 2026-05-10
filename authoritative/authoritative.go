@@ -155,6 +155,63 @@ func (a *Authoritative) AddZone(z zonefile.Zone) error {
 	return nil
 }
 
+// ReloadZone replaces an existing zone's published *zoneIndex with a
+// fresh one built from z. The swap happens atomically under the
+// write lock so concurrent queries see either the previous or the
+// new state — never a partial mix. Use this to apply edits made
+// out-of-band to the master file without restarting the server.
+//
+// If no zone with z's origin is currently loaded, ReloadZone falls
+// through to AddZone semantics (the new zone is registered).
+//
+// In-flight UPDATEs against the old *zoneIndex run to completion
+// against the snapshot they captured under their own lock; their
+// resulting clone is then written to a.zones, which a subsequent
+// ReloadZone may overwrite. Operators relying on UPDATE persistence
+// across reloads must serialise reload vs. update at the application
+// level (e.g. by pausing the UPDATE policy during reload windows).
+func (a *Authoritative) ReloadZone(z zonefile.Zone) error {
+	soa, soaRec, ok := z.SOA()
+	if !ok {
+		return fmt.Errorf("%w: %s", ErrNoSOA, z.Origin())
+	}
+	_ = soa
+	for _, rec := range z.Records() {
+		if !rec.Name().Equal(z.Origin()) {
+			continue
+		}
+		if rec.Type() == rrtype.CNAME || rec.Type() == rrtype.DNAME {
+			return fmt.Errorf("%w: %s", ErrApexCNAMEOrDNAME, z.Origin())
+		}
+	}
+	idx := &zoneIndex{
+		origin:     z.Origin(),
+		soaRec:     soaRec,
+		byName:     make(map[string][]wire.Record),
+		namesExist: make(map[string]struct{}),
+	}
+	for _, rec := range z.Records() {
+		k := nameKey(rec.Name())
+		idx.byName[k] = append(idx.byName[k], rec)
+		cur := rec.Name()
+		for {
+			idx.namesExist[nameKey(cur)] = struct{}{}
+			if cur.Equal(idx.origin) {
+				break
+			}
+			parent, ok := cur.Parent()
+			if !ok {
+				break
+			}
+			cur = parent
+		}
+	}
+	a.mu.Lock()
+	a.zones[nameKey(z.Origin())] = idx
+	a.mu.Unlock()
+	return nil
+}
+
 func (a *Authoritative) Zones() []wire.Name {
 	a.mu.RLock()
 	defer a.mu.RUnlock()
