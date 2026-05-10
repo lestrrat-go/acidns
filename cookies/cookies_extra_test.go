@@ -1,6 +1,7 @@
 package cookies_test
 
 import (
+	"context"
 	"net/netip"
 	"testing"
 	"time"
@@ -33,6 +34,33 @@ func TestSecretPoolCancelStopsRotation(t *testing.T) {
 	t.Parallel()
 	pool, _ := cookies.NewSecretPool(cookies.WithPoolRotateEvery(time.Hour))
 	pool.Close() // immediately stop; should not block / panic.
+}
+
+// TestSecretPoolContextCancelStopsRotation verifies that cancelling the
+// context passed via WithPoolContext stops the rotation goroutine even
+// when Close is never called. The leak guard for forgotten Close.
+func TestSecretPoolContextCancelStopsRotation(t *testing.T) {
+	t.Parallel()
+	ctx, cancel := context.WithCancel(t.Context())
+	pool, err := cookies.NewSecretPool(
+		cookies.WithPoolRotateEvery(5*time.Millisecond),
+		cookies.WithPoolContext(ctx),
+	)
+	require.NoError(t, err)
+
+	first := append([]byte(nil), pool.Current()...)
+	require.Eventually(t, func() bool {
+		return string(pool.Current()) != string(first)
+	}, time.Second, 5*time.Millisecond, "rotation did not start")
+
+	cancel()
+	// After cancellation, Current() must stabilise — the goroutine should
+	// have exited and stopped issuing new secrets.
+	time.Sleep(50 * time.Millisecond)
+	stable := append([]byte(nil), pool.Current()...)
+	time.Sleep(50 * time.Millisecond)
+	require.Equal(t, stable, []byte(pool.Current()),
+		"current secret continued to change after ctx cancellation")
 }
 
 // TestServerMaxAgeDefault checks that NewServer with maxAge=0 defaults to

@@ -23,13 +23,14 @@
 package cookies
 
 import (
+	"context"
 	"crypto/hmac"
 	"crypto/rand"
 	"crypto/sha256"
 	"encoding/binary"
 	"errors"
 	"fmt"
-	"log"
+	"log/slog"
 	"net/netip"
 	"sync"
 	"sync/atomic"
@@ -107,6 +108,7 @@ const DefaultClientMaxEntries = 8192
 func NewClient(opts ...ClientOption) (Client, error) {
 	maxEntries := DefaultClientMaxEntries
 	now := time.Now
+	logger := slog.New(slog.DiscardHandler)
 	for _, o := range opts {
 		switch o.Ident() {
 		case identClientMaxEntries{}:
@@ -115,12 +117,17 @@ func NewClient(opts ...ClientOption) (Client, error) {
 			if v := option.MustGet[func() time.Time](o); v != nil {
 				now = v
 			}
+		case identClientLogger{}:
+			if v := option.MustGet[*slog.Logger](o); v != nil {
+				logger = v
+			}
 		}
 	}
 	return &client{
 		cache:      make(map[netip.AddrPort]clientEntry),
 		maxEntries: maxEntries,
 		now:        now,
+		logger:     logger,
 	}, nil
 }
 
@@ -146,6 +153,7 @@ type client struct {
 	cache       map[netip.AddrPort]clientEntry
 	maxEntries  int
 	now         func() time.Time
+	logger      *slog.Logger
 	rngFailures atomic.Uint64
 	rngLogged   atomic.Bool
 }
@@ -169,7 +177,8 @@ func (c *client) Apply(server netip.AddrPort, b *wire.EDNSBuilder) *wire.EDNSBui
 			c.mu.Unlock()
 			c.rngFailures.Add(1)
 			if c.rngLogged.CompareAndSwap(false, true) {
-				log.Printf("cookies: rand.Read failed: %v; falling back to cookieless queries (further RNG failures will be silent — see Client.RNGFailures())", err)
+				c.logger.Warn("cookies: rand.Read failed; falling back to cookieless queries (further RNG failures will be silent — see Client.RNGFailures())",
+					slog.Any("err", err))
 			}
 			return b
 		}
@@ -339,18 +348,32 @@ type SecretPool interface {
 // see the [SecretPool] doc.
 func NewSecretPool(opts ...PoolOption) (*MemorySecretPool, error) {
 	var rotateEvery time.Duration
+	var ctx context.Context
+	logger := slog.New(slog.DiscardHandler)
 	for _, o := range opts {
 		switch o.Ident() {
 		case identPoolRotateEvery{}:
 			rotateEvery = option.MustGet[time.Duration](o)
+		case identPoolContext{}:
+			if v := option.MustGet[context.Context](o); v != nil {
+				ctx = v
+			}
+		case identPoolLogger{}:
+			if v := option.MustGet[*slog.Logger](o); v != nil {
+				logger = v
+			}
 		}
 	}
-	p := &MemorySecretPool{}
+	p := &MemorySecretPool{logger: logger}
 	if err := p.Rotate(); err != nil {
 		return nil, err
 	}
 	if rotateEvery > 0 {
 		p.stop = make(chan struct{})
+		var done <-chan struct{}
+		if ctx != nil {
+			done = ctx.Done()
+		}
 		go func() {
 			// The project's no-recover policy is for handler dispatch:
 			// a panic there is the operator's bug to surface. This
@@ -359,10 +382,11 @@ func NewSecretPool(opts ...PoolOption) (*MemorySecretPool, error) {
 			// inside rand.Read) shouldn't take down the host process.
 			// Recover, log, and stop. The previous secret stays
 			// current; callers that depend on continuous rotation
-			// should monitor process logs for this line.
+			// should monitor logs for this event.
 			defer func() {
 				if r := recover(); r != nil {
-					log.Printf("cookies: secret rotation goroutine recovered from panic: %v", r)
+					p.logger.Error("cookies: secret rotation goroutine recovered from panic",
+						slog.Any("panic", r))
 				}
 			}()
 			tick := time.NewTicker(rotateEvery)
@@ -370,6 +394,8 @@ func NewSecretPool(opts ...PoolOption) (*MemorySecretPool, error) {
 			for {
 				select {
 				case <-p.stop:
+					return
+				case <-done:
 					return
 				case <-tick.C:
 					_ = p.Rotate()
@@ -388,6 +414,7 @@ type MemorySecretPool struct {
 	previous Secret
 	stop     chan struct{}
 	stopOnce sync.Once
+	logger   *slog.Logger
 }
 
 func (p *MemorySecretPool) Close() {

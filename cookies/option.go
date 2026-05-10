@@ -1,6 +1,8 @@
 package cookies
 
 import (
+	"context"
+	"log/slog"
 	"time"
 
 	"github.com/lestrrat-go/option/v3"
@@ -38,7 +40,10 @@ func (serverOption) serverOption() {}
 
 type identClientMaxEntries struct{}
 type identClientClock struct{}
+type identClientLogger struct{}
 type identPoolRotateEvery struct{}
+type identPoolContext struct{}
+type identPoolLogger struct{}
 type identServerMaxAge struct{}
 type identServerClockSkew struct{}
 
@@ -58,12 +63,41 @@ func WithClientClock(now func() time.Time) ClientOption {
 }
 
 // WithPoolRotateEvery enables automatic rotation of the pool's
-// HMAC secret on the supplied interval. With auto-rotation enabled
-// the returned pool's [SecretPool.Close] must be called on shutdown
-// to stop the rotation goroutine. A non-positive value disables
+// HMAC secret on the supplied interval. The rotation goroutine
+// runs until either [SecretPool.Close] is called or the context
+// supplied via [WithPoolContext] is cancelled. Forgetting both
+// leaks the goroutine — and, with it, the secret material it
+// retains — so long-lived processes should always pair this
+// option with [WithPoolContext]. A non-positive value disables
 // automatic rotation.
 func WithPoolRotateEvery(d time.Duration) PoolOption {
 	return poolOption{option.New(identPoolRotateEvery{}, d)}
+}
+
+// WithPoolContext binds the rotation goroutine started by
+// [WithPoolRotateEvery] to ctx. When ctx is cancelled the
+// goroutine exits, even if [SecretPool.Close] is never called.
+// Recommended for long-running services that already plumb a
+// shutdown context; tests that don't may continue to rely on
+// Close.
+func WithPoolContext(ctx context.Context) PoolOption {
+	return poolOption{option.New(identPoolContext{}, ctx)}
+}
+
+// WithClientLogger routes [Client] diagnostics (currently the
+// one-shot RNG-failure warning emitted by [Client.Apply] when
+// crypto/rand.Read returns an error) through the supplied
+// logger. The default logger discards all output so importing
+// this package does not pollute the host's stderr.
+func WithClientLogger(l *slog.Logger) ClientOption {
+	return clientOption{option.New(identClientLogger{}, l)}
+}
+
+// WithPoolLogger routes [SecretPool] diagnostics (currently the
+// rotation-goroutine panic recovery message) through the supplied
+// logger. The default logger discards all output.
+func WithPoolLogger(l *slog.Logger) PoolOption {
+	return poolOption{option.New(identPoolLogger{}, l)}
 }
 
 // WithMaxAge sets the cookie acceptance window. RFC 7873 §5.2.5
