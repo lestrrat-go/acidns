@@ -243,7 +243,7 @@ func TestParseRDataErrors(t *testing.T) {
 		"SOA bad minimum":         "$ORIGIN example.com.\n$TTL 60\n@ IN SOA ns. hm. 1 7200 3600 1209600 bad\n",
 		"SOA bad mname":           "$ORIGIN example.com.\n$TTL 60\n@ IN SOA ..bad hm. 1 7200 3600 1209600 60\n",
 		"SOA bad rname":           "$ORIGIN example.com.\n$TTL 60\n@ IN SOA ns. ..bad 1 7200 3600 1209600 60\n",
-		"unsupported type SRV":    "$ORIGIN example.com.\n$TTL 60\n@ IN SRV 0 0 80 host.example.com.\n",
+		"unsupported type RT":     "$ORIGIN example.com.\n$TTL 60\n@ IN RT 0 host.example.com.\n",
 	}
 	for name, src := range cases {
 		t.Run(name, func(t *testing.T) {

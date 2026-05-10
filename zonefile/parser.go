@@ -1,6 +1,8 @@
 package zonefile
 
 import (
+	"encoding/base64"
+	"encoding/hex"
 	"fmt"
 	"io"
 	"net/netip"
@@ -12,6 +14,31 @@ import (
 	"github.com/lestrrat-go/acidns/wire/rdata"
 	"github.com/lestrrat-go/acidns/wire/rrtype"
 )
+
+// hexDecode tolerates whitespace within a hex string. Master files
+// commonly split a long DS digest across multiple parens-quoted lines
+// for legibility.
+func hexDecode(s string) ([]byte, error) {
+	clean := strings.Map(func(r rune) rune {
+		if r == ' ' || r == '\t' {
+			return -1
+		}
+		return r
+	}, s)
+	return hex.DecodeString(clean)
+}
+
+// b64Decode tolerates whitespace within a base64 string for the same
+// reason hexDecode does (DNSKEY public keys span multiple lines).
+func b64Decode(s string) ([]byte, error) {
+	clean := strings.Map(func(r rune) rune {
+		if r == ' ' || r == '\t' {
+			return -1
+		}
+		return r
+	}, s)
+	return base64.StdEncoding.DecodeString(clean)
+}
 
 type parser struct {
 	lex        *lexer
@@ -291,9 +318,125 @@ func (p *parser) parseRData(t rrtype.Type, fields []fieldTok) (rdata.RData, erro
 		return rdata.NewTXT(strs...)
 	case rrtype.SOA:
 		return p.parseSOA(fields)
+	case rrtype.SRV:
+		return p.parseSRV(fields)
+	case rrtype.CAA:
+		return p.parseCAA(fields)
+	case rrtype.DNAME:
+		return p.parseDNAME(fields)
+	case rrtype.DS:
+		return p.parseDS(fields)
+	case rrtype.DNSKEY:
+		return p.parseDNSKEY(fields)
 	default:
 		return nil, fmt.Errorf("type %s not supported in master file parser", t)
 	}
+}
+
+func (p *parser) parseSRV(fields []fieldTok) (rdata.RData, error) {
+	if len(fields) != 4 {
+		return nil, fmt.Errorf("SRV: expected 4 fields (priority weight port target), got %d", len(fields))
+	}
+	pri, err := strconv.ParseUint(fields[0].text, 10, 16)
+	if err != nil {
+		return nil, fmt.Errorf("SRV priority: %w", err)
+	}
+	wgt, err := strconv.ParseUint(fields[1].text, 10, 16)
+	if err != nil {
+		return nil, fmt.Errorf("SRV weight: %w", err)
+	}
+	port, err := strconv.ParseUint(fields[2].text, 10, 16)
+	if err != nil {
+		return nil, fmt.Errorf("SRV port: %w", err)
+	}
+	target, err := p.resolveName(fields[3].text)
+	if err != nil {
+		return nil, err
+	}
+	return rdata.NewSRV(uint16(pri), uint16(wgt), uint16(port), target)
+}
+
+func (p *parser) parseCAA(fields []fieldTok) (rdata.RData, error) {
+	if len(fields) != 3 {
+		return nil, fmt.Errorf("CAA: expected 3 fields (flags tag value), got %d", len(fields))
+	}
+	flags, err := strconv.ParseUint(fields[0].text, 10, 8)
+	if err != nil {
+		return nil, fmt.Errorf("CAA flags: %w", err)
+	}
+	tag := fields[1].text
+	// CAA value is a quoted character-string; the lexer has already
+	// stripped the surrounding quotes (see readQuoted).
+	value := fields[2].text
+	return rdata.NewCAA(uint8(flags), tag, []byte(value))
+}
+
+func (p *parser) parseDNAME(fields []fieldTok) (rdata.RData, error) {
+	if len(fields) != 1 {
+		return nil, fmt.Errorf("DNAME: expected 1 field (target)")
+	}
+	target, err := p.resolveName(fields[0].text)
+	if err != nil {
+		return nil, err
+	}
+	return rdata.NewDNAME(target)
+}
+
+func (p *parser) parseDS(fields []fieldTok) (rdata.RData, error) {
+	if len(fields) < 4 {
+		return nil, fmt.Errorf("DS: expected ≥4 fields (keytag alg digest-type digest...), got %d", len(fields))
+	}
+	keytag, err := strconv.ParseUint(fields[0].text, 10, 16)
+	if err != nil {
+		return nil, fmt.Errorf("DS keytag: %w", err)
+	}
+	alg, err := strconv.ParseUint(fields[1].text, 10, 8)
+	if err != nil {
+		return nil, fmt.Errorf("DS algorithm: %w", err)
+	}
+	dt, err := strconv.ParseUint(fields[2].text, 10, 8)
+	if err != nil {
+		return nil, fmt.Errorf("DS digest-type: %w", err)
+	}
+	// Digest is hex; may be split across multiple whitespace-separated
+	// fields (RFC 4034 §5.3 master-file form). Concatenate.
+	var hexStr strings.Builder
+	for _, f := range fields[3:] {
+		hexStr.WriteString(f.text)
+	}
+	digest, err := hexDecode(hexStr.String())
+	if err != nil {
+		return nil, fmt.Errorf("DS digest: %w", err)
+	}
+	return rdata.NewDS(uint16(keytag), rdata.DNSSECAlgorithm(alg), rdata.DSDigestType(dt), digest), nil
+}
+
+func (p *parser) parseDNSKEY(fields []fieldTok) (rdata.RData, error) {
+	if len(fields) < 4 {
+		return nil, fmt.Errorf("DNSKEY: expected ≥4 fields (flags protocol alg key...), got %d", len(fields))
+	}
+	flags, err := strconv.ParseUint(fields[0].text, 10, 16)
+	if err != nil {
+		return nil, fmt.Errorf("DNSKEY flags: %w", err)
+	}
+	proto, err := strconv.ParseUint(fields[1].text, 10, 8)
+	if err != nil {
+		return nil, fmt.Errorf("DNSKEY protocol: %w", err)
+	}
+	alg, err := strconv.ParseUint(fields[2].text, 10, 8)
+	if err != nil {
+		return nil, fmt.Errorf("DNSKEY algorithm: %w", err)
+	}
+	// Public key is base64 across remaining fields (RFC 4034 §2.2).
+	var b64Str strings.Builder
+	for _, f := range fields[3:] {
+		b64Str.WriteString(f.text)
+	}
+	key, err := b64Decode(b64Str.String())
+	if err != nil {
+		return nil, fmt.Errorf("DNSKEY public key: %w", err)
+	}
+	return rdata.NewDNSKEY(uint16(flags), uint8(proto), rdata.DNSSECAlgorithm(alg), key), nil
 }
 
 func (p *parser) parseSOA(fields []fieldTok) (rdata.SOA, error) {
