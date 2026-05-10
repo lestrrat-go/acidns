@@ -2,7 +2,6 @@ package rdata
 
 import (
 	"fmt"
-	"slices"
 
 	"github.com/lestrrat-go/acidns/wire/rrtype"
 	"github.com/lestrrat-go/acidns/wire/wirebb"
@@ -14,7 +13,7 @@ type RESINFO struct{ strs []string }
 
 func (RESINFO) Type() rrtype.Type   { return rrtype.RESINFO }
 func (RESINFO) typedRData()         {}
-func (r RESINFO) Strings() []string { return slices.Clone(r.strs) }
+func (r RESINFO) Strings() []string { return r.strs }
 func (r RESINFO) Pack(p *wirebb.Packer) {
 	for _, s := range r.strs {
 		_ = p.CharString([]byte(s))

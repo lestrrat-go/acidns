@@ -2,7 +2,6 @@ package rdata
 
 import (
 	"fmt"
-	"slices"
 
 	"github.com/lestrrat-go/acidns/wire/rrtype"
 	"github.com/lestrrat-go/acidns/wire/wirebb"
@@ -14,7 +13,7 @@ type TXT struct{ strs []string }
 
 func (TXT) Type() rrtype.Type   { return rrtype.TXT }
 func (TXT) typedRData()         {}
-func (t TXT) Strings() []string { return slices.Clone(t.strs) }
+func (t TXT) Strings() []string { return t.strs }
 func (t TXT) Pack(p *wirebb.Packer) {
 	for _, s := range t.strs {
 		// length already validated at construction

@@ -2,7 +2,6 @@ package rdata
 
 import (
 	"fmt"
-	"slices"
 
 	"github.com/lestrrat-go/acidns/wire/rrtype"
 	"github.com/lestrrat-go/acidns/wire/wirebb"
@@ -14,7 +13,7 @@ type NSAP struct{ addr []byte }
 
 func (NSAP) Type() rrtype.Type       { return rrtype.NSAP }
 func (NSAP) typedRData()             {}
-func (n NSAP) Address() []byte       { return slices.Clone(n.addr) }
+func (n NSAP) Address() []byte       { return n.addr }
 func (n NSAP) Pack(p *wirebb.Packer) { p.Raw(n.addr) }
 
 // NewNSAP returns an NSAP rdata. The address bytes are copied.

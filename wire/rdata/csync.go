@@ -2,7 +2,6 @@ package rdata
 
 import (
 	"fmt"
-	"slices"
 
 	"github.com/lestrrat-go/acidns/wire/rrtype"
 	"github.com/lestrrat-go/acidns/wire/wirebb"
@@ -21,7 +20,7 @@ func (CSYNC) Type() rrtype.Type      { return rrtype.CSYNC }
 func (CSYNC) typedRData()            {}
 func (c CSYNC) SOASerial() uint32    { return c.soaSerial }
 func (c CSYNC) Flags() uint16        { return c.flags }
-func (c CSYNC) Types() []rrtype.Type { return slices.Clone(c.types) }
+func (c CSYNC) Types() []rrtype.Type { return c.types }
 func (c CSYNC) Pack(p *wirebb.Packer) {
 	p.Uint32(c.soaSerial)
 	p.Uint16(c.flags)

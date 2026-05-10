@@ -2,7 +2,6 @@ package rdata
 
 import (
 	"fmt"
-	"slices"
 
 	"github.com/lestrrat-go/acidns/wire/rrtype"
 	"github.com/lestrrat-go/acidns/wire/wirebb"
@@ -39,7 +38,7 @@ func (SSHFP) Type() rrtype.Type            { return rrtype.SSHFP }
 func (SSHFP) typedRData()                  {}
 func (s SSHFP) Algorithm() SSHFPAlgorithm  { return s.alg }
 func (s SSHFP) FingerprintType() SSHFPType { return s.fpt }
-func (s SSHFP) Fingerprint() []byte        { return slices.Clone(s.value) }
+func (s SSHFP) Fingerprint() []byte        { return s.value }
 func (s SSHFP) Pack(p *wirebb.Packer) {
 	p.Uint8(uint8(s.alg))
 	p.Uint8(uint8(s.fpt))

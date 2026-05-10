@@ -1,7 +1,6 @@
 package rdata
 
 import (
-	"slices"
 
 	"github.com/lestrrat-go/acidns/wire/rrtype"
 	"github.com/lestrrat-go/acidns/wire/wirebb"
@@ -14,7 +13,7 @@ type OPENPGPKEY struct{ pubkey []byte }
 
 func (OPENPGPKEY) Type() rrtype.Type       { return rrtype.OPENPGPKEY }
 func (OPENPGPKEY) typedRData()             {}
-func (k OPENPGPKEY) PublicKey() []byte     { return slices.Clone(k.pubkey) }
+func (k OPENPGPKEY) PublicKey() []byte     { return k.pubkey }
 func (k OPENPGPKEY) Pack(p *wirebb.Packer) { p.Raw(k.pubkey) }
 
 // NewOPENPGPKEY returns an OPENPGPKEY rdata. The argument is copied; the

@@ -3,6 +3,16 @@
 // fields and value-receiver accessors; construct via the per-type New
 // constructors. Unknown carries the rdata for RR types this package does
 // not decode.
+//
+// # Slice/byte-slice accessor semantics
+//
+// Accessors that return a slice (e.g. CERT.Certificate, NSEC.Types,
+// SVCB.Params) return a value that ALIASES the rdata's internal
+// storage. Callers MUST NOT mutate the returned slice. If independent
+// ownership is needed, [slices.Clone] the result. The alias-by-default
+// semantics avoids per-call allocations on hot paths (validator chain
+// walks, cache iterations, AXFR streaming) where the caller is
+// inspecting, not mutating.
 package rdata
 
 import (

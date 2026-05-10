@@ -2,7 +2,6 @@ package rdata
 
 import (
 	"fmt"
-	"slices"
 
 	"github.com/lestrrat-go/acidns/wire/rrtype"
 	"github.com/lestrrat-go/acidns/wire/wirebb"
@@ -24,7 +23,7 @@ func (CDS) typedRData()                  {}
 func (d CDS) KeyTag() uint16             { return d.keyTag }
 func (d CDS) Algorithm() DNSSECAlgorithm { return d.algorithm }
 func (d CDS) DigestType() DSDigestType   { return d.digestT }
-func (d CDS) Digest() []byte             { return slices.Clone(d.digest) }
+func (d CDS) Digest() []byte             { return d.digest }
 func (d CDS) Pack(p *wirebb.Packer) {
 	p.Uint16(d.keyTag)
 	p.Uint8(uint8(d.algorithm))
@@ -80,7 +79,7 @@ func (CDNSKEY) typedRData()                  {}
 func (k CDNSKEY) Flags() uint16              { return k.flags }
 func (k CDNSKEY) Protocol() uint8            { return k.protocol }
 func (k CDNSKEY) Algorithm() DNSSECAlgorithm { return k.algorithm }
-func (k CDNSKEY) PublicKey() []byte          { return slices.Clone(k.pubkey) }
+func (k CDNSKEY) PublicKey() []byte          { return k.pubkey }
 func (k CDNSKEY) Pack(p *wirebb.Packer) {
 	p.Uint16(k.flags)
 	p.Uint8(k.protocol)

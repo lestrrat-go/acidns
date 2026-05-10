@@ -2,7 +2,6 @@ package rdata
 
 import (
 	"fmt"
-	"slices"
 
 	"github.com/lestrrat-go/acidns/wire/rrtype"
 	"github.com/lestrrat-go/acidns/wire/wirebb"
@@ -49,7 +48,7 @@ func (TLSA) typedRData()                      {}
 func (t TLSA) Usage() TLSAUsage               { return t.usage }
 func (t TLSA) Selector() TLSASelector         { return t.selector }
 func (t TLSA) MatchingType() TLSAMatchingType { return t.matching }
-func (t TLSA) CertificateAssociation() []byte { return slices.Clone(t.data) }
+func (t TLSA) CertificateAssociation() []byte { return t.data }
 func (t TLSA) Pack(p *wirebb.Packer) {
 	p.Uint8(uint8(t.usage))
 	p.Uint8(uint8(t.selector))
@@ -107,7 +106,7 @@ func (SMIMEA) typedRData()                      {}
 func (s SMIMEA) Usage() TLSAUsage               { return s.usage }
 func (s SMIMEA) Selector() TLSASelector         { return s.selector }
 func (s SMIMEA) MatchingType() TLSAMatchingType { return s.matching }
-func (s SMIMEA) CertificateAssociation() []byte { return slices.Clone(s.data) }
+func (s SMIMEA) CertificateAssociation() []byte { return s.data }
 func (s SMIMEA) Pack(p *wirebb.Packer) {
 	p.Uint8(uint8(s.usage))
 	p.Uint8(uint8(s.selector))

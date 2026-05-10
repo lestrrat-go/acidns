@@ -3,7 +3,6 @@ package rdata
 import (
 	"fmt"
 	"net/netip"
-	"slices"
 
 	"github.com/lestrrat-go/acidns/wire/rrtype"
 	"github.com/lestrrat-go/acidns/wire/wirebb"
@@ -48,7 +47,7 @@ type APL struct{ items []APLItem }
 
 func (APL) Type() rrtype.Type  { return rrtype.APL }
 func (APL) typedRData()        {}
-func (a APL) Items() []APLItem { return slices.Clone(a.items) }
+func (a APL) Items() []APLItem { return a.items }
 func (a APL) Pack(p *wirebb.Packer) {
 	for _, it := range a.items {
 		p.Uint16(uint16(it.Family()))

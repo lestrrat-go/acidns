@@ -2,7 +2,6 @@ package rdata
 
 import (
 	"fmt"
-	"slices"
 
 	"github.com/lestrrat-go/acidns/wire/rrtype"
 	"github.com/lestrrat-go/acidns/wire/wirebb"
@@ -19,7 +18,7 @@ func (CAA) Type() rrtype.Type { return rrtype.CAA }
 func (CAA) typedRData()       {}
 func (c CAA) Flags() uint8    { return c.flags }
 func (c CAA) Tag() string     { return c.tag }
-func (c CAA) Value() []byte   { return slices.Clone(c.value) }
+func (c CAA) Value() []byte   { return c.value }
 func (c CAA) Pack(p *wirebb.Packer) {
 	p.Uint8(c.flags)
 	p.Uint8(uint8(len(c.tag)))

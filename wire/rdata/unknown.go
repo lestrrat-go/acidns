@@ -1,7 +1,6 @@
 package rdata
 
 import (
-	"slices"
 
 	"github.com/lestrrat-go/acidns/wire/rrtype"
 	"github.com/lestrrat-go/acidns/wire/wirebb"
@@ -21,7 +20,7 @@ type Unknown struct {
 }
 
 func (u Unknown) Type() rrtype.Type     { return u.typ }
-func (u Unknown) Bytes() []byte         { return slices.Clone(u.data) }
+func (u Unknown) Bytes() []byte         { return u.data }
 func (u Unknown) Pack(p *wirebb.Packer) { p.Raw(u.data) }
 
 // NewUnknown returns an Unknown rdata for type t with the given raw bytes.

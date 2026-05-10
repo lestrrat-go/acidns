@@ -34,7 +34,7 @@ type SVCBParam struct {
 }
 
 func (p SVCBParam) Key() SvcParamKey { return p.key }
-func (p SVCBParam) Value() []byte    { return slices.Clone(p.data) }
+func (p SVCBParam) Value() []byte    { return p.data }
 
 // NewSVCBParam returns a generic SvcParam.
 func NewSVCBParam(key SvcParamKey, data []byte) SVCBParam {
@@ -55,7 +55,7 @@ type svcbBody struct {
 
 func (s svcbBody) Priority() uint16    { return s.priority }
 func (s svcbBody) Target() wirebb.Name { return s.target }
-func (s svcbBody) Params() []SVCBParam { return slices.Clone(s.params) }
+func (s svcbBody) Params() []SVCBParam { return s.params }
 
 func (s svcbBody) packBody(p *wirebb.Packer) {
 	p.Uint16(s.priority)

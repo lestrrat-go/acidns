@@ -1,7 +1,6 @@
 package rdata
 
 import (
-	"slices"
 
 	"github.com/lestrrat-go/acidns/wire/rrtype"
 	"github.com/lestrrat-go/acidns/wire/wirebb"
@@ -13,7 +12,7 @@ type DHCID struct{ data []byte }
 
 func (DHCID) Type() rrtype.Type       { return rrtype.DHCID }
 func (DHCID) typedRData()             {}
-func (d DHCID) Bytes() []byte         { return slices.Clone(d.data) }
+func (d DHCID) Bytes() []byte         { return d.data }
 func (d DHCID) Pack(p *wirebb.Packer) { p.Raw(d.data) }
 
 // NewDHCID returns a DHCID rdata. The data bytes are copied.
