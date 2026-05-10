@@ -222,24 +222,29 @@ func (g *cookieSizeGate) WriteMsg(m wire.Message) error {
 }
 
 // truncateForCookieGate builds the slip reply for the
-// large-response-without-cookie case: header + question, OPT echoed if
-// present, TC=1 set so the client retries over TCP. Mirrors the RRL
-// truncate helper but lives here so the cookies middleware does not
-// leak through the rrl writer abstraction.
+// large-response-without-cookie case: header + question, OPT echoed
+// from the RESPONSE (NOT the request), TC=1 set, and AA/AD cleared
+// because they no longer describe the stripped body. Mirrors the
+// truncation logic in udpResponseWriter.WriteMsg so the gate's stub
+// has the same EDNS shape (UDPSize, DO bit, extended RCODE) the
+// underlying UDP writer would produce — otherwise an EDNS-aware
+// client receives a TC=1 message whose advertised UDPSize is the
+// REQUEST's UDPSize (e.g. 4096), which contradicts the operator's
+// truncation policy.
 func truncateForCookieGate(m wire.Message, q wire.Message) wire.Message {
 	b := wire.NewMessageBuilder().
 		ID(m.ID()).
-		Flags(m.Flags().WithTruncated(true).WithResponse(true))
+		Flags(m.Flags().
+			WithTruncated(true).
+			WithResponse(true).
+			WithAuthoritative(false).
+			WithAuthenticData(false))
 	if qs := m.Questions(); len(qs) > 0 {
 		b = b.Question(qs[0])
 	} else if qs := q.Questions(); len(qs) > 0 {
 		b = b.Question(qs[0])
 	}
 	if e, ok := m.EDNS(); ok {
-		b = b.EDNS(e)
-	} else if e, ok := q.EDNS(); ok {
-		// Echo the requestor's EDNS so the truncated reply still
-		// advertises a sensible UDP payload size to the client's stack.
 		b = b.EDNS(e)
 	}
 	out, err := b.Build()
