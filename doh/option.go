@@ -2,6 +2,7 @@ package doh
 
 import (
 	"net/http"
+	"time"
 
 	"github.com/lestrrat-go/option/v3"
 )
@@ -17,11 +18,13 @@ type dohOption struct{ option.Interface }
 func (dohOption) dohOption() {}
 
 type config struct {
-	client    *http.Client
-	method    Method
-	userAgent string
-	padding   bool
-	insecure  bool
+	client     *http.Client
+	method     Method
+	userAgent  string
+	padding    bool
+	insecure   bool
+	timeout    time.Duration
+	timeoutSet bool
 }
 
 type identHTTPClient struct{}
@@ -29,6 +32,7 @@ type identMethod struct{}
 type identUserAgent struct{}
 type identPadding struct{}
 type identInsecure struct{}
+type identTimeout struct{}
 
 // WithHTTPClient overrides the default *http.Client.
 //
@@ -67,6 +71,16 @@ func WithUserAgent(ua string) Option {
 // disable padding.
 func WithPadding(v bool) Option {
 	return dohOption{option.New(identPadding{}, v)}
+}
+
+// WithTimeout sets the HTTP client request timeout. Has no effect when
+// the caller supplies a custom client via [WithHTTPClient] (set the
+// timeout on that client directly). When the default client is used
+// (no [WithHTTPClient]), this option overrides the built-in 10-second
+// default. Pass 0 to disable the deadline — the only bound becomes
+// the caller's context deadline.
+func WithTimeout(d time.Duration) Option {
+	return dohOption{option.New(identTimeout{}, d)}
 }
 
 // WithInsecure permits a plaintext "http://" endpoint. By default

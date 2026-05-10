@@ -136,6 +136,9 @@ func New(endpoint string, opts ...Option) (acidns.Exchanger, error) {
 			c.padding = option.MustGet[bool](o)
 		case identInsecure{}:
 			c.insecure = option.MustGet[bool](o)
+		case identTimeout{}:
+			c.timeout = option.MustGet[time.Duration](o)
+			c.timeoutSet = true
 		}
 	}
 	switch u.Scheme {
@@ -150,6 +153,13 @@ func New(endpoint string, opts ...Option) (acidns.Exchanger, error) {
 	}
 	if c.client == nil {
 		c.client = defaultClient()
+		// WithTimeout only applies to the default client — caller-supplied
+		// clients carry their own deadline policy. Override only when the
+		// option was supplied so the built-in default survives the
+		// no-option case.
+		if c.timeoutSet {
+			c.client.Timeout = c.timeout
+		}
 	}
 	// Force the no-redirect contract regardless of what the caller
 	// supplied. RFC 8484 has no notion of redirected DoH; a 3xx is
