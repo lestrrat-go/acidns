@@ -105,11 +105,7 @@ func run(argv []string) error {
 		return err
 	}
 
-	udpSrv, err := acidns.NewUDPServer(addr, handler)
-	if err != nil {
-		return err
-	}
-	tcpSrv, err := acidns.NewTCPServer(addr, handler)
+	udpSrv, tcpSrv, err := buildServers(addr, handler, o.allowPublic)
 	if err != nil {
 		return err
 	}
@@ -274,6 +270,44 @@ var universalFlags = map[string]struct{}{
 	"mode":         {},
 	"listen":       {},
 	"allow-public": {},
+}
+
+// buildServers wires the UDP and TCP server pair. When the bind is
+// loopback the bare server constructors are used (no middleware
+// needed for self-traffic). When -allow-public is set the public
+// constructors are used: the operator has acknowledged exposure, so
+// we install RRL + cookies + per-source rate limit + an allow-all
+// ACL automatically. An operator who wants stricter IP filtering
+// should compose their own program; this binary's contract is
+// "reasonable defaults for a reachable server."
+func buildServers(addr netip.AddrPort, handler acidns.Handler, allowPublic bool) (*acidns.UDPServer, *acidns.TCPServer, error) {
+	if !allowPublic {
+		udp, err := acidns.NewUDPServer(addr, handler)
+		if err != nil {
+			return nil, nil, err
+		}
+		tcp, err := acidns.NewTCPServer(addr, handler)
+		if err != nil {
+			return nil, nil, err
+		}
+		return udp, tcp, nil
+	}
+	allowAll := []netip.Prefix{
+		netip.MustParsePrefix("0.0.0.0/0"),
+		netip.MustParsePrefix("::/0"),
+	}
+	publicOpts := []acidns.PublicServerOption{
+		acidns.WithPublicACLOptions(acidns.WithACLAllow(allowAll...)),
+	}
+	udp, err := acidns.NewPublicUDPServer(addr, handler, publicOpts...)
+	if err != nil {
+		return nil, nil, fmt.Errorf("public udp: %w", err)
+	}
+	tcp, err := acidns.NewPublicTCPServer(addr, handler, publicOpts...)
+	if err != nil {
+		return nil, nil, fmt.Errorf("public tcp: %w", err)
+	}
+	return udp, tcp, nil
 }
 
 // needsPublicAck reports whether the given mode is amplification-prone
