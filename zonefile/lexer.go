@@ -139,6 +139,14 @@ func (l *lexer) flushOnEOF() (token, bool, error) {
 	return token{kind: tokEOF, line: l.line}, false, nil
 }
 
+// maxLexerTokenSize bounds a single unquoted word or quoted string.
+// 64 KiB is well above any legitimate zonefile token (the longest
+// single string permitted on the wire is a 255-byte character-string,
+// and a domain name is capped at 255 bytes total) but small enough
+// that an attacker-controlled zonefile cannot drive the lexer's
+// strings.Builder allocation arbitrarily large.
+const maxLexerTokenSize = 64 * 1024
+
 func (l *lexer) readWord() (string, error) {
 	var sb strings.Builder
 	for {
@@ -164,6 +172,9 @@ func (l *lexer) readWord() (string, error) {
 			sb.WriteByte(c)
 		default:
 			sb.WriteByte(b)
+		}
+		if sb.Len() > maxLexerTokenSize {
+			return "", fmt.Errorf("line %d: token exceeds %d bytes", l.line, maxLexerTokenSize)
 		}
 	}
 	return sb.String(), nil
@@ -193,6 +204,9 @@ func (l *lexer) readQuoted() (string, error) {
 			sb.WriteByte(b)
 		default:
 			sb.WriteByte(b)
+		}
+		if sb.Len() > maxLexerTokenSize {
+			return "", fmt.Errorf("line %d: quoted string exceeds %d bytes", l.line, maxLexerTokenSize)
 		}
 	}
 }
