@@ -36,9 +36,12 @@ package acidns
 //   - The cookies middleware needs a [cookies.Server]; if one is not
 //     supplied via [WithPublicCookiesServer], the wrapper builds an
 //     in-process [cookies.MemorySecretPool] + [cookies.Server] with
-//     defaults. The pool's Close is NOT wired here — callers that want
-//     graceful rotation-goroutine shutdown must build the pool
-//     themselves.
+//     defaults — and deliberately leaves automatic secret rotation
+//     OFF, because the public-listener constructor has no shutdown
+//     context to plumb in. Operators who want rotation must build
+//     the pool themselves (passing a ctx via [cookies.WithPoolContext]
+//     paired with [cookies.WithPoolRotateEvery]) and supply the
+//     resulting server via [WithPublicCookiesServer].
 //
 // To opt out of any single layer, build the stack manually and use
 // [NewUDPServer] / [NewTCPServer] directly.

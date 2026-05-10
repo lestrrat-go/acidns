@@ -336,11 +336,23 @@ type SecretPool interface {
 	Close()
 }
 
+// ErrPoolRotationNeedsContext is returned by [NewSecretPool] when
+// [WithPoolRotateEvery] is supplied with a positive duration but no
+// [WithPoolContext] is wired. The earlier API allowed callers to fall
+// back on calling [MemorySecretPool.Close] for shutdown, but that
+// pattern silently leaks the rotation goroutine — and the secret
+// material it retains — when callers forget. Requiring a ctx at
+// construction makes the leak impossible by construction.
+var ErrPoolRotationNeedsContext = errors.New("cookies: WithPoolRotateEvery requires WithPoolContext")
+
 // NewSecretPool returns a [MemorySecretPool] with a freshly-minted
 // random secret. With [WithPoolRotateEvery] the pool spawns a
 // background goroutine that periodically rotates the current secret;
-// the goroutine is shut down by [MemorySecretPool.Close]. An error is
-// returned if the initial random-secret generation fails.
+// the goroutine exits when the [WithPoolContext] context is cancelled
+// (or [MemorySecretPool.Close] is called). [WithPoolRotateEvery]
+// without [WithPoolContext] returns [ErrPoolRotationNeedsContext]
+// rather than risk leaking the goroutine. An error is also returned
+// if the initial random-secret generation fails.
 //
 // The returned concrete type satisfies [SecretPool] and additionally
 // exposes Rotate for tests and admin tooling. Callers that store the
@@ -363,6 +375,9 @@ func NewSecretPool(opts ...PoolOption) (*MemorySecretPool, error) {
 				logger = v
 			}
 		}
+	}
+	if rotateEvery > 0 && ctx == nil {
+		return nil, ErrPoolRotationNeedsContext
 	}
 	p := &MemorySecretPool{logger: logger}
 	if err := p.Rotate(); err != nil {

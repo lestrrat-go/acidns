@@ -16,7 +16,11 @@ import (
 // changes within a generous window.
 func TestSecretPoolAutoRotation(t *testing.T) {
 	t.Parallel()
-	pool, _ := cookies.NewSecretPool(cookies.WithPoolRotateEvery(5 * time.Millisecond))
+	pool, err := cookies.NewSecretPool(
+		cookies.WithPoolRotateEvery(5*time.Millisecond),
+		cookies.WithPoolContext(t.Context()),
+	)
+	require.NoError(t, err)
 	t.Cleanup(pool.Close)
 
 	first := append([]byte(nil), pool.Current()...)
@@ -28,12 +32,24 @@ func TestSecretPoolAutoRotation(t *testing.T) {
 	require.GreaterOrEqual(t, len(pool.All()), 2)
 }
 
-// TestSecretPoolCancelStopsRotation verifies that the cancel function
-// stops the background rotation loop without panicking.
+// TestSecretPoolCancelStopsRotation verifies that Close stops the
+// background rotation loop without panicking.
 func TestSecretPoolCancelStopsRotation(t *testing.T) {
 	t.Parallel()
-	pool, _ := cookies.NewSecretPool(cookies.WithPoolRotateEvery(time.Hour))
+	pool, err := cookies.NewSecretPool(
+		cookies.WithPoolRotateEvery(time.Hour),
+		cookies.WithPoolContext(t.Context()),
+	)
+	require.NoError(t, err)
 	pool.Close() // immediately stop; should not block / panic.
+}
+
+// TestSecretPoolRotateRequiresContext asserts that NewSecretPool
+// rejects WithPoolRotateEvery without WithPoolContext.
+func TestSecretPoolRotateRequiresContext(t *testing.T) {
+	t.Parallel()
+	_, err := cookies.NewSecretPool(cookies.WithPoolRotateEvery(time.Hour))
+	require.ErrorIs(t, err, cookies.ErrPoolRotationNeedsContext)
 }
 
 // TestSecretPoolContextCancelStopsRotation verifies that cancelling the

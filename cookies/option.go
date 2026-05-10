@@ -63,23 +63,20 @@ func WithClientClock(now func() time.Time) ClientOption {
 }
 
 // WithPoolRotateEvery enables automatic rotation of the pool's
-// HMAC secret on the supplied interval. The rotation goroutine
-// runs until either [SecretPool.Close] is called or the context
-// supplied via [WithPoolContext] is cancelled. Forgetting both
-// leaks the goroutine — and, with it, the secret material it
-// retains — so long-lived processes should always pair this
-// option with [WithPoolContext]. A non-positive value disables
-// automatic rotation.
+// HMAC secret on the supplied interval. A positive value MUST be
+// paired with [WithPoolContext]; otherwise [NewSecretPool] returns
+// [ErrPoolRotationNeedsContext]. The rotation goroutine exits when
+// the supplied ctx is cancelled (or [SecretPool.Close] is called,
+// which remains available for early shutdown). A non-positive value
+// disables automatic rotation.
 func WithPoolRotateEvery(d time.Duration) PoolOption {
 	return poolOption{option.New(identPoolRotateEvery{}, d)}
 }
 
 // WithPoolContext binds the rotation goroutine started by
 // [WithPoolRotateEvery] to ctx. When ctx is cancelled the
-// goroutine exits, even if [SecretPool.Close] is never called.
-// Recommended for long-running services that already plumb a
-// shutdown context; tests that don't may continue to rely on
-// Close.
+// goroutine exits. Required whenever [WithPoolRotateEvery] is set
+// to a positive duration.
 func WithPoolContext(ctx context.Context) PoolOption {
 	return poolOption{option.New(identPoolContext{}, ctx)}
 }
