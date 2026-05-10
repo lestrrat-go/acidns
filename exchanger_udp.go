@@ -165,15 +165,28 @@ func (e *udpExchanger) Exchange(ctx context.Context, q wire.Message) (wire.Messa
 
 	buf := make([]byte, e.bufsize)
 	// Bound how many invalid / spoofed datagrams we tolerate per
-	// Exchange. Without this an off-path attacker can flood the
-	// resolver's UDP socket with bogus packets and pin CPU on
-	// Unmarshal until the read deadline fires (5s by default), which
-	// — when the recursive resolver allots ~4s per upstream — turns
-	// into denial-of-resolution. 32 is plenty for legitimate noise
-	// (a few duplicate responses, the occasional ICMP-driven retry)
-	// while strictly bounding the attacker's CPU budget.
-	const maxSpurious = 32
-	spurious := 0
+	// Exchange. A single combined cap (the previous shape) lets a
+	// modest flood of forged datagrams race the legitimate response
+	// and surface a fake "lame upstream" error to the recursive
+	// resolver. Splitting per reason keeps the CPU bound while letting
+	// a noisy network deliver the real answer:
+	//
+	//   - parseErr: malformed wire (incl. ICMP-driven garbage); benign
+	//     noise should be small.
+	//   - idMismatch: forged-or-stale ID. The 16-bit ID space is small
+	//     enough that an attacker can fire many guesses cheaply, so
+	//     keep this budget the loosest.
+	//   - questionMismatch / caseMismatch: ID matched but question
+	//     didn't echo correctly — extremely improbable for benign
+	//     noise, looser-than-strict to swallow spurious bursts but
+	//     still bounded.
+	const (
+		maxParseErr         = 16
+		maxIDMismatch       = 256
+		maxQuestionMismatch = 16
+		maxCaseMismatch     = 16
+	)
+	var parseErr, idMis, qMis, caseMis int
 	for {
 		n, err := conn.Read(buf)
 		if err != nil {
@@ -182,46 +195,37 @@ func (e *udpExchanger) Exchange(ctx context.Context, q wire.Message) (wire.Messa
 			}
 			return wire.Message{}, fmt.Errorf("acidns: read: %w", err)
 		}
-		// Re-check ctx after a successful read so a flood of bogus
-		// datagrams cannot keep the loop alive past cancellation.
 		if cerr := ctx.Err(); cerr != nil {
 			return wire.Message{}, cerr
 		}
 		resp, err := wire.Unmarshal(buf[:n])
 		if err != nil {
-			// Malformed datagrams are dropped silently per RFC 1035 §7.3
-			// (server is misbehaving) — but only up to the spurious cap.
-			spurious++
-			if spurious >= maxSpurious {
-				return wire.Message{}, fmt.Errorf("acidns: spurious-datagram budget exhausted: %w", err)
+			parseErr++
+			if parseErr >= maxParseErr {
+				return wire.Message{}, fmt.Errorf("acidns: parse-error budget exhausted: %w", err)
 			}
 			continue
 		}
 		if resp.ID() != q.ID() {
-			spurious++
-			if spurious >= maxSpurious {
-				return wire.Message{}, fmt.Errorf("acidns: spurious-datagram budget exhausted on id mismatch")
+			idMis++
+			if idMis >= maxIDMismatch {
+				return wire.Message{}, fmt.Errorf("acidns: id-mismatch budget exhausted")
 			}
 			continue
 		}
 		if !wire.QuestionsMatch(q, resp) {
-			// RFC 5452 §9.2: spoofed responses with a guessed ID still
-			// have to match the question section. Drop and keep waiting
-			// for a legit response.
-			spurious++
-			if spurious >= maxSpurious {
-				return wire.Message{}, fmt.Errorf("acidns: spurious-datagram budget exhausted on question mismatch")
+			qMis++
+			if qMis >= maxQuestionMismatch {
+				return wire.Message{}, fmt.Errorf("acidns: question-mismatch budget exhausted")
 			}
 			continue
 		}
 		if use0x20 {
 			recvQuestion, qerr := questionSectionBytes(buf[:n])
 			if qerr != nil || !bytes.Equal(recvQuestion, sentQuestion) {
-				// 0x20 mismatch — response question's case doesn't
-				// match what we sent. Treat as forgery; keep waiting.
-				spurious++
-				if spurious >= maxSpurious {
-					return wire.Message{}, fmt.Errorf("acidns: spurious-datagram budget exhausted on 0x20 mismatch")
+				caseMis++
+				if caseMis >= maxCaseMismatch {
+					return wire.Message{}, fmt.Errorf("acidns: 0x20-mismatch budget exhausted")
 				}
 				continue
 			}
