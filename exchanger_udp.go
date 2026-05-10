@@ -62,11 +62,10 @@ func WithUDPExchangerBufferSize(n int) UDPExchangerOption {
 // transaction ID still has to reproduce the case-pattern, raising
 // the per-query search space by 2^N for an N-letter qname.
 //
-// Defaults to false at this raw-exchanger level so explicit callers
-// can mix-and-match policies per server. The convenience
-// constructors ([NewResolver] with [WithServers], [recursive.New])
-// flip this on by default and expose [WithUDP0x20](false) as an
-// opt-out for upstreams known to silently lowercase the qname in
+// Defaults to true so the safe behaviour is uniform across every
+// construction path ([NewUDPExchanger] direct, [NewResolver] with
+// [WithServers], [recursive.New]). Pass [WithUDP0x20](false) to opt
+// out for upstreams known to silently lowercase the qname in
 // responses (rare).
 func WithUDP0x20(v bool) UDPExchangerOption {
 	return udpExchangerOption{option.New(identUDP0x20{}, v)}
@@ -84,7 +83,7 @@ func NewUDPExchanger(addr netip.AddrPort, opts ...UDPExchangerOption) (Exchanger
 	if !addr.IsValid() {
 		return nil, fmt.Errorf("acidns: invalid server address")
 	}
-	c := udpExchangerConfig{timeout: 5 * time.Second, bufferSize: 4096}
+	c := udpExchangerConfig{timeout: 5 * time.Second, bufferSize: 4096, use0x20: true}
 	for _, o := range opts {
 		switch o.Ident() {
 		case identUDPTimeout{}:
@@ -108,8 +107,21 @@ func (e *udpExchanger) Exchange(ctx context.Context, q wire.Message) (wire.Messa
 	// case randomization happens after locating the question bytes
 	// (the locator only needs the length byte structure, which case
 	// flips don't affect).
+	//
+	// Skip 0x20 in three cases where it doesn't apply:
+	//   1. No question section (preflight FORMERR tests, raw probes).
+	//   2. Non-QUERY opcode — UPDATE / NOTIFY / DSO carry a structurally
+	//      similar "zone" / "question" field but the spec doesn't require
+	//      the response to echo it byte-exact, and UPDATE callers (e.g.
+	//      [acidns.RawRequest] consumers asserting on the wire bytes)
+	//      depend on the qname surviving unmolested.
+	// Hardcoding the negative reason here is uglier than having callers
+	// pass [WithUDP0x20](false), but the friendlier default avoids a
+	// landmine for every UPDATE / NOTIFY user who would otherwise have
+	// to know to opt out.
 	var sentQuestion []byte
-	if e.use0x20 {
+	use0x20 := e.use0x20 && len(q.Questions()) > 0 && q.Flags().Opcode() == wire.OpcodeQuery
+	if use0x20 {
 		qs, qerr := questionSectionBytes(msg)
 		if qerr != nil {
 			return wire.Message{}, fmt.Errorf("acidns: extract sent question: %w", qerr)
@@ -202,7 +214,7 @@ func (e *udpExchanger) Exchange(ctx context.Context, q wire.Message) (wire.Messa
 			}
 			continue
 		}
-		if e.use0x20 {
+		if use0x20 {
 			recvQuestion, qerr := questionSectionBytes(buf[:n])
 			if qerr != nil || !bytes.Equal(recvQuestion, sentQuestion) {
 				// 0x20 mismatch — response question's case doesn't
