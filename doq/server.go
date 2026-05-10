@@ -65,6 +65,7 @@ func NewServer(addr netip.AddrPort, h acidns.Handler, opts ...ServerOption) (*Se
 		return nil, fmt.Errorf("doq: handler is nil")
 	}
 	cfg := serverConfig{
+		handshakeTimeout:  10 * time.Second,
 		idleTimeout:       30 * time.Second,
 		streamReadTimeout: 10 * time.Second,
 		writeTimeout:      5 * time.Second,
@@ -77,6 +78,8 @@ func NewServer(addr netip.AddrPort, h acidns.Handler, opts ...ServerOption) (*Se
 		switch o.Ident() {
 		case identServerTLSConfig{}:
 			cfg.tlsConfig = option.MustGet[*tls.Config](o)
+		case identServerHandshakeTimeout{}:
+			cfg.handshakeTimeout = option.MustGet[time.Duration](o)
 		case identServerIdleTimeout{}:
 			cfg.idleTimeout = option.MustGet[time.Duration](o)
 		case identServerStreamReadTimeout{}:
@@ -122,8 +125,9 @@ func (s *Server) Run(ctx context.Context) (*Controller, error) {
 	bound := netip.AddrPortFrom(ua.AddrPort().Addr(), uint16(ua.Port))
 
 	ln, err := quic.Listen(pc, s.cfg.tlsConfig, &quic.Config{
-		MaxIdleTimeout:     s.cfg.idleTimeout,
-		MaxIncomingStreams: int64(s.cfg.maxStreamsPer),
+		HandshakeIdleTimeout: s.cfg.handshakeTimeout,
+		MaxIdleTimeout:       s.cfg.idleTimeout,
+		MaxIncomingStreams:   int64(s.cfg.maxStreamsPer),
 	})
 	if err != nil {
 		_ = pc.Close()

@@ -21,6 +21,7 @@ func (doqServerOption) doqServerOption() {}
 
 type serverConfig struct {
 	tlsConfig         *tls.Config
+	handshakeTimeout  time.Duration
 	idleTimeout       time.Duration
 	streamReadTimeout time.Duration
 	writeTimeout      time.Duration
@@ -31,6 +32,7 @@ type serverConfig struct {
 }
 
 type identServerTLSConfig struct{}
+type identServerHandshakeTimeout struct{}
 type identServerIdleTimeout struct{}
 type identServerStreamReadTimeout struct{}
 type identServerWriteTimeout struct{}
@@ -45,6 +47,16 @@ type identServerMaxConnLifetime struct{}
 // NextProtos when missing.
 func WithServerTLSConfig(tc *tls.Config) ServerOption {
 	return doqServerOption{option.New(identServerTLSConfig{}, tc)}
+}
+
+// WithServerHandshakeTimeout caps how long the QUIC handshake may
+// take. A slow-handshake peer that opens a connection and never
+// finishes ClientHello → 1-RTT can otherwise pin per-connection
+// state on the server. Distinct from [WithServerIdleTimeout] (which
+// applies to established connections). Defaults to 10s; non-positive
+// disables.
+func WithServerHandshakeTimeout(d time.Duration) ServerOption {
+	return doqServerOption{option.New(identServerHandshakeTimeout{}, d)}
 }
 
 // WithServerIdleTimeout caps how long a QUIC connection can be idle
