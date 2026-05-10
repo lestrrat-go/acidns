@@ -54,7 +54,7 @@ const (
 	doqStreamRequestCancelled quic.StreamErrorCode = 0x3
 )
 
-type exchanger struct {
+type Client struct {
 	addr             netip.AddrPort
 	timeout          time.Duration
 	tlsConfig        *tls.Config
@@ -62,8 +62,9 @@ type exchanger struct {
 	maxResponseBytes int
 }
 
-// New returns an Exchanger that talks DoQ to addr.
-func New(addr netip.AddrPort, opts ...Option) (acidns.Exchanger, error) {
+// New returns a *Client that talks DoQ to addr. *Client satisfies
+// [acidns.Exchanger].
+func New(addr netip.AddrPort, opts ...Option) (*Client, error) {
 	if !addr.IsValid() {
 		return nil, ErrInvalidAddress
 	}
@@ -119,14 +120,14 @@ func New(addr netip.AddrPort, opts ...Option) (acidns.Exchanger, error) {
 	if mr <= 0 {
 		mr = DefaultMaxResponseBytes
 	}
-	return &exchanger{addr: addr, timeout: c.timeout, tlsConfig: tcfg, padding: c.padding, maxResponseBytes: mr}, nil
+	return &Client{addr: addr, timeout: c.timeout, tlsConfig: tcfg, padding: c.padding, maxResponseBytes: mr}, nil
 }
 
 func containsALPN(list []string, want string) bool {
 	return slices.Contains(list, want)
 }
 
-func (e *exchanger) Exchange(ctx context.Context, q wire.Message) (wire.Message, error) {
+func (e *Client) Exchange(ctx context.Context, q wire.Message) (wire.Message, error) {
 	if e.padding {
 		q = wire.PadEncrypted(q)
 	}
@@ -218,7 +219,7 @@ func decodeDoQResponse(body []byte, q wire.Message) (wire.Message, error) {
 // which the caller pulls responses. Implements XFR-over-QUIC (RFC 9103
 // §4.4): one query, then a stream of responses on the same QUIC stream
 // until the server FINs the read side.
-func (e *exchanger) Stream(ctx context.Context, q wire.Message) (acidns.MessageStream, error) {
+func (e *Client) Stream(ctx context.Context, q wire.Message) (acidns.MessageStream, error) {
 	if e.padding {
 		q = wire.PadEncrypted(q)
 	}

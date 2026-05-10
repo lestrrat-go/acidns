@@ -7,7 +7,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/lestrrat-go/acidns"
 	"github.com/lestrrat-go/acidns/doq"
 	"github.com/lestrrat-go/acidns/wire"
 	"github.com/lestrrat-go/acidns/wire/rrtype"
@@ -29,8 +28,7 @@ func TestDoQStream(t *testing.T) {
 		Question(wire.NewQuestion(wire.MustParseName("example.com"), rrtype.A)).
 		Build()
 
-	se, ok := ex.(acidns.StreamExchanger)
-	require.True(t, ok)
+	se := ex
 	ctx, cancel := context.WithTimeout(t.Context(), 5*time.Second)
 	defer cancel()
 	stream, err := se.Stream(ctx, q)

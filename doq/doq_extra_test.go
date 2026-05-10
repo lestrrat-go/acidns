@@ -22,7 +22,6 @@ import (
 
 	"github.com/quic-go/quic-go"
 
-	"github.com/lestrrat-go/acidns"
 	"github.com/lestrrat-go/acidns/doq"
 	"github.com/lestrrat-go/acidns/wire"
 	"github.com/lestrrat-go/acidns/wire/rdata"
@@ -218,7 +217,7 @@ func TestExchangeIDMismatch(t *testing.T) {
 }
 
 // TestExchangeAcceptsZeroID confirms that a response carrying the
-// spec-mandated wire ID=0 is accepted, and that the exchanger restores
+// spec-mandated wire ID=0 is accepted, and that the Client restores
 // the caller's requested ID on the returned message so callers don't
 // have to special-case DoQ.
 func TestExchangeAcceptsZeroID(t *testing.T) {
@@ -318,8 +317,7 @@ func TestStreamFallbackTimeout(t *testing.T) {
 		doq.WithTimeout(150*time.Millisecond),
 		doq.WithServerName("127.0.0.1"))
 	require.NoError(t, err)
-	se, ok := ex.(acidns.StreamExchanger)
-	require.True(t, ok)
+	se := ex
 
 	q := buildQuery(t, 7)
 	_, err = se.Stream(t.Context(), q)
@@ -340,8 +338,7 @@ func TestStreamIDMismatch(t *testing.T) {
 
 	ex, err := doq.New(addr, doq.WithTLSConfig(cfg))
 	require.NoError(t, err)
-	se, ok := ex.(acidns.StreamExchanger)
-	require.True(t, ok)
+	se := ex
 
 	q := buildQuery(t, 0xaa55)
 	ctx, cancel := context.WithTimeout(t.Context(), 5*time.Second)
@@ -372,8 +369,7 @@ func TestStreamMultipleResponses(t *testing.T) {
 
 	ex, err := doq.New(addr, doq.WithTLSConfig(cfg))
 	require.NoError(t, err)
-	se, ok := ex.(acidns.StreamExchanger)
-	require.True(t, ok)
+	se := ex
 
 	q := buildQuery(t, 0x4242)
 	ctx, cancel := context.WithTimeout(t.Context(), 5*time.Second)
@@ -411,8 +407,7 @@ func TestStreamContextCancelDuringNext(t *testing.T) {
 
 	ex, err := doq.New(addr, doq.WithTLSConfig(cfg))
 	require.NoError(t, err)
-	se, ok := ex.(acidns.StreamExchanger)
-	require.True(t, ok)
+	se := ex
 
 	q := buildQuery(t, 0x1357)
 	dialCtx, dialCancel := context.WithTimeout(t.Context(), 5*time.Second)
@@ -444,8 +439,7 @@ func TestStreamDialFailureWithDeadline(t *testing.T) {
 
 	ex, err := doq.New(addr, doq.WithServerName("127.0.0.1"))
 	require.NoError(t, err)
-	se, ok := ex.(acidns.StreamExchanger)
-	require.True(t, ok)
+	se := ex
 
 	q := buildQuery(t, 9)
 	ctx, cancel := context.WithTimeout(t.Context(), 200*time.Millisecond)
@@ -600,8 +594,7 @@ func TestStreamRefusedAtOpen(t *testing.T) {
 	addr, cfg := startRefusingDoQ(t, closeAfterAccept)
 	ex, err := doq.New(addr, doq.WithTLSConfig(cfg))
 	require.NoError(t, err)
-	se, ok := ex.(acidns.StreamExchanger)
-	require.True(t, ok)
+	se := ex
 
 	q := buildQuery(t, 12)
 	ctx, cancel := context.WithTimeout(t.Context(), 5*time.Second)
@@ -633,8 +626,7 @@ func TestStreamRefusedAfterOpen(t *testing.T) {
 	addr, cfg := startRefusingDoQ(t, closeAfterStreamOpen)
 	ex, err := doq.New(addr, doq.WithTLSConfig(cfg))
 	require.NoError(t, err)
-	se, ok := ex.(acidns.StreamExchanger)
-	require.True(t, ok)
+	se := ex
 
 	q := buildQuery(t, 12)
 	ctx, cancel := context.WithTimeout(t.Context(), 5*time.Second)
@@ -754,8 +746,7 @@ func TestStreamOpenStreamTimeout(t *testing.T) {
 		doq.WithTimeout(500*time.Millisecond),
 	)
 	require.NoError(t, err)
-	se, ok := ex.(acidns.StreamExchanger)
-	require.True(t, ok)
+	se := ex
 
 	q := buildQuery(t, 32)
 	_, err = se.Stream(t.Context(), q)
@@ -865,8 +856,7 @@ func TestExchangeBrokenAfterDial(t *testing.T) {
 
 	ex, err := doq.New(addr, doq.WithTLSConfig(clientTLS))
 	require.NoError(t, err)
-	se, ok := ex.(acidns.StreamExchanger)
-	require.True(t, ok)
+	se := ex
 
 	q := buildQuery(t, 21)
 	for range 25 {
