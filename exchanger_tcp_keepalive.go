@@ -112,13 +112,18 @@ func (e *TCPKeepAliveExchanger) Exchange(ctx context.Context, q wire.Message) (w
 		q = ensureKeepAliveOption(q)
 	}
 
+	// exchangeMu wraps acquireConn so a concurrent caller cannot
+	// observe a conn that the previous exchange just closed on the
+	// idle=0 path. The single persistent connection serialises
+	// exchanges anyway (no pipelining), so widening the lock costs
+	// nothing in practice.
+	e.exchangeMu.Lock()
+	defer e.exchangeMu.Unlock()
+
 	conn, err := e.acquireConn(ctx)
 	if err != nil {
 		return wire.Message{}, err
 	}
-
-	e.exchangeMu.Lock()
-	defer e.exchangeMu.Unlock()
 
 	resp, err := streamframe.ExchangeOnConn(ctx, conn, q, e.cfg.timeout)
 	if err != nil {
