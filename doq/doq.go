@@ -80,6 +80,8 @@ func New(addr netip.AddrPort, opts ...Option) (acidns.Exchanger, error) {
 			c.padding = option.MustGet[bool](o)
 		case identMaxResponseBytes{}:
 			c.maxResponseBytes = option.MustGet[int](o)
+		case identInsecure{}:
+			c.insecure = option.MustGet[bool](o)
 		}
 	}
 
@@ -104,8 +106,13 @@ func New(addr netip.AddrPort, opts ...Option) (acidns.Exchanger, error) {
 	}
 	// IP-literal address with no ServerName: refuse, mirroring [dot.New].
 	// Authenticating a TLS handshake against an IP-as-SNI is a footgun.
-	if tcfg.ServerName == "" {
+	// WithInsecure callers opt out of cert verification entirely so
+	// the SNI requirement no longer protects anything.
+	if tcfg.ServerName == "" && !c.insecure {
 		return nil, fmt.Errorf("doq: WithServerName (or *tls.Config.ServerName) required when addr is an IP literal")
+	}
+	if c.insecure {
+		tcfg.InsecureSkipVerify = true
 	}
 
 	mr := c.maxResponseBytes

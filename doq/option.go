@@ -31,6 +31,7 @@ type config struct {
 	tlsConfig        *tls.Config
 	serverName       string
 	padding          bool
+	insecure         bool
 	maxResponseBytes int
 }
 
@@ -38,6 +39,7 @@ type identTimeout struct{}
 type identTLSConfig struct{}
 type identServerName struct{}
 type identPadding struct{}
+type identInsecure struct{}
 type identMaxResponseBytes struct{}
 
 // WithTimeout sets a per-exchange timeout used when ctx has no deadline.
@@ -59,6 +61,15 @@ func WithServerName(name string) Option {
 // WithPadding toggles RFC 8467 §4.1 block-padding. Default is true.
 func WithPadding(v bool) Option {
 	return doqOption{option.New(identPadding{}, v)}
+}
+
+// WithInsecure disables TLS certificate verification on the QUIC
+// handshake. Use only against a known loopback / test endpoint —
+// disabling verification on a public network strips DoQ of every
+// authentication property the transport is meant to provide. The TLS
+// 1.3 floor (RFC 9250 §4.1) is preserved.
+func WithInsecure(v bool) Option {
+	return doqOption{option.New(identInsecure{}, v)}
 }
 
 // WithMaxResponseBytes caps how many response bytes the client will
