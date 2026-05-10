@@ -141,7 +141,13 @@ func verifyExtractSIG(msg []byte, key rdata.DNSKEY, expectedSigner wire.Name, no
 	if err := verifySignature(key.Algorithm(), key.PublicKey(), signedData, sig.signature); err != nil {
 		return nil, parsedSIG{}, err
 	}
-	if now.Unix() > int64(sig.expiration) || now.Unix() < int64(sig.inception) {
+	// RFC 2931 §3.1 / RFC 4034 §3.1.5: inception/expiration are
+	// 32-bit absolute seconds-since-epoch interpreted under RFC 1982
+	// serial-number arithmetic (mod 2³²). The naive int64 comparison
+	// wraps incorrectly past 2106-02-07; use the canonical
+	// signed-wraparound predicate instead.
+	nowU := uint32(now.Unix())
+	if sig0SerialLT(sig.expiration, nowU) || sig0SerialLT(nowU, sig.inception) {
 		return nil, parsedSIG{}, ErrBadTime
 	}
 	return body, sig, nil
@@ -170,6 +176,11 @@ func VerifyWithReplay(msg []byte, key rdata.DNSKEY, expectedSigner wire.Name, no
 	}
 	return body, nil
 }
+
+// sig0SerialLT is RFC 1982 §3.2 mod-2³² "less than" on uint32 — see
+// the same predicate in dnssec/validator/validatorbb. Inlined here so
+// the sig0 package does not import the validator package.
+func sig0SerialLT(a, b uint32) bool { return int32(a-b) < 0 }
 
 // buildSIGRDataPrefix builds the part of the SIG(0) rdata that comes
 // before the signature field — exactly the bytes signed/verified.

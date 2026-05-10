@@ -190,6 +190,21 @@ func (r RRSIG) Labels() uint8                  { return r.labels }
 func (r RRSIG) OriginalTTL() time.Duration     { return time.Duration(r.origTTL) * time.Second }
 func (r RRSIG) SignatureExpiration() time.Time { return time.Unix(int64(r.sigExp), 0).UTC() }
 func (r RRSIG) SignatureInception() time.Time  { return time.Unix(int64(r.sigInc), 0).UTC() }
+
+// SignatureExpirationRaw returns the on-the-wire 32-bit
+// seconds-since-epoch value of the expiration field. RFC 4034 §3.1.5
+// requires interpretation under RFC 1982 serial-number arithmetic
+// (mod 2³²) — naive [time.Time] comparison silently mis-classifies
+// signatures that legitimately span the 2106-02-07 wrap. Validators
+// performing inception/expiration bound checks SHOULD compare against
+// these raw values, not the time.Time accessor.
+func (r RRSIG) SignatureExpirationRaw() uint32 { return r.sigExp }
+
+// SignatureInceptionRaw returns the on-the-wire 32-bit
+// seconds-since-epoch value of the inception field. See
+// [RRSIG.SignatureExpirationRaw] for why callers should prefer this
+// over the time.Time form.
+func (r RRSIG) SignatureInceptionRaw() uint32 { return r.sigInc }
 func (r RRSIG) KeyTag() uint16                 { return r.keyTag }
 func (r RRSIG) SignerName() wirebb.Name        { return r.signerName }
 func (r RRSIG) Signature() []byte              { return slices.Clone(r.signature) }
