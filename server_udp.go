@@ -348,9 +348,10 @@ func (l *udpLoop) handlePacket(ctx context.Context, body []byte, src netip.AddrP
 
 	switch verdict, reply := PreflightRequest(q); verdict {
 	case PreflightDrop:
+		l.ctrl.preflightDrops.Add(1)
 		return
 	case PreflightReply:
-			_ = w.WriteMsg(reply)
+		_ = w.WriteMsg(reply)
 		return
 	}
 
