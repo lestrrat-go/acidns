@@ -273,9 +273,20 @@ func Browse(ctx context.Context, service string, opts ...BrowseOption) ([]Servic
 	merged := map[string]Service{}
 	buf := make([]byte, 9000)
 	for {
-		n, _, err := conn.ReadFrom(buf)
+		n, src, err := conn.ReadFrom(buf)
 		if err != nil {
 			break
+		}
+		// RFC 6762 §11 requires receivers to ignore mDNS traffic whose
+		// source is not on-link. We can't see the IP TTL or interface
+		// from a vanilla net.PacketConn, so we approximate by demanding
+		// a non-public source address: link-local, RFC 1918, ULA, or
+		// loopback. An off-link forgery from a globally-routable peer
+		// is the attack we're closing here — a misconfigured LAN with
+		// a globally-routable host will still work via the broader
+		// allow-list.
+		if !linkLocalishSource(src) {
+			continue
 		}
 		resp, err := wire.Unmarshal(buf[:n])
 		if err != nil {
@@ -294,6 +305,31 @@ func Browse(ctx context.Context, service string, opts ...BrowseOption) ([]Servic
 		out = append(out, s)
 	}
 	return out, nil
+}
+
+// linkLocalishSource reports whether src is plausibly an on-link mDNS
+// peer per the RFC 6762 §11 requirement. Returns false for nil / unknown
+// address types so a future net.Addr family does not silently accept
+// arbitrary sources.
+func linkLocalishSource(src net.Addr) bool {
+	ua, ok := src.(*net.UDPAddr)
+	if !ok {
+		return false
+	}
+	addr, ok := netip.AddrFromSlice(ua.IP)
+	if !ok {
+		return false
+	}
+	addr = addr.Unmap()
+	switch {
+	case addr.IsLoopback():
+		return true
+	case addr.IsLinkLocalUnicast():
+		return true
+	case addr.IsPrivate():
+		return true
+	}
+	return false
 }
 
 func openMulticast(ifce *net.Interface) (*net.UDPConn, error) {
