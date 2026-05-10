@@ -316,6 +316,19 @@ func NewSecretPool(opts ...PoolOption) (*MemorySecretPool, error) {
 	if rotateEvery > 0 {
 		p.stop = make(chan struct{})
 		go func() {
+			// The project's no-recover policy is for handler dispatch:
+			// a panic there is the operator's bug to surface. This
+			// goroutine is library-owned background machinery — a
+			// panic propagating from Rotate (e.g. an OS RNG hiccup
+			// inside rand.Read) shouldn't take down the host process.
+			// Recover, log, and stop. The previous secret stays
+			// current; callers that depend on continuous rotation
+			// should monitor process logs for this line.
+			defer func() {
+				if r := recover(); r != nil {
+					log.Printf("cookies: secret rotation goroutine recovered from panic: %v", r)
+				}
+			}()
 			tick := time.NewTicker(rotateEvery)
 			defer tick.Stop()
 			for {
