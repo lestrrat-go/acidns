@@ -39,15 +39,23 @@ type Entry struct {
 	expiresAt  time.Time
 }
 
-// Answer returns a copy of the answer-section records. The returned
-// slice is owned by the caller; mutating it does not affect the cached
-// entry.
+// Answer returns a copy of the answer-section records.
+//
+// CARVE-OUT: unlike most accessors in the module — which alias their
+// internal storage to avoid per-call allocation — Entry's section
+// accessors deliberately clone. Cache safety is the load-bearing
+// invariant here: a Cache implementation that forgets to clone
+// Entry's slice fields cannot poison readers, and callers cannot
+// mutate the returned value to shift its semantics (e.g. zeroing
+// ExpiresAt would mark the entry expired).
 func (e Entry) Answer() []wire.Record { return slices.Clone(e.answer) }
 
 // Authority returns a copy of the authority-section records.
+// See [Entry.Answer] for the clone-vs-alias rationale.
 func (e Entry) Authority() []wire.Record { return slices.Clone(e.authority) }
 
 // Additional returns a copy of the additional-section records.
+// See [Entry.Answer] for the clone-vs-alias rationale.
 func (e Entry) Additional() []wire.Record { return slices.Clone(e.additional) }
 
 // RCODE returns the response code carried by the cached answer.
@@ -114,11 +122,22 @@ func (b *EntryBuilder) TTL(d time.Duration) *EntryBuilder {
 // reading the [Get] expiry check uses for jump-immune comparison.
 func (b *EntryBuilder) ExpiresAt(t time.Time) *EntryBuilder { b.e.expiresAt = t; return b }
 
-// Build returns the constructed Entry. Currently infallible; the
-// (Entry, error) shape matches the rest of the builder family in
-// this module so future validation can be added without an API
-// break.
-func (b *EntryBuilder) Build() (Entry, error) { return b.e, nil }
+// Build returns the constructed Entry and resets b to the zero state
+// — single-shot semantics. The Entry's slice fields ALIAS the slices
+// the builder accumulated; the reset zeroes b's slice fields so a
+// subsequent reuse of b cannot mutate the previously-built Entry.
+// Currently infallible; the (Entry, error) shape matches the rest of
+// the builder family in this module so future validation can be
+// added without an API break.
+//
+// Entry's accessors clone on read (see [Entry.Answer]); this is the
+// deliberate cache-safety carve-out. Callers of EntryBuilder remain
+// alias-by-default on input.
+func (b *EntryBuilder) Build() (Entry, error) {
+	out := b.e
+	*b = EntryBuilder{}
+	return out, nil
+}
 
 // DefaultMemoryCacheSize is the default upper bound on the number of
 // entries [MemoryCache] retains across all internal shards; new
