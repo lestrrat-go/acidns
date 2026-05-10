@@ -8,7 +8,7 @@ import (
 )
 
 // decryptHelper / encryptHelper duplicate the dnscrypt package's
-// internal logic (which lives behind the exchanger surface) for the
+// internal logic (which lives behind the Client surface) for the
 // fake-resolver test in dnscrypt_test.go.
 func decryptHelper(sharedKey []byte, clientNonce [12]byte, ct []byte) ([]byte, error) {
 	aead, err := chacha20poly1305.NewX(sharedKey)

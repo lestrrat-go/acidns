@@ -76,7 +76,7 @@ func (h *echoHandler) ServeDNS(_ context.Context, w acidns.ResponseWriter, q wir
 }
 
 // TestServerRoundTrip exercises a single client query against the
-// server using the existing client exchanger.
+// server using the existing client Client.
 func TestServerRoundTrip(t *testing.T) {
 	t.Parallel()
 	fx := mkFixture(t)

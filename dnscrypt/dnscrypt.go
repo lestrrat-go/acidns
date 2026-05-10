@@ -32,7 +32,6 @@ import (
 	"golang.org/x/crypto/chacha20poly1305"
 	"golang.org/x/crypto/curve25519"
 
-	"github.com/lestrrat-go/acidns"
 	"github.com/lestrrat-go/acidns/wire"
 	"github.com/lestrrat-go/option/v3"
 )
@@ -383,7 +382,7 @@ func unpad(b []byte) ([]byte, error) {
 	return nil, fmt.Errorf("dnscrypt: padding sentinel not found")
 }
 
-type exchanger struct {
+type Client struct {
 	addr      netip.AddrPort
 	cert      *Cert
 	timeout   time.Duration
@@ -398,7 +397,7 @@ type exchanger struct {
 // Exchanger from an unverified cert because the resolver's short-term
 // X25519 public key is the very thing DNSCrypt's signature is meant
 // to bind, and skipping verification defeats the whole protocol.
-func New(addr netip.AddrPort, cert *Cert, opts ...Option) (acidns.Exchanger, error) {
+func New(addr netip.AddrPort, cert *Cert, opts ...Option) (*Client, error) {
 	if cert == nil {
 		return nil, fmt.Errorf("dnscrypt: cert is nil")
 	}
@@ -422,7 +421,7 @@ func New(addr netip.AddrPort, cert *Cert, opts ...Option) (acidns.Exchanger, err
 	if c.now == nil {
 		c.now = time.Now
 	}
-	return &exchanger{addr: addr, cert: cert, timeout: c.timeout, now: c.now, clockSkew: c.clockSkew}, nil
+	return &Client{addr: addr, cert: cert, timeout: c.timeout, now: c.now, clockSkew: c.clockSkew}, nil
 }
 
 // Exchange encrypts q, sends it via UDP, and decrypts the response.
@@ -432,7 +431,7 @@ func New(addr netip.AddrPort, cert *Cert, opts ...Option) (acidns.Exchanger, err
 // continue using a cert past ValidUntil. A failed re-check surfaces
 // [ErrCertExpired]; the caller is expected to fetch a fresh cert and
 // rebuild the Exchanger.
-func (e *exchanger) Exchange(ctx context.Context, q wire.Message) (wire.Message, error) {
+func (e *Client) Exchange(ctx context.Context, q wire.Message) (wire.Message, error) {
 	now := e.now()
 	if !certWithinWindow(now, e.cert, e.clockSkew) {
 		return wire.Message{}, fmt.Errorf("%w: now=%s window=[%s, %s] skew=%s",
@@ -513,7 +512,7 @@ func (e *exchanger) Exchange(ctx context.Context, q wire.Message) (wire.Message,
 	// AEAD only proves the resolver's short-term key signed *some* DNS
 	// message — not necessarily the one we asked. Bind the response to
 	// the request the same way every other transport in this repo does
-	// (UDP exchanger, streamframe, DoH, DoQ).
+	// (UDP Client, streamframe, DoH, DoQ).
 	if resp.ID() != q.ID() {
 		return wire.Message{}, fmt.Errorf("dnscrypt: response id %d != request id %d", resp.ID(), q.ID())
 	}
