@@ -28,12 +28,14 @@ type config struct {
 	tlsConfig  *tls.Config
 	serverName string
 	padding    bool
+	insecure   bool
 }
 
 type identTimeout struct{}
 type identTLSConfig struct{}
 type identServerName struct{}
 type identPadding struct{}
+type identInsecure struct{}
 
 // WithTimeout sets a per-exchange timeout used when the caller's
 // context has no deadline. Defaults to 10 seconds (TLS handshake
@@ -56,6 +58,19 @@ func WithTLSConfig(tc *tls.Config) Option {
 // servers whose certificate is bound to a hostname.
 func WithServerName(name string) Option {
 	return dotOption{option.New(identServerName{}, name)}
+}
+
+// WithInsecure disables TLS certificate verification on outbound
+// connections. By default the exchanger requires a valid chain to a
+// system root or to the RootCAs configured via [WithTLSConfig]; pass
+// true here to skip that check entirely. Use only against a known
+// loopback / test endpoint — disabling verification on a public
+// network strips DoT of every privacy and authentication property the
+// transport is meant to provide. The TLS minimum-version floor is
+// preserved (the option toggles only the cert chain, not the
+// ciphersuite policy).
+func WithInsecure(v bool) Option {
+	return dotOption{option.New(identInsecure{}, v)}
 }
 
 // WithPadding toggles RFC 8467 §4.1 block-padding. Default is true:

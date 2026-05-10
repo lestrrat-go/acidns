@@ -74,6 +74,8 @@ func New(addr netip.AddrPort, opts ...Option) (acidns.Exchanger, error) {
 			c.serverName = option.MustGet[string](o)
 		case identPadding{}:
 			c.padding = option.MustGet[bool](o)
+		case identInsecure{}:
+			c.insecure = option.MustGet[bool](o)
 		}
 	}
 
@@ -106,8 +108,11 @@ func New(addr netip.AddrPort, opts ...Option) (acidns.Exchanger, error) {
 	// any cert that happens to include the IP — typically not what the
 	// caller wants. Refuse this combination so a misuse is loud, not
 	// silent. Use WithServerName or pre-configure the *tls.Config.
-	if tcfg.ServerName == "" && !isHostnameAddr(addr) {
+	if tcfg.ServerName == "" && !isHostnameAddr(addr) && !c.insecure {
 		return nil, fmt.Errorf("dot: WithServerName (or *tls.Config.ServerName) required when addr is an IP literal")
+	}
+	if c.insecure {
+		tcfg.InsecureSkipVerify = true
 	}
 
 	return &exchanger{addr: addr, timeout: c.timeout, tlsConfig: tcfg, padding: c.padding}, nil
