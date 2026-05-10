@@ -28,6 +28,13 @@ import (
 // responses and is therefore rejected at AddZone time.
 var ErrNoSOA = errors.New("authoritative: zone has no SOA")
 
+// ErrApexCNAMEOrDNAME is returned when AddZone encounters a CNAME or
+// DNAME record at the zone apex. RFC 1034 §3.6.2 forbids co-locating a
+// CNAME with any other RRset at the same name; the apex always carries
+// SOA/NS, so a CNAME or DNAME here would mask both. Rather than load a
+// zone that misbehaves on every query, refuse it at construction.
+var ErrApexCNAMEOrDNAME = errors.New("authoritative: zone apex carries CNAME or DNAME")
+
 // maxCNAMEChain bounds CNAME chasing within a single response so a malformed
 // zone with a self-referential CNAME loop cannot stall a request.
 const maxCNAMEChain = 8
@@ -43,6 +50,7 @@ type Authoritative struct {
 	notifySem     chan struct{} // counting semaphore; nil disables the cap
 	axfrPolicy    AXFRPolicy
 	updatePolicy  UpdatePolicy
+	onUpdate      OnUpdate
 	minimalANY    bool
 }
 
@@ -74,12 +82,15 @@ func New(opts ...Option) (*Authoritative, error) {
 			c.minimalANY = option.MustGet[bool](o)
 		case identMaxNotifyInflight{}:
 			c.maxNotifyInflight = option.MustGet[int](o)
+		case identOnUpdate{}:
+			c.onUpdate = option.MustGet[OnUpdate](o)
 		}
 	}
 	a.notifyHandler = c.notifyHandler
 	a.notifyPolicy = c.notifyPolicy
 	a.axfrPolicy = c.axfrPolicy
 	a.updatePolicy = c.updatePolicy
+	a.onUpdate = c.onUpdate
 	a.minimalANY = c.minimalANY
 	if c.maxNotifyInflight > 0 {
 		a.notifySem = make(chan struct{}, c.maxNotifyInflight)
@@ -98,6 +109,17 @@ func (a *Authoritative) AddZone(z zonefile.Zone) error {
 		return fmt.Errorf("%w: %s", ErrNoSOA, z.Origin())
 	}
 	_ = soa // SOA captured via record
+	// RFC 1034 §3.6.2: a CNAME or DNAME at the apex would shadow the
+	// SOA/NS that AddZone is about to register, leaving the zone
+	// unanswerable for any query type. Refuse such zones.
+	for _, rec := range z.Records() {
+		if !rec.Name().Equal(z.Origin()) {
+			continue
+		}
+		if rec.Type() == rrtype.CNAME || rec.Type() == rrtype.DNAME {
+			return fmt.Errorf("%w: %s", ErrApexCNAMEOrDNAME, z.Origin())
+		}
+	}
 	idx := &zoneIndex{
 		origin:     z.Origin(),
 		soaRec:     soaRec,

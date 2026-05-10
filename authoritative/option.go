@@ -26,6 +26,7 @@ type config struct {
 	maxNotifyInflight int
 	axfrPolicy        AXFRPolicy
 	updatePolicy      UpdatePolicy
+	onUpdate          OnUpdate
 	minimalANY        bool
 }
 
@@ -36,6 +37,7 @@ type identAXFRPolicy struct{}
 type identNotifyPolicy struct{}
 type identMinimalANY struct{}
 type identMaxNotifyInflight struct{}
+type identOnUpdate struct{}
 
 // UpdatePolicy decides whether an inbound RFC 2136 UPDATE may proceed.
 // It is invoked after the request has been parsed but before any zone
@@ -82,6 +84,19 @@ type AXFRPolicy func(ctx context.Context, w acidns.ResponseWriter, q wire.Messag
 // typical policy matches w.RemoteAddr() against the configured
 // primaries.
 type NotifyPolicy func(ctx context.Context, w acidns.ResponseWriter, q wire.Message) bool
+
+// OnUpdate is invoked after a successful RFC 2136 UPDATE that
+// changed at least one record in the zone. The server has already
+// bumped the SOA serial when this fires (oldSerial → newSerial); the
+// callback runs after the response is sent so a slow handler does not
+// stretch the request's tail latency. Typical use is to broadcast an
+// outbound NOTIFY to configured secondaries via [notify.Broadcast].
+//
+// The handler is invoked synchronously after the response — wrap in a
+// goroutine if work might block longer than the next inbound UPDATE
+// can wait. UPDATEs that don't actually change zone data (idempotent
+// adds, deletes of already-absent records) do NOT fire the handler.
+type OnUpdate func(ctx context.Context, origin wire.Name, oldSerial, newSerial uint32)
 
 // WithZone adds z to the server's zones.
 func WithZone(z zonefile.Zone) Option {
@@ -139,6 +154,13 @@ func WithNotifyPolicy(p NotifyPolicy) Option {
 // amplification risk.
 func WithMinimalANY(v bool) Option {
 	return authOption{option.New(identMinimalANY{}, v)}
+}
+
+// WithOnUpdate installs a callback that fires after every UPDATE
+// that actually mutated the zone. Use this to drive outbound NOTIFY
+// to secondaries via [notify.Broadcast].
+func WithOnUpdate(f OnUpdate) Option {
+	return authOption{option.New(identOnUpdate{}, f)}
 }
 
 // WithMaxNotifyInflight caps how many [NotifyHandler] goroutines may
