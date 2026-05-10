@@ -72,12 +72,13 @@ func NewServer(addr netip.AddrPort, h acidns.Handler, opts ...ServerOption) (*Se
 		return nil, fmt.Errorf("dot: handler is nil")
 	}
 	cfg := serverConfig{
-		handshakeTimeout: 10 * time.Second,
-		idleTimeout:      10 * time.Second,
-		writeTimeout:     5 * time.Second,
-		maxConnections:   1024,
-		maxMessageSize:   16 * 1024,
-		maxInflightPer:   32,
+		handshakeTimeout:  10 * time.Second,
+		idleTimeout:       10 * time.Second,
+		writeTimeout:      5 * time.Second,
+		maxConnections:    1024,
+		maxConnsPerSource: 32,
+		maxMessageSize:    16 * 1024,
+		maxInflightPer:    32,
 		// Match TCP defaults — DoT amortises TLS state across many
 		// queries on a long-lived connection, so an unbounded
 		// per-connection budget is at least as risky here as on TCP.
@@ -96,6 +97,8 @@ func NewServer(addr netip.AddrPort, h acidns.Handler, opts ...ServerOption) (*Se
 			cfg.writeTimeout = option.MustGet[time.Duration](o)
 		case identServerMaxConnections{}:
 			cfg.maxConnections = option.MustGet[int](o)
+		case identServerMaxConnsPerSource{}:
+			cfg.maxConnsPerSource = option.MustGet[int](o)
 		case identServerMaxMessageSize{}:
 			cfg.maxMessageSize = option.MustGet[int](o)
 		case identServerMaxQueriesPerConn{}:
@@ -184,6 +187,48 @@ type serverLoop struct {
 	sem      chan struct{}
 	wg       sync.WaitGroup
 	bodyPool sync.Pool
+
+	// perSourceMu guards perSource. Keyed on netip.Addr.Unmap so a
+	// v4-mapped v6 client shares a bucket with its v4 form.
+	perSourceMu sync.Mutex
+	perSource   map[netip.Addr]int
+}
+
+// reservePerSource increments the per-source counter if the cap permits
+// and returns true. When the cap would be exceeded it returns false and
+// the caller closes the connection without spawning a serve goroutine.
+func (l *serverLoop) reservePerSource(addr netip.Addr) bool {
+	if l.cfg.maxConnsPerSource <= 0 {
+		return true
+	}
+	addr = addr.Unmap()
+	l.perSourceMu.Lock()
+	defer l.perSourceMu.Unlock()
+	if l.perSource[addr] >= l.cfg.maxConnsPerSource {
+		return false
+	}
+	if l.perSource == nil {
+		l.perSource = make(map[netip.Addr]int)
+	}
+	l.perSource[addr]++
+	return true
+}
+
+// releasePerSource decrements the counter for addr; the entry is
+// removed when the count reaches zero so the map does not grow without
+// bound across the lifetime of the listener.
+func (l *serverLoop) releasePerSource(addr netip.Addr) {
+	if l.cfg.maxConnsPerSource <= 0 {
+		return
+	}
+	addr = addr.Unmap()
+	l.perSourceMu.Lock()
+	defer l.perSourceMu.Unlock()
+	if l.perSource[addr] <= 1 {
+		delete(l.perSource, addr)
+		return
+	}
+	l.perSource[addr]--
 }
 
 func (l *serverLoop) run(ctx context.Context) error {
@@ -242,16 +287,25 @@ func (l *serverLoop) run(ctx context.Context) error {
 			return fmt.Errorf("dot: accept: %w", err)
 		}
 		tempBackoff = 0
+		src := remoteAddrFromConn(conn).Addr()
+		if !l.reservePerSource(src) {
+			if l.sem != nil {
+				<-l.sem
+			}
+			_ = conn.Close()
+			continue
+		}
 		l.wg.Add(1)
-		go func(c net.Conn) {
+		go func(c net.Conn, src netip.Addr) {
 			defer func() {
+				l.releasePerSource(src)
 				if l.sem != nil {
 					<-l.sem
 				}
 				l.wg.Done()
 			}()
 			l.serveConn(ctx, c)
-		}(conn)
+		}(conn, src)
 	}
 }
 

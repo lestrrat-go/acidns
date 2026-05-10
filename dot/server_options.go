@@ -25,6 +25,7 @@ type serverConfig struct {
 	idleTimeout       time.Duration
 	writeTimeout      time.Duration
 	maxConnections    int
+	maxConnsPerSource int
 	maxMessageSize    int
 	maxQueriesPerConn int
 	maxConnLifetime   time.Duration
@@ -36,6 +37,7 @@ type identServerHandshakeTimeout struct{}
 type identServerIdleTimeout struct{}
 type identServerWriteTimeout struct{}
 type identServerMaxConnections struct{}
+type identServerMaxConnsPerSource struct{}
 type identServerMaxMessageSize struct{}
 type identServerMaxQueriesPerConn struct{}
 type identServerMaxConnLifetime struct{}
@@ -86,6 +88,14 @@ func WithServerWriteTimeout(d time.Duration) ServerOption {
 // backlog. A non-positive value disables the cap. Defaults to 1024.
 func WithServerMaxConnections(n int) ServerOption {
 	return dotServerOption{option.New(identServerMaxConnections{}, n)}
+}
+
+// WithServerMaxConnsPerSource caps the number of concurrent TLS
+// connections accepted from a single client IP. A single misbehaving
+// peer cannot drain the global [WithServerMaxConnections] budget when
+// this is set. Defaults to 32; non-positive disables.
+func WithServerMaxConnsPerSource(n int) ServerOption {
+	return dotServerOption{option.New(identServerMaxConnsPerSource{}, n)}
 }
 
 // WithServerMaxMessageSize caps the length-prefixed body the server
