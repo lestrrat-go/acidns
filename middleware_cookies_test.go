@@ -210,7 +210,7 @@ func TestCookiesLargeResponseGateUDPTruncates(t *testing.T) {
 	t.Parallel()
 	srv := newCookiesServer(t)
 	h := acidns.NewCookies(largeAnswerInner(), srv,
-		acidns.WithRequireCookieForLargeResponse(true, 512))
+		acidns.WithRequireCookieForLargeResponse(true), acidns.WithRequireCookieMaxBytes(512))
 
 	q, err := wire.NewMessageBuilder().
 		ID(10).
@@ -233,7 +233,7 @@ func TestCookiesLargeResponseGateTCPPassesThrough(t *testing.T) {
 	t.Parallel()
 	srv := newCookiesServer(t)
 	h := acidns.NewCookies(largeAnswerInner(), srv,
-		acidns.WithRequireCookieForLargeResponse(true, 512))
+		acidns.WithRequireCookieForLargeResponse(true), acidns.WithRequireCookieMaxBytes(512))
 
 	q, err := wire.NewMessageBuilder().
 		ID(11).
@@ -256,7 +256,7 @@ func TestCookiesLargeResponseGateValidCookieAllowsLarge(t *testing.T) {
 	t.Parallel()
 	srv := newCookiesServer(t)
 	h := acidns.NewCookies(largeAnswerInner(), srv,
-		acidns.WithRequireCookieForLargeResponse(true, 512))
+		acidns.WithRequireCookieForLargeResponse(true), acidns.WithRequireCookieMaxBytes(512))
 
 	addr := netip.MustParseAddr("198.51.100.12")
 	cc := [8]byte{2, 2, 2, 2, 2, 2, 2, 2}

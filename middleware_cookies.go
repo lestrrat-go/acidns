@@ -50,35 +50,39 @@ type cookieConfig struct {
 	largeRespMaxSize int
 }
 
-// requireForLargeSpec carries the (enable, maxBytes) tuple.
-type requireForLargeSpec struct {
-	enable   bool
-	maxBytes int
-}
-
 type identCookieClock struct{}
 type identRequireCookieForLarge struct{}
+type identRequireCookieMaxBytes struct{}
 
-// WithClock injects a custom clock. Test-only — production code
-// should leave this unset and rely on time.Now.
-func WithClock(now func() time.Time) CookieOption {
+// WithCookieClock injects a custom clock. Test-only — production
+// code should leave this unset and rely on time.Now.
+func WithCookieClock(now func() time.Time) CookieOption {
 	return cookieOption{option.New(identCookieClock{}, now)}
 }
 
-// WithRequireCookieForLargeResponse toggles RFC 7873 §1's amplification
-// defence: an inbound UDP query that lacks a valid client/server cookie
-// receives a TC=1 truncated reply when the inner handler's response
-// would exceed maxBytes, forcing the client to retry over TCP (where
-// the 3-way handshake provides a path-validated channel that cannot be
-// spoofed). TCP queries pass through unchanged. A non-positive maxBytes
-// falls back to 1232 (RFC 9715-recommended EDNS UDP ceiling).
+// WithRequireCookieForLargeResponse toggles RFC 7873 §1's
+// amplification defence: an inbound UDP query that lacks a valid
+// client/server cookie receives a TC=1 truncated reply when the inner
+// handler's response would exceed the configured threshold, forcing
+// the client to retry over TCP (where the 3-way handshake provides a
+// path-validated channel that cannot be spoofed). TCP queries pass
+// through unchanged.
 //
-// Default: enabled at 1232 bytes. Pass enable=false to disable on
-// listeners where amplification is not a concern (e.g. localhost-only
-// or LAN-only deployments). The previous "off by default" behaviour
-// silently disabled the defence; flipping the default closes the gap.
-func WithRequireCookieForLargeResponse(enable bool, maxBytes int) CookieOption {
-	return cookieOption{option.New(identRequireCookieForLarge{}, requireForLargeSpec{enable: enable, maxBytes: maxBytes})}
+// Default: enabled. Pass enable=false to disable on listeners where
+// amplification is not a concern (e.g. localhost-only or LAN-only
+// deployments). The threshold is set independently via
+// [WithRequireCookieMaxBytes].
+func WithRequireCookieForLargeResponse(enable bool) CookieOption {
+	return cookieOption{option.New(identRequireCookieForLarge{}, enable)}
+}
+
+// WithRequireCookieMaxBytes sets the response-size threshold above
+// which uncookied UDP queries get a TC=1 truncated reply (see
+// [WithRequireCookieForLargeResponse]). Defaults to 1232 — the
+// RFC 9715 EDNS UDP ceiling. Non-positive values reset to the
+// default. Has no effect when the toggle is disabled.
+func WithRequireCookieMaxBytes(maxBytes int) CookieOption {
+	return cookieOption{option.New(identRequireCookieMaxBytes{}, maxBytes)}
 }
 
 // NewCookies wraps inner with EDNS-Cookie processing backed by srv.
@@ -111,14 +115,10 @@ func NewCookies(inner Handler, srv cookies.Server, opts ...CookieOption) Handler
 		case identCookieClock{}:
 			c.now = option.MustGet[func() time.Time](o)
 		case identRequireCookieForLarge{}:
-			spec := option.MustGet[requireForLargeSpec](o)
-			c.requireForLarge = spec.enable
-			if spec.enable {
-				if spec.maxBytes > 0 {
-					c.largeRespMaxSize = spec.maxBytes
-				} else {
-					c.largeRespMaxSize = 1232
-				}
+			c.requireForLarge = option.MustGet[bool](o)
+		case identRequireCookieMaxBytes{}:
+			if v := option.MustGet[int](o); v > 0 {
+				c.largeRespMaxSize = v
 			}
 		}
 	}
