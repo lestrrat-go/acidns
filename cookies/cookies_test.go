@@ -124,6 +124,41 @@ func TestClientApplyAndObserveAndRetry(t *testing.T) {
 	require.True(t, ok)
 }
 
+// TestClientRetryBoundedToOnce verifies the per-server retry cap: a
+// server hammering BADCOOKIE on every reply must not pin the caller
+// in a tight retry loop.
+func TestClientRetryBoundedToOnce(t *testing.T) {
+	t.Parallel()
+	c, err := cookies.NewClient()
+	require.NoError(t, err)
+	server := netip.MustParseAddrPort("198.51.100.20:53")
+
+	// Drive an Apply to seed an entry.
+	_ = c.Apply(server, wire.NewEDNSBuilder())
+
+	mkBadCookie := func(cc [8]byte, sc []byte) wire.Message {
+		respEDNS := mustEDNS(t, wire.NewEDNSBuilder().
+			ExtendedRCODE(1).
+			Option(mustClientServer(t, cc, sc)))
+		m, err := wire.NewMessageBuilder().Response(true).RCODE(7).EDNS(respEDNS).Build()
+		require.NoError(t, err)
+		return m
+	}
+
+	// First BADCOOKIE: ok=true (we adopt the server cookie and the caller
+	// retries once).
+	r1 := mkBadCookie([8]byte{1, 2, 3, 4, 5, 6, 7, 8}, []byte{1, 1, 1, 1, 1, 1, 1, 1})
+	ok, err := c.Retry(server, r1)
+	require.NoError(t, err)
+	require.True(t, ok)
+
+	// Second BADCOOKIE in a row: budget exhausted.
+	r2 := mkBadCookie([8]byte{2, 3, 4, 5, 6, 7, 8, 9}, []byte{2, 2, 2, 2, 2, 2, 2, 2})
+	ok, err = c.Retry(server, r2)
+	require.ErrorIs(t, err, cookies.ErrCookieRetryExhausted)
+	require.False(t, ok)
+}
+
 func TestClientRetryNotBADCOOKIENoOp(t *testing.T) {
 	t.Parallel()
 	c, err := cookies.NewClient()

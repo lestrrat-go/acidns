@@ -64,6 +64,14 @@ var ErrCookieExpired = errors.New("cookies: server cookie outside age window")
 // HMAC does not match the supplied cookie's hash field.
 var ErrCookieMismatch = errors.New("cookies: server cookie HMAC mismatch")
 
+// ErrCookieRetryExhausted is returned by [Client.Retry] when a server
+// has issued back-to-back BADCOOKIE responses that exceed the per-server
+// retry budget. RFC 7873 §5.3 specifies a single retry; further
+// BADCOOKIE replies indicate the server is misbehaving (or that an
+// off-path attacker is forging BADCOOKIE responses), and the client
+// must surface the failure rather than spin.
+var ErrCookieRetryExhausted = errors.New("cookies: per-server BADCOOKIE retry budget exhausted")
+
 // Client is the per-server cookie cache + helper for outgoing queries.
 type Client interface {
 	// Apply installs the cookie EDNS option into b for server. If a
@@ -120,7 +128,18 @@ type clientEntry struct {
 	clientCookie [8]byte
 	serverCookie []byte
 	updated      time.Time
+	// badCookieStreak is the count of consecutive BADCOOKIE responses
+	// observed since the last successful Observe. RFC 7873 §5.3 calls
+	// for one retry only; we trip ErrCookieRetryExhausted past that.
+	badCookieStreak uint8
 }
+
+// maxBadCookieRetries is the per-server cap on consecutive BADCOOKIE
+// retries before [Client.Retry] returns ErrCookieRetryExhausted. RFC
+// 7873 §5.3 specifies one retry; we set 1 so the second BADCOOKIE in
+// a row terminates the retry loop. Exposed as a const so tests can
+// observe the value rather than hard-coding it.
+const maxBadCookieRetries = 1
 
 type client struct {
 	mu          sync.Mutex
@@ -189,6 +208,10 @@ func (c *client) Observe(server netip.AddrPort, resp wire.Message) {
 	e.clientCookie = cc
 	e.serverCookie = append(e.serverCookie[:0], sc...)
 	e.updated = c.now()
+	// A successful (non-BADCOOKIE) observation clears the BADCOOKIE
+	// streak so a future legitimate retry chain isn't pre-poisoned by
+	// an old failure record.
+	e.badCookieStreak = 0
 	c.cache[server] = e
 }
 
@@ -209,9 +232,22 @@ func (c *client) Retry(server netip.AddrPort, resp wire.Message) (bool, error) {
 	if !exists && c.maxEntries > 0 && len(c.cache) >= c.maxEntries {
 		c.evictLocked()
 	}
+	// RFC 7873 §5.3: retry once. A second BADCOOKIE in a row indicates
+	// either a misbehaving server or an off-path attacker forging
+	// BADCOOKIE replies; spinning forever would let either pin the
+	// caller into a tight loop minting new client cookies. Surface
+	// failure instead.
+	if e.badCookieStreak >= maxBadCookieRetries {
+		// Reset the streak so a later legit retry chain (after the caller
+		// gives up and tries again on a fresh transaction) is not pre-poisoned.
+		e.badCookieStreak = 0
+		c.cache[server] = e
+		return false, ErrCookieRetryExhausted
+	}
 	e.clientCookie = cc
 	e.serverCookie = append(e.serverCookie[:0], sc...)
 	e.updated = c.now()
+	e.badCookieStreak++
 	c.cache[server] = e
 	return true, nil
 }
