@@ -149,17 +149,32 @@ func (v *Validator) ValidateRRset(set []wire.Record, rrsigs []rdata.RRSIG, keys 
 			lastErr = fmt.Errorf("validator: RRSIG inception/expiration outside now")
 			continue
 		}
-		key, ok := findMatchingKey(keys, sig)
-		if !ok {
+		// RFC 4034 §5.4: keytag is non-unique. Try every DNSKEY whose
+		// (alg, keytag) pair matches the signature; otherwise a hostile
+		// signer can publish a same-keytag throwaway and DoS validation
+		// against the legitimate key it sorts before.
+		matched := 0
+		var verifyErr error
+		for _, key := range keys {
+			if key.Algorithm() != sig.Algorithm() {
+				continue
+			}
+			if dnssec.KeyTag(key) != sig.KeyTag() {
+				continue
+			}
+			matched++
+			err := dnssec.Verify(set, sig, key)
+			if err == nil {
+				return Secure, sig, nil
+			}
+			verifyErr = err
+		}
+		if matched == 0 {
 			lastErr = fmt.Errorf("validator: no DNSKEY matches RRSIG %d/%d",
 				sig.Algorithm(), sig.KeyTag())
 			continue
 		}
-		err := dnssec.Verify(set, sig, key)
-		if err == nil {
-			return Secure, sig, nil
-		}
-		lastErr = err
+		lastErr = verifyErr
 	}
 	if v.cfg.bogusPolicy == BogusReturnAnswer {
 		return Bogus, rdata.RRSIG{}, lastErr
@@ -188,6 +203,10 @@ func (v *Validator) VerifyDelegation(owner wire.Name, dsRecords []rdata.DS, keys
 	return Bogus, fmt.Errorf("validator: no DS matched any DNSKEY for %s", owner)
 }
 
+// findMatchingKey returns the first DNSKEY whose (alg, keytag) matches
+// sig. Retained for callers that want to peek at "any matching key";
+// verification paths use the loop in ValidateRRset / verifyRRsetWithKeys
+// directly so collisions are exhausted instead of breaking on first match.
 func findMatchingKey(keys []rdata.DNSKEY, sig rdata.RRSIG) (rdata.DNSKEY, bool) {
 	for _, k := range keys {
 		if k.Algorithm() != sig.Algorithm() {
