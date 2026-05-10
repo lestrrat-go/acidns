@@ -40,6 +40,14 @@ func (a *Authoritative) serveUpdate(ctx context.Context, w acidns.ResponseWriter
 	}
 	zoneName := zoneQ.Name()
 
+	// Cap the per-UPDATE record count before policy invocation. Hitting
+	// the cap is treated as malformed input rather than a policy
+	// failure — the operator's policy should not have to count records.
+	if a.maxUpdateRecords > 0 && len(q.Answers())+len(q.Authorities()) > a.maxUpdateRecords {
+		_ = w.WriteMsg(mustBuild(setRCODE(b, q, wire.RCODEFormErr), q))
+		return
+	}
+
 	// Authorisation gate. With no policy installed, every UPDATE is
 	// refused — we won't accept unauthenticated mutation by default.
 	if a.updatePolicy == nil || !a.updatePolicy(ctx, w, q) {

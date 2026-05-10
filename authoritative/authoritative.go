@@ -48,10 +48,11 @@ type Authoritative struct {
 	notifyHandler NotifyHandler
 	notifyPolicy  NotifyPolicy
 	notifySem     chan struct{} // counting semaphore; nil disables the cap
-	axfrPolicy    AXFRPolicy
-	updatePolicy  UpdatePolicy
-	onUpdate      OnUpdate
-	minimalANY    bool
+	axfrPolicy       AXFRPolicy
+	updatePolicy     UpdatePolicy
+	onUpdate         OnUpdate
+	maxUpdateRecords int
+	minimalANY       bool
 }
 
 // zoneIndex is the per-zone lookup-friendly form of a Zone.
@@ -65,7 +66,7 @@ type zoneIndex struct {
 // New returns a new [*Authoritative].
 func New(opts ...Option) (*Authoritative, error) {
 	a := &Authoritative{zones: make(map[string]*zoneIndex)}
-	c := &config{maxNotifyInflight: 32, minimalANY: true}
+	c := &config{maxNotifyInflight: 32, maxUpdateRecords: 1000, minimalANY: true}
 	for _, o := range opts {
 		switch o.Ident() {
 		case identZone{}:
@@ -84,6 +85,8 @@ func New(opts ...Option) (*Authoritative, error) {
 			c.maxNotifyInflight = option.MustGet[int](o)
 		case identOnUpdate{}:
 			c.onUpdate = option.MustGet[OnUpdate](o)
+		case identMaxUpdateRecords{}:
+			c.maxUpdateRecords = option.MustGet[int](o)
 		}
 	}
 	a.notifyHandler = c.notifyHandler
@@ -91,6 +94,7 @@ func New(opts ...Option) (*Authoritative, error) {
 	a.axfrPolicy = c.axfrPolicy
 	a.updatePolicy = c.updatePolicy
 	a.onUpdate = c.onUpdate
+	a.maxUpdateRecords = c.maxUpdateRecords
 	a.minimalANY = c.minimalANY
 	if c.maxNotifyInflight > 0 {
 		a.notifySem = make(chan struct{}, c.maxNotifyInflight)

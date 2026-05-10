@@ -27,6 +27,7 @@ type config struct {
 	axfrPolicy        AXFRPolicy
 	updatePolicy      UpdatePolicy
 	onUpdate          OnUpdate
+	maxUpdateRecords  int
 	minimalANY        bool
 }
 
@@ -38,6 +39,7 @@ type identNotifyPolicy struct{}
 type identMinimalANY struct{}
 type identMaxNotifyInflight struct{}
 type identOnUpdate struct{}
+type identMaxUpdateRecords struct{}
 
 // UpdatePolicy decides whether an inbound RFC 2136 UPDATE may proceed.
 // It is invoked after the request has been parsed but before any zone
@@ -170,4 +172,20 @@ func WithOnUpdate(f OnUpdate) Option {
 // 32; pass 0 to disable the cap entirely.
 func WithMaxNotifyInflight(n int) Option {
 	return authOption{option.New(identMaxNotifyInflight{}, n)}
+}
+
+// WithMaxUpdateRecords caps how many records (prereqs + updates
+// combined) a single inbound UPDATE may carry. The applyUpdate path
+// clones the per-zone byName/namesExist maps under the write lock; an
+// authenticated UPDATE carrying tens of thousands of records can
+// thus pin the zone's full memory for the duration of the apply,
+// multiplied by any concurrent UPDATEs the policy admits.
+//
+// Default 1000 records, which comfortably fits batched provisioning
+// flows without exposing the server to a memory-amplification signal.
+// Pass 0 to disable the cap entirely (NOT recommended — operators
+// who want unbounded UPDATEs should at minimum size the cap to their
+// largest expected batch and document it).
+func WithMaxUpdateRecords(n int) Option {
+	return authOption{option.New(identMaxUpdateRecords{}, n)}
 }
