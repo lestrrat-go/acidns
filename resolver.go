@@ -674,8 +674,27 @@ func (e *tcFallback) Exchange(ctx context.Context, q wire.Message) (wire.Message
 	if err != nil {
 		return wire.Message{}, err
 	}
-	if resp.Flags().Truncated() && e.fallback != nil {
-		return e.fallback.Exchange(ctx, q)
+	if !resp.Flags().Truncated() || e.fallback == nil {
+		return resp, nil
+	}
+	// Mint a fresh transaction ID for the TCP retry per RFC 5452 §10:
+	// reusing the UDP query ID gives an off-path observer that timed
+	// out on UDP a free correlation point on the TCP path. The retry
+	// path elsewhere in this package (retryExchanger, failover) already
+	// re-randomises; tcFallback is the last hold-out.
+	q2 := q
+	if id, idErr := randomID(); idErr == nil {
+		q2 = wire.WithID(q, id)
+	}
+	resp, err = e.fallback.Exchange(ctx, q2)
+	if err != nil {
+		return wire.Message{}, err
+	}
+	if resp.Flags().Truncated() {
+		// TC=1 over TCP is a protocol violation (RFC 7766) — surfacing
+		// the partial answer would let a hostile upstream feed a
+		// caller a record-stripped reply that looks authoritative.
+		return wire.Message{}, fmt.Errorf("acidns: response truncated after TCP fallback")
 	}
 	return resp, nil
 }
