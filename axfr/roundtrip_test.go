@@ -14,7 +14,7 @@ import (
 func TestTSIGMarshalRoundtripIsStable(t *testing.T) {
 	t.Parallel()
 
-	key := tsig.NewKey(
+	key := tsig.MustNewKey(
 		wire.MustParseName("xfr.key"),
 		tsig.HMACSHA256,
 		[]byte("0123456789abcdef0123456789abcdef"),

@@ -63,7 +63,7 @@ func (u *unsignedExchanger) Exchange(_ context.Context, q wire.Message) (wire.Me
 func TestNotifySignedQueryHasTSIG(t *testing.T) {
 	t.Parallel()
 
-	key := tsig.NewKey(
+	key := tsig.MustNewKey(
 		wire.MustParseName("notify.key"),
 		tsig.HMACSHA256,
 		[]byte("0123456789abcdef0123456789abcdef"),
@@ -92,7 +92,7 @@ func TestNotifySignedQueryHasTSIG(t *testing.T) {
 func TestNotifyUnsignedResponseRejectedWhenSigned(t *testing.T) {
 	t.Parallel()
 
-	key := tsig.NewKey(
+	key := tsig.MustNewKey(
 		wire.MustParseName("notify.key"),
 		tsig.HMACSHA256,
 		[]byte("0123456789abcdef0123456789abcdef"),
@@ -134,7 +134,7 @@ func (r *captureSigningExchanger) Exchange(ctx context.Context, q wire.Message) 
 func TestNotifySignedQueryRoundTripVerifies(t *testing.T) {
 	t.Parallel()
 
-	key := tsig.NewKey(
+	key := tsig.MustNewKey(
 		wire.MustParseName("notify.key"),
 		tsig.HMACSHA256,
 		[]byte("abcdefabcdefabcdefabcdefabcdef00"),

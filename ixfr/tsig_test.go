@@ -57,7 +57,7 @@ func signResp(t *testing.T, m wire.Message, key tsig.Key, requestMAC []byte, now
 func TestIXFRTSIGSignedQueryAndVerifiedResponse(t *testing.T) {
 	t.Parallel()
 
-	key := tsig.NewKey(
+	key := tsig.MustNewKey(
 		wire.MustParseName("ixfr.key"),
 		tsig.HMACSHA256,
 		[]byte("0123456789abcdef0123456789abcdef"),
@@ -104,7 +104,7 @@ func TestIXFRTSIGSignedQueryAndVerifiedResponse(t *testing.T) {
 func TestIXFRTSIGUnsignedFirstFails(t *testing.T) {
 	t.Parallel()
 
-	key := tsig.NewKey(
+	key := tsig.MustNewKey(
 		wire.MustParseName("ixfr.key"),
 		tsig.HMACSHA256,
 		[]byte("0123456789abcdef0123456789abcdef"),

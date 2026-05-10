@@ -13,7 +13,7 @@ func Example_tsig_sign_verify() {
 	// TSIG (RFC 8945) signs a marshalled DNS message in-place by appending
 	// a TSIG RR to the additional section. Both sides agree on a key name,
 	// algorithm, and shared secret out of band.
-	key := tsig.NewKey(wire.MustParseName("example-key"), tsig.HMACSHA256, []byte("a-shared-secret-of-at-least-256-bits"))
+	key := tsig.MustNewKey(wire.MustParseName("example-key"), tsig.HMACSHA256, []byte("a-shared-secret-of-at-least-256-bits"))
 
 	q, _ := wire.NewMessageBuilder().
 		ID(1).

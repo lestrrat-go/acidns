@@ -19,7 +19,7 @@ func TestSignedUpdate(t *testing.T) {
 	secret := make([]byte, 32)
 	_, err := rand.Read(secret)
 	require.NoError(t, err)
-	key := tsig.NewKey(wire.MustParseName("update.key"), tsig.HMACSHA256, secret)
+	key := tsig.MustNewKey(wire.MustParseName("update.key"), tsig.HMACSHA256, secret)
 
 	rec := wire.NewRecord(wire.MustParseName("blog.example.com"), 60*time.Second,
 		rdata.MustNewA(netip.MustParseAddr("198.51.100.5")))

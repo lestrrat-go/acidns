@@ -44,7 +44,7 @@ func TestSignVerifyRoundTrip(t *testing.T) {
 			if alg == tsig.HMACSHA1 {
 				keyOpts = append(keyOpts, tsig.WithAllowSHA1(true))
 			}
-			key := tsig.NewKey(wire.MustParseName("test.key"), alg, mkSecret(t, 32), keyOpts...)
+			key := tsig.MustNewKey(wire.MustParseName("test.key"), alg, mkSecret(t, 32), keyOpts...)
 			msg := mkMessage(t)
 			now := time.Now().Truncate(time.Second)
 
@@ -69,11 +69,11 @@ func TestSignVerifyRoundTrip(t *testing.T) {
 // fails Sign/Verify with ErrSHA1Disabled unless WithAllowSHA1 is set.
 func TestSHA1DisabledByDefault(t *testing.T) {
 	t.Parallel()
-	key := tsig.NewKey(wire.MustParseName("legacy.key"), tsig.HMACSHA1, mkSecret(t, 20))
+	key := tsig.MustNewKey(wire.MustParseName("legacy.key"), tsig.HMACSHA1, mkSecret(t, 20))
 	_, err := tsig.Sign(mkMessage(t), key, time.Now(), 5*time.Minute)
 	require.ErrorIs(t, err, tsig.ErrSHA1Disabled)
 
-	allowed := tsig.NewKey(wire.MustParseName("legacy.key"), tsig.HMACSHA1, mkSecret(t, 20),
+	allowed := tsig.MustNewKey(wire.MustParseName("legacy.key"), tsig.HMACSHA1, mkSecret(t, 20),
 		tsig.WithAllowSHA1(true))
 	signed, err := tsig.Sign(mkMessage(t), allowed, time.Now(), 5*time.Minute)
 	require.NoError(t, err)
@@ -82,7 +82,7 @@ func TestSHA1DisabledByDefault(t *testing.T) {
 
 func TestVerifyFailsOnTamper(t *testing.T) {
 	t.Parallel()
-	key := tsig.NewKey(wire.MustParseName("k"), tsig.HMACSHA256, mkSecret(t, 16))
+	key := tsig.MustNewKey(wire.MustParseName("k"), tsig.HMACSHA256, mkSecret(t, 16))
 	msg := mkMessage(t)
 	now := time.Now().Truncate(time.Second)
 	signed, err := tsig.Sign(msg, key, now, 5*time.Minute)
@@ -97,8 +97,8 @@ func TestVerifyFailsOnTamper(t *testing.T) {
 
 func TestVerifyFailsOnWrongSecret(t *testing.T) {
 	t.Parallel()
-	signKey := tsig.NewKey(wire.MustParseName("k"), tsig.HMACSHA256, mkSecret(t, 16))
-	verKey := tsig.NewKey(wire.MustParseName("k"), tsig.HMACSHA256, mkSecret(t, 16))
+	signKey := tsig.MustNewKey(wire.MustParseName("k"), tsig.HMACSHA256, mkSecret(t, 16))
+	verKey := tsig.MustNewKey(wire.MustParseName("k"), tsig.HMACSHA256, mkSecret(t, 16))
 
 	msg := mkMessage(t)
 	now := time.Now().Truncate(time.Second)
@@ -111,7 +111,7 @@ func TestVerifyFailsOnWrongSecret(t *testing.T) {
 
 func TestVerifyClockSkewExceedsFudge(t *testing.T) {
 	t.Parallel()
-	key := tsig.NewKey(wire.MustParseName("k"), tsig.HMACSHA256, mkSecret(t, 16))
+	key := tsig.MustNewKey(wire.MustParseName("k"), tsig.HMACSHA256, mkSecret(t, 16))
 	msg := mkMessage(t)
 	signedAt := time.Now().Truncate(time.Second)
 	signed, err := tsig.Sign(msg, key, signedAt, 60*time.Second)
@@ -126,7 +126,7 @@ func TestVerifyClockSkewExceedsFudge(t *testing.T) {
 func TestVerifyMissingTSIG(t *testing.T) {
 	t.Parallel()
 	msg := mkMessage(t)
-	key := tsig.NewKey(wire.MustParseName("k"), tsig.HMACSHA256, mkSecret(t, 16))
+	key := tsig.MustNewKey(wire.MustParseName("k"), tsig.HMACSHA256, mkSecret(t, 16))
 	_, _, err := tsig.Verify(msg, key, time.Now(), time.Minute)
 	require.ErrorIs(t, err, tsig.ErrTSIGMissing)
 }

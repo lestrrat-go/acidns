@@ -85,7 +85,16 @@ type Key struct {
 // HMAC-SHA1 keys are rejected by Sign and Verify with
 // [ErrSHA1Disabled] unless the key is constructed with
 // [WithAllowSHA1] (true).
-func NewKey(name wire.Name, alg Algorithm, secret []byte, opts ...KeyOption) Key {
+func NewKey(name wire.Name, alg Algorithm, secret []byte, opts ...KeyOption) (Key, error) {
+	if !name.IsValid() {
+		return Key{}, fmt.Errorf("tsig: NewKey: invalid key name")
+	}
+	if !alg.IsKnown() {
+		return Key{}, fmt.Errorf("%w: %q", ErrUnsupportedAlgorithm, alg)
+	}
+	if len(secret) == 0 {
+		return Key{}, fmt.Errorf("tsig: NewKey: secret is empty")
+	}
 	s := make([]byte, len(secret))
 	copy(s, secret)
 	k := Key{name: name, algorithm: alg, secret: s}
@@ -94,6 +103,29 @@ func NewKey(name wire.Name, alg Algorithm, secret []byte, opts ...KeyOption) Key
 		case identKeyAllowSHA1{}:
 			k.allowSHA1 = option.MustGet[bool](o)
 		}
+	}
+	return k, nil
+}
+
+// IsKnown reports whether a is one of the [Algorithm] constants this
+// package implements. Used by [NewKey] to reject unknown algorithms
+// at construction so the failure surfaces at the obvious site
+// instead of at first Sign/Verify.
+func (a Algorithm) IsKnown() bool {
+	switch a {
+	case HMACSHA1, HMACSHA256, HMACSHA384, HMACSHA512:
+		return true
+	}
+	return false
+}
+
+// MustNewKey is the panic-on-error variant of [NewKey], intended for
+// tests and one-shot fixtures where validation failure indicates a
+// programmer bug rather than a recoverable condition.
+func MustNewKey(name wire.Name, alg Algorithm, secret []byte, opts ...KeyOption) Key {
+	k, err := NewKey(name, alg, secret, opts...)
+	if err != nil {
+		panic(err)
 	}
 	return k
 }
