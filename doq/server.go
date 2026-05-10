@@ -62,7 +62,7 @@ type Server struct {
 // ALPN identifier.
 func NewServer(addr netip.AddrPort, h acidns.Handler, opts ...ServerOption) (*Server, error) {
 	if h == nil {
-		return nil, fmt.Errorf("doq: handler is nil")
+		return nil, ErrNilHandler
 	}
 	cfg := serverConfig{
 		handshakeTimeout:  10 * time.Second,
@@ -97,7 +97,7 @@ func NewServer(addr netip.AddrPort, h acidns.Handler, opts ...ServerOption) (*Se
 		}
 	}
 	if cfg.tlsConfig == nil {
-		return nil, fmt.Errorf("doq: WithServerTLSConfig is required")
+		return nil, ErrTLSConfigRequired
 	}
 	tc := cfg.tlsConfig.Clone()
 	if tc.MinVersion == 0 {
@@ -320,7 +320,7 @@ func (w *responseWriter) WriteMsg(m wire.Message) error {
 	w.mu.Lock()
 	defer w.mu.Unlock()
 	if w.wrote {
-		return fmt.Errorf("doq: WriteMsg called twice on a single stream")
+		return ErrDuplicateWrite
 	}
 	w.wrote = true
 
@@ -329,7 +329,7 @@ func (w *responseWriter) WriteMsg(m wire.Message) error {
 		return err
 	}
 	if len(buf) > 0xffff {
-		return fmt.Errorf("doq: response exceeds 65535 bytes")
+		return ErrResponseTooLarge
 	}
 	// RFC 9250 §4.2.1: server response wire ID MUST be 0. Clients
 	// expect this; our handler echoes the request ID (which the

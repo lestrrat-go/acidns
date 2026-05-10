@@ -61,7 +61,7 @@ type exchanger struct {
 // port resolve to 853 in the higher-level Resolver wiring.
 func New(addr netip.AddrPort, opts ...Option) (acidns.Exchanger, error) {
 	if !addr.IsValid() {
-		return nil, fmt.Errorf("dot: invalid server address")
+		return nil, ErrInvalidAddress
 	}
 	c := config{timeout: 10 * time.Second, padding: true}
 	for _, o := range opts {
@@ -109,7 +109,7 @@ func New(addr netip.AddrPort, opts ...Option) (acidns.Exchanger, error) {
 	// caller wants. Refuse this combination so a misuse is loud, not
 	// silent. Use WithServerName or pre-configure the *tls.Config.
 	if tcfg.ServerName == "" && !isHostnameAddr(addr) && !c.insecure {
-		return nil, fmt.Errorf("dot: WithServerName (or *tls.Config.ServerName) required when addr is an IP literal")
+		return nil, fmt.Errorf("%w (or *tls.Config.ServerName)", ErrServerNameRequired)
 	}
 	if c.insecure {
 		tcfg.InsecureSkipVerify = true

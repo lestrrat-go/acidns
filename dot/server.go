@@ -69,7 +69,7 @@ type Server struct {
 // supplied: a DoT server without TLS is no longer DoT.
 func NewServer(addr netip.AddrPort, h acidns.Handler, opts ...ServerOption) (*Server, error) {
 	if h == nil {
-		return nil, fmt.Errorf("dot: handler is nil")
+		return nil, ErrNilHandler
 	}
 	cfg := serverConfig{
 		handshakeTimeout:   10 * time.Second,
@@ -113,7 +113,7 @@ func NewServer(addr netip.AddrPort, h acidns.Handler, opts ...ServerOption) (*Se
 		}
 	}
 	if cfg.tlsConfig == nil {
-		return nil, fmt.Errorf("dot: WithServerTLSConfig is required (DoT cannot run without TLS)")
+		return nil, fmt.Errorf("%w (DoT cannot run without TLS)", ErrTLSConfigRequired)
 	}
 	tc := cfg.tlsConfig.Clone()
 	if tc.MinVersion == 0 {
@@ -495,7 +495,7 @@ func (w *responseWriter) WriteMsg(m wire.Message) error {
 		return err
 	}
 	if len(buf) > 0xffff {
-		return fmt.Errorf("dot: response exceeds 65535 bytes")
+		return ErrResponseTooLarge
 	}
 	w.writeMu.Lock()
 	defer w.writeMu.Unlock()

@@ -65,7 +65,7 @@ type exchanger struct {
 // New returns an Exchanger that talks DoQ to addr.
 func New(addr netip.AddrPort, opts ...Option) (acidns.Exchanger, error) {
 	if !addr.IsValid() {
-		return nil, fmt.Errorf("doq: invalid server address")
+		return nil, ErrInvalidAddress
 	}
 	c := config{timeout: 10 * time.Second, padding: true, maxResponseBytes: DefaultMaxResponseBytes}
 	for _, o := range opts {
@@ -109,7 +109,7 @@ func New(addr netip.AddrPort, opts ...Option) (acidns.Exchanger, error) {
 	// WithInsecure callers opt out of cert verification entirely so
 	// the SNI requirement no longer protects anything.
 	if tcfg.ServerName == "" && !c.insecure {
-		return nil, fmt.Errorf("doq: WithServerName (or *tls.Config.ServerName) required when addr is an IP literal")
+		return nil, fmt.Errorf("%w (or *tls.Config.ServerName)", ErrServerNameRequired)
 	}
 	if c.insecure {
 		tcfg.InsecureSkipVerify = true
@@ -181,7 +181,7 @@ func (e *exchanger) Exchange(ctx context.Context, q wire.Message) (wire.Message,
 	}
 	respLen := int(binary.BigEndian.Uint16(hdr[:]))
 	if respLen > e.maxResponseBytes {
-		return wire.Message{}, fmt.Errorf("doq: response length %d exceeds %d byte cap", respLen, e.maxResponseBytes)
+		return wire.Message{}, fmt.Errorf("%w: %d > %d", ErrResponseTooLarge, respLen, e.maxResponseBytes)
 	}
 	body := make([]byte, respLen)
 	if _, err := io.ReadFull(stream, body); err != nil {

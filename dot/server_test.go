@@ -258,3 +258,11 @@ func TestServerLifecycle(t *testing.T) {
 		t.Fatalf("unexpected terminal error: %v", err)
 	}
 }
+
+func TestSentinelErrors(t *testing.T) {
+	t.Parallel()
+	_, err := dot.NewServer(netip.MustParseAddrPort("127.0.0.1:0"), nil)
+	require.ErrorIs(t, err, dot.ErrNilHandler)
+	_, err = dot.NewServer(netip.MustParseAddrPort("127.0.0.1:0"), &echoHandler{})
+	require.ErrorIs(t, err, dot.ErrTLSConfigRequired)
+}

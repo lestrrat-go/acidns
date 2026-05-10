@@ -118,8 +118,7 @@ func TestServerRoundTrip(t *testing.T) {
 func TestNewServerRejectsMissingTLS(t *testing.T) {
 	t.Parallel()
 	_, err := doq.NewServer(netip.MustParseAddrPort("127.0.0.1:0"), &echoHandler{})
-	require.Error(t, err)
-	require.Contains(t, err.Error(), "WithServerTLSConfig is required")
+	require.ErrorIs(t, err, doq.ErrTLSConfigRequired)
 }
 
 func TestNewServerRejectsNilHandler(t *testing.T) {
@@ -129,8 +128,7 @@ func TestNewServerRejectsNilHandler(t *testing.T) {
 		netip.MustParseAddrPort("127.0.0.1:0"), nil,
 		doq.WithServerTLSConfig(&tls.Config{Certificates: []tls.Certificate{cert}}),
 	)
-	require.Error(t, err)
-	require.Contains(t, err.Error(), "handler is nil")
+	require.ErrorIs(t, err, doq.ErrNilHandler)
 }
 
 func TestServerLifecycle(t *testing.T) {
@@ -155,4 +153,12 @@ func TestServerLifecycle(t *testing.T) {
 	if err := ctrl.Err(); err != nil && !errors.Is(err, doq.ErrServerClosed) {
 		t.Fatalf("unexpected terminal error: %v", err)
 	}
+}
+
+func TestDoQSentinelErrors(t *testing.T) {
+	t.Parallel()
+	_, err := doq.NewServer(netip.MustParseAddrPort("127.0.0.1:0"), nil)
+	require.ErrorIs(t, err, doq.ErrNilHandler)
+	_, err = doq.NewServer(netip.MustParseAddrPort("127.0.0.1:0"), &echoHandler{})
+	require.ErrorIs(t, err, doq.ErrTLSConfigRequired)
 }

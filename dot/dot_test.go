@@ -147,8 +147,7 @@ func TestDoTNewInvalidAddr(t *testing.T) {
 	t.Parallel()
 
 	_, err := dot.New(netip.AddrPort{})
-	require.Error(t, err)
-	require.Contains(t, err.Error(), "invalid server address")
+	require.ErrorIs(t, err, dot.ErrInvalidAddress)
 }
 
 // TestDoTNewDefaultServerName confirms that constructing a DoT

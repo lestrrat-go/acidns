@@ -217,8 +217,7 @@ func TestServerEndToEnd(t *testing.T) {
 func TestNewServerRejectsMissingTLS(t *testing.T) {
 	t.Parallel()
 	_, err := doh.NewServer(netip.MustParseAddrPort("127.0.0.1:0"), &echoHandler{})
-	require.Error(t, err)
-	require.Contains(t, err.Error(), "WithServerTLSConfig is required")
+	require.ErrorIs(t, err, doh.ErrTLSConfigRequired)
 }
 
 // TestServerMaxConnsPerSourceCap models a single source occupying every
@@ -278,4 +277,16 @@ func TestServerMaxConnsPerSourceCap(t *testing.T) {
 	require.NoError(t, err)
 	require.NoError(t, c4.Handshake(), "slot should free after closing first conn")
 	_ = c4.Close()
+}
+
+func TestDoHSentinelErrors(t *testing.T) {
+	t.Parallel()
+	_, err := doh.NewServer(netip.MustParseAddrPort("127.0.0.1:0"), nil)
+	require.ErrorIs(t, err, doh.ErrNilHandler)
+	_, err = doh.NewServer(netip.MustParseAddrPort("127.0.0.1:0"), &echoHandler{})
+	require.ErrorIs(t, err, doh.ErrTLSConfigRequired)
+	_, err = doh.New("http://example.com/dns-query")
+	require.ErrorIs(t, err, doh.ErrPlaintextRefused)
+	_, err = doh.New("https://invalid host/")
+	require.ErrorIs(t, err, doh.ErrInvalidEndpoint)
 }

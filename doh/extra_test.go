@@ -27,8 +27,7 @@ func newQuery(t *testing.T, id uint16) wire.Message {
 func TestNewURLParseError(t *testing.T) {
 	t.Parallel()
 	_, err := doh.New("://")
-	require.Error(t, err)
-	require.Contains(t, err.Error(), "invalid endpoint")
+	require.ErrorIs(t, err, doh.ErrInvalidEndpoint)
 }
 
 // TestNewRefusesPlaintextHTTP confirms that an http:// endpoint is
@@ -76,8 +75,7 @@ func TestExchangeBadContentType(t *testing.T) {
 	require.NoError(t, err)
 
 	_, err = ex.Exchange(t.Context(), newQuery(t, 0x1234))
-	require.Error(t, err)
-	require.Contains(t, err.Error(), "unexpected content type")
+	require.ErrorIs(t, err, doh.ErrUnexpectedContentType)
 }
 
 // TestExchangeEmptyContentType — RFC 8484 §6 mandates the server set
@@ -148,8 +146,7 @@ func TestExchangeIDMismatch(t *testing.T) {
 	require.NoError(t, err)
 
 	_, err = ex.Exchange(t.Context(), newQuery(t, 0x4567))
-	require.Error(t, err)
-	require.Contains(t, err.Error(), "id mismatch")
+	require.ErrorIs(t, err, doh.ErrIDMismatch)
 }
 
 // TestExchangeRequestError covers the http.Client.Do error branch by pointing

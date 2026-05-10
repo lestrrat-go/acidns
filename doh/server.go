@@ -222,7 +222,7 @@ func (w *dohResponseWriter) Network() string            { return "doh" }
 
 func (w *dohResponseWriter) WriteMsg(m wire.Message) error {
 	if w.wrote {
-		return fmt.Errorf("doh: WriteMsg called twice on a single HTTP response")
+		return ErrDuplicateWrite
 	}
 	w.wrote = true
 	buf, err := wire.Marshal(m)
@@ -269,7 +269,7 @@ type Server struct {
 // [WithServerPath]; default is "/dns-query" per RFC 8484 §3.
 func NewServer(addr netip.AddrPort, h acidns.Handler, opts ...ServerOption) (*Server, error) {
 	if h == nil {
-		return nil, fmt.Errorf("doh: handler is nil")
+		return nil, ErrNilHandler
 	}
 	cfg := serverConfig{
 		path:                 "/dns-query",
@@ -307,7 +307,7 @@ func NewServer(addr netip.AddrPort, h acidns.Handler, opts ...ServerOption) (*Se
 		}
 	}
 	if cfg.tlsConfig == nil {
-		return nil, fmt.Errorf("doh: WithServerTLSConfig is required")
+		return nil, ErrTLSConfigRequired
 	}
 	tc := cfg.tlsConfig.Clone()
 	if tc.MinVersion == 0 {

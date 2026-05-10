@@ -152,8 +152,7 @@ func buildAnswer(t *testing.T, id uint16, q wire.Question) wire.Message {
 func TestNewInvalidAddr(t *testing.T) {
 	t.Parallel()
 	_, err := doq.New(netip.AddrPort{})
-	require.Error(t, err)
-	require.Contains(t, err.Error(), "invalid server address")
+	require.ErrorIs(t, err, doq.ErrInvalidAddress)
 }
 
 // TestNewALPNAlreadyPresent covers containsALPN's true branch and confirms

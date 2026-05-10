@@ -121,7 +121,7 @@ type exchanger struct {
 func New(endpoint string, opts ...Option) (acidns.Exchanger, error) {
 	u, err := url.Parse(endpoint)
 	if err != nil {
-		return nil, fmt.Errorf("doh: invalid endpoint: %w", err)
+		return nil, fmt.Errorf("%w: %v", ErrInvalidEndpoint, err)
 	}
 	c := config{method: MethodPOST, userAgent: "acidns-doh/0.1", padding: true}
 	for _, o := range opts {
@@ -146,10 +146,10 @@ func New(endpoint string, opts ...Option) (acidns.Exchanger, error) {
 		// the only real DoH transport
 	case "http":
 		if !c.insecure {
-			return nil, fmt.Errorf("doh: refusing plaintext http:// endpoint; use https:// or WithInsecure(true) (test loopback only)")
+			return nil, fmt.Errorf("%w; use https:// or WithInsecure(true) (test loopback only)", ErrPlaintextRefused)
 		}
 	default:
-		return nil, fmt.Errorf("doh: endpoint scheme must be https (or http with WithInsecure)")
+		return nil, fmt.Errorf("%w: endpoint scheme must be https (or http with WithInsecure)", ErrInvalidEndpoint)
 	}
 	if c.client == nil {
 		c.client = defaultClient()
@@ -174,7 +174,7 @@ func New(endpoint string, opts ...Option) (acidns.Exchanger, error) {
 	}
 	if ht, ok := clientCopy.Transport.(*http.Transport); ok {
 		if ht.TLSClientConfig != nil && ht.TLSClientConfig.InsecureSkipVerify {
-			return nil, fmt.Errorf("doh: WithHTTPClient transport has InsecureSkipVerify enabled; refusing to silently disable certificate verification")
+			return nil, ErrInsecureTransport
 		}
 		// Scrub Proxy on a copy of the transport so $HTTPS_PROXY cannot
 		// silently route DoH queries (and the queried name) elsewhere
@@ -219,10 +219,10 @@ func (e *exchanger) Exchange(ctx context.Context, q wire.Message) (wire.Message,
 	// would launder the protocol violation downstream.
 	ct := resp.Header.Get("Content-Type")
 	if ct == "" {
-		return wire.Message{}, fmt.Errorf("doh: response missing Content-Type header (RFC 8484 §6 requires %q)", contentType)
+		return wire.Message{}, fmt.Errorf("%w: missing Content-Type header (RFC 8484 §6 requires %q)", ErrUnexpectedContentType, contentType)
 	}
 	if ct != contentType {
-		return wire.Message{}, fmt.Errorf("doh: unexpected content type %q", ct)
+		return wire.Message{}, fmt.Errorf("%w: %q", ErrUnexpectedContentType, ct)
 	}
 
 	// If the server advertised Content-Length, refuse before reading
@@ -231,24 +231,24 @@ func (e *exchanger) Exchange(ctx context.Context, q wire.Message) (wire.Message,
 	// 64 KiB allocation per query even though we'd reject the body
 	// shortly after.
 	if cl := resp.ContentLength; cl > maxResponseBytes {
-		return wire.Message{}, fmt.Errorf("doh: Content-Length %d exceeds %d byte cap", cl, maxResponseBytes)
+		return wire.Message{}, fmt.Errorf("%w: Content-Length %d exceeds %d byte cap", ErrResponseTooLarge, cl, maxResponseBytes)
 	}
 	body, err := io.ReadAll(io.LimitReader(resp.Body, maxResponseBytes+1))
 	if err != nil {
 		return wire.Message{}, fmt.Errorf("doh: read body: %w", err)
 	}
 	if len(body) > maxResponseBytes {
-		return wire.Message{}, fmt.Errorf("doh: response body exceeds %d byte cap", maxResponseBytes)
+		return wire.Message{}, fmt.Errorf("%w: body exceeds %d byte cap", ErrResponseTooLarge, maxResponseBytes)
 	}
 	m, err := wire.Unmarshal(body)
 	if err != nil {
 		return wire.Message{}, fmt.Errorf("doh: unmarshal: %w", err)
 	}
 	if m.ID() != q.ID() {
-		return wire.Message{}, fmt.Errorf("doh: id mismatch")
+		return wire.Message{}, ErrIDMismatch
 	}
 	if !wire.QuestionsMatch(q, m) {
-		return wire.Message{}, fmt.Errorf("doh: response question does not match request")
+		return wire.Message{}, ErrQuestionMismatch
 	}
 	return m, nil
 }
