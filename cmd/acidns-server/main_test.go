@@ -256,3 +256,18 @@ func TestRunAcceptsHybridZonesAndRoots(t *testing.T) {
 	require.Error(t, err)
 	require.NotContains(t, err.Error(), "not valid in -mode=hybrid")
 }
+
+// TestRunAuthoritativePublicBindRequiresAck confirms that authoritative
+// mode is now covered by -allow-public on a non-loopback bind. Large
+// DNSKEY/RRSIG/MX/TXT answers off a UDP-only authoritative server are
+// still amplifying without a fronting ACL/RRL, so the ack must fire.
+func TestRunAuthoritativePublicBindRequiresAck(t *testing.T) {
+	t.Parallel()
+	err := run([]string{
+		"-mode=authoritative",
+		"-zones=/no/such/zone",
+		"-listen=0.0.0.0:0",
+	})
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "-allow-public")
+}

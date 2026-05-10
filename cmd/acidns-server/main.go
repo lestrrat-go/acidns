@@ -65,7 +65,7 @@ func run(argv []string) error {
 	fs.IntVar(&o.cacheSize, "cache-size", 4096,
 		"forward mode: number of cached answers retained (0 disables caching)")
 	fs.BoolVar(&o.allowPublic, "allow-public", false,
-		"required to bind a non-loopback address in recursive/hybrid/forward mode (acknowledges that a wide-open recursive resolver is a known DDoS amplifier and that the operator has wired in their own ACL/RRL/cookies)")
+		"required to bind a non-loopback address in any mode (acknowledges that an unfronted UDP DNS server is a known DDoS amplifier — recursive/forward most obviously, but authoritative too via large DNSKEY/RRSIG/MX answers — and that the operator has wired their own ACL/RRL/cookies)")
 	fs.Usage = func() {
 		fmt.Fprintf(os.Stderr, "usage: acidns-server [options]\n\noptions:\n")
 		fs.PrintDefaults()
@@ -277,14 +277,17 @@ var universalFlags = map[string]struct{}{
 }
 
 // needsPublicAck reports whether the given mode is amplification-prone
-// (recursive answers can be many KB regardless of query size, and
-// without source verification an attacker spoofs UDP queries from a
-// victim address). Authoritative mode is exempt only because it serves
-// configured zones; an operator who deliberately exposes
-// authoritative is making a different (and less amplifying) choice.
+// on a non-loopback bind. Recursive and forward are the obvious
+// classics (a small spoofed query yields a many-KB iterative or cached
+// answer). Authoritative is included because zones with large RR sets
+// (DNSKEY/RRSIG bouquets, ANY queries that aren't minimised, big MX or
+// TXT lists) make a UDP server with no ACL a usable reflector even
+// when it isn't recursive. The flag asks the operator to confirm that
+// their own ACL / RRL / cookies are wired in front of the bare server
+// constructors used by this binary.
 func needsPublicAck(mode string) bool {
 	switch mode {
-	case "recursive", "hybrid", "forward":
+	case "authoritative", "recursive", "hybrid", "forward":
 		return true
 	}
 	return false
