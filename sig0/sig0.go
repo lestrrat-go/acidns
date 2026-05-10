@@ -236,12 +236,23 @@ func stripSIG(msg []byte) ([]byte, parsedSIG, error) {
 	if err != nil {
 		return nil, parsedSIG{}, fmt.Errorf("sig0: parse owner: %w", err)
 	}
-	_ = owner
+	if !owner.IsRoot() {
+		// RFC 2931 §4 fixes the owner of a SIG(0) RR at the root
+		// domain. The owner is not in the signed bytes so a non-root
+		// owner does not affect signature validity, but accepting it
+		// weakens the package's fail-closed posture.
+		return nil, parsedSIG{}, ErrSIGMissing
+	}
 	if off+10 > len(msg) {
 		return nil, parsedSIG{}, fmt.Errorf("sig0: truncated header")
 	}
 	t := binary.BigEndian.Uint16(msg[off : off+2])
 	if t != sigType {
+		return nil, parsedSIG{}, ErrSIGMissing
+	}
+	cls := binary.BigEndian.Uint16(msg[off+2 : off+4])
+	if cls != classANY {
+		// RFC 2931 §4 fixes the SIG(0) RR class to ANY (255).
 		return nil, parsedSIG{}, ErrSIGMissing
 	}
 	rdlen := int(binary.BigEndian.Uint16(msg[off+8 : off+10]))

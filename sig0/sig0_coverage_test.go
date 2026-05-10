@@ -461,6 +461,41 @@ func TestVerifyWrongRRType(t *testing.T) {
 	require.ErrorIs(t, err, sig0.ErrSIGMissing)
 }
 
+// TestVerifyNonRootOwner checks the RFC 2931 §4 fix that the SIG(0) RR
+// owner is the root domain. A valid-looking SIG record with a non-root
+// owner is rejected as ErrSIGMissing.
+func TestVerifyNonRootOwner(t *testing.T) {
+	t.Parallel()
+	hdr := make([]byte, 12)
+	binary.BigEndian.PutUint16(hdr[10:12], 1) // arcount = 1
+	// owner = "x." (one label), then rest of an otherwise plausible SIG RR
+	rr := []byte{1, 'x', 0}                  // x.
+	rr = binary.BigEndian.AppendUint16(rr, 24)  // SIG
+	rr = binary.BigEndian.AppendUint16(rr, 255) // class ANY
+	rr = binary.BigEndian.AppendUint32(rr, 0)   // TTL
+	rr = binary.BigEndian.AppendUint16(rr, 0)   // rdlen=0 — content irrelevant for the owner check
+	msg := append(hdr, rr...)
+	_, err := sig0.Verify(msg, dummyKey(), wire.MustParseName("s"), time.Now())
+	require.ErrorIs(t, err, sig0.ErrSIGMissing)
+}
+
+// TestVerifyWrongClass checks the RFC 2931 §4 fix that the SIG(0) RR
+// class is ANY (255). A SIG RR with class != ANY is rejected.
+func TestVerifyWrongClass(t *testing.T) {
+	t.Parallel()
+	hdr := make([]byte, 12)
+	binary.BigEndian.PutUint16(hdr[10:12], 1) // arcount = 1
+	// owner=root, type=SIG, class=IN (1) — wrong
+	rr := []byte{0}
+	rr = binary.BigEndian.AppendUint16(rr, 24) // SIG
+	rr = binary.BigEndian.AppendUint16(rr, 1)  // class IN — not ANY
+	rr = binary.BigEndian.AppendUint32(rr, 0)
+	rr = binary.BigEndian.AppendUint16(rr, 0)
+	msg := append(hdr, rr...)
+	_, err := sig0.Verify(msg, dummyKey(), wire.MustParseName("s"), time.Now())
+	require.ErrorIs(t, err, sig0.ErrSIGMissing)
+}
+
 func TestVerifyTruncatedQuestion(t *testing.T) {
 	t.Parallel()
 	// qdcount=1 but the question doesn't fit (no QTYPE/QCLASS bytes).
