@@ -92,10 +92,12 @@ func (b *Builder) PrereqNameNotInUse(name wire.Name) *Builder {
 	return b
 }
 
-// Build returns the encoded UPDATE message ready for marshaling.
+// Build returns the encoded UPDATE message ready for marshaling and
+// resets b to the zero state — single-shot semantics.
 func (b *Builder) Build() (wire.Message, error) {
 	id, err := randomID()
 	if err != nil {
+		*b = Builder{}
 		return wire.Message{}, err
 	}
 	mb := wire.NewMessageBuilder().
@@ -108,6 +110,7 @@ func (b *Builder) Build() (wire.Message, error) {
 	for _, u := range b.updates {
 		mb = mb.Authority(u)
 	}
+	*b = Builder{}
 	return mb.Build()
 }
 

@@ -98,35 +98,29 @@ func (b *MessageBuilder) setErr(err error) {
 	}
 }
 
+// Build returns the constructed [Message] and resets b to the zero
+// state — single-shot semantics. The returned Message's section
+// slices ALIAS the slices the builder accumulated during setter
+// calls; resetting b ensures a subsequent reuse of b cannot mutate
+// the previously-built Message via append grow-in-place. Callers
+// that want to keep mutating their own input slices independently
+// of the Message must [slices.Clone] before passing them in.
 func (b *MessageBuilder) Build() (Message, error) {
 	if b.err != nil {
-		return Message{}, b.err
+		err := b.err
+		*b = MessageBuilder{}
+		return Message{}, err
 	}
-	// Snapshot every section into a freshly-allocated slice. Without this
-	// step a MessageBuilder reused after Build (b.Answer(...).Build() then more
-	// b.Answer(...).Build()) could mutate the first Message's backing
-	// array via append's grow-in-place semantics. The package contract
-	// promises Build returns an immutable Message; the copy enforces it.
-	return Message{
+	m := Message{
 		id:          b.id,
 		flags:       b.flags,
-		questions:   cloneSlice(b.questions),
-		answers:     cloneSlice(b.answers),
-		authorities: cloneSlice(b.authorities),
-		additionals: cloneSlice(b.additionals),
+		questions:   b.questions,
+		answers:     b.answers,
+		authorities: b.authorities,
+		additionals: b.additionals,
 		edns:        b.edns,
 		hasEDNS:     b.hasEDNS,
-	}, nil
-}
-
-// cloneSlice returns a fresh slice with the same elements as s, or nil
-// when s is empty so the zero-record sections continue to compare equal
-// against the nil literal in tests.
-func cloneSlice[T any](s []T) []T {
-	if len(s) == 0 {
-		return nil
 	}
-	out := make([]T, len(s))
-	copy(out, s)
-	return out
+	*b = MessageBuilder{}
+	return m, nil
 }

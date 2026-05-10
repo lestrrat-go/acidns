@@ -126,9 +126,13 @@ func (b *EndpointBuilder) IPv4Hints(v []netip.Addr) *EndpointBuilder { b.e.ipv4H
 // IPv6Hints sets the IPv6 address hints.
 func (b *EndpointBuilder) IPv6Hints(v []netip.Addr) *EndpointBuilder { b.e.ipv6Hints = v; return b }
 
-// Build returns the configured Endpoint.
+// Build returns the configured Endpoint and resets b to the zero
+// state — single-shot semantics. The Endpoint's slice fields ALIAS
+// the slices passed to the builder's setters.
 func (b *EndpointBuilder) Build() (Endpoint, error) {
-	return b.e, nil
+	out := b.e
+	*b = EndpointBuilder{}
+	return out, nil
 }
 
 // Discover queries _dns.resolver.arpa via r and returns the

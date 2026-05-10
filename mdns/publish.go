@@ -127,27 +127,26 @@ func (b *PublicationBuilder) TTL(d time.Duration) *PublicationBuilder {
 // [Publication]. Returns an error when Instance, Type, or Host is
 // missing. Slices and maps are copied so a later mutation of the
 // caller's source does not leak into the published record.
+// Build returns the assembled Publication and resets b to the zero
+// state — single-shot semantics. The Publication's slice/map fields
+// ALIAS the values the builder accumulated; the reset zeroes b's
+// fields so subsequent reuse cannot mutate the previously-built
+// Publication.
 func (b *PublicationBuilder) Build() (Publication, error) {
 	if b.err != nil {
-		return Publication{}, b.err
+		err := b.err
+		*b = PublicationBuilder{}
+		return Publication{}, err
 	}
 	if !b.p.instance.IsValid() || !b.p.typ.IsValid() || !b.p.host.IsValid() {
+		*b = PublicationBuilder{}
 		return Publication{}, fmt.Errorf("mdns: incomplete publication (Instance/Type/Host required)")
 	}
 	out := b.p
 	if out.ttl == 0 {
 		out.ttl = 120 * time.Second
 	}
-	if len(out.addrs) > 0 {
-		out.addrs = append([]netip.Addr(nil), out.addrs...)
-	}
-	if len(out.text) > 0 {
-		cp := make(map[string]string, len(out.text))
-		for k, v := range out.text {
-			cp[k] = v
-		}
-		out.text = cp
-	}
+	*b = PublicationBuilder{}
 	return out, nil
 }
 
