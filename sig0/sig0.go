@@ -130,6 +130,14 @@ func verifyExtractSIG(msg []byte, key rdata.DNSKEY, expectedSigner wire.Name, no
 	if key.Algorithm() != sig.algorithm {
 		return nil, parsedSIG{}, fmt.Errorf("%w: alg mismatch", ErrUnsupportedAlg)
 	}
+	// Share the DNSSEC package's explicit deny-list. The switch in
+	// verifySignature only handles modern algorithms, but adding the
+	// shared deny-list here makes the rejection intentional and stops
+	// a future maintainer from silently weakening SIG(0) by extending
+	// the switch with a deprecated algorithm.
+	if dnssec.IsRejectedAlgorithm(sig.algorithm) {
+		return nil, parsedSIG{}, fmt.Errorf("%w: deprecated algorithm %d", ErrUnsupportedAlg, sig.algorithm)
+	}
 	if dnssec.KeyTag(key) != sig.keyTag {
 		return nil, parsedSIG{}, fmt.Errorf("%w: SIG keytag %d, supplied DNSKEY %d",
 			ErrKeyTagMismatch, sig.keyTag, dnssec.KeyTag(key))

@@ -88,6 +88,13 @@ func New(addr netip.AddrPort, opts ...Option) (*Client, error) {
 
 	var tcfg *tls.Config
 	if c.tlsConfig != nil {
+		// Refuse a caller-supplied tls.Config that already disables
+		// cert verification unless WithInsecure(true) was also passed.
+		// Mirrors the DoH and DoT posture so the rule is uniform across
+		// encrypted transports.
+		if c.tlsConfig.InsecureSkipVerify && !c.insecure {
+			return nil, ErrInsecureTLSConfig
+		}
 		tcfg = c.tlsConfig.Clone()
 	} else {
 		tcfg = &tls.Config{MinVersion: tls.VersionTLS13}

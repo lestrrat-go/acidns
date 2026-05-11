@@ -122,12 +122,18 @@ func unpackIPSECKEY(u *wirebb.Unpacker, rdlen int) (IPSECKEY, error) {
 	case IPSECKEYGatewayNone:
 		// no gateway
 	case IPSECKEYGatewayIPv4:
+		if u.Off()+4 > end {
+			return zero, fmt.Errorf("%w: IPSECKEY IPv4 gateway exceeds rdlen", ErrInvalidRData)
+		}
 		b, err := u.Bytes(4)
 		if err != nil {
 			return zero, err
 		}
 		k.gwAddr = netip.AddrFrom4([4]byte(b))
 	case IPSECKEYGatewayIPv6:
+		if u.Off()+16 > end {
+			return zero, fmt.Errorf("%w: IPSECKEY IPv6 gateway exceeds rdlen", ErrInvalidRData)
+		}
 		b, err := u.Bytes(16)
 		if err != nil {
 			return zero, err

@@ -70,7 +70,7 @@ func WithTCPKeepAliveAdvertise(v bool) TCPKeepAliveOption {
 // connection (no pipelining).
 func NewTCPKeepAliveClient(addr netip.AddrPort, opts ...TCPKeepAliveOption) (*TCPKeepAliveClient, error) {
 	if !addr.IsValid() {
-		return nil, fmt.Errorf("acidns: invalid server address")
+		return nil, fmt.Errorf("%w: tcp keepalive client server address", ErrInvalidAddress)
 	}
 	c := tcpKAConfig{
 		timeout:      5 * time.Second,

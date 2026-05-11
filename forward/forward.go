@@ -237,6 +237,20 @@ func (h *Forwarder) ServeDNS(ctx context.Context, w acidns.ResponseWriter, q wir
 			slog.Duration("elapsed", time.Since(start)))
 		return
 	}
+	// The forwarder only handles class IN. Non-IN queries (CHAOS,
+	// HESIOD, …) would otherwise mistype every cache lookup as IN and
+	// then key cache entries under exotic classes the operator never
+	// expected to be cacheable. Refuse with NOTIMP per RFC 1035 §6.1.1,
+	// mirroring the recursive resolver's posture. Operators serving
+	// CHAOS should compose chaos.NewHandler ahead of this forwarder.
+	if first := q.Questions()[0]; first.Class() != rrtype.ClassIN {
+		_ = w.WriteMsg(buildErrorResponse(q, wire.RCODENotImp))
+		h.cfg.logger.LogAttrs(ctx, slog.LevelDebug, "forward.serve",
+			slog.String("decision", "non_in_class"),
+			slog.String("class", first.Class().String()),
+			slog.Duration("elapsed", time.Since(start)))
+		return
+	}
 	// A caching forwarder that answers RD=0 is an amplification
 	// primitive — any peer can pull cached records without proving
 	// they wanted recursion. Refuse such queries by default; an

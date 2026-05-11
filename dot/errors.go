@@ -22,3 +22,9 @@ var ErrServerNameRequired = errors.New("dot: WithServerName required when addr i
 // ErrResponseTooLarge is returned by the server when a response would
 // not fit in the 16-bit length-prefixed framing.
 var ErrResponseTooLarge = errors.New("dot: response exceeds 65535 bytes")
+
+// ErrInsecureTLSConfig is returned by [New] when the caller-supplied
+// [WithTLSConfig] has [crypto/tls.Config.InsecureSkipVerify] set and
+// [WithInsecure] was not also passed. Refusing the inherited
+// misconfiguration avoids silently disabling certificate verification.
+var ErrInsecureTLSConfig = errors.New("dot: tls.Config has InsecureSkipVerify=true without explicit WithInsecure(true)")

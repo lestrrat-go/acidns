@@ -146,9 +146,14 @@ func (b *QueryEventBuilder) Envelopes(v int) *QueryEventBuilder { b.e.envelopes 
 // Err sets the first WriteMsg error, if any.
 func (b *QueryEventBuilder) Err(v error) *QueryEventBuilder { b.e.err = v; return b }
 
-// Build returns the assembled QueryEvent.
+// Build returns the assembled QueryEvent and resets the builder to
+// its zero state so the same instance can be reused for a subsequent
+// event without aliasing slices or carrying over fields. Builders in
+// this project are single-shot per Build call.
 func (b *QueryEventBuilder) Build() (QueryEvent, error) {
-	return b.e, nil
+	ev := b.e
+	b.e = QueryEvent{}
+	return ev, nil
 }
 
 // QueryObserver receives one [QueryEvent] per Handler invocation. It

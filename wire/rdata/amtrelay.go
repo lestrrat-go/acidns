@@ -111,12 +111,18 @@ func unpackAMTRELAY(u *wirebb.Unpacker, rdlen int) (AMTRELAY, error) {
 	case AMTRELAYTypeNone:
 		// no relay
 	case AMTRELAYTypeIPv4:
+		if u.Off()+4 > end {
+			return zero, fmt.Errorf("%w: AMTRELAY IPv4 relay exceeds rdlen", ErrInvalidRData)
+		}
 		raw, err := u.Bytes(4)
 		if err != nil {
 			return zero, err
 		}
 		a.relayAddr = netip.AddrFrom4([4]byte(raw))
 	case AMTRELAYTypeIPv6:
+		if u.Off()+16 > end {
+			return zero, fmt.Errorf("%w: AMTRELAY IPv6 relay exceeds rdlen", ErrInvalidRData)
+		}
 		raw, err := u.Bytes(16)
 		if err != nil {
 			return zero, err

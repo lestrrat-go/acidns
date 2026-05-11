@@ -469,7 +469,10 @@ func TestServeDNSWithAuthorityAndAdditional(t *testing.T) {
 	resp, err := ex.Exchange(qctx, q)
 	require.NoError(t, err)
 	require.Equal(t, wire.RCODENXDomain, resp.Flags().RCODE())
-	require.True(t, resp.Flags().AuthenticData())
+	// AD from upstream is intentionally cleared when no Validator is
+	// configured: a non-validating recursive resolver propagating AD=1
+	// would launder a path-injected forgery's AD bit to its clients.
+	require.False(t, resp.Flags().AuthenticData())
 	require.GreaterOrEqual(t, len(resp.Authorities()), 1)
 	require.GreaterOrEqual(t, len(resp.Additionals()), 1)
 }

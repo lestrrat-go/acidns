@@ -25,12 +25,15 @@ const NSEC3HashSHA1 = rdata.NSEC3HashSHA1
 // proof of "no signed delegation" rather than "no name".
 const NSEC3FlagOptOut uint8 = 0x01
 
-// MaxNSEC3Iterations is the validator's hard cap on NSEC3 iterations,
-// matching the conservative bound recommended by RFC 9276 §3.1. Records
-// with a higher count are treated as Insecure (the resolver continues
-// without DNSSEC validation for that response). Operationally most zones
-// use 0; values above 100 have no defensive value and are pure CPU drag.
-const MaxNSEC3Iterations uint16 = 100
+// MaxNSEC3Iterations is the validator's hard cap on NSEC3 iterations.
+// RFC 9276 §3.1 recommends a value of 0 and notes that higher counts
+// have no defensive value; the wider operator community (Unbound,
+// BIND) has converged on a cap of 50, well below the RFC's earlier
+// drafts' 150. Records with a higher count are treated as Insecure —
+// the resolver continues without DNSSEC validation for that response
+// rather than refuse outright, matching RFC 9276 §3.2's
+// recommendation.
+const MaxNSEC3Iterations uint16 = 50
 
 // ErrNSEC3IterationsExceeded is returned when a record exceeds
 // MaxNSEC3Iterations.

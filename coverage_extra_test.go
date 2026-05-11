@@ -278,7 +278,7 @@ func TestKeepAliveCloseReleasesConn(t *testing.T) {
 func TestKeepAliveInvalidAddr(t *testing.T) {
 	t.Parallel()
 	_, err := acidns.NewTCPKeepAliveClient(netip.AddrPort{})
-	require.ErrorContains(t, err, "invalid server address")
+	require.ErrorIs(t, err, acidns.ErrInvalidAddress)
 }
 
 // TestKeepAlivePreservesExistingOption proves ensureKeepAliveOption returns
@@ -404,7 +404,7 @@ func TestKeepAliveDialFailure(t *testing.T) {
 func TestUDPNewInvalidAddr(t *testing.T) {
 	t.Parallel()
 	_, err := acidns.NewUDPClient(netip.AddrPort{})
-	require.ErrorContains(t, err, "invalid server address")
+	require.ErrorIs(t, err, acidns.ErrInvalidAddress)
 }
 
 // TestUDPDialFailure forces the UDP dial path to fail by passing a destination

@@ -25,3 +25,9 @@ var ErrResponseTooLarge = errors.New("doq: response exceeds 65535 bytes")
 // ErrDuplicateWrite is returned by the server's [acidns.ResponseWriter]
 // when WriteMsg is called more than once on a single QUIC stream.
 var ErrDuplicateWrite = errors.New("doq: WriteMsg called twice on a single stream")
+
+// ErrInsecureTLSConfig is returned by [New] when the caller-supplied
+// [WithTLSConfig] has [crypto/tls.Config.InsecureSkipVerify] set and
+// [WithInsecure] was not also passed. Refusing the inherited
+// misconfiguration avoids silently disabling certificate verification.
+var ErrInsecureTLSConfig = errors.New("doq: tls.Config has InsecureSkipVerify=true without explicit WithInsecure(true)")

@@ -15,6 +15,13 @@ import (
 	"github.com/lestrrat-go/acidns/wire/rrtype"
 )
 
+// maxTTL is the RFC 2308 §8 ceiling on a TTL value (32-bit unsigned).
+// Master-file TTLs above this either overflow the on-wire 32-bit field
+// or, in extreme cases, wrap [time.Duration]'s int64-nanoseconds
+// representation. Rejecting at parse time keeps the in-memory record
+// honest.
+const maxTTL int64 = 0x7fffffff
+
 // hexDecode tolerates whitespace within a hex string. Master files
 // commonly split a long DS digest across multiple parens-quoted lines
 // for legibility.
@@ -142,6 +149,9 @@ func (p *parser) handleLine(fields []fieldTok, leadingWS bool) error {
 			break
 		}
 		if t, err := strconv.ParseInt(tok, 10, 64); err == nil {
+			if t < 0 || t > maxTTL {
+				return fmt.Errorf("line %d: TTL %d out of range (RFC 2308 §8: 0..%d)", fields[0].line, t, maxTTL)
+			}
 			ttl = t
 			fields = fields[1:]
 			continue
@@ -220,6 +230,9 @@ func (p *parser) handleDirective(fields []fieldTok) error {
 		v, err := strconv.ParseInt(fields[1].text, 10, 64)
 		if err != nil {
 			return fmt.Errorf("line %d: $TTL: %w", fields[0].line, err)
+		}
+		if v < 0 || v > maxTTL {
+			return fmt.Errorf("line %d: $TTL %d out of range (RFC 2308 §8: 0..%d)", fields[0].line, v, maxTTL)
 		}
 		p.defaultTTL = v
 		return nil

@@ -37,10 +37,18 @@ func (e *udpTCPFallback) Exchange(ctx context.Context, q wire.Message) (wire.Mes
 	if err != nil {
 		return wire.Message{}, err
 	}
-	if resp.Flags().Truncated() {
-		return e.tcp.Exchange(ctx, q)
+	if !resp.Flags().Truncated() {
+		return resp, nil
 	}
-	return resp, nil
+	// Re-randomise the transaction ID before the TCP retry. An off-path
+	// observer who saw the UDP query (or an attacker who can drop only
+	// UDP) would otherwise have the ID free, which weakens the TCP
+	// exchange's spoofing surface (RFC 5452 §10).
+	id, err := newID()
+	if err != nil {
+		return wire.Message{}, err
+	}
+	return e.tcp.Exchange(ctx, wire.WithID(q, id))
 }
 
 // errExchanger surfaces a construction-time error on every Exchange so

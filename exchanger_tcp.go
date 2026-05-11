@@ -58,7 +58,7 @@ type TCPClient struct {
 // NewTCPClient returns a TCPClient talking to addr.
 func NewTCPClient(addr netip.AddrPort, opts ...TCPClientOption) (*TCPClient, error) {
 	if !addr.IsValid() {
-		return nil, fmt.Errorf("acidns: invalid server address")
+		return nil, fmt.Errorf("%w: tcp client server address", ErrInvalidAddress)
 	}
 	c := tcpClientConfig{timeout: 5 * time.Second}
 	for _, o := range opts {

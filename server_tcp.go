@@ -160,10 +160,10 @@ type TCPServer struct {
 // multiple times to spawn multiple independent server instances.
 func NewTCPServer(addr netip.AddrPort, h Handler, opts ...TCPListenerOption) (*TCPServer, error) {
 	if h == nil {
-		return nil, fmt.Errorf("acidns: handler is nil")
+		return nil, ErrNilHandler
 	}
 	if !addr.IsValid() {
-		return nil, fmt.Errorf("acidns: invalid bind address")
+		return nil, fmt.Errorf("%w: tcp server bind address", ErrInvalidAddress)
 	}
 	cfg := tcpListenerConfig{
 		idleTimeout:        10 * time.Second,

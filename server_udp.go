@@ -124,10 +124,10 @@ type UDPServer struct {
 // multiple times to spawn multiple independent server instances.
 func NewUDPServer(addr netip.AddrPort, h Handler, opts ...UDPListenerOption) (*UDPServer, error) {
 	if h == nil {
-		return nil, fmt.Errorf("acidns: handler is nil")
+		return nil, ErrNilHandler
 	}
 	if !addr.IsValid() {
-		return nil, fmt.Errorf("acidns: invalid bind address")
+		return nil, fmt.Errorf("%w: udp server bind address", ErrInvalidAddress)
 	}
 	cfg := udpListenerConfig{
 		bufferSize:     4096,

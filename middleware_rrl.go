@@ -445,10 +445,18 @@ func responseKeyName(m wire.Message, q wire.Message) wire.Name {
 // truncateForRRL builds a slip reply: copies ID, opcode, RD echo,
 // question, and OPT (if any) from the original response, sets TC=1.
 // The client will retry over TCP, where RRL doesn't apply.
+//
+// AA and AD are cleared on the stub. The body is empty, so a downstream
+// client trusting AA or AD on a TC=1 reply would otherwise pin trust to
+// no records — mirroring the cookie gate's stub (truncateForCookieGate).
 func truncateForRRL(m wire.Message, q wire.Message) wire.Message {
 	b := wire.NewMessageBuilder().
 		ID(m.ID()).
-		Flags(m.Flags().WithTruncated(true).WithResponse(true))
+		Flags(m.Flags().
+			WithTruncated(true).
+			WithResponse(true).
+			WithAuthoritative(false).
+			WithAuthenticData(false))
 	if qs := m.Questions(); len(qs) > 0 {
 		b = b.Question(qs[0])
 	} else if qs := q.Questions(); len(qs) > 0 {

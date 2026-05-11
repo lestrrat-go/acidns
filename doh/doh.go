@@ -123,7 +123,11 @@ func New(endpoint string, opts ...Option) (*Client, error) {
 	if err != nil {
 		return nil, fmt.Errorf("%w: %v", ErrInvalidEndpoint, err)
 	}
-	c := config{method: MethodPOST, userAgent: "acidns-doh/0.1", padding: true}
+	// Default User-Agent is empty: net/http falls back to its minimal
+	// "Go-http-client/N.M" identifier, which avoids fingerprinting the
+	// toolkit's version on every outbound query. Callers that need a
+	// specific UA can opt in with WithUserAgent.
+	c := config{method: MethodPOST, userAgent: "", padding: true}
 	for _, o := range opts {
 		switch o.Ident() {
 		case identHTTPClient{}:

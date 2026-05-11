@@ -84,7 +84,15 @@ func formErrReply(q wire.Message) (wire.Message, bool) {
 		WithRCODE(wire.RCODEFormErr)
 	b := wire.NewMessageBuilder().ID(q.ID()).Flags(flags)
 	if e, ok := q.EDNS(); ok {
-		size := min(e.UDPSize(), formErrUDPSize)
+		// An OPT carrying UDPSize=0 is legal per RFC 6891 §6.2.3
+		// ("unknown" sender) but EDNS-aware peers treat an advertised
+		// UDPSize-of-zero on a response as a downgrade signal. Use the
+		// project-wide default in that case rather than echo the
+		// caller's zero through min().
+		size := e.UDPSize()
+		if size == 0 || size > formErrUDPSize {
+			size = formErrUDPSize
+		}
 		ed, err := wire.NewEDNSBuilder().
 			UDPSize(size).
 			Version(e.Version()).

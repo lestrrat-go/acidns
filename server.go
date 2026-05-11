@@ -53,6 +53,17 @@ var ErrServerClosed = errors.New("acidns: server closed")
 // errors.Is(err, acidns.ErrInflightFull) matches both layers.
 var ErrInflightFull = errors.New("acidns: max inflight upstream calls reached")
 
+// ErrInvalidAddress is returned by exchanger and server constructors
+// when the supplied netip.AddrPort is the zero value or otherwise
+// fails IsValid. Wrapped via %w so callers can match it with
+// errors.Is.
+var ErrInvalidAddress = errors.New("acidns: invalid address")
+
+// ErrNilHandler is returned by [NewUDPServer] / [NewTCPServer] and
+// the public-server / middleware constructors when a required
+// [Handler] argument is nil.
+var ErrNilHandler = errors.New("acidns: handler is nil")
+
 // Handler is the interface implemented by anything that answers DNS queries.
 //
 // # Panics

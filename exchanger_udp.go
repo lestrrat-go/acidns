@@ -84,7 +84,7 @@ type UDPClient struct {
 // without an interface assertion; *UDPClient satisfies [Exchanger].
 func NewUDPClient(addr netip.AddrPort, opts ...UDPClientOption) (*UDPClient, error) {
 	if !addr.IsValid() {
-		return nil, fmt.Errorf("acidns: invalid server address")
+		return nil, fmt.Errorf("%w: udp client server address", ErrInvalidAddress)
 	}
 	c := udpClientConfig{timeout: 5 * time.Second, bufferSize: 4096, use0x20: true}
 	for _, o := range opts {

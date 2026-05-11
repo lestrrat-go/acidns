@@ -449,7 +449,15 @@ func (d defaultDialer) Exchange(ctx context.Context, server netip.AddrPort, q wi
 	if terr != nil {
 		return wire.Message{}, fmt.Errorf("%w: tcp dial: %v", ErrTruncatedAfterTCPFail, terr)
 	}
-	r2, terr := tex.Exchange(ctx, q)
+	// Re-randomise the transaction ID before the TCP retry. The UDP
+	// query's ID is visible to any on-path observer; re-using it for the
+	// TCP retry hands a free correlation point — and, worse, a known ID
+	// to anyone attempting a TCP MITM — to attackers (RFC 5452 §10).
+	id, terr := randomID()
+	if terr != nil {
+		return wire.Message{}, fmt.Errorf("%w: tcp id: %v", ErrTruncatedAfterTCPFail, terr)
+	}
+	r2, terr := tex.Exchange(ctx, wire.WithID(q, id))
 	if terr != nil {
 		return wire.Message{}, fmt.Errorf("%w: tcp exchange: %v", ErrTruncatedAfterTCPFail, terr)
 	}
@@ -1200,13 +1208,22 @@ func (r *Recursive) entryFromResponse(qname wire.Name, resp wire.Message) Entry 
 		ttl = r.maxPosTTL
 	}
 	answers, authority, additional := bailiwickFilter(qname, resp)
+	// AD bit from upstream is meaningless without local validation —
+	// any path-injecting attacker could set AD=1 on a forged answer
+	// and a non-validating resolver would otherwise propagate it. Trust
+	// AD only when the validator is wired in; the validator overwrites
+	// this field on its way through ResolveEntry when present.
+	ad := false
+	if r.validator != nil {
+		ad = resp.Flags().AuthenticData()
+	}
 	return Entry{
 		answer:     answers,
 		authority:  authority,
 		additional: additional,
 		rcode:      resp.Flags().RCODE(),
 		aa:         resp.Flags().Authoritative(),
-		ad:         resp.Flags().AuthenticData(),
+		ad:         ad,
 		expiresAt:  time.Now().Add(ttl),
 	}
 }

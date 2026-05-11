@@ -76,11 +76,18 @@ func (a *Answer) Question() wire.Question { return a.q }
 // Records returns a copy of the matched record list. The returned
 // slice is owned by the caller; mutating it does not affect the
 // Answer.
-func (a *Answer) Records() []wire.Record { return a.records }
-func (a *Answer) Raw() wire.Message      { return a.raw }
-func (a *Answer) RCODE() wire.RCODE      { return a.raw.Flags().RCODE() }
-func (a *Answer) Authoritative() bool    { return a.raw.Flags().Authoritative() }
-func (a *Answer) Truncated() bool        { return a.raw.Flags().Truncated() }
+func (a *Answer) Records() []wire.Record {
+	if len(a.records) == 0 {
+		return nil
+	}
+	out := make([]wire.Record, len(a.records))
+	copy(out, a.records)
+	return out
+}
+func (a *Answer) Raw() wire.Message   { return a.raw }
+func (a *Answer) RCODE() wire.RCODE   { return a.raw.Flags().RCODE() }
+func (a *Answer) Authoritative() bool { return a.raw.Flags().Authoritative() }
+func (a *Answer) Truncated() bool     { return a.raw.Flags().Truncated() }
 
 // ResolverOption configures a Resolver.
 type ResolverOption interface {

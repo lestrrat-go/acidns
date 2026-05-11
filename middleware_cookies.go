@@ -105,6 +105,16 @@ func WithRequireCookieMaxBytes(maxBytes int) CookieOption {
 // runs. Cookies on a localhost-only or LAN-only listener do not
 // benefit from the rate limit and need no extra layer.
 func NewCookies(inner Handler, srv cookies.Server, opts ...CookieOption) Handler {
+	if srv == nil {
+		// A nil cookie server would NPE inside Validate/Make on the
+		// first request that carried a COOKIE option. The middleware is
+		// load-bearing for amplification defence (it gates large
+		// responses on a validated cookie), so silently bypassing it
+		// when srv is nil would surprise an operator who composed the
+		// middleware expecting cookies to be enforced. Refuse at
+		// construction — this is a programming error caught at startup.
+		panic("acidns: NewCookies: srv is nil")
+	}
 	c := cookieConfig{
 		now:              time.Now,
 		requireForLarge:  true,
