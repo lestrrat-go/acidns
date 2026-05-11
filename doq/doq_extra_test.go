@@ -152,7 +152,7 @@ func buildAnswer(t *testing.T, id uint16, q wire.Question) wire.Message {
 // TestNewInvalidAddr exercises the invalid-address branch of New().
 func TestNewInvalidAddr(t *testing.T) {
 	t.Parallel()
-	_, err := doq.New(netip.AddrPort{})
+	_, err := doq.NewClient(netip.AddrPort{})
 	require.ErrorIs(t, err, doq.ErrInvalidAddress)
 }
 
@@ -166,7 +166,7 @@ func TestNewALPNAlreadyPresent(t *testing.T) {
 		ServerName: "127.0.0.1",
 	}
 	addr := netip.AddrPortFrom(netip.MustParseAddr("127.0.0.1"), 8530)
-	_, err := doq.New(addr, doq.WithTLSConfig(tlsCfg))
+	_, err := doq.NewClient(addr, doq.WithTLSConfig(tlsCfg))
 	require.NoError(t, err)
 }
 
@@ -180,7 +180,7 @@ func TestExchangeFallbackTimeout(t *testing.T) {
 	a := udpConn.LocalAddr().(*net.UDPAddr)
 	addr := netip.AddrPortFrom(netip.MustParseAddr("127.0.0.1"), uint16(a.Port))
 
-	ex, err := doq.New(addr,
+	ex, err := doq.NewClient(addr,
 		doq.WithTimeout(150*time.Millisecond),
 		doq.WithServerName("127.0.0.1"))
 	require.NoError(t, err)
@@ -206,7 +206,7 @@ func TestExchangeIDMismatch(t *testing.T) {
 		writeFrame(stream, out)
 	})
 
-	ex, err := doq.New(addr, doq.WithTLSConfig(cfg))
+	ex, err := doq.NewClient(addr, doq.WithTLSConfig(cfg))
 	require.NoError(t, err)
 
 	q := buildQuery(t, 0x1234)
@@ -231,7 +231,7 @@ func TestExchangeAcceptsZeroID(t *testing.T) {
 		writeFrame(stream, out)
 	})
 
-	ex, err := doq.New(addr, doq.WithTLSConfig(cfg))
+	ex, err := doq.NewClient(addr, doq.WithTLSConfig(cfg))
 	require.NoError(t, err)
 
 	q := buildQuery(t, 0xbeef)
@@ -253,7 +253,7 @@ func TestExchangeMalformedResponse(t *testing.T) {
 		writeFrame(stream, []byte{0x00, 0x00, 0x42})
 	})
 
-	ex, err := doq.New(addr, doq.WithTLSConfig(cfg))
+	ex, err := doq.NewClient(addr, doq.WithTLSConfig(cfg))
 	require.NoError(t, err)
 
 	q := buildQuery(t, 1)
@@ -276,7 +276,7 @@ func TestExchangeReadBodyTruncated(t *testing.T) {
 		_ = stream.Close()
 	})
 
-	ex, err := doq.New(addr, doq.WithTLSConfig(cfg))
+	ex, err := doq.NewClient(addr, doq.WithTLSConfig(cfg))
 	require.NoError(t, err)
 
 	q := buildQuery(t, 2)
@@ -295,7 +295,7 @@ func TestExchangeReadLengthEOF(t *testing.T) {
 		_ = stream.Close()
 	})
 
-	ex, err := doq.New(addr, doq.WithTLSConfig(cfg))
+	ex, err := doq.NewClient(addr, doq.WithTLSConfig(cfg))
 	require.NoError(t, err)
 
 	q := buildQuery(t, 3)
@@ -315,7 +315,7 @@ func TestStreamFallbackTimeout(t *testing.T) {
 	a := udpConn.LocalAddr().(*net.UDPAddr)
 	addr := netip.AddrPortFrom(netip.MustParseAddr("127.0.0.1"), uint16(a.Port))
 
-	ex, err := doq.New(addr,
+	ex, err := doq.NewClient(addr,
 		doq.WithTimeout(150*time.Millisecond),
 		doq.WithServerName("127.0.0.1"))
 	require.NoError(t, err)
@@ -338,7 +338,7 @@ func TestStreamIDMismatch(t *testing.T) {
 		writeFrame(stream, out)
 	})
 
-	ex, err := doq.New(addr, doq.WithTLSConfig(cfg))
+	ex, err := doq.NewClient(addr, doq.WithTLSConfig(cfg))
 	require.NoError(t, err)
 	se := ex
 
@@ -369,7 +369,7 @@ func TestStreamMultipleResponses(t *testing.T) {
 		}
 	})
 
-	ex, err := doq.New(addr, doq.WithTLSConfig(cfg))
+	ex, err := doq.NewClient(addr, doq.WithTLSConfig(cfg))
 	require.NoError(t, err)
 	se := ex
 
@@ -407,7 +407,7 @@ func TestStreamContextCancelDuringNext(t *testing.T) {
 	})
 	t.Cleanup(func() { close(hold) })
 
-	ex, err := doq.New(addr, doq.WithTLSConfig(cfg))
+	ex, err := doq.NewClient(addr, doq.WithTLSConfig(cfg))
 	require.NoError(t, err)
 	se := ex
 
@@ -439,7 +439,7 @@ func TestStreamDialFailureWithDeadline(t *testing.T) {
 	a := udpConn.LocalAddr().(*net.UDPAddr)
 	addr := netip.AddrPortFrom(netip.MustParseAddr("127.0.0.1"), uint16(a.Port))
 
-	ex, err := doq.New(addr, doq.WithServerName("127.0.0.1"))
+	ex, err := doq.NewClient(addr, doq.WithServerName("127.0.0.1"))
 	require.NoError(t, err)
 	se := ex
 
@@ -543,7 +543,7 @@ func startRefusingDoQ(t *testing.T, timing closeTiming) (netip.AddrPort, *tls.Co
 func TestExchangeStreamRefusedAtOpen(t *testing.T) {
 	t.Parallel()
 	addr, cfg := startRefusingDoQ(t, closeAfterAccept)
-	ex, err := doq.New(addr, doq.WithTLSConfig(cfg))
+	ex, err := doq.NewClient(addr, doq.WithTLSConfig(cfg))
 	require.NoError(t, err)
 
 	q := buildQuery(t, 11)
@@ -569,7 +569,7 @@ func TestExchangeStreamRefusedAtOpen(t *testing.T) {
 func TestExchangeStreamRefusedAfterOpen(t *testing.T) {
 	t.Parallel()
 	addr, cfg := startRefusingDoQ(t, closeAfterStreamOpen)
-	ex, err := doq.New(addr, doq.WithTLSConfig(cfg))
+	ex, err := doq.NewClient(addr, doq.WithTLSConfig(cfg))
 	require.NoError(t, err)
 
 	q := buildQuery(t, 11)
@@ -594,7 +594,7 @@ func TestExchangeStreamRefusedAfterOpen(t *testing.T) {
 func TestStreamRefusedAtOpen(t *testing.T) {
 	t.Parallel()
 	addr, cfg := startRefusingDoQ(t, closeAfterAccept)
-	ex, err := doq.New(addr, doq.WithTLSConfig(cfg))
+	ex, err := doq.NewClient(addr, doq.WithTLSConfig(cfg))
 	require.NoError(t, err)
 	se := ex
 
@@ -626,7 +626,7 @@ func TestStreamRefusedAtOpen(t *testing.T) {
 func TestStreamRefusedAfterOpen(t *testing.T) {
 	t.Parallel()
 	addr, cfg := startRefusingDoQ(t, closeAfterStreamOpen)
-	ex, err := doq.New(addr, doq.WithTLSConfig(cfg))
+	ex, err := doq.NewClient(addr, doq.WithTLSConfig(cfg))
 	require.NoError(t, err)
 	se := ex
 
@@ -726,7 +726,7 @@ func startStreamStarvedDoQ(t *testing.T) (netip.AddrPort, *tls.Config) {
 func TestExchangeOpenStreamTimeout(t *testing.T) {
 	t.Parallel()
 	addr, cfg := startStreamStarvedDoQ(t)
-	ex, err := doq.New(addr,
+	ex, err := doq.NewClient(addr,
 		doq.WithTLSConfig(cfg),
 		doq.WithTimeout(500*time.Millisecond),
 	)
@@ -743,7 +743,7 @@ func TestExchangeOpenStreamTimeout(t *testing.T) {
 func TestStreamOpenStreamTimeout(t *testing.T) {
 	t.Parallel()
 	addr, cfg := startStreamStarvedDoQ(t)
-	ex, err := doq.New(addr,
+	ex, err := doq.NewClient(addr,
 		doq.WithTLSConfig(cfg),
 		doq.WithTimeout(500*time.Millisecond),
 	)
@@ -773,7 +773,7 @@ func TestExchangeMarshalError(t *testing.T) {
 	// Use an unbound port; we never reach the dial because Marshal fails
 	// first.
 	addr := netip.AddrPortFrom(netip.MustParseAddr("127.0.0.1"), 1)
-	ex, err := doq.New(addr, doq.WithServerName("127.0.0.1"))
+	ex, err := doq.NewClient(addr, doq.WithServerName("127.0.0.1"))
 	require.NoError(t, err)
 	_, err = ex.Exchange(t.Context(), bad)
 	require.Error(t, err)
@@ -856,7 +856,7 @@ func TestExchangeBrokenAfterDial(t *testing.T) {
 	a := udpConn.LocalAddr().(*net.UDPAddr)
 	addr := netip.AddrPortFrom(netip.MustParseAddr("127.0.0.1"), uint16(a.Port))
 
-	ex, err := doq.New(addr, doq.WithTLSConfig(clientTLS))
+	ex, err := doq.NewClient(addr, doq.WithTLSConfig(clientTLS))
 	require.NoError(t, err)
 	se := ex
 
@@ -883,7 +883,7 @@ func TestWithServerNameOverride(t *testing.T) {
 	t.Parallel()
 	tlsCfg := &tls.Config{MinVersion: tls.VersionTLS13}
 	addr := netip.AddrPortFrom(netip.MustParseAddr("127.0.0.1"), 8531)
-	_, err := doq.New(addr,
+	_, err := doq.NewClient(addr,
 		doq.WithTLSConfig(tlsCfg),
 		doq.WithServerName("override.example"),
 	)

@@ -101,7 +101,7 @@ func TestDoTExchange(t *testing.T) {
 	t.Parallel()
 
 	addr, cfg := startDoT(t)
-	ex, err := dot.New(addr, dot.WithTLSConfig(cfg), dot.WithServerName("127.0.0.1"))
+	ex, err := dot.NewClient(addr, dot.WithTLSConfig(cfg), dot.WithServerName("127.0.0.1"))
 	require.NoError(t, err)
 
 	q, _ := wire.NewMessageBuilder().
@@ -126,7 +126,7 @@ func TestDoTContextCancel(t *testing.T) {
 	a := ln.Addr().(*net.TCPAddr)
 	addr := netip.AddrPortFrom(netip.MustParseAddr("127.0.0.1"), uint16(a.Port))
 
-	ex, err := dot.New(addr, dot.WithServerName("127.0.0.1"))
+	ex, err := dot.NewClient(addr, dot.WithServerName("127.0.0.1"))
 	require.NoError(t, err)
 
 	q, _ := wire.NewMessageBuilder().
@@ -147,7 +147,7 @@ func TestDoTContextCancel(t *testing.T) {
 func TestDoTNewInvalidAddr(t *testing.T) {
 	t.Parallel()
 
-	_, err := dot.New(netip.AddrPort{})
+	_, err := dot.NewClient(netip.AddrPort{})
 	require.ErrorIs(t, err, dot.ErrInvalidAddress)
 }
 
@@ -159,18 +159,18 @@ func TestDoTNewDefaultServerName(t *testing.T) {
 	t.Parallel()
 
 	addr := netip.AddrPortFrom(netip.MustParseAddr("127.0.0.1"), 853)
-	_, err := dot.New(addr)
+	_, err := dot.NewClient(addr)
 	require.Error(t, err, "IP-literal addr without ServerName must be refused")
 
-	_, err = dot.New(addr, dot.WithTLSConfig(&tls.Config{MinVersion: tls.VersionTLS12}))
+	_, err = dot.NewClient(addr, dot.WithTLSConfig(&tls.Config{MinVersion: tls.VersionTLS12}))
 	require.Error(t, err, "TLSConfig with empty ServerName must also be refused")
 
 	// With ServerName supplied, construction succeeds.
-	ex, err := dot.New(addr, dot.WithServerName("example.test"))
+	ex, err := dot.NewClient(addr, dot.WithServerName("example.test"))
 	require.NoError(t, err)
 	require.NotNil(t, ex)
 
-	ex2, err := dot.New(addr, dot.WithTLSConfig(&tls.Config{
+	ex2, err := dot.NewClient(addr, dot.WithTLSConfig(&tls.Config{
 		MinVersion: tls.VersionTLS12,
 		ServerName: "example.test",
 	}))
@@ -184,7 +184,7 @@ func TestDoTNewPresetTLSConfigServerName(t *testing.T) {
 	t.Parallel()
 
 	addr := netip.AddrPortFrom(netip.MustParseAddr("127.0.0.1"), 853)
-	ex, err := dot.New(addr, dot.WithTLSConfig(&tls.Config{
+	ex, err := dot.NewClient(addr, dot.WithTLSConfig(&tls.Config{
 		ServerName: "preset.example",
 		MinVersion: tls.VersionTLS12,
 	}))
@@ -204,7 +204,7 @@ func TestDoTStreamDialError(t *testing.T) {
 	require.NoError(t, ln.Close())
 	addr := netip.AddrPortFrom(netip.MustParseAddr("127.0.0.1"), uint16(a.Port))
 
-	ex, err := dot.New(addr, dot.WithServerName("127.0.0.1"), dot.WithTimeout(200*time.Millisecond))
+	ex, err := dot.NewClient(addr, dot.WithServerName("127.0.0.1"), dot.WithTimeout(200*time.Millisecond))
 	require.NoError(t, err)
 
 	q, _ := wire.NewMessageBuilder().
@@ -227,7 +227,7 @@ func TestDoTStreamWriteError(t *testing.T) {
 	t.Parallel()
 
 	addr, cfg := startDoTHandshakeOnly(t)
-	ex, err := dot.New(addr,
+	ex, err := dot.NewClient(addr,
 		dot.WithTLSConfig(cfg),
 		dot.WithServerName("127.0.0.1"),
 		dot.WithTimeout(500*time.Millisecond),

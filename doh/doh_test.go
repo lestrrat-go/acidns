@@ -67,7 +67,7 @@ func TestDoHPost(t *testing.T) {
 	srv := makeServer(t, http.MethodPost)
 	t.Cleanup(srv.Close)
 
-	ex, err := doh.New(srv.URL+"/dns-query", doh.WithInsecure(true))
+	ex, err := doh.NewClient(srv.URL+"/dns-query", doh.WithInsecure(true))
 	require.NoError(t, err)
 
 	q, _ := wire.NewMessageBuilder().
@@ -86,7 +86,7 @@ func TestDoHGet(t *testing.T) {
 	srv := makeServer(t, http.MethodGet)
 	t.Cleanup(srv.Close)
 
-	ex, err := doh.New(srv.URL+"/dns-query", doh.WithMethod(doh.MethodGET), doh.WithInsecure(true))
+	ex, err := doh.NewClient(srv.URL+"/dns-query", doh.WithMethod(doh.MethodGET), doh.WithInsecure(true))
 	require.NoError(t, err)
 
 	q, _ := wire.NewMessageBuilder().
@@ -106,7 +106,7 @@ func TestDoHHTTPError(t *testing.T) {
 	}))
 	t.Cleanup(srv.Close)
 
-	ex, err := doh.New(srv.URL, doh.WithInsecure(true))
+	ex, err := doh.NewClient(srv.URL, doh.WithInsecure(true))
 	require.NoError(t, err)
 
 	q, _ := wire.NewMessageBuilder().
@@ -127,7 +127,7 @@ func TestDoHContextCancel(t *testing.T) {
 	}))
 	t.Cleanup(srv.Close)
 
-	ex, err := doh.New(srv.URL, doh.WithInsecure(true))
+	ex, err := doh.NewClient(srv.URL, doh.WithInsecure(true))
 	require.NoError(t, err)
 
 	q, _ := wire.NewMessageBuilder().
@@ -143,9 +143,9 @@ func TestDoHContextCancel(t *testing.T) {
 
 func TestDoHInvalidEndpoint(t *testing.T) {
 	t.Parallel()
-	_, err := doh.New("not a url")
+	_, err := doh.NewClient("not a url")
 	require.Error(t, err)
-	_, err = doh.New("ftp://example.com")
+	_, err = doh.NewClient("ftp://example.com")
 	require.Error(t, err)
 	_, err = url.Parse("https://valid.example/")
 	require.NoError(t, err)

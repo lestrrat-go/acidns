@@ -92,7 +92,7 @@ func TestServerRoundTrip(t *testing.T) {
 	ctrl, err := srv.Run(ctx)
 	require.NoError(t, err)
 
-	ex, err := dot.New(ctrl.Addr(), dot.WithTLSConfig(clientCfg))
+	ex, err := dot.NewClient(ctrl.Addr(), dot.WithTLSConfig(clientCfg))
 	require.NoError(t, err)
 
 	q, err := wire.NewMessageBuilder().

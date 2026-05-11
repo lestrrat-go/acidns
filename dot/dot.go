@@ -9,7 +9,7 @@
 // reuse, idle timeouts, and pipelining are out of scope for this
 // primitive transport — for keep-alive, use the TCP keep-alive
 // Client from the root acidns package and wrap it with TLS yourself,
-// or wait for a future dot.NewKeepAlive helper.
+// or use [NewKeepAliveClient] (DoT-native keep-alive).
 //
 // Stream returns a MessageStream so the caller can pull AXFR / IXFR
 // responses (RFC 9103, "XFR over TLS") on the same connection without
@@ -58,13 +58,13 @@ type Client struct {
 	padding   bool
 }
 
-// New returns a *Client that talks DoT to addr. addr is typically
+// NewClient returns a *Client that talks DoT to addr. addr is typically
 // "host:853" — DoT does not auto-default the port, but addresses
 // without a port resolve to 853 in the higher-level Resolver wiring.
 // *Client satisfies [acidns.Exchanger]; the concrete pointer is
 // returned so callers can reach implementation-specific affordances
 // without an interface assertion.
-func New(addr netip.AddrPort, opts ...Option) (*Client, error) {
+func NewClient(addr netip.AddrPort, opts ...Option) (*Client, error) {
 	if !addr.IsValid() {
 		return nil, ErrInvalidAddress
 	}

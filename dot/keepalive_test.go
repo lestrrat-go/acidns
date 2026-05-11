@@ -115,7 +115,7 @@ func TestDoTKeepAliveReusesConnection(t *testing.T) {
 	t.Parallel()
 
 	addr, cfg, conns := startMultiDoT(t, time.Minute)
-	ex, err := dot.NewKeepAliveExchanger(addr,
+	ex, err := dot.NewKeepAliveClient(addr,
 		dot.WithKeepAliveTLSConfig(cfg),
 		dot.WithKeepAliveServerName("127.0.0.1"),
 		dot.WithKeepAlivePadding(false),
@@ -149,7 +149,7 @@ func TestDoTKeepAliveExpiresIdleConnection(t *testing.T) {
 	// idle-fallback governs reuse. A tiny fallback forces the second
 	// exchange to dial fresh.
 	addr, cfg, conns := startMultiDoT(t, 0)
-	ex, err := dot.NewKeepAliveExchanger(addr,
+	ex, err := dot.NewKeepAliveClient(addr,
 		dot.WithKeepAliveTLSConfig(cfg),
 		dot.WithKeepAliveServerName("127.0.0.1"),
 		dot.WithKeepAliveIdle(time.Nanosecond),
@@ -181,7 +181,7 @@ func TestDoTKeepAliveExpiresIdleConnection(t *testing.T) {
 func TestDoTKeepAliveRefusesIPLiteralWithoutServerName(t *testing.T) {
 	t.Parallel()
 	addr := netip.MustParseAddrPort("127.0.0.1:853")
-	_, err := dot.NewKeepAliveExchanger(addr)
+	_, err := dot.NewKeepAliveClient(addr)
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "ServerName")
 }

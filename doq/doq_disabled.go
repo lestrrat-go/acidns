@@ -1,7 +1,7 @@
 //go:build acidns_no_doq
 
 // Package doq is a stub built when the acidns_no_doq build tag is set.
-// New always returns ErrDoQDisabled and the package does not import
+// NewClient always returns ErrDoQDisabled and the package does not import
 // quic-go, so callers can drop quic-go from their dependency tree.
 package doq
 
@@ -15,12 +15,12 @@ import (
 	"github.com/lestrrat-go/option/v3"
 )
 
-// ErrDoQDisabled is returned by New when the package was built with the
-// acidns_no_doq build tag.
+// ErrDoQDisabled is returned by NewClient when the package was built with
+// the acidns_no_doq build tag.
 var ErrDoQDisabled = errors.New("doq: disabled at build time (acidns_no_doq)")
 
-// Option is a no-op stub; its methods are unreachable because New errors
-// before they are applied.
+// Option is a no-op stub; its methods are unreachable because NewClient
+// errors before they are applied.
 type Option interface {
 	option.Interface
 	doqOption()
@@ -55,7 +55,7 @@ func WithPadding(v bool) Option {
 	return doqOption{option.New(identPadding{}, v)}
 }
 
-// New always returns ErrDoQDisabled in the stub build.
-func New(_ netip.AddrPort, _ ...Option) (acidns.Exchanger, error) {
+// NewClient always returns ErrDoQDisabled in the stub build.
+func NewClient(_ netip.AddrPort, _ ...Option) (acidns.Exchanger, error) {
 	return nil, ErrDoQDisabled
 }

@@ -121,7 +121,7 @@ func TestKeepAliveSPKIPinMatch(t *testing.T) {
 	addr, cfg, leaf := startMultiDoTWithCert(t)
 	pin := spki.Hash(leaf)
 
-	ex, err := dot.NewKeepAliveExchanger(addr,
+	ex, err := dot.NewKeepAliveClient(addr,
 		dot.WithKeepAliveTLSConfig(cfg),
 		dot.WithKeepAliveServerName("127.0.0.1"),
 		dot.WithKeepAlivePadding(false),
@@ -141,7 +141,7 @@ func TestKeepAliveSPKIPinMismatch(t *testing.T) {
 	addr, cfg, _ := startMultiDoTWithCert(t)
 
 	wrongPin := make([]byte, spki.HashSize) // all zeros
-	ex, err := dot.NewKeepAliveExchanger(addr,
+	ex, err := dot.NewKeepAliveClient(addr,
 		dot.WithKeepAliveTLSConfig(cfg),
 		dot.WithKeepAliveServerName("127.0.0.1"),
 		dot.WithKeepAlivePadding(false),
@@ -158,7 +158,7 @@ func TestKeepAliveSPKIPinMismatch(t *testing.T) {
 func TestKeepAliveSPKIPinInvalidLength(t *testing.T) {
 	t.Parallel()
 	addr := netip.MustParseAddrPort("127.0.0.1:853")
-	_, err := dot.NewKeepAliveExchanger(addr,
+	_, err := dot.NewKeepAliveClient(addr,
 		dot.WithKeepAliveServerName("test"),
 		dot.WithKeepAliveSPKIPin(make([]byte, 16)),
 	)
@@ -174,7 +174,7 @@ func TestKeepAliveSPKIPinPreservesCallerVerifyConnection(t *testing.T) {
 	cfg = cfg.Clone()
 	cfg.VerifyConnection = func(_ tls.ConnectionState) error { return callerErr }
 
-	ex, err := dot.NewKeepAliveExchanger(addr,
+	ex, err := dot.NewKeepAliveClient(addr,
 		dot.WithKeepAliveTLSConfig(cfg),
 		dot.WithKeepAliveServerName("127.0.0.1"),
 		dot.WithKeepAlivePadding(false),
@@ -193,7 +193,7 @@ func TestKeepAliveRejectsInsecureTLSConfig(t *testing.T) {
 	addr := netip.MustParseAddrPort("127.0.0.1:853")
 	cfg := &tls.Config{InsecureSkipVerify: true, ServerName: "example"}
 
-	_, err := dot.NewKeepAliveExchanger(addr,
+	_, err := dot.NewKeepAliveClient(addr,
 		dot.WithKeepAliveTLSConfig(cfg),
 		dot.WithKeepAliveServerName("example"),
 	)
@@ -205,7 +205,7 @@ func TestKeepAliveAllowsInsecureTLSConfigWithExplicitOptIn(t *testing.T) {
 	addr := netip.MustParseAddrPort("127.0.0.1:853")
 	cfg := &tls.Config{InsecureSkipVerify: true, ServerName: "example"}
 
-	_, err := dot.NewKeepAliveExchanger(addr,
+	_, err := dot.NewKeepAliveClient(addr,
 		dot.WithKeepAliveTLSConfig(cfg),
 		dot.WithKeepAliveServerName("example"),
 		dot.WithKeepAliveInsecure(true),
@@ -219,7 +219,7 @@ func TestKeepAliveInsecureSkipsServerNameCheck(t *testing.T) {
 	// constructor must NOT refuse — symmetric with the single-shot
 	// New(WithInsecure(true)) escape hatch for loopback testing.
 	addr := netip.MustParseAddrPort("127.0.0.1:853")
-	_, err := dot.NewKeepAliveExchanger(addr,
+	_, err := dot.NewKeepAliveClient(addr,
 		dot.WithKeepAliveInsecure(true),
 	)
 	require.NoError(t, err)

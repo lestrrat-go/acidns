@@ -93,7 +93,7 @@ func TestServerRoundTrip(t *testing.T) {
 	ctrl, err := srv.Run(ctx)
 	require.NoError(t, err)
 
-	ex, err := doq.New(ctrl.Addr(),
+	ex, err := doq.NewClient(ctrl.Addr(),
 		doq.WithTLSConfig(clientCfg),
 		doq.WithServerName("127.0.0.1"),
 		doq.WithPadding(false),

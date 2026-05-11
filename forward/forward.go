@@ -93,14 +93,14 @@ func NewUDP(addr netip.AddrPort, opts ...Option) (*Forwarder, error) {
 }
 
 // NewDoT returns a Forwarder that forwards to addr over DoT (RFC
-// 7858). The tlsConfig is forwarded to the underlying [dot.New]; a
+// 7858). The tlsConfig is forwarded to the underlying [dot.NewClient]; a
 // nil tlsConfig falls back to dot's defaults.
 func NewDoT(addr netip.AddrPort, tlsConfig *tls.Config, opts ...Option) (*Forwarder, error) {
 	var dotOpts []dot.Option
 	if tlsConfig != nil {
 		dotOpts = append(dotOpts, dot.WithTLSConfig(tlsConfig))
 	}
-	ex, err := dot.New(addr, dotOpts...)
+	ex, err := dot.NewClient(addr, dotOpts...)
 	if err != nil {
 		return newForwarder(errExchanger{err: err}, "(invalid dot)", opts)
 	}

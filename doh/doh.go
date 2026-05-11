@@ -67,7 +67,7 @@ const maxResponseBytes = 64 * 1024
 // CheckRedirect returns http.ErrUseLastResponse so the client surfaces
 // the 3xx as the HTTP response rather than auto-following it. A hostile
 // or misconfigured DoH endpoint that 302s to http:// would otherwise
-// bypass the scheme guard at New, since the redirect is followed by
+// bypass the scheme guard at NewClient, since the redirect is followed by
 // the underlying http.Client and not re-validated. RFC 8484 has no
 // notion of redirected DoH; a 3xx is itself a protocol violation.
 func defaultClient() *http.Client {
@@ -115,10 +115,10 @@ type Client struct {
 	padding   bool
 }
 
-// New returns a *Client that talks DoH to the given endpoint URL
+// NewClient returns a *Client that talks DoH to the given endpoint URL
 // (e.g. "https://cloudflare-dns.com/dns-query"). *Client satisfies
 // [acidns.Exchanger].
-func New(endpoint string, opts ...Option) (*Client, error) {
+func NewClient(endpoint string, opts ...Option) (*Client, error) {
 	u, err := url.Parse(endpoint)
 	if err != nil {
 		return nil, fmt.Errorf("%w: %v", ErrInvalidEndpoint, err)
@@ -170,7 +170,7 @@ func New(endpoint string, opts ...Option) (*Client, error) {
 	// a protocol violation by the server, and silently following it
 	// (which any caller-supplied http.Client would do unless they
 	// explicitly disabled redirects) bypasses the scheme guard at
-	// New that refuses http:// endpoints. Shallow-copy so we don't
+	// NewClient that refuses http:// endpoints. Shallow-copy so we don't
 	// mutate the caller's client.
 	clientCopy := *c.client
 	clientCopy.CheckRedirect = func(*http.Request, []*http.Request) error {

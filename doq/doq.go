@@ -11,8 +11,8 @@
 // DoQ pulls quic-go (and its TLS / ECN / connection-migration code paths)
 // into the binary. Builds that do not need DoQ can pass the
 // `acidns_no_doq` build tag to compile a stub package that returns
-// ErrDoQDisabled from New; this keeps the quic-go dependency out of the
-// final binary.
+// ErrDoQDisabled from NewClient; this keeps the quic-go dependency out of
+// the final binary.
 package doq
 
 import (
@@ -64,9 +64,9 @@ type Client struct {
 	maxResponseBytes int
 }
 
-// New returns a *Client that talks DoQ to addr. *Client satisfies
+// NewClient returns a *Client that talks DoQ to addr. *Client satisfies
 // [acidns.Exchanger].
-func New(addr netip.AddrPort, opts ...Option) (*Client, error) {
+func NewClient(addr netip.AddrPort, opts ...Option) (*Client, error) {
 	if !addr.IsValid() {
 		return nil, ErrInvalidAddress
 	}
@@ -121,7 +121,7 @@ func New(addr netip.AddrPort, opts ...Option) (*Client, error) {
 	if c.serverName != "" {
 		tcfg.ServerName = c.serverName
 	}
-	// IP-literal address with no ServerName: refuse, mirroring [dot.New].
+	// IP-literal address with no ServerName: refuse, mirroring [dot.NewClient].
 	// Authenticating a TLS handshake against an IP-as-SNI is a footgun.
 	// WithInsecure callers opt out of cert verification entirely so
 	// the SNI requirement no longer protects anything.

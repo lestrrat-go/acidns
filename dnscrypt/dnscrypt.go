@@ -61,7 +61,7 @@ var (
 	ErrResponseMagic        = errors.New("dnscrypt: bad resolver magic in response")
 	ErrPlainTextTooShort    = errors.New("dnscrypt: response too short")
 	ErrCertUnverified       = errors.New("dnscrypt: cert not verified — call Cert.Verify first")
-	ErrCertRequired         = errors.New("dnscrypt: New requires WithCertificate")
+	ErrCertRequired         = errors.New("dnscrypt: NewClient requires WithCertificate")
 	// ErrLowOrderPoint indicates the X25519 shared-secret derivation
 	// produced an all-zero output, which means the peer supplied a
 	// Curve25519 low-order point. Accepting such a key would AEAD
@@ -87,7 +87,7 @@ type Cert struct {
 	validUntil    time.Time
 	// verified is set true only by Verify() on a successful signature
 	// check (or by SignCert when a fake/test cert is locally signed).
-	// New() refuses to construct an Exchanger from an unverified cert
+	// NewClient refuses to construct an Exchanger from an unverified cert
 	// so a caller cannot accidentally bypass the signature check that
 	// is the entire point of DNSCrypt.
 	verified bool
@@ -261,7 +261,7 @@ func SignCert(c *Cert, providerSK ed25519.PrivateKey) {
 	sig := ed25519.Sign(providerSK, signed)
 	copy(c.signature[:], sig)
 	// Locally-signed cert: the caller knows-good the signature; allow
-	// tests / fake responders to use it via [New] without re-verifying.
+	// tests / fake responders to use it via [NewClient] without re-verifying.
 	c.verified = true
 }
 
@@ -391,11 +391,11 @@ type Client struct {
 	clockSkew time.Duration
 }
 
-// New returns a *Client that sends DNSCrypt-encrypted queries to
+// NewClient returns a *Client that sends DNSCrypt-encrypted queries to
 // addr. The verified [*Cert] is supplied via [WithCertificate] and
 // is required — see that option for the caller's [Cert.Verify]
 // obligation. *Client satisfies [acidns.Exchanger].
-func New(addr netip.AddrPort, opts ...Option) (*Client, error) {
+func NewClient(addr netip.AddrPort, opts ...Option) (*Client, error) {
 	c := config{timeout: 5 * time.Second, now: time.Now, clockSkew: 5 * time.Second}
 	for _, o := range opts {
 		switch o.Ident() {

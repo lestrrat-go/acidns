@@ -44,7 +44,7 @@ func TestE2ELiveResolver(t *testing.T) {
 	})
 
 	t.Run("DoT via 1.1.1.1:853", func(t *testing.T) {
-		ex, err := dot.New(netip.MustParseAddrPort("1.1.1.1:853"),
+		ex, err := dot.NewClient(netip.MustParseAddrPort("1.1.1.1:853"),
 			dot.WithServerName("cloudflare-dns.com"))
 		require.NoError(t, err)
 		rd, err := acidns.NewResolver(acidns.WithExchanger(ex))
@@ -56,7 +56,7 @@ func TestE2ELiveResolver(t *testing.T) {
 	})
 
 	t.Run("DoH via cloudflare-dns.com", func(t *testing.T) {
-		ex, err := doh.New("https://cloudflare-dns.com/dns-query")
+		ex, err := doh.NewClient("https://cloudflare-dns.com/dns-query")
 		require.NoError(t, err)
 		rh, err := acidns.NewResolver(acidns.WithExchanger(ex))
 		require.NoError(t, err)

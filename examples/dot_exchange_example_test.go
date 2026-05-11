@@ -25,7 +25,7 @@ import (
 
 func Example_dot_exchange() {
 	// Bring up a self-signed TLS listener on 127.0.0.1, dial it with
-	// dot.New, and exchange a single A query. The server returns a
+	// dot.NewClient, and exchange a single A query. The server returns a
 	// fixed answer so the example output is deterministic.
 	priv, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
 	if err != nil {
@@ -109,7 +109,7 @@ func Example_dot_exchange() {
 	addr := netip.AddrPortFrom(netip.MustParseAddr("127.0.0.1"), uint16(a.Port))
 	clientCfg := &tls.Config{RootCAs: pool, ServerName: "127.0.0.1", MinVersion: tls.VersionTLS12}
 
-	ex, err := dot.New(addr, dot.WithTLSConfig(clientCfg), dot.WithServerName("127.0.0.1"))
+	ex, err := dot.NewClient(addr, dot.WithTLSConfig(clientCfg), dot.WithServerName("127.0.0.1"))
 	if err != nil {
 		fmt.Println("dot:", err)
 		return

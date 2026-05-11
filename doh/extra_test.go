@@ -26,7 +26,7 @@ func newQuery(t *testing.T, id uint16) wire.Message {
 // TestNewURLParseError covers the url.Parse error branch in New.
 func TestNewURLParseError(t *testing.T) {
 	t.Parallel()
-	_, err := doh.New("://")
+	_, err := doh.NewClient("://")
 	require.ErrorIs(t, err, doh.ErrInvalidEndpoint)
 }
 
@@ -36,19 +36,19 @@ func TestNewURLParseError(t *testing.T) {
 // privacy goal of the package.
 func TestNewRefusesPlaintextHTTP(t *testing.T) {
 	t.Parallel()
-	_, err := doh.New("http://example.com/dns-query")
+	_, err := doh.NewClient("http://example.com/dns-query")
 	require.Error(t, err, "plaintext http:// must be refused")
 	require.Contains(t, err.Error(), "plaintext http")
 
 	// Explicit opt-in lets it through.
-	ex, err := doh.New("http://example.com/dns-query", doh.WithInsecure(true))
+	ex, err := doh.NewClient("http://example.com/dns-query", doh.WithInsecure(true))
 	require.NoError(t, err)
 	require.NotNil(t, ex)
 }
 
 func TestNewRefusesUnknownScheme(t *testing.T) {
 	t.Parallel()
-	_, err := doh.New("ftp://example.com/dns-query")
+	_, err := doh.NewClient("ftp://example.com/dns-query")
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "scheme must be https")
 }
@@ -57,7 +57,7 @@ func TestNewRefusesUnknownScheme(t *testing.T) {
 // must fall back to http.DefaultClient.
 func TestNewNilHTTPClient(t *testing.T) {
 	t.Parallel()
-	ex, err := doh.New("https://example.com/dns-query", doh.WithHTTPClient(nil))
+	ex, err := doh.NewClient("https://example.com/dns-query", doh.WithHTTPClient(nil))
 	require.NoError(t, err)
 	require.NotNil(t, ex)
 }
@@ -71,7 +71,7 @@ func TestExchangeBadContentType(t *testing.T) {
 	}))
 	t.Cleanup(srv.Close)
 
-	ex, err := doh.New(srv.URL, doh.WithInsecure(true))
+	ex, err := doh.NewClient(srv.URL, doh.WithInsecure(true))
 	require.NoError(t, err)
 
 	_, err = ex.Exchange(t.Context(), newQuery(t, 0x1234))
@@ -90,7 +90,7 @@ func TestExchangeEmptyContentType(t *testing.T) {
 	}))
 	t.Cleanup(srv.Close)
 
-	ex, err := doh.New(srv.URL, doh.WithInsecure(true))
+	ex, err := doh.NewClient(srv.URL, doh.WithInsecure(true))
 	require.NoError(t, err)
 
 	_, err = ex.Exchange(t.Context(), newQuery(t, 0x2345))
@@ -109,7 +109,7 @@ func TestExchangeUnmarshalError(t *testing.T) {
 	}))
 	t.Cleanup(srv.Close)
 
-	ex, err := doh.New(srv.URL, doh.WithInsecure(true))
+	ex, err := doh.NewClient(srv.URL, doh.WithInsecure(true))
 	require.NoError(t, err)
 
 	_, err = ex.Exchange(t.Context(), newQuery(t, 0x3456))
@@ -142,7 +142,7 @@ func TestExchangeIDMismatch(t *testing.T) {
 	}))
 	t.Cleanup(srv.Close)
 
-	ex, err := doh.New(srv.URL, doh.WithInsecure(true))
+	ex, err := doh.NewClient(srv.URL, doh.WithInsecure(true))
 	require.NoError(t, err)
 
 	_, err = ex.Exchange(t.Context(), newQuery(t, 0x4567))
@@ -157,7 +157,7 @@ func TestExchangeRequestError(t *testing.T) {
 	url := srv.URL
 	srv.Close() // close immediately so subsequent dial fails.
 
-	ex, err := doh.New(url, doh.WithInsecure(true))
+	ex, err := doh.NewClient(url, doh.WithInsecure(true))
 	require.NoError(t, err)
 
 	_, err = ex.Exchange(t.Context(), newQuery(t, 0x5678))
@@ -169,7 +169,7 @@ func TestExchangeRequestError(t *testing.T) {
 // failure: passing a nil context triggers the error branch.
 func TestExchangeGETRequestError(t *testing.T) {
 	t.Parallel()
-	ex, err := doh.New("https://example.invalid/dns-query", doh.WithMethod(doh.MethodGET))
+	ex, err := doh.NewClient("https://example.invalid/dns-query", doh.WithMethod(doh.MethodGET))
 	require.NoError(t, err)
 
 	//nolint:staticcheck // intentionally passing nil ctx to drive error path
@@ -181,7 +181,7 @@ func TestExchangeGETRequestError(t *testing.T) {
 // failure path the same way.
 func TestExchangePOSTRequestError(t *testing.T) {
 	t.Parallel()
-	ex, err := doh.New("https://example.invalid/dns-query")
+	ex, err := doh.NewClient("https://example.invalid/dns-query")
 	require.NoError(t, err)
 
 	//nolint:staticcheck // intentionally passing nil ctx to drive error path

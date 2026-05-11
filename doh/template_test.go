@@ -106,7 +106,7 @@ func TestGETFormTemplate(t *testing.T) {
 	t.Cleanup(srv.Close)
 
 	endpoint := srv.URL + "/dns-query{?dns}"
-	ex, err := doh.New(endpoint, doh.WithMethod(doh.MethodGET), doh.WithInsecure(true))
+	ex, err := doh.NewClient(endpoint, doh.WithMethod(doh.MethodGET), doh.WithInsecure(true))
 	require.NoError(t, err)
 
 	q, _ := wire.NewMessageBuilder().
@@ -124,7 +124,7 @@ func TestGETPathTemplate(t *testing.T) {
 	t.Cleanup(srv.Close)
 
 	endpoint := srv.URL + "/dns-query/{dns}"
-	ex, err := doh.New(endpoint, doh.WithMethod(doh.MethodGET), doh.WithInsecure(true))
+	ex, err := doh.NewClient(endpoint, doh.WithMethod(doh.MethodGET), doh.WithInsecure(true))
 	require.NoError(t, err)
 
 	q, _ := wire.NewMessageBuilder().
@@ -142,7 +142,7 @@ func TestGETLegacyAppendQuery(t *testing.T) {
 	t.Cleanup(srv.Close)
 
 	endpoint := srv.URL + "/dns-query"
-	ex, err := doh.New(endpoint, doh.WithMethod(doh.MethodGET), doh.WithInsecure(true))
+	ex, err := doh.NewClient(endpoint, doh.WithMethod(doh.MethodGET), doh.WithInsecure(true))
 	require.NoError(t, err)
 
 	q, _ := wire.NewMessageBuilder().

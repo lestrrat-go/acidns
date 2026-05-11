@@ -16,7 +16,7 @@ import (
 func TestDoQStream(t *testing.T) {
 	t.Parallel()
 	addr, cfg := startDoQ(t)
-	ex, err := doq.New(addr,
+	ex, err := doq.NewClient(addr,
 		doq.WithTLSConfig(cfg),
 		doq.WithTimeout(2*time.Second),
 		doq.WithServerName("127.0.0.1"),

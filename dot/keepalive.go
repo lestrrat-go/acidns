@@ -9,7 +9,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/lestrrat-go/acidns"
 	"github.com/lestrrat-go/acidns/internal/spki"
 	"github.com/lestrrat-go/acidns/internal/streamframe"
 	"github.com/lestrrat-go/acidns/wire"
@@ -76,7 +75,7 @@ func WithKeepAliveTLSConfig(tc *tls.Config) KeepAliveOption {
 // WithKeepAliveServerName sets the SNI / certificate verification name.
 // Required when addr is an IP literal and no ServerName was set on the
 // pre-supplied *tls.Config — the Client refuses construction
-// otherwise (see [New] for the same rule).
+// otherwise (see [NewClient] for the same rule).
 func WithKeepAliveServerName(name string) KeepAliveOption {
 	return dotKeepAliveOption{option.New(identKAServerName{}, name)}
 }
@@ -89,7 +88,7 @@ func WithKeepAlivePadding(v bool) KeepAliveOption {
 
 // WithKeepAliveInsecure disables TLS certificate verification on the
 // persistent connection. Mirrors [WithInsecure] for the single-shot
-// Client: by default the keep-alive Exchanger requires a valid chain
+// Client: by default the keep-alive client requires a valid chain
 // to a system root or to the RootCAs configured via
 // [WithKeepAliveTLSConfig]; pass true here to skip that check entirely.
 // Use only against a known loopback / test endpoint — disabling
@@ -102,14 +101,14 @@ func WithKeepAliveInsecure(v bool) KeepAliveOption {
 // WithKeepAliveSPKIPin appends a SHA-256 SubjectPublicKeyInfo
 // fingerprint (32 raw bytes) the resolver's leaf certificate MUST
 // match. Mirrors [WithSPKIPin] for the persistent-connection
-// Exchanger. Multiple WithKeepAliveSPKIPin calls accumulate: at least
+// client. Multiple WithKeepAliveSPKIPin calls accumulate: at least
 // one of the registered pins must match. Pinning runs IN ADDITION TO
 // the usual PKIX chain validation; a successful handshake requires
 // both a valid chain (or [WithKeepAliveInsecure](true)) AND a matching
 // pin. If the [crypto/tls.Config] carries its own VerifyConnection,
 // ours runs after the caller's so the caller's check is preserved.
 //
-// Pin length is validated at [NewKeepAliveExchanger]; supplying a
+// Pin length is validated at [NewKeepAliveClient]; supplying a
 // non-32-byte pin returns [ErrInvalidSPKIPin].
 func WithKeepAliveSPKIPin(pin []byte) KeepAliveOption {
 	cp := make([]byte, len(pin))
@@ -117,16 +116,18 @@ func WithKeepAliveSPKIPin(pin []byte) KeepAliveOption {
 	return dotKeepAliveOption{option.New(identKASPKIPin{}, cp)}
 }
 
-// NewKeepAliveExchanger returns an Exchanger that maintains a single
+// NewKeepAliveClient returns a *KeepAliveClient that maintains a single
 // persistent TLS-over-TCP connection per addr, advertising
 // edns-tcp-keepalive on outgoing queries (RFC 7828) and honouring the
 // timeout returned by the server. The connection is closed and
 // re-dialled transparently when the server-advertised idle window
 // elapses or any I/O error breaks framing.
 //
-// Returned Client is safe for concurrent callers but serialises
-// exchanges over the single connection (no pipelining).
-func NewKeepAliveExchanger(addr netip.AddrPort, opts ...KeepAliveOption) (acidns.Exchanger, error) {
+// *KeepAliveClient satisfies [acidns.Exchanger]; the concrete pointer is
+// returned so callers can reach Close without an interface assertion. It
+// is safe for concurrent callers but serialises exchanges over the
+// single connection (no pipelining).
+func NewKeepAliveClient(addr netip.AddrPort, opts ...KeepAliveOption) (*KeepAliveClient, error) {
 	if !addr.IsValid() {
 		return nil, fmt.Errorf("dot-keepalive: invalid server address")
 	}
@@ -211,10 +212,15 @@ func NewKeepAliveExchanger(addr netip.AddrPort, opts ...KeepAliveOption) (acidns
 		}
 	}
 
-	return &kaExchanger{addr: addr, cfg: c, tlsConfig: tcfg}, nil
+	return &KeepAliveClient{addr: addr, cfg: c, tlsConfig: tcfg}, nil
 }
 
-type kaExchanger struct {
+// KeepAliveClient is the *Client variant that maintains a single
+// persistent TLS connection across exchanges, advertising
+// edns-tcp-keepalive (RFC 7828) and honouring the server-supplied idle
+// window. Construct with [NewKeepAliveClient]. The zero value is not
+// usable.
+type KeepAliveClient struct {
 	addr      netip.AddrPort
 	cfg       kaConfig
 	tlsConfig *tls.Config
@@ -235,7 +241,7 @@ type kaExchanger struct {
 	exchangeMu sync.Mutex
 }
 
-func (e *kaExchanger) Exchange(ctx context.Context, q wire.Message) (wire.Message, error) {
+func (e *KeepAliveClient) Exchange(ctx context.Context, q wire.Message) (wire.Message, error) {
 	if e.cfg.padding {
 		q = wire.PadEncrypted(q)
 	}
@@ -288,7 +294,7 @@ func (e *kaExchanger) Exchange(ctx context.Context, q wire.Message) (wire.Messag
 // handshake does not pin concurrent callers. Concurrent callers
 // dedupe via the dialing channel — exactly one dial happens per
 // epoch.
-func (e *kaExchanger) acquireConn(ctx context.Context) (net.Conn, error) {
+func (e *KeepAliveClient) acquireConn(ctx context.Context) (net.Conn, error) {
 	for {
 		e.dialMu.Lock()
 		if e.conn != nil {
@@ -340,7 +346,7 @@ func (e *kaExchanger) acquireConn(ctx context.Context) (net.Conn, error) {
 // dropConn invalidates conn so the next Exchange dials fresh. If conn
 // is no longer the active one (a concurrent caller already swapped it
 // out) we still close it so the resource isn't leaked.
-func (e *kaExchanger) dropConn(conn net.Conn) {
+func (e *KeepAliveClient) dropConn(conn net.Conn) {
 	e.dialMu.Lock()
 	defer e.dialMu.Unlock()
 	if e.conn == conn {
@@ -352,7 +358,7 @@ func (e *kaExchanger) dropConn(conn net.Conn) {
 
 // Close releases any cached TLS connection. Subsequent Exchange calls
 // will re-handshake.
-func (e *kaExchanger) Close() error {
+func (e *KeepAliveClient) Close() error {
 	e.dialMu.Lock()
 	defer e.dialMu.Unlock()
 	if e.conn != nil {

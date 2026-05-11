@@ -134,7 +134,7 @@ func Example_doq_exchange() {
 	a := udpConn.LocalAddr().(*net.UDPAddr)
 	addr := netip.AddrPortFrom(netip.MustParseAddr("127.0.0.1"), uint16(a.Port))
 
-	ex, err := doq.New(addr, doq.WithTLSConfig(clientTLS))
+	ex, err := doq.NewClient(addr, doq.WithTLSConfig(clientTLS))
 	if err != nil {
 		fmt.Println("doq:", err)
 		return

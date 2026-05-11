@@ -14,7 +14,7 @@ import (
 
 func TestNew_ReturnsErrDoQDisabled(t *testing.T) {
 	t.Parallel()
-	_, err := doq.New(
+	_, err := doq.NewClient(
 		netip.MustParseAddrPort("127.0.0.1:8853"),
 		doq.WithTimeout(time.Second),
 		doq.WithServerName("example.com"),

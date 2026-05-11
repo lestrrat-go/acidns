@@ -140,7 +140,7 @@ func TestDoQSPKIPinMatch(t *testing.T) {
 	addr, cfg, leaf := startDoQReturningCert(t)
 	pin := spki.Hash(leaf)
 
-	ex, err := doq.New(addr,
+	ex, err := doq.NewClient(addr,
 		doq.WithTLSConfig(cfg),
 		doq.WithServerName("127.0.0.1"),
 		doq.WithSPKIPin(pin[:]),
@@ -157,7 +157,7 @@ func TestDoQSPKIPinMismatch(t *testing.T) {
 	addr, cfg, _ := startDoQReturningCert(t)
 
 	wrongPin := make([]byte, spki.HashSize)
-	ex, err := doq.New(addr,
+	ex, err := doq.NewClient(addr,
 		doq.WithTLSConfig(cfg),
 		doq.WithServerName("127.0.0.1"),
 		doq.WithSPKIPin(wrongPin),
@@ -171,7 +171,7 @@ func TestDoQSPKIPinMismatch(t *testing.T) {
 func TestDoQSPKIPinInvalidLength(t *testing.T) {
 	t.Parallel()
 	addr := netip.MustParseAddrPort("127.0.0.1:853")
-	_, err := doq.New(addr,
+	_, err := doq.NewClient(addr,
 		doq.WithServerName("test"),
 		doq.WithSPKIPin(make([]byte, 16)),
 	)

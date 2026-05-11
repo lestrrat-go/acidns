@@ -93,7 +93,7 @@ func TestServerRoundTrip(t *testing.T) {
 	ctrl, err := srv.Run(ctx)
 	require.NoError(t, err)
 
-	ex, err := dnscrypt.New(ctrl.Addr(), dnscrypt.WithCertificate(fx.cert))
+	ex, err := dnscrypt.NewClient(ctrl.Addr(), dnscrypt.WithCertificate(fx.cert))
 	require.NoError(t, err)
 
 	q, err := wire.NewMessageBuilder().
@@ -147,7 +147,7 @@ func TestServerDropsWrongClientMagic(t *testing.T) {
 	require.NoError(t, err)
 	dnscrypt.SignCert(bad, fx.providerSK)
 
-	ex, err := dnscrypt.New(ctrl.Addr(), dnscrypt.WithCertificate(bad))
+	ex, err := dnscrypt.NewClient(ctrl.Addr(), dnscrypt.WithCertificate(bad))
 	require.NoError(t, err)
 	q, _ := wire.NewMessageBuilder().
 		ID(1).
@@ -249,7 +249,7 @@ func TestServerRotate(t *testing.T) {
 	require.NoError(t, err)
 
 	// Round-trip under the original cert.
-	ex1, err := dnscrypt.New(ctrl.Addr(), dnscrypt.WithCertificate(first.cert))
+	ex1, err := dnscrypt.NewClient(ctrl.Addr(), dnscrypt.WithCertificate(first.cert))
 	require.NoError(t, err)
 	q, _ := wire.NewMessageBuilder().
 		ID(1).
@@ -267,7 +267,7 @@ func TestServerRotate(t *testing.T) {
 	require.NoError(t, ctrl.Rotate(second.cert, second.resolverSK))
 
 	// New client under the new cert succeeds.
-	ex2, err := dnscrypt.New(ctrl.Addr(), dnscrypt.WithCertificate(second.cert))
+	ex2, err := dnscrypt.NewClient(ctrl.Addr(), dnscrypt.WithCertificate(second.cert))
 	require.NoError(t, err)
 	q2, _ := wire.NewMessageBuilder().
 		ID(2).

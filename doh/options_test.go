@@ -10,7 +10,7 @@ import (
 
 func TestNewWithOptions(t *testing.T) {
 	t.Parallel()
-	ex, err := doh.New("https://cloudflare-dns.com/dns-query",
+	ex, err := doh.NewClient("https://cloudflare-dns.com/dns-query",
 		doh.WithHTTPClient(http.DefaultClient),
 		doh.WithUserAgent("acidns/test"),
 	)

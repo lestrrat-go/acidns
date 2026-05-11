@@ -13,7 +13,7 @@ import (
 func TestDoTStream(t *testing.T) {
 	t.Parallel()
 	addr, cfg := startDoT(t)
-	ex, err := dot.New(addr,
+	ex, err := dot.NewClient(addr,
 		dot.WithTLSConfig(cfg),
 		dot.WithServerName("127.0.0.1"),
 		dot.WithTimeout(2*time.Second),

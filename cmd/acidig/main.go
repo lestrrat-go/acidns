@@ -120,7 +120,7 @@ func splitAtServerArg(argv []string, server *string) []string {
 func buildResolver(o opts) (acidns.Resolver, error) {
 	switch {
 	case o.dohURL != "":
-		ex, err := doh.New(o.dohURL)
+		ex, err := doh.NewClient(o.dohURL)
 		if err != nil {
 			return nil, err
 		}
@@ -134,7 +134,7 @@ func buildResolver(o opts) (acidns.Resolver, error) {
 		if o.tlsName != "" {
 			dotOpts = append(dotOpts, dot.WithServerName(o.tlsName))
 		}
-		ex, err := dot.New(addr, dotOpts...)
+		ex, err := dot.NewClient(addr, dotOpts...)
 		if err != nil {
 			return nil, err
 		}

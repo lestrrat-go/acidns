@@ -49,7 +49,7 @@ func Example_doh_exchange() {
 
 	// httptest.NewTLSServer hands us a Client wired to trust its self-
 	// signed cert; pipe that through to the DoH exchanger.
-	ex, err := doh.New(srv.URL+"/dns-query", doh.WithHTTPClient(srv.Client()))
+	ex, err := doh.NewClient(srv.URL+"/dns-query", doh.WithHTTPClient(srv.Client()))
 	if err != nil {
 		fmt.Println("doh:", err)
 		return

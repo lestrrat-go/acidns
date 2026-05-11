@@ -116,7 +116,7 @@ func TestSPKIPinMatch(t *testing.T) {
 	addr, cfg, leaf := startDoTReturningCert(t)
 	pin := spki.Hash(leaf)
 
-	ex, err := dot.New(addr,
+	ex, err := dot.NewClient(addr,
 		dot.WithTLSConfig(cfg),
 		dot.WithServerName("127.0.0.1"),
 		dot.WithSPKIPin(pin[:]),
@@ -133,7 +133,7 @@ func TestSPKIPinMismatch(t *testing.T) {
 	addr, cfg, _ := startDoTReturningCert(t)
 
 	wrongPin := make([]byte, spki.HashSize) // all zeros
-	ex, err := dot.New(addr,
+	ex, err := dot.NewClient(addr,
 		dot.WithTLSConfig(cfg),
 		dot.WithServerName("127.0.0.1"),
 		dot.WithSPKIPin(wrongPin),
@@ -150,7 +150,7 @@ func TestSPKIPinMultiplePinsOneMatches(t *testing.T) {
 	good := spki.Hash(leaf)
 	bad := make([]byte, spki.HashSize)
 
-	ex, err := dot.New(addr,
+	ex, err := dot.NewClient(addr,
 		dot.WithTLSConfig(cfg),
 		dot.WithServerName("127.0.0.1"),
 		dot.WithSPKIPin(bad),
@@ -166,7 +166,7 @@ func TestSPKIPinMultiplePinsOneMatches(t *testing.T) {
 func TestSPKIPinInvalidLength(t *testing.T) {
 	t.Parallel()
 	addr := netip.MustParseAddrPort("127.0.0.1:853")
-	_, err := dot.New(addr,
+	_, err := dot.NewClient(addr,
 		dot.WithServerName("test"),
 		dot.WithSPKIPin(make([]byte, 16)),
 	)
@@ -185,7 +185,7 @@ func TestSPKIPinPreservesCallerVerifyConnection(t *testing.T) {
 	cfg = cfg.Clone()
 	cfg.VerifyConnection = func(_ tls.ConnectionState) error { return callerErr }
 
-	ex, err := dot.New(addr,
+	ex, err := dot.NewClient(addr,
 		dot.WithTLSConfig(cfg),
 		dot.WithServerName("127.0.0.1"),
 		dot.WithSPKIPin(pin[:]),

@@ -7,9 +7,9 @@ import (
 	"github.com/lestrrat-go/option/v3"
 )
 
-// Option configures the basic single-shot DoT Exchanger ([New]).
+// Option configures the basic single-shot DoT Exchanger ([NewClient]).
 // Distinct from [KeepAliveOption] (the persistent-connection
-// variant, [NewKeepAliveExchanger]) and [ServerOption] (the listen
+// variant, [NewKeepAliveClient]) and [ServerOption] (the listen
 // side, [NewServer]); the three option-sets share concept names
 // (timeout, TLS config) but the Go type system enforces which
 // constructor accepts which option, so the unprefixed names here

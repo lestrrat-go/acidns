@@ -202,7 +202,7 @@ func TestServerEndToEnd(t *testing.T) {
 		Transport: &http.Transport{TLSClientConfig: clientCfg},
 		Timeout:   5 * time.Second,
 	}
-	ex, err := doh.New(endpoint, doh.WithHTTPClient(httpClient))
+	ex, err := doh.NewClient(endpoint, doh.WithHTTPClient(httpClient))
 	require.NoError(t, err)
 
 	q := mkQuery(t, "e2e.test.")
@@ -286,8 +286,8 @@ func TestDoHSentinelErrors(t *testing.T) {
 	require.ErrorIs(t, err, doh.ErrNilHandler)
 	_, err = doh.NewServer(netip.MustParseAddrPort("127.0.0.1:0"), &echoHandler{})
 	require.ErrorIs(t, err, doh.ErrTLSConfigRequired)
-	_, err = doh.New("http://example.com/dns-query")
+	_, err = doh.NewClient("http://example.com/dns-query")
 	require.ErrorIs(t, err, doh.ErrPlaintextRefused)
-	_, err = doh.New("https://invalid host/")
+	_, err = doh.NewClient("https://invalid host/")
 	require.ErrorIs(t, err, doh.ErrInvalidEndpoint)
 }

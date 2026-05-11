@@ -124,7 +124,7 @@ func TestDoQExchange(t *testing.T) {
 	t.Parallel()
 	addr, cfg := startDoQ(t)
 
-	ex, err := doq.New(addr, doq.WithTLSConfig(cfg))
+	ex, err := doq.NewClient(addr, doq.WithTLSConfig(cfg))
 	require.NoError(t, err)
 
 	q, _ := wire.NewMessageBuilder().
@@ -150,7 +150,7 @@ func TestDoQContextCancel(t *testing.T) {
 	a := udpConn.LocalAddr().(*net.UDPAddr)
 	addr := netip.AddrPortFrom(netip.MustParseAddr("127.0.0.1"), uint16(a.Port))
 
-	ex, err := doq.New(addr, doq.WithServerName("127.0.0.1"))
+	ex, err := doq.NewClient(addr, doq.WithServerName("127.0.0.1"))
 	require.NoError(t, err)
 
 	q, _ := wire.NewMessageBuilder().

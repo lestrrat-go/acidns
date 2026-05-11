@@ -830,7 +830,7 @@ func TestWithDoTUpstreamServerName(t *testing.T) {
 
 func TestWithDoTUpstreamServerNameInvalidAddr(t *testing.T) {
 	t.Parallel()
-	// dot.New rejects invalid addresses; the option records this as
+	// dot.NewClient rejects invalid addresses; the option records this as
 	// errExchanger so first ServeDNS returns SERVFAIL.
 	h, err := forward.NewDoT(netip.AddrPort{}, &tls.Config{ServerName: "dns.example."})
 	require.NoError(t, err)
