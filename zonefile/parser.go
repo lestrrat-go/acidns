@@ -477,21 +477,21 @@ func (p *parser) parseSOA(fields []fieldTok) (rdata.SOA, error) {
 	if err != nil {
 		return zero, fmt.Errorf("SOA serial: %w", err)
 	}
-	refresh, err := strconv.ParseInt(fields[3].text, 10, 64)
+	refresh, err := parseSOATimer(fields[3], "refresh")
 	if err != nil {
-		return zero, fmt.Errorf("SOA refresh: %w", err)
+		return zero, err
 	}
-	retry, err := strconv.ParseInt(fields[4].text, 10, 64)
+	retry, err := parseSOATimer(fields[4], "retry")
 	if err != nil {
-		return zero, fmt.Errorf("SOA retry: %w", err)
+		return zero, err
 	}
-	expire, err := strconv.ParseInt(fields[5].text, 10, 64)
+	expire, err := parseSOATimer(fields[5], "expire")
 	if err != nil {
-		return zero, fmt.Errorf("SOA expire: %w", err)
+		return zero, err
 	}
-	minimum, err := strconv.ParseInt(fields[6].text, 10, 64)
+	minimum, err := parseSOATimer(fields[6], "minimum")
 	if err != nil {
-		return zero, fmt.Errorf("SOA minimum: %w", err)
+		return zero, err
 	}
 	return rdata.NewSOA(mname, rname,
 		uint32(serial),
@@ -500,4 +500,21 @@ func (p *parser) parseSOA(fields []fieldTok) (rdata.SOA, error) {
 		time.Duration(expire)*time.Second,
 		time.Duration(minimum)*time.Second,
 	)
+}
+
+// parseSOATimer parses one of the SOA refresh / retry / expire / minimum
+// fields. RFC 1035 §3.3.13 defines all four as 32-bit unsigned seconds, so
+// reject negatives and >2^32-1, and apply the same RFC 2308 §8 maxTTL
+// ceiling [parser.go] enforces on the TTL field — a value beyond maxTTL
+// would either overflow the on-wire field or wrap [time.Duration]'s
+// int64-nanoseconds representation once multiplied by [time.Second].
+func parseSOATimer(f fieldTok, label string) (int64, error) {
+	v, err := strconv.ParseUint(f.text, 10, 32)
+	if err != nil {
+		return 0, fmt.Errorf("SOA %s: %w", label, err)
+	}
+	if int64(v) > maxTTL {
+		return 0, fmt.Errorf("line %d: SOA %s %d out of range (RFC 2308 §8: 0..%d)", f.line, label, v, maxTTL)
+	}
+	return int64(v), nil
 }

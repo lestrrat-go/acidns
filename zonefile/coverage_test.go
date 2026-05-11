@@ -243,6 +243,20 @@ func TestParseRDataErrors(t *testing.T) {
 		"SOA bad minimum":         "$ORIGIN example.com.\n$TTL 60\n@ IN SOA ns. hm. 1 7200 3600 1209600 bad\n",
 		"SOA bad mname":           "$ORIGIN example.com.\n$TTL 60\n@ IN SOA ..bad hm. 1 7200 3600 1209600 60\n",
 		"SOA bad rname":           "$ORIGIN example.com.\n$TTL 60\n@ IN SOA ns. ..bad 1 7200 3600 1209600 60\n",
+		// Negative refresh: RFC 1035 §3.3.13 specifies all four SOA
+		// timer fields as 32-bit unsigned, so a negative literal must
+		// be rejected at parse time rather than silently coerced.
+		"SOA negative refresh":    "$ORIGIN example.com.\n$TTL 60\n@ IN SOA ns. hm. 1 -1 3600 1209600 60\n",
+		"SOA negative retry":      "$ORIGIN example.com.\n$TTL 60\n@ IN SOA ns. hm. 1 7200 -1 1209600 60\n",
+		"SOA negative expire":     "$ORIGIN example.com.\n$TTL 60\n@ IN SOA ns. hm. 1 7200 3600 -1 60\n",
+		"SOA negative minimum":    "$ORIGIN example.com.\n$TTL 60\n@ IN SOA ns. hm. 1 7200 3600 1209600 -1\n",
+		// Value >2^32-1: must overflow ParseUint(..., 32) and fail.
+		"SOA refresh >uint32":     "$ORIGIN example.com.\n$TTL 60\n@ IN SOA ns. hm. 1 99999999999 3600 1209600 60\n",
+		// Value within uint32 but above maxTTL (0x7fffffff): must hit
+		// the RFC 2308 §8 ceiling clamp, matching the TTL field's
+		// behaviour. 2147483648 == maxTTL + 1.
+		"SOA refresh over maxTTL": "$ORIGIN example.com.\n$TTL 60\n@ IN SOA ns. hm. 1 2147483648 3600 1209600 60\n",
+		"SOA minimum over maxTTL": "$ORIGIN example.com.\n$TTL 60\n@ IN SOA ns. hm. 1 7200 3600 1209600 2147483648\n",
 		"unsupported type RT":     "$ORIGIN example.com.\n$TTL 60\n@ IN RT 0 host.example.com.\n",
 	}
 	for name, src := range cases {
