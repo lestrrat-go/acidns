@@ -41,7 +41,7 @@ func TestForwarder_CtxCancel_ClosesUpstream(t *testing.T) {
 	t.Parallel()
 	up := &closableUpstream{}
 	ctx, cancel := context.WithCancel(t.Context())
-	_, err := forward.New(forward.WithUpstream(up), forward.WithContext(ctx))
+	_, err := forward.New(up, forward.WithContext(ctx))
 	require.NoError(t, err)
 
 	cancel()
@@ -54,7 +54,7 @@ func TestForwarder_CtxCancel_ClosesUpstream(t *testing.T) {
 func TestForwarder_CtxCancel_NopUpstream(t *testing.T) {
 	t.Parallel()
 	ctx, cancel := context.WithCancel(t.Context())
-	_, err := forward.New(forward.WithUpstream(plainUpstream{}), forward.WithContext(ctx))
+	_, err := forward.New(plainUpstream{}, forward.WithContext(ctx))
 	require.NoError(t, err)
 	cancel()
 	// No assertion beyond "did not panic"; give the lifecycle

@@ -3,8 +3,8 @@ package forward
 import (
 	"context"
 	"crypto/rand"
+	"crypto/tls"
 	"encoding/binary"
-	"errors"
 	"fmt"
 	"io"
 	"log/slog"
@@ -20,10 +20,6 @@ import (
 	"github.com/lestrrat-go/acidns/wire/rrtype"
 	"github.com/lestrrat-go/option/v3"
 )
-
-// ErrNoUpstream is returned by New when no upstream Exchanger has been
-// configured.
-var ErrNoUpstream = errors.New("forward: no upstream configured")
 
 // ErrInflightFull is returned when a cache miss arrives while the
 // configured WithMaxInflight cap is saturated. Surfaces as SERVFAIL
@@ -80,10 +76,44 @@ type inflightCall struct {
 	err  error
 }
 
-// New returns a Forwarder. Exactly one of WithUpstream,
-// WithUDPUpstream, or WithDoTUpstream must be supplied.
-func New(opts ...Option) (*Forwarder, error) {
+// New returns a Forwarder that uses the supplied [acidns.Exchanger]
+// as its upstream. Use [NewUDP] for a plain-text UDP-with-TCP-fallback
+// upstream and [NewDoT] for a DNS-over-TLS upstream — both are
+// convenience wrappers over this constructor.
+func New(upstream acidns.Exchanger, opts ...Option) (*Forwarder, error) {
+	return newForwarder(upstream, "(custom)", opts)
+}
+
+// NewUDP returns a Forwarder that forwards to addr over UDP with TCP
+// fallback on truncation (RFC 7766). Equivalent to constructing the
+// UDP/TCP-fallback exchanger yourself and passing it to [New], but
+// records a more descriptive upstream label for logs and metrics.
+func NewUDP(addr netip.AddrPort, opts ...Option) (*Forwarder, error) {
+	return newForwarder(newUDPTCPFallback(addr), addr.String(), opts)
+}
+
+// NewDoT returns a Forwarder that forwards to addr over DoT (RFC
+// 7858). The tlsConfig is forwarded to the underlying [dot.New]; a
+// nil tlsConfig falls back to dot's defaults.
+func NewDoT(addr netip.AddrPort, tlsConfig *tls.Config, opts ...Option) (*Forwarder, error) {
+	var dotOpts []dot.Option
+	if tlsConfig != nil {
+		dotOpts = append(dotOpts, dot.WithTLSConfig(tlsConfig))
+	}
+	ex, err := dot.New(addr, dotOpts...)
+	if err != nil {
+		return newForwarder(errExchanger{err: err}, "(invalid dot)", opts)
+	}
+	return newForwarder(ex, "tls://"+addr.String(), opts)
+}
+
+// newForwarder builds a Forwarder around the supplied upstream. The
+// three public constructors ([New], [NewUDP], [NewDoT]) thread their
+// transport-specific exchanger here.
+func newForwarder(upstream acidns.Exchanger, upstreamName string, opts []Option) (*Forwarder, error) {
 	c := config{
+		upstream:     upstream,
+		upstreamName: upstreamName,
 		cacheSize:    4096,
 		minTTL:       0,
 		maxTTL:       24 * time.Hour,
@@ -94,27 +124,6 @@ func New(opts ...Option) (*Forwarder, error) {
 	}
 	for _, o := range opts {
 		switch o.Ident() {
-		case identUpstream{}:
-			c.upstream = option.MustGet[acidns.Exchanger](o)
-			c.upstreamName = "(custom)"
-		case identUDPUpstream{}:
-			addr := option.MustGet[netip.AddrPort](o)
-			c.upstream = newUDPTCPFallback(addr)
-			c.upstreamName = addr.String()
-		case identDoTUpstream{}:
-			spec := option.MustGet[dotUpstreamSpec](o)
-			var dotOpts []dot.Option
-			if spec.tc != nil {
-				dotOpts = append(dotOpts, dot.WithTLSConfig(spec.tc))
-			}
-			ex, err := dot.New(spec.addr, dotOpts...)
-			if err != nil {
-				c.upstream = errExchanger{err: err}
-				c.upstreamName = "(invalid dot)"
-			} else {
-				c.upstream = ex
-				c.upstreamName = "tls://" + spec.addr.String()
-			}
 		case identCacheSize{}:
 			c.cacheSize = option.MustGet[int](o)
 		case identMinTTL{}:
@@ -136,9 +145,6 @@ func New(opts ...Option) (*Forwarder, error) {
 		case identContext{}:
 			c.lifecycleCtx = option.MustGet[context.Context](o)
 		}
-	}
-	if c.upstream == nil {
-		return nil, ErrNoUpstream
 	}
 	if c.now == nil {
 		c.now = time.Now

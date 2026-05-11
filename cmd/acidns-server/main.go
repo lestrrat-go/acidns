@@ -172,15 +172,14 @@ func buildForward(o opts) (acidns.Handler, error) {
 		if err != nil {
 			return nil, fmt.Errorf("parse upstream-tls %q: %w", o.upstreamTLS, err)
 		}
-		opts = append(opts, forward.WithDoTUpstream(ap, &tls.Config{ServerName: o.tlsName}))
+		return forward.NewDoT(ap, &tls.Config{ServerName: o.tlsName}, opts...)
 	default:
 		ap, err := netip.ParseAddrPort(o.upstream)
 		if err != nil {
 			return nil, fmt.Errorf("parse upstream %q: %w", o.upstream, err)
 		}
-		opts = append(opts, forward.WithUDPUpstream(ap))
+		return forward.NewUDP(ap, opts...)
 	}
-	return forward.New(opts...)
 }
 
 func buildAuthoritative(files []string) (acidns.Handler, error) {

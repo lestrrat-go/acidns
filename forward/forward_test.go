@@ -128,7 +128,7 @@ func TestPositiveCacheHit(t *testing.T) {
 			return answer(q, 5*time.Second, netip.MustParseAddr("203.0.113.10"))
 		},
 	}
-	h, err := forward.New(forward.WithUpstream(upstream))
+	h, err := forward.New(upstream)
 	require.NoError(t, err)
 
 	q := clientQuery(t, "example.com", rrtype.A)
@@ -151,7 +151,7 @@ func TestPositiveCacheTTLDecrements(t *testing.T) {
 		},
 	}
 	clk := newFakeClock()
-	h, err := forward.New(forward.WithUpstream(upstream), forward.WithClock(clk.Now))
+	h, err := forward.New(upstream, forward.WithClock(clk.Now))
 	require.NoError(t, err)
 
 	q := clientQuery(t, "example.com", rrtype.A)
@@ -175,7 +175,7 @@ func TestPositiveCacheExpires(t *testing.T) {
 		},
 	}
 	clk := newFakeClock()
-	h, err := forward.New(forward.WithUpstream(upstream), forward.WithClock(clk.Now))
+	h, err := forward.New(upstream, forward.WithClock(clk.Now))
 	require.NoError(t, err)
 
 	q := clientQuery(t, "example.com", rrtype.A)
@@ -196,7 +196,7 @@ func TestNXDomainCachedFromSOAMinimum(t *testing.T) {
 			return nxdomain(q, time.Hour, 30*time.Second)
 		},
 	}
-	h, err := forward.New(forward.WithUpstream(upstream))
+	h, err := forward.New(upstream)
 	require.NoError(t, err)
 
 	q := clientQuery(t, "nope.example", rrtype.A)
@@ -215,7 +215,7 @@ func TestNoDataCached(t *testing.T) {
 			return nodata(q, time.Hour, 30*time.Second)
 		},
 	}
-	h, err := forward.New(forward.WithUpstream(upstream))
+	h, err := forward.New(upstream)
 	require.NoError(t, err)
 
 	q := clientQuery(t, "ipv6less.example", rrtype.AAAA)
@@ -237,8 +237,7 @@ func TestNegativeCacheCappedByMaxNegTTL(t *testing.T) {
 		},
 	}
 	clk := newFakeClock()
-	h, err := forward.New(
-		forward.WithUpstream(upstream),
+	h, err := forward.New(upstream,
 		forward.WithMaxNegativeTTL(time.Second),
 		forward.WithClock(clk.Now),
 	)
@@ -268,7 +267,7 @@ func TestServFailNotCached(t *testing.T) {
 			return a
 		},
 	}
-	h, err := forward.New(forward.WithUpstream(upstream))
+	h, err := forward.New(upstream)
 	require.NoError(t, err)
 
 	q := clientQuery(t, "fail.example", rrtype.A)
@@ -300,7 +299,7 @@ func TestUDPTCPFallbackEndToEnd(t *testing.T) {
 	_, err = tcpSrv.Run(ctx)
 	require.NoError(t, err)
 
-	h, err := forward.New(forward.WithUDPUpstream(udpCtrl.Addr()))
+	h, err := forward.NewUDP(udpCtrl.Addr())
 	require.NoError(t, err)
 
 	w := &captureWriter{}
@@ -311,11 +310,10 @@ func TestUDPTCPFallbackEndToEnd(t *testing.T) {
 	require.Contains(t, h.UpstreamName(), udpCtrl.Addr().String())
 }
 
-func TestNoUpstreamRejected(t *testing.T) {
-	t.Parallel()
-	_, err := forward.New()
-	require.ErrorIs(t, err, forward.ErrNoUpstream)
-}
+// TestNoUpstreamRejected was removed: the constructor now takes the
+// upstream positionally, so passing no upstream is a compile-time
+// error rather than a runtime one. The previous ErrNoUpstream
+// sentinel is gone.
 
 func TestCacheCapacityZeroDisables(t *testing.T) {
 	t.Parallel()
@@ -324,8 +322,7 @@ func TestCacheCapacityZeroDisables(t *testing.T) {
 			return answer(q, time.Hour, netip.MustParseAddr("203.0.113.10"))
 		},
 	}
-	h, err := forward.New(
-		forward.WithUpstream(upstream),
+	h, err := forward.New(upstream,
 		forward.WithCacheSize(0),
 	)
 	require.NoError(t, err)
@@ -354,7 +351,7 @@ func (e *errUpstream) Exchange(_ context.Context, _ wire.Message) (wire.Message,
 func TestUpstreamErrorReturnsServFail(t *testing.T) {
 	t.Parallel()
 	up := &errUpstream{err: errors.New("simulated upstream failure")}
-	h, err := forward.New(forward.WithUpstream(up))
+	h, err := forward.New(up)
 	require.NoError(t, err)
 
 	q := clientQuery(t, "example.com", rrtype.A)
@@ -378,7 +375,7 @@ func TestNonQueryOpcodeRejectedNotImp(t *testing.T) {
 			return answer(q, time.Hour, netip.MustParseAddr("203.0.113.10"))
 		},
 	}
-	h, err := forward.New(forward.WithUpstream(up))
+	h, err := forward.New(up)
 	require.NoError(t, err)
 
 	q, err := wire.NewMessageBuilder().
@@ -405,7 +402,7 @@ func TestZeroQuestionsRejectedFormErr(t *testing.T) {
 			return answer(q, time.Hour, netip.MustParseAddr("203.0.113.10"))
 		},
 	}
-	h, err := forward.New(forward.WithUpstream(up))
+	h, err := forward.New(up)
 	require.NoError(t, err)
 
 	q, err := wire.NewMessageBuilder().ID(0x1234).RecursionDesired(true).Build()
@@ -425,7 +422,7 @@ func TestMultipleQuestionsRejectedFormErr(t *testing.T) {
 			return answer(q, time.Hour, netip.MustParseAddr("203.0.113.10"))
 		},
 	}
-	h, err := forward.New(forward.WithUpstream(up))
+	h, err := forward.New(up)
 	require.NoError(t, err)
 
 	q, err := wire.NewMessageBuilder().
@@ -470,7 +467,7 @@ func TestEDNSPreservedAndForwarded(t *testing.T) {
 			return a
 		},
 	}
-	h, err := forward.New(forward.WithUpstream(up))
+	h, err := forward.New(up)
 	require.NoError(t, err)
 
 	clientEDNS := mustEDNS(t, wire.NewEDNSBuilder().UDPSize(1232).DO(true))
@@ -512,8 +509,7 @@ func TestNXDomainNoSOAFallsBackToMaxNeg(t *testing.T) {
 			return a
 		},
 	}
-	h, err := forward.New(
-		forward.WithUpstream(up),
+	h, err := forward.New(up,
 		forward.WithMaxNegativeTTL(time.Hour),
 	)
 	require.NoError(t, err)
@@ -544,7 +540,7 @@ func TestNoDataNoSOANotCached(t *testing.T) {
 			return a
 		},
 	}
-	h, err := forward.New(forward.WithUpstream(up))
+	h, err := forward.New(up)
 	require.NoError(t, err)
 
 	q := clientQuery(t, "empty.example", rrtype.A)
@@ -567,7 +563,7 @@ func TestPositiveZeroTTLNotCached(t *testing.T) {
 			return answer(q, 0, netip.MustParseAddr("203.0.113.10"))
 		},
 	}
-	h, err := forward.New(forward.WithUpstream(up))
+	h, err := forward.New(up)
 	require.NoError(t, err)
 
 	q := clientQuery(t, "zero.example", rrtype.A)
@@ -591,8 +587,7 @@ func TestMinTTLFloor(t *testing.T) {
 			return answer(q, time.Millisecond, netip.MustParseAddr("203.0.113.10"))
 		},
 	}
-	h, err := forward.New(
-		forward.WithUpstream(up),
+	h, err := forward.New(up,
 		forward.WithMinTTL(10*time.Second),
 	)
 	require.NoError(t, err)
@@ -616,8 +611,7 @@ func TestMaxTTLCap(t *testing.T) {
 		},
 	}
 	clk := newFakeClock()
-	h, err := forward.New(
-		forward.WithUpstream(up),
+	h, err := forward.New(up,
 		forward.WithMaxTTL(time.Second),
 		forward.WithClock(clk.Now),
 	)
@@ -655,8 +649,7 @@ func TestQueryTimeoutAppliesWhenNoDeadline(t *testing.T) {
 	// Wrap in an Exchanger that inspects the context.
 	wrapped := &deadlineSpyExchanger{inner: up, sawDeadline: &sawDeadline}
 
-	h, err := forward.New(
-		forward.WithUpstream(wrapped),
+	h, err := forward.New(wrapped,
 		forward.WithQueryTimeout(50*time.Millisecond),
 	)
 	require.NoError(t, err)
@@ -688,8 +681,7 @@ func TestExistingDeadlineNotOverridden(t *testing.T) {
 			return answer(q, time.Hour, netip.MustParseAddr("203.0.113.10"))
 		},
 	}
-	h, err := forward.New(
-		forward.WithUpstream(up),
+	h, err := forward.New(up,
 		forward.WithQueryTimeout(time.Hour),
 	)
 	require.NoError(t, err)
@@ -717,7 +709,7 @@ func TestCacheReplacesExisting(t *testing.T) {
 		},
 	}
 	clk := newFakeClock()
-	h, err := forward.New(forward.WithUpstream(up), forward.WithClock(clk.Now))
+	h, err := forward.New(up, forward.WithClock(clk.Now))
 	require.NoError(t, err)
 
 	q := clientQuery(t, "example.com", rrtype.A)
@@ -740,8 +732,7 @@ func TestCacheEvictsLRU(t *testing.T) {
 			return answer(q, time.Hour, netip.MustParseAddr("203.0.113.10"))
 		},
 	}
-	h, err := forward.New(
-		forward.WithUpstream(up),
+	h, err := forward.New(up,
 		forward.WithCacheSize(2),
 	)
 	require.NoError(t, err)
@@ -793,7 +784,7 @@ func TestUDPTCPFallbackOnTruncated(t *testing.T) {
 	_, err = tcpSrv.Run(ctx)
 	require.NoError(t, err)
 
-	h, err := forward.New(forward.WithUDPUpstream(udpCtrl.Addr()))
+	h, err := forward.NewUDP(udpCtrl.Addr())
 	require.NoError(t, err)
 
 	w := &captureWriter{}
@@ -812,7 +803,7 @@ func TestUDPUpstreamConstructionFailureSurfacedAsServFail(t *testing.T) {
 	t.Parallel()
 	// AddrPort{} is the zero value (invalid). NewUDPClient refuses
 	// it, leaving the forwarder configured with an errExchanger.
-	h, err := forward.New(forward.WithUDPUpstream(netip.AddrPort{}))
+	h, err := forward.NewUDP(netip.AddrPort{})
 	require.NoError(t, err, "construction errors are deferred to first Exchange")
 
 	w := &captureWriter{}
@@ -828,7 +819,7 @@ func TestUDPUpstreamConstructionFailureSurfacedAsServFail(t *testing.T) {
 func TestWithDoTUpstreamServerName(t *testing.T) {
 	t.Parallel()
 	addr := netip.MustParseAddrPort("127.0.0.1:853")
-	h, err := forward.New(forward.WithDoTUpstream(addr, &tls.Config{ServerName: "dns.example."}))
+	h, err := forward.NewDoT(addr, &tls.Config{ServerName: "dns.example."})
 	require.NoError(t, err)
 	require.Contains(t, h.UpstreamName(), "tls://")
 	require.Contains(t, h.UpstreamName(), addr.String())
@@ -838,7 +829,7 @@ func TestWithDoTUpstreamServerNameInvalidAddr(t *testing.T) {
 	t.Parallel()
 	// dot.New rejects invalid addresses; the option records this as
 	// errExchanger so first ServeDNS returns SERVFAIL.
-	h, err := forward.New(forward.WithDoTUpstream(netip.AddrPort{}, &tls.Config{ServerName: "dns.example."}))
+	h, err := forward.NewDoT(netip.AddrPort{}, &tls.Config{ServerName: "dns.example."})
 	require.NoError(t, err)
 	require.Equal(t, "(invalid dot)", h.UpstreamName())
 
@@ -851,7 +842,7 @@ func TestWithDoTUpstreamTLSConfig(t *testing.T) {
 	t.Parallel()
 	addr := netip.MustParseAddrPort("127.0.0.1:853")
 	tc := &tls.Config{ServerName: "dns.example.", MinVersion: tls.VersionTLS13}
-	h, err := forward.New(forward.WithDoTUpstream(addr, tc))
+	h, err := forward.NewDoT(addr, tc)
 	require.NoError(t, err)
 	require.Contains(t, h.UpstreamName(), "tls://")
 }
@@ -859,7 +850,7 @@ func TestWithDoTUpstreamTLSConfig(t *testing.T) {
 func TestWithDoTUpstreamTLSConfigInvalidAddr(t *testing.T) {
 	t.Parallel()
 	tc := &tls.Config{ServerName: "dns.example."}
-	h, err := forward.New(forward.WithDoTUpstream(netip.AddrPort{}, tc))
+	h, err := forward.NewDoT(netip.AddrPort{}, tc)
 	require.NoError(t, err)
 	require.Equal(t, "(invalid dot)", h.UpstreamName())
 
@@ -882,8 +873,7 @@ func TestNegativeTTLFromSOATTLLowerThanMinimum(t *testing.T) {
 		},
 	}
 	clk := newFakeClock()
-	h, err := forward.New(
-		forward.WithUpstream(up),
+	h, err := forward.New(up,
 		forward.WithMaxNegativeTTL(time.Hour), // ensure no other cap interferes
 		forward.WithClock(clk.Now),
 	)

@@ -2,9 +2,7 @@ package forward
 
 import (
 	"context"
-	"crypto/tls"
 	"log/slog"
-	"net/netip"
 	"time"
 
 	"github.com/lestrrat-go/acidns"
@@ -50,9 +48,6 @@ func WithContext(ctx context.Context) Option {
 	return forwardOption{option.New(identContext{}, ctx)}
 }
 
-type identUpstream struct{}
-type identUDPUpstream struct{}
-type identDoTUpstream struct{}
 type identCacheSize struct{}
 type identMinTTL struct{}
 type identMaxTTL struct{}
@@ -62,41 +57,6 @@ type identMaxInflight struct{}
 type identClock struct{}
 type identLogger struct{}
 type identAllowNoRD struct{}
-
-// dotUpstreamSpec carries the unprocessed DoT upstream parameters; the
-// consumer constructs the dot.Exchanger so option construction stays a
-// pure data store.
-type dotUpstreamSpec struct {
-	addr netip.AddrPort
-	tc   *tls.Config
-}
-
-// WithUpstream sets the Exchanger used to forward queries. The caller
-// retains ownership of ex; the forwarder does not Close it. Use this
-// when composing custom transports (DoH, DoQ, DNSCrypt, ...).
-//
-// Either WithUpstream, WithUDPUpstream, or WithDoTUpstream must be
-// supplied; if more than one is provided the last one wins.
-func WithUpstream(ex acidns.Exchanger) Option {
-	return forwardOption{option.New(identUpstream{}, ex)}
-}
-
-// WithUDPUpstream forwards queries to addr over UDP, falling back to
-// TCP automatically when the UDP response is truncated (TC=1) per
-// RFC 1035 §4.2.1 and the standard stub-resolver convention.
-func WithUDPUpstream(addr netip.AddrPort) Option {
-	return forwardOption{option.New(identUDPUpstream{}, addr)}
-}
-
-// WithDoTUpstream forwards queries to addr over RFC 7858 DoT. Pass a
-// fully-formed *tls.Config (custom roots, mTLS, KeyLogWriter, ...) to
-// drive certificate verification — tc.ServerName is honored for SNI;
-// when forwarding to an IP literal (e.g. "8.8.8.8:853") set
-// tc.ServerName to the verifying name (e.g. "dns.google"). Pass nil to
-// use the dot package defaults.
-func WithDoTUpstream(addr netip.AddrPort, tc *tls.Config) Option {
-	return forwardOption{option.New(identDoTUpstream{}, dotUpstreamSpec{addr: addr, tc: tc})}
-}
 
 // WithCacheSize sets the number of entries retained in the LRU cache.
 // Defaults to 4096. A non-positive value disables caching.
