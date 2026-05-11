@@ -27,6 +27,12 @@ type cacheKey struct {
 	name  string
 	qtype rrtype.Type
 	class rrtype.Class
+	// do mirrors the inbound query's EDNS DO bit. A DO=0 requester
+	// populates an entry that lacks DNSSEC RRs (RRSIGs, NSEC, ...);
+	// serving that entry to a later DO=1 requester would silently
+	// downgrade the answer and break downstream validators. Splitting
+	// the key by DO keeps the two response shapes on disjoint slots.
+	do bool
 }
 
 // cache is a fixed-size LRU. nil-receiver methods are no-ops so a
@@ -54,11 +60,11 @@ type cacheItem struct {
 	val entry
 }
 
-func (c *cache) get(name wire.Name, qtype rrtype.Type, class rrtype.Class, now time.Time) (entry, bool) {
+func (c *cache) get(name wire.Name, qtype rrtype.Type, class rrtype.Class, do bool, now time.Time) (entry, bool) {
 	if c == nil {
 		return entry{}, false
 	}
-	k := makeKey(name, qtype, class)
+	k := makeKey(name, qtype, class, do)
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	el, ok := c.m[k]
@@ -82,11 +88,11 @@ func (c *cache) get(name wire.Name, qtype rrtype.Type, class rrtype.Class, now t
 	return out, true
 }
 
-func (c *cache) put(name wire.Name, qtype rrtype.Type, class rrtype.Class, e entry) {
+func (c *cache) put(name wire.Name, qtype rrtype.Type, class rrtype.Class, do bool, e entry) {
 	if c == nil {
 		return
 	}
-	k := makeKey(name, qtype, class)
+	k := makeKey(name, qtype, class, do)
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	if el, ok := c.m[k]; ok {
@@ -130,10 +136,11 @@ func (c *cache) clear() {
 	}
 }
 
-func makeKey(name wire.Name, qtype rrtype.Type, class rrtype.Class) cacheKey {
+func makeKey(name wire.Name, qtype rrtype.Type, class rrtype.Class, do bool) cacheKey {
 	return cacheKey{
 		name:  string(name.AppendWire(nil)),
 		qtype: qtype,
 		class: class,
+		do:    do,
 	}
 }

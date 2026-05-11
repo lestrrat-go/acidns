@@ -893,3 +893,82 @@ func TestNegativeTTLFromSOATTLLowerThanMinimum(t *testing.T) {
 	require.Equal(t, int64(2), up.calls.Load(),
 		"negative cache must expire when SOA-record TTL is the binding cap")
 }
+
+// TestCacheKeyedByDOBit guards against DNSSEC cross-contamination
+// across the forwarder's cache: a non-DO requester must NOT poison the
+// entry served to a later DO=1 requester. Pre-fix the cache keyed only
+// on (name, type, class) — the DO=0 leader populated an entry without
+// RRSIGs and the follow-up DO=1 lookup was served that same RRSIG-less
+// entry, silently downgrading downstream validators. Post-fix the two
+// shapes occupy disjoint slots: the DO=1 query is a cache miss, hits
+// the upstream, and receives its RRSIG.
+func TestCacheKeyedByDOBit(t *testing.T) {
+	t.Parallel()
+	signerName := wire.MustParseName("example.")
+	sig := rdata.NewRRSIG(rrtype.A, rdata.AlgRSASHA256, 2, 30*time.Second,
+		time.Unix(1<<31-1, 0), time.Unix(0, 0),
+		0xbeef, signerName, []byte("signature-bytes"))
+	up := &fakeUpstream{
+		handler: func(q wire.Message) wire.Message {
+			ar, _ := rdata.NewA(netip.MustParseAddr("203.0.113.42"))
+			b := wire.NewMessageBuilder().
+				ID(q.ID()).
+				Response(true).
+				RecursionDesired(q.Flags().RecursionDesired()).
+				RecursionAvailable(true).
+				Question(q.Questions()[0]).
+				Answer(wire.NewRecord(q.Questions()[0].Name(), 30*time.Second, ar))
+			if e, ok := q.EDNS(); ok && e.DO() {
+				b = b.Answer(wire.NewRecord(q.Questions()[0].Name(), 30*time.Second, sig))
+			}
+			m, _ := b.Build()
+			return m
+		},
+	}
+	h, err := forward.New(up)
+	require.NoError(t, err)
+
+	name := wire.MustParseName("example.com")
+
+	// DO=0 first — populates the cache with an answer that has no RRSIG.
+	qPlain, err := wire.NewMessageBuilder().
+		ID(0x1111).
+		RecursionDesired(true).
+		Question(wire.NewQuestion(name, rrtype.A)).
+		Build()
+	require.NoError(t, err)
+	wPlain := &captureWriter{}
+	h.ServeDNS(t.Context(), wPlain, qPlain)
+	require.Len(t, wPlain.got.Answers(), 1, "DO=0 response must not include RRSIG")
+	require.Equal(t, int64(1), up.calls.Load())
+
+	// DO=1 next — must NOT inherit the DO=0 entry. Pre-fix this returned
+	// the cached RRSIG-less answer; post-fix it forwards a fresh query.
+	qDO, err := wire.NewMessageBuilder().
+		ID(0x2222).
+		RecursionDesired(true).
+		Question(wire.NewQuestion(name, rrtype.A)).
+		EDNS(mustEDNS(t, wire.NewEDNSBuilder().UDPSize(1232).DO(true))).
+		Build()
+	require.NoError(t, err)
+	wDO := &captureWriter{}
+	h.ServeDNS(t.Context(), wDO, qDO)
+	require.Equal(t, int64(2), up.calls.Load(),
+		"DO=1 query must miss the DO=0-populated cache entry and reach the upstream")
+	require.Len(t, wDO.got.Answers(), 2, "DO=1 response must include the RRSIG from the upstream")
+	var sawRRSIG bool
+	for _, r := range wDO.got.Answers() {
+		if r.Type() == rrtype.RRSIG {
+			sawRRSIG = true
+		}
+	}
+	require.True(t, sawRRSIG, "DO=1 cache miss must surface the upstream's RRSIG")
+
+	// Reciprocal direction: DO=0 repeat is still a cache hit on the
+	// original DO=0 entry — the split key did not invalidate it.
+	wPlain2 := &captureWriter{}
+	h.ServeDNS(t.Context(), wPlain2, qPlain)
+	require.Equal(t, int64(2), up.calls.Load(),
+		"DO=0 repeat must remain a cache hit on its own entry")
+	require.Len(t, wPlain2.got.Answers(), 1)
+}

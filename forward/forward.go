@@ -265,9 +265,10 @@ func (h *Forwarder) ServeDNS(ctx context.Context, w acidns.ResponseWriter, q wir
 	}
 
 	qq := q.Questions()[0]
+	do := edsoDOBit(q)
 	now := h.cfg.now()
 
-	if e, ok := h.cache.get(qq.Name(), qq.Type(), qq.Class(), now); ok {
+	if e, ok := h.cache.get(qq.Name(), qq.Type(), qq.Class(), do, now); ok {
 		_ = w.WriteMsg(buildFromCache(q, e, now))
 		h.cfg.logger.LogAttrs(ctx, slog.LevelDebug, "forward.serve",
 			slog.String("decision", "cache_hit"),
@@ -293,7 +294,7 @@ func (h *Forwarder) ServeDNS(ctx context.Context, w acidns.ResponseWriter, q wir
 
 	resp = filterBailiwick(qq.Name(), resp)
 	if e, ok := makeEntry(resp, h.cfg, h.cfg.now()); ok {
-		h.cache.put(qq.Name(), qq.Type(), qq.Class(), e)
+		h.cache.put(qq.Name(), qq.Type(), qq.Class(), do, e)
 	}
 
 	_ = w.WriteMsg(rebuildForClient(q, resp))
