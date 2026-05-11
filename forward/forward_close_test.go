@@ -2,8 +2,9 @@ package forward_test
 
 import (
 	"context"
-	"errors"
+	"sync/atomic"
 	"testing"
+	"time"
 
 	"github.com/lestrrat-go/acidns/forward"
 	"github.com/lestrrat-go/acidns/wire"
@@ -13,8 +14,7 @@ import (
 
 // closableUpstream is an Exchanger that records whether Close was called.
 type closableUpstream struct {
-	closed   bool
-	closeErr error
+	closed atomic.Bool
 }
 
 func (u *closableUpstream) Exchange(_ context.Context, q wire.Message) (wire.Message, error) {
@@ -22,8 +22,8 @@ func (u *closableUpstream) Exchange(_ context.Context, q wire.Message) (wire.Mes
 }
 
 func (u *closableUpstream) Close() error {
-	u.closed = true
-	return u.closeErr
+	u.closed.Store(true)
+	return nil
 }
 
 // plainUpstream is an Exchanger without Close.
@@ -33,30 +33,31 @@ func (plainUpstream) Exchange(_ context.Context, q wire.Message) (wire.Message, 
 	return wiretest.Response(q), nil
 }
 
-func TestHandler_Close_PropagatesToUpstream(t *testing.T) {
+// TestForwarder_CtxCancel_ClosesUpstream verifies that cancelling the
+// lifecycle ctx supplied via [forward.WithContext] propagates a
+// Close call to the upstream when the upstream implements
+// [io.Closer].
+func TestForwarder_CtxCancel_ClosesUpstream(t *testing.T) {
 	t.Parallel()
 	up := &closableUpstream{}
-	h, err := forward.New(forward.WithUpstream(up))
+	ctx, cancel := context.WithCancel(t.Context())
+	_, err := forward.New(forward.WithUpstream(up), forward.WithContext(ctx))
 	require.NoError(t, err)
 
-	require.NoError(t, h.Close())
-	require.True(t, up.closed)
+	cancel()
+	require.Eventually(t, up.closed.Load, time.Second, 5*time.Millisecond,
+		"upstream Close must run when lifecycle ctx is cancelled")
 }
 
-func TestHandler_Close_PropagatesError(t *testing.T) {
+// TestForwarder_CtxCancel_NopUpstream verifies that a non-Closer
+// upstream is left untouched on ctx cancel (no panic).
+func TestForwarder_CtxCancel_NopUpstream(t *testing.T) {
 	t.Parallel()
-	wantErr := errors.New("upstream gone")
-	up := &closableUpstream{closeErr: wantErr}
-	h, err := forward.New(forward.WithUpstream(up))
+	ctx, cancel := context.WithCancel(t.Context())
+	_, err := forward.New(forward.WithUpstream(plainUpstream{}), forward.WithContext(ctx))
 	require.NoError(t, err)
-
-	require.ErrorIs(t, h.Close(), wantErr)
-}
-
-func TestHandler_Close_NopUpstream(t *testing.T) {
-	t.Parallel()
-	h, err := forward.New(forward.WithUpstream(plainUpstream{}))
-	require.NoError(t, err)
-
-	require.NoError(t, h.Close())
+	cancel()
+	// No assertion beyond "did not panic"; give the lifecycle
+	// goroutine a moment to run cleanup.
+	time.Sleep(20 * time.Millisecond)
 }

@@ -1,6 +1,7 @@
 package forward
 
 import (
+	"context"
 	"crypto/tls"
 	"log/slog"
 	"net/netip"
@@ -32,6 +33,21 @@ type config struct {
 	now          func() time.Time
 	logger       *slog.Logger
 	allowNoRD    bool
+	lifecycleCtx context.Context
+}
+
+type identContext struct{}
+
+// WithContext binds the Forwarder's lifecycle to ctx. When ctx is
+// cancelled, the Forwarder transitions to closed: subsequent
+// ServeDNS calls reply SERVFAIL, in-flight upstream goroutines
+// unwind via ctx, the cache is dropped, and (when the configured
+// upstream implements [io.Closer]) the upstream's Close is invoked.
+// Omit this option to share the process's lifetime — appropriate
+// for forwarders that run for the entire program's lifetime and
+// release on process exit.
+func WithContext(ctx context.Context) Option {
+	return forwardOption{option.New(identContext{}, ctx)}
 }
 
 type identUpstream struct{}

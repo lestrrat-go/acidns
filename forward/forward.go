@@ -55,22 +55,23 @@ type Forwarder struct {
 	// outbound upstream goroutines. nil when WithMaxInflight ≤ 0.
 	inflightSem chan struct{}
 
-	// closeOnce guards Close so it is idempotent — repeated calls
-	// observe the same upstream-Close error without re-invoking it.
-	closeOnce sync.Once
-	closeErr  error
-	// closed is set after Close returns; ServeDNS observes this and
+	// cleanupOnce guards the ctx-driven cleanup so the lifecycle
+	// goroutine fires the upstream Close at most once.
+	cleanupOnce sync.Once
+	cleanupDone chan struct{}
+	// closed is set after cleanup finishes; ServeDNS observes this and
 	// replies SERVFAIL rather than driving a now-dead upstream.
 	closed atomic.Bool
 
-	// closeCtx is cancelled by Close so in-flight upstream Exchange
+	// closeCtx is the lifecycle ctx (supplied via [WithContext], or
+	// [context.Background] by default). In-flight upstream Exchange
 	// goroutines (which run under context.WithoutCancel of the caller
-	// to keep followers from starving) actually stop instead of
-	// running to queryTimeout. wg counts those goroutines so Close can
-	// wait for them.
-	closeCtx    context.Context
-	closeCancel context.CancelFunc
-	wg          sync.WaitGroup
+	// to keep followers from starving) derive their own ctx from this
+	// one so they unwind on Forwarder shutdown instead of running to
+	// queryTimeout. wg counts those goroutines so the shutdown
+	// goroutine can wait for them before closing the upstream.
+	closeCtx context.Context
+	wg       sync.WaitGroup
 }
 
 type inflightCall struct {
@@ -132,6 +133,8 @@ func New(opts ...Option) (*Forwarder, error) {
 			c.logger = option.MustGet[*slog.Logger](o)
 		case identAllowNoRD{}:
 			c.allowNoRD = option.MustGet[bool](o)
+		case identContext{}:
+			c.lifecycleCtx = option.MustGet[context.Context](o)
 		}
 	}
 	if c.upstream == nil {
@@ -143,8 +146,20 @@ func New(opts ...Option) (*Forwarder, error) {
 	if c.logger == nil {
 		c.logger = slog.New(slog.DiscardHandler)
 	}
-	h := &Forwarder{cfg: c, cache: newCache(c.cacheSize), inflight: make(map[string]*inflightCall)}
-	h.closeCtx, h.closeCancel = context.WithCancel(context.Background())
+	h := &Forwarder{
+		cfg:         c,
+		cache:       newCache(c.cacheSize),
+		inflight:    make(map[string]*inflightCall),
+		cleanupDone: make(chan struct{}),
+	}
+	h.closeCtx = c.lifecycleCtx
+	if h.closeCtx == nil {
+		h.closeCtx = context.Background()
+	}
+	go func() {
+		<-h.closeCtx.Done()
+		h.cleanup()
+	}()
 	if c.maxInflight > 0 {
 		h.inflightSem = make(chan struct{}, c.maxInflight)
 	}
@@ -158,35 +173,25 @@ func (h *Forwarder) UpstreamName() string { return h.cfg.upstreamName }
 // CacheSize returns the current number of entries in the cache.
 func (h *Forwarder) CacheSize() int { return h.cache.len() }
 
-// Close drops the cache and, if the configured upstream Exchanger
-// implements io.Closer, propagates the Close call to it. Subsequent
-// ServeDNS calls reply SERVFAIL rather than dispatch to the (now
-// possibly closed) upstream.
-//
-// In-flight upstream Exchange goroutines are signalled via a Close-
-// scoped context so they unwind promptly instead of running to
-// queryTimeout, then Close blocks until every spawned goroutine has
-// returned. A Forwarder.Close that returns therefore guarantees no
-// further upstream traffic from this instance.
-//
-// Close is idempotent — repeated calls return the same upstream
-// Close error (nil if the upstream does not implement io.Closer).
-func (h *Forwarder) Close() error {
-	h.closeOnce.Do(func() {
+// cleanup is the once-only ctx-driven shutdown path. The lifecycle
+// goroutine spawned in [New] invokes this when the [WithContext] ctx
+// is cancelled (or, by default, never — when no WithContext is
+// supplied the Forwarder shares its parent process's lifetime). The
+// caller does NOT call this directly; the public surface is ctx-only.
+func (h *Forwarder) cleanup() {
+	h.cleanupOnce.Do(func() {
 		h.closed.Store(true)
 		h.cache.clear()
-		// Cancel in-flight upstream goroutines BEFORE closing the
-		// upstream itself so any blocked Exchange unwinds via ctx
-		// rather than via Closer-induced I/O errors.
-		if h.closeCancel != nil {
-			h.closeCancel()
-		}
+		// In-flight upstream goroutines see closeCtx.Done() and
+		// unwind via ctx rather than via Closer-induced I/O errors.
+		// Wait for them before closing the upstream so a
+		// concurrent Exchange cannot observe a half-closed conn.
 		h.wg.Wait()
 		if c, ok := h.cfg.upstream.(io.Closer); ok {
-			h.closeErr = c.Close()
+			_ = c.Close()
 		}
+		close(h.cleanupDone)
 	})
-	return h.closeErr
 }
 
 // ServeDNS answers q by serving from cache when fresh, otherwise by
