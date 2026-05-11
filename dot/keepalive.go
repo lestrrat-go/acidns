@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/lestrrat-go/acidns"
+	"github.com/lestrrat-go/acidns/internal/spki"
 	"github.com/lestrrat-go/acidns/internal/streamframe"
 	"github.com/lestrrat-go/acidns/wire"
 	"github.com/lestrrat-go/option/v3"
@@ -32,6 +33,8 @@ type kaConfig struct {
 	tlsConfig    *tls.Config
 	serverName   string
 	padding      bool
+	insecure     bool
+	spkiPins     [][]byte
 }
 
 type identKATimeout struct{}
@@ -40,6 +43,8 @@ type identKAAdvertise struct{}
 type identKATLSConfig struct{}
 type identKAServerName struct{}
 type identKAPadding struct{}
+type identKAInsecure struct{}
+type identKASPKIPin struct{}
 
 // WithKeepAliveTimeout sets the per-exchange I/O timeout used when the
 // caller's context has no deadline. Defaults to 10 seconds — TLS
@@ -82,6 +87,36 @@ func WithKeepAlivePadding(v bool) KeepAliveOption {
 	return dotKeepAliveOption{option.New(identKAPadding{}, v)}
 }
 
+// WithKeepAliveInsecure disables TLS certificate verification on the
+// persistent connection. Mirrors [WithInsecure] for the single-shot
+// Client: by default the keep-alive Exchanger requires a valid chain
+// to a system root or to the RootCAs configured via
+// [WithKeepAliveTLSConfig]; pass true here to skip that check entirely.
+// Use only against a known loopback / test endpoint — disabling
+// verification on a public network strips DoT of every privacy and
+// authentication property the transport is meant to provide.
+func WithKeepAliveInsecure(v bool) KeepAliveOption {
+	return dotKeepAliveOption{option.New(identKAInsecure{}, v)}
+}
+
+// WithKeepAliveSPKIPin appends a SHA-256 SubjectPublicKeyInfo
+// fingerprint (32 raw bytes) the resolver's leaf certificate MUST
+// match. Mirrors [WithSPKIPin] for the persistent-connection
+// Exchanger. Multiple WithKeepAliveSPKIPin calls accumulate: at least
+// one of the registered pins must match. Pinning runs IN ADDITION TO
+// the usual PKIX chain validation; a successful handshake requires
+// both a valid chain (or [WithKeepAliveInsecure](true)) AND a matching
+// pin. If the [crypto/tls.Config] carries its own VerifyConnection,
+// ours runs after the caller's so the caller's check is preserved.
+//
+// Pin length is validated at [NewKeepAliveExchanger]; supplying a
+// non-32-byte pin returns [ErrInvalidSPKIPin].
+func WithKeepAliveSPKIPin(pin []byte) KeepAliveOption {
+	cp := make([]byte, len(pin))
+	copy(cp, pin)
+	return dotKeepAliveOption{option.New(identKASPKIPin{}, cp)}
+}
+
 // NewKeepAliveExchanger returns an Exchanger that maintains a single
 // persistent TLS-over-TCP connection per addr, advertising
 // edns-tcp-keepalive on outgoing queries (RFC 7828) and honouring the
@@ -115,11 +150,27 @@ func NewKeepAliveExchanger(addr netip.AddrPort, opts ...KeepAliveOption) (acidns
 			c.serverName = option.MustGet[string](o)
 		case identKAPadding{}:
 			c.padding = option.MustGet[bool](o)
+		case identKAInsecure{}:
+			c.insecure = option.MustGet[bool](o)
+		case identKASPKIPin{}:
+			c.spkiPins = append(c.spkiPins, option.MustGet[[]byte](o))
+		}
+	}
+	for _, p := range c.spkiPins {
+		if len(p) != spki.HashSize {
+			return nil, fmt.Errorf("%w: got %d bytes", ErrInvalidSPKIPin, len(p))
 		}
 	}
 
 	var tcfg *tls.Config
 	if c.tlsConfig != nil {
+		// Refuse a caller-supplied tls.Config that already disables cert
+		// verification unless WithKeepAliveInsecure(true) was also passed.
+		// Mirrors the rule in [New] so the security posture is uniform
+		// across single-shot and keep-alive DoT clients.
+		if c.tlsConfig.InsecureSkipVerify && !c.insecure {
+			return nil, ErrInsecureTLSConfig
+		}
 		tcfg = c.tlsConfig.Clone()
 	} else {
 		tcfg = &tls.Config{MinVersion: tls.VersionTLS13}
@@ -133,12 +184,31 @@ func NewKeepAliveExchanger(addr netip.AddrPort, opts ...KeepAliveOption) (acidns
 	if c.serverName != "" {
 		tcfg.ServerName = c.serverName
 	}
-	if tcfg.ServerName == "" {
+	if tcfg.ServerName == "" && !c.insecure {
 		return nil, fmt.Errorf("dot-keepalive: WithKeepAliveServerName (or *tls.Config.ServerName) required when addr is an IP literal")
+	}
+	if c.insecure {
+		tcfg.InsecureSkipVerify = true
 	}
 	// RFC 7858 §3.2 ALPN identifier.
 	if !containsALPN(tcfg.NextProtos, "dot") {
 		tcfg.NextProtos = append(tcfg.NextProtos, "dot")
+	}
+	// SPKI pin enforcement runs AFTER PKIX validation (which fires
+	// first inside crypto/tls). When the caller supplied their own
+	// VerifyConnection via WithKeepAliveTLSConfig, run theirs first so
+	// any custom check they configured still gates the handshake.
+	if len(c.spkiPins) > 0 {
+		prev := tcfg.VerifyConnection
+		pins := c.spkiPins
+		tcfg.VerifyConnection = func(cs tls.ConnectionState) error {
+			if prev != nil {
+				if err := prev(cs); err != nil {
+					return err
+				}
+			}
+			return verifySPKIPin(cs, pins)
+		}
 	}
 
 	return &kaExchanger{addr: addr, cfg: c, tlsConfig: tcfg}, nil
