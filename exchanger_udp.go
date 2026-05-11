@@ -6,6 +6,16 @@ package acidns
 // the request is received, the context fires, or an unrecoverable I/O error
 // occurs. It does NOT retry on truncation; callers wanting TCP fall-back are
 // expected to compose two transports at the resolver layer.
+//
+// # Option naming
+//
+// Client-side options live on [UDPClientOption]; server-side options on
+// [UDPListenerOption] (see server_udp.go). The two are prefixed
+// `UDPClient*` / `UDPListener*` ONLY when the same concept exists on
+// both sides — for example [WithUDPClientBufferSize] vs
+// [WithUDPListenerBufferSize]. Concepts unique to one side use the
+// plain name ([WithUDPTimeout] is client-only; [WithUDPWriteTimeout],
+// [WithUDPMaxResponse] etc. are listener-only and unambiguous).
 
 import (
 	"bytes"
@@ -38,7 +48,7 @@ type udpClientConfig struct {
 
 type identUDPTimeout struct{}
 type identUDPClientBufferSize struct{}
-type identUDP0x20 struct{}
+type identUDPCaseRandomization struct{}
 
 // WithUDPTimeout sets a per-exchange timeout that takes effect when
 // the caller supplies a context without its own deadline. Defaults
@@ -55,20 +65,20 @@ func WithUDPClientBufferSize(n int) UDPClientOption {
 	return udpClientOption{option.New(identUDPClientBufferSize{}, n)}
 }
 
-// WithUDP0x20 toggles RFC 5452 §9.3 0x20 hardening: the exchanger
-// randomly toggles the case of ASCII letters in the QNAME of every
-// outbound query, then verifies the response's question section
-// matches case-exactly. A spoofer that guesses the 16-bit
-// transaction ID still has to reproduce the case-pattern, raising
-// the per-query search space by 2^N for an N-letter qname.
+// WithUDPCaseRandomization toggles RFC 5452 §9.3 "0x20" hardening:
+// the exchanger randomly toggles the case of ASCII letters in the
+// QNAME of every outbound query, then verifies the response's
+// question section matches case-exactly. A spoofer that guesses the
+// 16-bit transaction ID still has to reproduce the case pattern,
+// raising the per-query search space by 2^N for an N-letter qname.
 //
 // Defaults to true so the safe behaviour is uniform across every
 // construction path ([NewUDPClient] direct, [NewResolver] with
-// [WithServers], [recursive.New]). Pass [WithUDP0x20](false) to opt
-// out for upstreams known to silently lowercase the qname in
-// responses (rare).
-func WithUDP0x20(v bool) UDPClientOption {
-	return udpClientOption{option.New(identUDP0x20{}, v)}
+// [WithServers], [recursive.New]). Pass
+// [WithUDPCaseRandomization](false) to opt out for upstreams known
+// to silently lowercase the qname in responses (rare).
+func WithUDPCaseRandomization(v bool) UDPClientOption {
+	return udpClientOption{option.New(identUDPCaseRandomization{}, v)}
 }
 
 type UDPClient struct {
@@ -93,7 +103,7 @@ func NewUDPClient(addr netip.AddrPort, opts ...UDPClientOption) (*UDPClient, err
 			c.timeout = option.MustGet[time.Duration](o)
 		case identUDPClientBufferSize{}:
 			c.bufferSize = option.MustGet[int](o)
-		case identUDP0x20{}:
+		case identUDPCaseRandomization{}:
 			c.use0x20 = option.MustGet[bool](o)
 		}
 	}
@@ -119,9 +129,9 @@ func (e *UDPClient) Exchange(ctx context.Context, q wire.Message) (wire.Message,
 	//      [acidns.RawRequest] consumers asserting on the wire bytes)
 	//      depend on the qname surviving unmolested.
 	// Hardcoding the negative reason here is uglier than having callers
-	// pass [WithUDP0x20](false), but the friendlier default avoids a
-	// landmine for every UPDATE / NOTIFY user who would otherwise have
-	// to know to opt out.
+	// pass [WithUDPCaseRandomization](false), but the friendlier
+	// default avoids a landmine for every UPDATE / NOTIFY user who
+	// would otherwise have to know to opt out.
 	var sentQuestion []byte
 	use0x20 := e.use0x20 && len(q.Questions()) > 0 && q.Flags().Opcode() == wire.OpcodeQuery
 	if use0x20 {
