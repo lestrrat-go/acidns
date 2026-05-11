@@ -430,11 +430,12 @@ func TestWriteUnknownRData(t *testing.T) {
 	require.Contains(t, buf.String(), "\\# 4 deadbeef")
 }
 
-// TestWriteUnsupportedRData verifies Write errors on a typed rdata not in
-// formatRDataPresentation's switch (e.g. SRV).
-func TestWriteUnsupportedRData(t *testing.T) {
+// TestWriteSRVPresentation verifies that SRV records emit RFC 2782
+// presentation form (priority weight port target) — historically this
+// case errored; now it has explicit coverage in the writer.
+func TestWriteSRVPresentation(t *testing.T) {
 	t.Parallel()
-	srv, err := rdata.NewSRV(0, 0, 80, wire.MustParseName("host.example.com"))
+	srv, err := rdata.NewSRV(10, 20, 80, wire.MustParseName("host.example.com"))
 	require.NoError(t, err)
 	owner := wire.MustParseName("_http._tcp.example.com")
 	rec := wire.NewRecordClass(owner, rrtype.ClassIN, 60*time.Second, srv)
@@ -444,9 +445,8 @@ func TestWriteUnsupportedRData(t *testing.T) {
 		records: []wire.Record{rec},
 	}
 	var buf bytes.Buffer
-	err = zonefile.Write(&buf, zsyn)
-	require.Error(t, err)
-	require.Contains(t, err.Error(), "cannot present rdata")
+	require.NoError(t, zonefile.Write(&buf, zsyn))
+	require.Contains(t, buf.String(), "10 20 80 host.example.com.")
 }
 
 // TestWriteNonSuffixOwner covers the relativise branch where the owner is

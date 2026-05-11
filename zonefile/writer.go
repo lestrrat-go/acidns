@@ -1,6 +1,7 @@
 package zonefile
 
 import (
+	"encoding/base64"
 	"encoding/hex"
 	"fmt"
 	"io"
@@ -110,12 +111,29 @@ func formatRDataPresentation(rd rdata.RData, _ wire.Name) (string, error) {
 			int(v.Expire().Seconds()), int(v.Minimum().Seconds())), nil
 	case rdata.CAA:
 		return fmt.Sprintf("%d %s %s", v.Flags(), v.Tag(), quoteCharString(string(v.Value()))), nil
+	case rdata.SRV:
+		// RFC 2782: priority weight port target
+		return fmt.Sprintf("%d %d %d %s", v.Priority(), v.Weight(), v.Port(), v.Target()), nil
+	case rdata.DNAME:
+		// RFC 6672 §2.1: single target name
+		return v.Target().String(), nil
+	case rdata.DS:
+		// RFC 4034 §5.3: keytag alg digest-type <hex digest>
+		return fmt.Sprintf("%d %d %d %s", v.KeyTag(), uint8(v.Algorithm()), uint8(v.DigestType()), hex.EncodeToString(v.Digest())), nil
+	case rdata.DNSKEY:
+		// RFC 4034 §2.2: flags protocol algorithm <base64 key>
+		return fmt.Sprintf("%d %d %d %s", v.Flags(), v.Protocol(), uint8(v.Algorithm()), base64.StdEncoding.EncodeToString(v.PublicKey())), nil
 	case rdata.Unknown:
 		// RFC 3597 generic form: \# <length> <hex>
 		b := v.Bytes()
 		return fmt.Sprintf("\\# %d %s", len(b), hex.EncodeToString(b)), nil
 	default:
-		return "", fmt.Errorf("zonefile: cannot present rdata of type %s", rd.Type())
+		// Fall back to RFC 3597 §5 generic form for any typed rdata we
+		// don't have an explicit presentation form for. The writer must
+		// never fail on a valid record — round-tripping via the generic
+		// form preserves the wire payload exactly.
+		b := rdata.Pack(rd)
+		return fmt.Sprintf("\\# %d %s", len(b), hex.EncodeToString(b)), nil
 	}
 }
 

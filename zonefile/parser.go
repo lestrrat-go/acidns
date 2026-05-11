@@ -13,6 +13,7 @@ import (
 	"github.com/lestrrat-go/acidns/wire"
 	"github.com/lestrrat-go/acidns/wire/rdata"
 	"github.com/lestrrat-go/acidns/wire/rrtype"
+	"github.com/lestrrat-go/acidns/wire/wirebb"
 )
 
 // maxTTL is the RFC 2308 §8 ceiling on a TTL value (32-bit unsigned).
@@ -258,6 +259,13 @@ func parseClass(s string) (rrtype.Class, bool) {
 }
 
 func (p *parser) parseRData(t rrtype.Type, fields []fieldTok) (rdata.RData, error) {
+	// RFC 3597 §5 generic form: `\# <length> <hex>` may appear for ANY
+	// type, including those that have a type-specific presentation
+	// format. Detect it before the type switch so the writer's generic
+	// fallback path round-trips.
+	if len(fields) > 0 && fields[0].text == `\#` {
+		return p.parseGenericRData(t, fields[1:])
+	}
 	switch t {
 	case rrtype.A:
 		if len(fields) != 1 {
@@ -344,6 +352,41 @@ func (p *parser) parseRData(t rrtype.Type, fields []fieldTok) (rdata.RData, erro
 	default:
 		return nil, fmt.Errorf("type %s not supported in master file parser", t)
 	}
+}
+
+// parseGenericRData decodes RFC 3597 §5 generic form: the `\#` token has
+// already been consumed; fields is `<length> <hex...>`. Hex octets may be
+// split across multiple whitespace-separated fields. The decoded payload
+// is fed through rdata.Unpack so a type-aware decoder is used when one is
+// registered, falling back to rdata.Unknown otherwise.
+func (p *parser) parseGenericRData(t rrtype.Type, fields []fieldTok) (rdata.RData, error) {
+	if len(fields) < 1 {
+		return nil, fmt.Errorf("generic rdata: expected <length> [<hex>...]")
+	}
+	n, err := strconv.ParseInt(fields[0].text, 10, 32)
+	if err != nil {
+		return nil, fmt.Errorf("generic rdata length: %w", err)
+	}
+	if n < 0 {
+		return nil, fmt.Errorf("generic rdata: negative length %d", n)
+	}
+	var hexStr strings.Builder
+	for _, f := range fields[1:] {
+		hexStr.WriteString(f.text)
+	}
+	payload, err := hexDecode(hexStr.String())
+	if err != nil {
+		return nil, fmt.Errorf("generic rdata hex: %w", err)
+	}
+	if int64(len(payload)) != n {
+		return nil, fmt.Errorf("generic rdata: declared length %d != %d hex bytes", n, len(payload))
+	}
+	u := wirebb.NewUnpacker(payload)
+	rd, err := rdata.Unpack(t, u, len(payload))
+	if err != nil {
+		return nil, fmt.Errorf("generic rdata: %w", err)
+	}
+	return rd, nil
 }
 
 func (p *parser) parseSRV(fields []fieldTok) (rdata.RData, error) {
