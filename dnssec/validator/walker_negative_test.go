@@ -186,12 +186,7 @@ func TestWalkerValidateNegativeNXDOMAINSecure(t *testing.T) {
 	)
 	require.NoError(t, err)
 	ans, err := w.Resolve(t.Context(), target, rrtype.AAAA)
-	require.NoError(t, err, "reason: %v", func() error {
-		if ans != nil {
-			return ans.Reason()
-		}
-		return nil
-	}())
+	require.NoError(t, err, "reason: %v", ans.Reason())
 	require.Equal(t, validator.Secure, ans.Result(), "reason: %v", ans.Reason())
 	require.Equal(t, wire.RCODENXDomain, ans.RCODE())
 }

@@ -223,12 +223,7 @@ func TestWalkerNoDataNSEC(t *testing.T) {
 	_, w, _ := buildChain(t, rdata.AlgECDSAP256SHA256, now)
 	// www.sub.example. has an A but no AAAA → NoData.
 	ans, err := w.Resolve(t.Context(), wire.MustParseName("www.sub.example."), rrtype.AAAA)
-	require.NoError(t, err, "reason: %v", func() error {
-		if ans != nil {
-			return ans.Reason()
-		}
-		return nil
-	}())
+	require.NoError(t, err, "reason: %v", ans.Reason())
 	require.Equal(t, validator.Secure, ans.Result(), "reason: %v", ans.Reason())
 	require.Equal(t, wire.RCODENoError, ans.RCODE())
 	require.Empty(t, ans.Records())
@@ -240,12 +235,7 @@ func TestWalkerNoDataNSEC3(t *testing.T) {
 	mode := nsec3Mode{iterations: 0, salt: []byte{0xab, 0xcd}}
 	_, w, _ := buildNSEC3Chain(t, rdata.AlgECDSAP256SHA256, mode, now)
 	ans, err := w.Resolve(t.Context(), wire.MustParseName("www.sub.example."), rrtype.AAAA)
-	require.NoError(t, err, "reason: %v", func() error {
-		if ans != nil {
-			return ans.Reason()
-		}
-		return nil
-	}())
+	require.NoError(t, err, "reason: %v", ans.Reason())
 	require.Equal(t, validator.Secure, ans.Result(), "reason: %v", ans.Reason())
 	require.Equal(t, wire.RCODENoError, ans.RCODE())
 	require.Empty(t, ans.Records())

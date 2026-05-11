@@ -52,44 +52,7 @@ type Walker interface {
 }
 
 // Answer captures the outcome of a chain-walked validation.
-type Answer interface {
-	// Result classifies the answer per RFC 4035 §4.3.
-	Result() Result
-	// Records returns the validated answer RRset for Result==Secure;
-	// for Insecure it returns the unvalidated answer the upstream gave;
-	// for Bogus and Indeterminate it returns whatever was supplied
-	// (possibly empty) so callers can log diagnostics.
-	Records() []wire.Record
-	// RCODE is the RCODE carried by the upstream's terminal answer.
-	RCODE() wire.RCODE
-	// Chain returns the audit trail: one ChainStep per zone cut traversed,
-	// from the trust anchor to the answer's zone (inclusive).
-	Chain() []ChainStep
-	// Reason is the underlying error for Result!=Secure (nil otherwise).
-	Reason() error
-}
-
-// ChainStep records a single zone in the validated chain.
-type ChainStep interface {
-	Zone() wire.Name
-	DNSKEYs() []rdata.DNSKEY
-	DSs() []rdata.DS
-	Result() Result
-}
-
-type chainStep struct {
-	zone wire.Name
-	keys []rdata.DNSKEY
-	dss  []rdata.DS
-	res  Result
-}
-
-func (s chainStep) Zone() wire.Name         { return s.zone }
-func (s chainStep) DNSKEYs() []rdata.DNSKEY { return s.keys }
-func (s chainStep) DSs() []rdata.DS         { return s.dss }
-func (s chainStep) Result() Result          { return s.res }
-
-type answer struct {
+type Answer struct {
 	result  Result
 	records []wire.Record
 	rcode   wire.RCODE
@@ -97,11 +60,48 @@ type answer struct {
 	reason  error
 }
 
-func (a *answer) Result() Result         { return a.result }
-func (a *answer) Records() []wire.Record { return a.records }
-func (a *answer) RCODE() wire.RCODE      { return a.rcode }
-func (a *answer) Chain() []ChainStep     { return a.chain }
-func (a *answer) Reason() error          { return a.reason }
+// Result classifies the answer per RFC 4035 §4.3.
+func (a Answer) Result() Result { return a.result }
+
+// Records returns the validated answer RRset for Result==Secure;
+// for Insecure it returns the unvalidated answer the upstream gave;
+// for Bogus and Indeterminate it returns whatever was supplied
+// (possibly empty) so callers can log diagnostics. Aliases internal
+// storage.
+func (a Answer) Records() []wire.Record { return a.records }
+
+// RCODE is the RCODE carried by the upstream's terminal answer.
+func (a Answer) RCODE() wire.RCODE { return a.rcode }
+
+// Chain returns the audit trail: one ChainStep per zone cut
+// traversed, from the trust anchor to the answer's zone (inclusive).
+// Aliases internal storage.
+func (a Answer) Chain() []ChainStep { return a.chain }
+
+// Reason is the underlying error for Result!=Secure (nil otherwise).
+func (a Answer) Reason() error { return a.reason }
+
+// ChainStep records a single zone in the validated chain.
+type ChainStep struct {
+	zone wire.Name
+	keys []rdata.DNSKEY
+	dss  []rdata.DS
+	res  Result
+}
+
+// Zone returns the zone-cut name for this step.
+func (s ChainStep) Zone() wire.Name { return s.zone }
+
+// DNSKEYs returns the DNSKEYs published at this zone cut. Aliases
+// internal storage.
+func (s ChainStep) DNSKEYs() []rdata.DNSKEY { return s.keys }
+
+// DSs returns the DS records published at the parent of this zone
+// cut. Aliases internal storage.
+func (s ChainStep) DSs() []rdata.DS { return s.dss }
+
+// Result classifies this step's validation outcome.
+func (s ChainStep) Result() Result { return s.res }
 
 type walker struct {
 	source       Source
@@ -193,7 +193,7 @@ func NewWalker(source Source, opts ...WalkerOption) (Walker, error) {
 // always nil for Bogus (the caller inspects Result/Reason on the Answer).
 func (w *walker) Resolve(ctx context.Context, qname wire.Name, qtype rrtype.Type) (Answer, error) {
 	if !qname.IsValid() {
-		return nil, fmt.Errorf("validator: invalid qname")
+		return Answer{}, fmt.Errorf("validator: invalid qname")
 	}
 
 	if w.ntas.Covers(qname) {
@@ -209,7 +209,7 @@ func (w *walker) Resolve(ctx context.Context, qname wire.Name, qtype rrtype.Type
 	if err != nil {
 		if errors.Is(err, errNXDomainAtCandidate) {
 			// Walker validated NXDOMAIN at qname's parent zone.
-			return &answer{
+			return Answer{
 				result:  Secure,
 				records: nil,
 				rcode:   wire.RCODENXDomain,
@@ -225,7 +225,7 @@ func (w *walker) Resolve(ctx context.Context, qname wire.Name, qtype rrtype.Type
 		if err != nil {
 			return w.bogus(qname, qtype, chain, fmt.Errorf("validator: lookup: %w", err))
 		}
-		ans := &answer{
+		ans := Answer{
 			result:  Insecure,
 			records: msg.Answers(),
 			rcode:   msg.Flags().RCODE(),
@@ -273,7 +273,7 @@ func (w *walker) Resolve(ctx context.Context, qname wire.Name, qtype rrtype.Type
 				return w.bogus(qname, qtype, chain, fmt.Errorf("validator: wildcard next-closer: %w", err))
 			}
 		}
-		return &answer{
+		return Answer{
 			result:  Secure,
 			records: matching,
 			rcode:   rcode,
@@ -303,7 +303,7 @@ func (w *walker) walkChain(ctx context.Context, anchor Anchor, qname wire.Name) 
 	if err != nil {
 		return nil, nil, wire.Name{}, fmt.Errorf("anchor %s: %w", anchor.Name(), err)
 	}
-	chain := []ChainStep{chainStep{zone: anchor.Name(), keys: keys, dss: anchor.DSs(), res: Secure}}
+	chain := []ChainStep{ChainStep{zone: anchor.Name(), keys: keys, dss: anchor.DSs(), res: Secure}}
 
 	parentKeys := keys
 	zone := anchor.Name()
@@ -342,13 +342,13 @@ func (w *walker) walkChain(ctx context.Context, anchor Anchor, qname wire.Name) 
 			if err != nil {
 				return chain, nil, wire.Name{}, fmt.Errorf("DNSKEY %s: %w", candidate, err)
 			}
-			chain = append(chain, chainStep{zone: candidate, keys: childKeys, dss: dsRRs, res: Secure})
+			chain = append(chain, ChainStep{zone: candidate, keys: childKeys, dss: dsRRs, res: Secure})
 			zone = candidate
 			parentKeys = childKeys
 		case dsOutcomeInsecure:
 			// Proven insecure delegation: NS present at candidate, DS absent.
 			// The subtree from candidate is unsigned.
-			chain = append(chain, chainStep{zone: candidate, res: Insecure})
+			chain = append(chain, ChainStep{zone: candidate, res: Insecure})
 			return chain, parentKeys, candidate, nil
 		case dsOutcomeNonCut:
 			// candidate is a non-cut node under zone — keep walking.
@@ -360,7 +360,7 @@ func (w *walker) walkChain(ctx context.Context, anchor Anchor, qname wire.Name) 
 			// is qname, that's a validated NXDOMAIN — surface it through
 			// the answer path. Otherwise the chain is broken.
 			if candidate.Equal(qname) {
-				chain = append(chain, chainStep{zone: candidate, res: Secure})
+				chain = append(chain, ChainStep{zone: candidate, res: Secure})
 				return chain, parentKeys, candidate, errNXDomainAtCandidate
 			}
 			return chain, nil, wire.Name{}, fmt.Errorf("validator: name %s does not exist (NXDOMAIN at chain step)", candidate)
@@ -865,7 +865,7 @@ func (w *walker) validateNoData(qname wire.Name, qtype rrtype.Type, parentKeys [
 func (w *walker) validateNoDataNSEC(qname wire.Name, qtype rrtype.Type, parentKeys []rdata.DNSKEY, msg wire.Message, chain []ChainStep) (Answer, bool) {
 	allNSECs := allNSEC(msg.Authorities())
 	if len(allNSECs) == 0 {
-		return nil, false
+		return Answer{}, false
 	}
 	// Verify every NSEC group; fail closed if any group lacks signatures
 	// or fails verification, otherwise the ENT scan below could rely on
@@ -876,10 +876,10 @@ func (w *walker) validateNoDataNSEC(qname wire.Name, qtype rrtype.Type, parentKe
 		owner := set[0].Name()
 		sigs := rrsigsForTypeAndOwner(allSigs, rrtype.NSEC, owner)
 		if len(sigs) == 0 {
-			return nil, false
+			return Answer{}, false
 		}
 		if err := w.verifyRRsetWithKeys(set, sigs, parentKeys); err != nil {
-			return nil, false
+			return Answer{}, false
 		}
 	}
 
@@ -894,7 +894,7 @@ func (w *walker) validateNoDataNSEC(qname wire.Name, qtype rrtype.Type, parentKe
 			continue
 		}
 		if !bitmapHas(nsec.Types(), qtype) {
-			return &answer{
+			return Answer{
 				result:  Secure,
 				records: nil,
 				rcode:   wire.RCODENoError,
@@ -935,7 +935,7 @@ func (w *walker) validateNoDataNSEC(qname wire.Name, qtype rrtype.Type, parentKe
 			continue
 		}
 		if validatorbb.NameSuffixEqualOrSubdomain(next, qname) {
-			return &answer{
+			return Answer{
 				result:  Secure,
 				records: nil,
 				rcode:   wire.RCODENoError,
@@ -943,16 +943,16 @@ func (w *walker) validateNoDataNSEC(qname wire.Name, qtype rrtype.Type, parentKe
 			}, true
 		}
 	}
-	return nil, false
+	return Answer{}, false
 }
 
 func (w *walker) validateNoDataNSEC3(qname wire.Name, qtype rrtype.Type, parentKeys []rdata.DNSKEY, msg wire.Message, chain []ChainStep) (Answer, bool) {
 	nsec3RRs := recordsOfType3(msg.Authorities())
 	if len(nsec3RRs) == 0 {
-		return nil, false
+		return Answer{}, false
 	}
 	if err := w.verifyNSEC3Set(nsec3RRs, msg.Authorities(), parentKeys); err != nil {
-		return nil, false
+		return Answer{}, false
 	}
 	// The zone for closest-encloser hashing must come from the
 	// validated chain — not from the response's RRSIG signer. A
@@ -964,16 +964,16 @@ func (w *walker) validateNoDataNSEC3(qname wire.Name, qtype rrtype.Type, parentK
 	// NoData path was the asymmetric gap.
 	zone := deepestSecureZone(chain)
 	if !zone.IsValid() {
-		return nil, false
+		return Answer{}, false
 	}
 	respSigner := validatorbb.SignerOf(msg.Authorities())
 	if respSigner.IsValid() && !validatorbb.NameSuffixEqualOrSubdomain(zone, respSigner) && !respSigner.Equal(zone) {
-		return nil, false
+		return Answer{}, false
 	}
 	res := nsec3ProveDenial(qname, qtype, zone, nsec3RRs)
 	switch res.kind {
 	case nsec3DenialNoData:
-		return &answer{
+		return Answer{
 			result:  Secure,
 			records: nil,
 			rcode:   wire.RCODENoError,
@@ -981,14 +981,14 @@ func (w *walker) validateNoDataNSEC3(qname wire.Name, qtype rrtype.Type, parentK
 		}, true
 	case nsec3DenialIterationsExceeded:
 		// RFC 9276 §3.2: high iteration count downgrades to Insecure.
-		return &answer{
+		return Answer{
 			result:  Insecure,
 			records: msg.Answers(),
 			rcode:   wire.RCODENoError,
 			chain:   chain,
 		}, true
 	}
-	return nil, false
+	return Answer{}, false
 }
 
 // validateNegative classifies an NXDOMAIN/NoData response.
@@ -1010,7 +1010,7 @@ func (w *walker) validateNegative(qname wire.Name, qtype rrtype.Type, parentKeys
 	}
 	if err := w.validateNXDomain(qname, zone, parentKeys, msg); err != nil {
 		if errors.Is(err, errInsecureNSEC3Iterations) {
-			return &answer{
+			return Answer{
 				result:  Insecure,
 				records: nil,
 				rcode:   wire.RCODENXDomain,
@@ -1020,7 +1020,7 @@ func (w *walker) validateNegative(qname wire.Name, qtype rrtype.Type, parentKeys
 		}
 		return w.bogus(qname, qtype, chain, fmt.Errorf("validator: NXDOMAIN proof: %w", err))
 	}
-	return &answer{
+	return Answer{
 		result:  Secure,
 		records: nil,
 		rcode:   wire.RCODENXDomain,
@@ -1174,7 +1174,7 @@ func (w *walker) indeterminate(_ wire.Name, _ rrtype.Type, err error, note strin
 	if err == nil && note != "" {
 		err = fmt.Errorf("validator: %s", note)
 	}
-	return &answer{result: Indeterminate, reason: err}
+	return Answer{result: Indeterminate, reason: err}
 }
 
 func (w *walker) bogus(_ wire.Name, _ rrtype.Type, chain []ChainStep, err error) (Answer, error) {
@@ -1182,7 +1182,7 @@ func (w *walker) bogus(_ wire.Name, _ rrtype.Type, chain []ChainStep, err error)
 	// while errors.Is on the concrete underlying reason still works
 	// (Go 1.20+ multi-%w preserves both chains).
 	wrapped := fmt.Errorf("%w: %w", ErrBogus, err)
-	a := &answer{result: Bogus, chain: chain, reason: wrapped}
+	a := Answer{result: Bogus, chain: chain, reason: wrapped}
 	if w.bogusPolicy == BogusReturnAnswer {
 		return a, nil
 	}

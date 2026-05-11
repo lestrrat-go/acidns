@@ -105,12 +105,7 @@ func TestWalkerFix1ValidSigLastNotTruncated(t *testing.T) {
 	)
 	require.NoError(t, err)
 	ans, err := w.Resolve(t.Context(), target, rrtype.A)
-	require.NoError(t, err, "reason: %v", func() error {
-		if ans != nil {
-			return ans.Reason()
-		}
-		return nil
-	}())
+	require.NoError(t, err, "reason: %v", ans.Reason())
 	require.Equal(t, validator.Secure, ans.Result(), "reason: %v", ans.Reason())
 }
 

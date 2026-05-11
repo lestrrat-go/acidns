@@ -59,12 +59,7 @@ func TestWalkerNSEC3NXDOMAIN(t *testing.T) {
 	mode := nsec3Mode{iterations: 0, salt: []byte{0xab, 0xcd}}
 	_, w, _ := buildNSEC3Chain(t, rdata.AlgECDSAP256SHA256, mode, now)
 	ans, err := w.Resolve(t.Context(), wire.MustParseName("missing.sub.example."), rrtype.A)
-	require.NoError(t, err, "reason: %v", func() error {
-		if ans != nil {
-			return ans.Reason()
-		}
-		return nil
-	}())
+	require.NoError(t, err, "reason: %v", ans.Reason())
 	require.Equal(t, validator.Secure, ans.Result(), "reason: %v", ans.Reason())
 	require.Equal(t, wire.RCODENXDomain, ans.RCODE())
 }

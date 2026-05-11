@@ -233,12 +233,7 @@ func TestWalkerNXDOMAIN(t *testing.T) {
 	now := time.Now().UTC().Truncate(time.Second)
 	_, w, _ := buildChain(t, rdata.AlgECDSAP256SHA256, now)
 	ans, err := w.Resolve(t.Context(), wire.MustParseName("missing.sub.example."), rrtype.A)
-	require.NoError(t, err, "reason: %v", func() error {
-		if ans != nil {
-			return ans.Reason()
-		}
-		return nil
-	}())
+	require.NoError(t, err, "reason: %v", ans.Reason())
 	require.Equal(t, validator.Secure, ans.Result(), "reason: %v", ans.Reason())
 	require.Equal(t, wire.RCODENXDomain, ans.RCODE())
 	require.Empty(t, ans.Records())

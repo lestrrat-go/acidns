@@ -20,14 +20,14 @@ import (
 func TestSigningAlgorithmsFromChain(t *testing.T) {
 	t.Parallel()
 	chain := []ChainStep{
-		chainStep{zone: wire.MustParseName("."), dss: []rdata.DS{
+		ChainStep{zone: wire.MustParseName("."), dss: []rdata.DS{
 			fakeDS(rdata.AlgRSASHA256),
 		}, res: Secure},
-		chainStep{zone: wire.MustParseName("example."), dss: []rdata.DS{
+		ChainStep{zone: wire.MustParseName("example."), dss: []rdata.DS{
 			fakeDS(rdata.AlgECDSAP256SHA256),
 			fakeDS(rdata.AlgED25519),
 		}, res: Secure},
-		chainStep{zone: wire.MustParseName("sub.example."), res: Insecure},
+		ChainStep{zone: wire.MustParseName("sub.example."), res: Insecure},
 	}
 	algs := signingAlgorithms(chain)
 	require.Len(t, algs, 2)
