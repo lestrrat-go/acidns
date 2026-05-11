@@ -29,6 +29,7 @@ type config struct {
 	serverName string
 	padding    bool
 	insecure   bool
+	spkiPins   [][]byte
 }
 
 type identTimeout struct{}
@@ -36,6 +37,7 @@ type identTLSConfig struct{}
 type identServerName struct{}
 type identPadding struct{}
 type identInsecure struct{}
+type identSPKIPin struct{}
 
 // WithTimeout sets a per-exchange timeout used when the caller's
 // context has no deadline. Defaults to 10 seconds (TLS handshake
@@ -71,6 +73,32 @@ func WithServerName(name string) Option {
 // ciphersuite policy).
 func WithInsecure(v bool) Option {
 	return dotOption{option.New(identInsecure{}, v)}
+}
+
+// WithSPKIPin appends a SHA-256 SubjectPublicKeyInfo fingerprint (32
+// raw bytes) the resolver's leaf certificate MUST match. RFC 7858 §4.2
+// describes SPKI pinning as the recommended deployment posture for
+// public DoT resolvers; Cloudflare, Quad9, and Google publish pin sets
+// in this format.
+//
+// Multiple WithSPKIPin calls accumulate: at least one of the
+// registered pins must match. Operators are encouraged to publish at
+// least one backup pin so a key rotation can land without an outage
+// (RFC 7858 §4.2).
+//
+// Pinning runs IN ADDITION TO the usual PKIX chain validation: a
+// successful handshake requires both a valid certificate chain (or
+// [WithInsecure](true)) AND a matching pin. The [crypto/tls.Config]
+// returned by [WithTLSConfig] may carry its own VerifyConnection — if
+// so, ours runs after the caller's, so the caller's check is
+// preserved.
+//
+// Pin length is validated at [New]; supplying a non-32-byte pin
+// returns [ErrInvalidSPKIPin].
+func WithSPKIPin(pin []byte) Option {
+	cp := make([]byte, len(pin))
+	copy(cp, pin)
+	return dotOption{option.New(identSPKIPin{}, cp)}
 }
 
 // WithPadding toggles RFC 8467 §4.1 block-padding. Default is true:

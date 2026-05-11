@@ -36,6 +36,7 @@ package dot
 
 import (
 	"context"
+	"crypto/subtle"
 	"crypto/tls"
 	"fmt"
 	"net"
@@ -44,6 +45,7 @@ import (
 	"time"
 
 	"github.com/lestrrat-go/acidns"
+	"github.com/lestrrat-go/acidns/internal/spki"
 	"github.com/lestrrat-go/acidns/internal/streamframe"
 	"github.com/lestrrat-go/acidns/wire"
 	"github.com/lestrrat-go/option/v3"
@@ -79,6 +81,13 @@ func New(addr netip.AddrPort, opts ...Option) (*Client, error) {
 			c.padding = option.MustGet[bool](o)
 		case identInsecure{}:
 			c.insecure = option.MustGet[bool](o)
+		case identSPKIPin{}:
+			c.spkiPins = append(c.spkiPins, option.MustGet[[]byte](o))
+		}
+	}
+	for _, p := range c.spkiPins {
+		if len(p) != spki.HashSize {
+			return nil, fmt.Errorf("%w: got %d bytes", ErrInvalidSPKIPin, len(p))
 		}
 	}
 
@@ -124,8 +133,42 @@ func New(addr netip.AddrPort, opts ...Option) (*Client, error) {
 	if c.insecure {
 		tcfg.InsecureSkipVerify = true
 	}
+	// SPKI pin enforcement runs AFTER PKIX validation (which fires
+	// first inside crypto/tls). When the caller supplied their own
+	// VerifyConnection via WithTLSConfig, run theirs first so any
+	// custom check they configured still gates the handshake.
+	if len(c.spkiPins) > 0 {
+		prev := tcfg.VerifyConnection
+		pins := c.spkiPins
+		tcfg.VerifyConnection = func(cs tls.ConnectionState) error {
+			if prev != nil {
+				if err := prev(cs); err != nil {
+					return err
+				}
+			}
+			return verifySPKIPin(cs, pins)
+		}
+	}
 
 	return &Client{addr: addr, timeout: c.timeout, tlsConfig: tcfg, padding: c.padding}, nil
+}
+
+// verifySPKIPin checks the leaf certificate's SubjectPublicKeyInfo
+// SHA-256 hash against the registered pins (RFC 7858 §4.2). At least
+// one pin must match. Constant-time comparison is used uniformly with
+// the rest of the codebase's crypto pattern even though pins are
+// public material.
+func verifySPKIPin(cs tls.ConnectionState, pins [][]byte) error {
+	if len(cs.PeerCertificates) == 0 {
+		return ErrNoPeerCertificate
+	}
+	got := spki.Hash(cs.PeerCertificates[0])
+	for _, pin := range pins {
+		if subtle.ConstantTimeCompare(got[:], pin) == 1 {
+			return nil
+		}
+	}
+	return ErrSPKIPinMismatch
 }
 
 // isHostnameAddr reports whether addr is a hostname:port form rather

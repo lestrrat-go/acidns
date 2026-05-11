@@ -33,6 +33,7 @@ type config struct {
 	padding          bool
 	insecure         bool
 	maxResponseBytes int
+	spkiPins         [][]byte
 }
 
 type identTimeout struct{}
@@ -41,6 +42,7 @@ type identServerName struct{}
 type identPadding struct{}
 type identInsecure struct{}
 type identMaxResponseBytes struct{}
+type identSPKIPin struct{}
 
 // WithTimeout sets a per-exchange timeout used when ctx has no deadline.
 func WithTimeout(d time.Duration) Option {
@@ -77,4 +79,21 @@ func WithInsecure(v bool) Option {
 // [DefaultMaxResponseBytes].
 func WithMaxResponseBytes(n int) Option {
 	return doqOption{option.New(identMaxResponseBytes{}, n)}
+}
+
+// WithSPKIPin appends a SHA-256 SubjectPublicKeyInfo fingerprint (32
+// raw bytes) the resolver's leaf certificate MUST match. Modelled on
+// RFC 7858 §4.2 DoT pinning, which RFC 9250 inherits for DoQ. Multiple
+// WithSPKIPin calls accumulate: at least one of the registered pins
+// must match. Pin length is validated at [New]; supplying a non-32-byte
+// pin returns [ErrInvalidSPKIPin].
+//
+// Pinning runs IN ADDITION TO the usual PKIX chain validation. The
+// [crypto/tls.Config] returned by [WithTLSConfig] may carry its own
+// VerifyConnection — if so, ours runs after the caller's, so the
+// caller's check is preserved.
+func WithSPKIPin(pin []byte) Option {
+	cp := make([]byte, len(pin))
+	copy(cp, pin)
+	return doqOption{option.New(identSPKIPin{}, cp)}
 }

@@ -17,6 +17,7 @@ package doq
 
 import (
 	"context"
+	"crypto/subtle"
 	"crypto/tls"
 	"encoding/binary"
 	"fmt"
@@ -29,6 +30,7 @@ import (
 	"github.com/quic-go/quic-go"
 
 	"github.com/lestrrat-go/acidns"
+	"github.com/lestrrat-go/acidns/internal/spki"
 	"github.com/lestrrat-go/acidns/wire"
 	"github.com/lestrrat-go/option/v3"
 )
@@ -83,6 +85,13 @@ func New(addr netip.AddrPort, opts ...Option) (*Client, error) {
 			c.maxResponseBytes = option.MustGet[int](o)
 		case identInsecure{}:
 			c.insecure = option.MustGet[bool](o)
+		case identSPKIPin{}:
+			c.spkiPins = append(c.spkiPins, option.MustGet[[]byte](o))
+		}
+	}
+	for _, p := range c.spkiPins {
+		if len(p) != spki.HashSize {
+			return nil, fmt.Errorf("%w: got %d bytes", ErrInvalidSPKIPin, len(p))
 		}
 	}
 
@@ -122,6 +131,22 @@ func New(addr netip.AddrPort, opts ...Option) (*Client, error) {
 	if c.insecure {
 		tcfg.InsecureSkipVerify = true
 	}
+	// SPKI pin enforcement runs after PKIX validation (which fires
+	// first inside crypto/tls). When the caller supplied their own
+	// VerifyConnection via WithTLSConfig, run theirs first so any
+	// custom check they configured still gates the handshake.
+	if len(c.spkiPins) > 0 {
+		prev := tcfg.VerifyConnection
+		pins := c.spkiPins
+		tcfg.VerifyConnection = func(cs tls.ConnectionState) error {
+			if prev != nil {
+				if err := prev(cs); err != nil {
+					return err
+				}
+			}
+			return verifySPKIPin(cs, pins)
+		}
+	}
 
 	mr := c.maxResponseBytes
 	if mr <= 0 {
@@ -132,6 +157,23 @@ func New(addr netip.AddrPort, opts ...Option) (*Client, error) {
 
 func containsALPN(list []string, want string) bool {
 	return slices.Contains(list, want)
+}
+
+// verifySPKIPin checks the leaf certificate's SubjectPublicKeyInfo
+// SHA-256 hash against the registered pins. At least one pin must
+// match. Constant-time comparison mirrors the rest of the codebase's
+// crypto pattern.
+func verifySPKIPin(cs tls.ConnectionState, pins [][]byte) error {
+	if len(cs.PeerCertificates) == 0 {
+		return ErrNoPeerCertificate
+	}
+	got := spki.Hash(cs.PeerCertificates[0])
+	for _, pin := range pins {
+		if subtle.ConstantTimeCompare(got[:], pin) == 1 {
+			return nil
+		}
+	}
+	return ErrSPKIPinMismatch
 }
 
 func (e *Client) Exchange(ctx context.Context, q wire.Message) (wire.Message, error) {

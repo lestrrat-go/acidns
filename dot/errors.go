@@ -28,3 +28,17 @@ var ErrResponseTooLarge = errors.New("dot: response exceeds 65535 bytes")
 // [WithInsecure] was not also passed. Refusing the inherited
 // misconfiguration avoids silently disabling certificate verification.
 var ErrInsecureTLSConfig = errors.New("dot: tls.Config has InsecureSkipVerify=true without explicit WithInsecure(true)")
+
+// ErrInvalidSPKIPin is returned by [New] when a [WithSPKIPin] value is
+// not exactly 32 bytes (SHA-256 output length).
+var ErrInvalidSPKIPin = errors.New("dot: SPKI pin must be 32 bytes (SHA-256)")
+
+// ErrSPKIPinMismatch is returned from the TLS handshake when none of
+// the pins registered via [WithSPKIPin] match the SHA-256 hash of the
+// resolver's leaf certificate SubjectPublicKeyInfo (RFC 7858 §4.2).
+var ErrSPKIPinMismatch = errors.New("dot: SPKI pin mismatch")
+
+// ErrNoPeerCertificate is returned from the TLS handshake when the
+// server presents no certificate but a [WithSPKIPin] was configured.
+// In practice this can only happen on a misconfigured server.
+var ErrNoPeerCertificate = errors.New("dot: no peer certificate")

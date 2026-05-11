@@ -181,14 +181,14 @@ Status legend: **Implemented** = working code with tests; **Partial** = document
 | 6844 | DNS Certification Authority Authorization (legacy) | Implemented (succeeded by RFC 8659; same wire format) |
 | 6944 | DNSKEY Algorithm Implementation Status | Followed (modern algorithms — RSASHA256, ECDSAP256, ECDSAP384, Ed25519 — implemented; legacy algorithms and SHA-1 only where required by other RFCs) |
 | 6975 | Signaling Cryptographic Algorithm Understanding | Implemented (`NewAlgorithmUnderstood` for DAU/DHU/N3U EDNS options) |
-| 7858 | DNS over Transport Layer Security (DoT) | Implemented |
+| 7858 | DNS over Transport Layer Security (DoT) | Implemented (+ §4.2 SPKI pinning via `dot.WithSPKIPin`) |
 | 8080 | Edwards-Curve DSA for DNSSEC | Implemented (Ed25519; Ed448 algorithm constant present, signing/verification not wired) |
 | 8162 | Using Secure DNS to Associate Certificates with Domain Names for S/MIME | Implemented (typed `rdata.SMIMEA`) |
 | 8484 | DNS Queries over HTTPS (DoH) | Implemented (POST + GET) |
 | 8624 | DNSSEC Algorithm Implementation Requirements | Followed |
 | 8659 | DNS Certification Authority Authorization (CAA) | Implemented |
 | 8945 | Secret Key Transaction Authentication for DNS (TSIG) | Implemented (hmac-sha1/256/384/512; bridge into UPDATE via `dnsupdate.SignedWire`) |
-| 9250 | DNS over Dedicated QUIC Connections (DoQ) | Implemented |
+| 9250 | DNS over Dedicated QUIC Connections (DoQ) | Implemented (+ SPKI pinning via `doq.WithSPKIPin`) |
 | 9460 | Service Binding (SVCB) and HTTPS Resource Records | Implemented (typed accessors for ALPN, port, IPv4/IPv6 hints, dohpath) |
 | Compact Denial draft (`draft-ietf-dnsop-compact-denial-of-existence`) | Compact Denial of Existence | Partial (NXNAME pseudo-type + `validator.IsCompactNXDOMAIN` classifier; chain Walker recognises NSEC/NSEC3 denial but Compact-Denial-specific bitmap interpretation pending) |
 | DNSCrypt v2 (non-IETF) | Trusted DNS Queries | Implemented (`dnscrypt/`: cert parse + verify, X25519 + XChaCha20-Poly1305 encrypt/decrypt, transport.Exchanger) |

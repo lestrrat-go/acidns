@@ -31,3 +31,16 @@ var ErrDuplicateWrite = errors.New("doq: WriteMsg called twice on a single strea
 // [WithInsecure] was not also passed. Refusing the inherited
 // misconfiguration avoids silently disabling certificate verification.
 var ErrInsecureTLSConfig = errors.New("doq: tls.Config has InsecureSkipVerify=true without explicit WithInsecure(true)")
+
+// ErrInvalidSPKIPin is returned by [New] when a [WithSPKIPin] value is
+// not exactly 32 bytes (SHA-256 output length).
+var ErrInvalidSPKIPin = errors.New("doq: SPKI pin must be 32 bytes (SHA-256)")
+
+// ErrSPKIPinMismatch is returned from the TLS handshake when none of
+// the pins registered via [WithSPKIPin] match the SHA-256 hash of the
+// resolver's leaf certificate SubjectPublicKeyInfo.
+var ErrSPKIPinMismatch = errors.New("doq: SPKI pin mismatch")
+
+// ErrNoPeerCertificate is returned from the TLS handshake when the
+// server presents no certificate but a [WithSPKIPin] was configured.
+var ErrNoPeerCertificate = errors.New("doq: no peer certificate")
