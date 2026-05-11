@@ -15,9 +15,11 @@ import (
 	"os/signal"
 	"strings"
 	"syscall"
+	"time"
 
 	"github.com/lestrrat-go/acidns"
 	"github.com/lestrrat-go/acidns/authoritative"
+	"github.com/lestrrat-go/acidns/cookies"
 	"github.com/lestrrat-go/acidns/forward"
 	"github.com/lestrrat-go/acidns/recursive"
 	"github.com/lestrrat-go/acidns/wire"
@@ -105,13 +107,16 @@ func run(argv []string) error {
 		return err
 	}
 
-	udpSrv, tcpSrv, err := buildServers(addr, handler, o.allowPublic)
+	// Establish the shutdown context BEFORE buildServers so the
+	// public-mode cookies pool can bind its secret-rotation goroutine
+	// to the same lifetime as the listeners.
+	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer cancel()
+
+	udpSrv, tcpSrv, err := buildServers(ctx, addr, handler, o.allowPublic)
 	if err != nil {
 		return err
 	}
-
-	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
-	defer cancel()
 
 	udpCtrl, err := udpSrv.Run(ctx)
 	if err != nil {
@@ -279,7 +284,10 @@ var universalFlags = map[string]struct{}{
 // ACL automatically. An operator who wants stricter IP filtering
 // should compose their own program; this binary's contract is
 // "reasonable defaults for a reachable server."
-func buildServers(addr netip.AddrPort, handler acidns.Handler, allowPublic bool) (*acidns.UDPServer, *acidns.TCPServer, error) {
+//
+// ctx scopes the cookies secret-rotation goroutine to the process
+// lifetime; cancelling it stops the rotator alongside the listeners.
+func buildServers(ctx context.Context, addr netip.AddrPort, handler acidns.Handler, allowPublic bool) (*acidns.UDPServer, *acidns.TCPServer, error) {
 	if !allowPublic {
 		udp, err := acidns.NewUDPServer(addr, handler)
 		if err != nil {
@@ -295,6 +303,21 @@ func buildServers(addr netip.AddrPort, handler acidns.Handler, allowPublic bool)
 		netip.MustParsePrefix("0.0.0.0/0"),
 		netip.MustParsePrefix("::/0"),
 	}
+	// Cookies secret pool with hourly rotation bound to ctx. The
+	// public-listener constructors refuse to synthesise a default
+	// pool (a non-rotating process-lifetime HMAC key is unsafe on a
+	// public listener), so build one explicitly here.
+	pool, err := cookies.NewSecretPool(
+		cookies.WithPoolContext(ctx),
+		cookies.WithPoolRotateEvery(time.Hour),
+	)
+	if err != nil {
+		return nil, nil, fmt.Errorf("public cookies pool: %w", err)
+	}
+	cookiesSrv, err := cookies.NewServer(pool)
+	if err != nil {
+		return nil, nil, fmt.Errorf("public cookies server: %w", err)
+	}
 	// Per-source rate limit defaults for the public stack. Without
 	// prefix grouping a /24 or /56 of attackers gets one budget per
 	// address (256× / 2^72×); RRL covers the response-side
@@ -309,6 +332,7 @@ func buildServers(addr netip.AddrPort, handler acidns.Handler, allowPublic bool)
 			acidns.WithRateLimitIPv6Prefix(56),
 			acidns.WithRateLimitDrop(true),
 		),
+		acidns.WithPublicCookiesServer(cookiesSrv),
 	}
 	udp, err := acidns.NewPublicUDPServer(addr, handler, publicOpts...)
 	if err != nil {

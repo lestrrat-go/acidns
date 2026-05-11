@@ -8,11 +8,28 @@ import (
 	"time"
 
 	"github.com/lestrrat-go/acidns"
+	"github.com/lestrrat-go/acidns/cookies"
 	"github.com/lestrrat-go/acidns/wire"
 	"github.com/lestrrat-go/acidns/wire/rdata"
 	"github.com/lestrrat-go/acidns/wire/rrtype"
 	"github.com/stretchr/testify/require"
 )
+
+// publicMkCookiesServer builds a [cookies.Server] backed by a
+// freshly-minted in-process secret pool. The public-listener
+// constructors require an explicit server (see
+// [acidns.ErrPublicCookiesServerRequired]); production callers should
+// pair this with [cookies.WithPoolContext] +
+// [cookies.WithPoolRotateEvery] so secrets actually roll, but tests
+// don't need rotation.
+func publicMkCookiesServer(t *testing.T) cookies.Server {
+	t.Helper()
+	pool, err := cookies.NewSecretPool()
+	require.NoError(t, err)
+	srv, err := cookies.NewServer(pool)
+	require.NoError(t, err)
+	return srv
+}
 
 func publicMkInner() acidns.Handler {
 	return acidns.HandlerFunc(func(_ context.Context, w acidns.ResponseWriter, q wire.Message) {
@@ -50,6 +67,35 @@ func TestNewPublicTCPServer_RequiresAllowList(t *testing.T) {
 	require.ErrorIs(t, err, acidns.ErrPublicACLRequired)
 }
 
+func TestNewPublicUDPServer_RequiresCookiesServer(t *testing.T) {
+	t.Parallel()
+
+	// ACL is supplied, but no cookies server — the constructor must
+	// refuse rather than silently spin up a non-rotating in-process
+	// pool. Regression test for the secure-default fix.
+	_, err := acidns.NewPublicUDPServer(
+		netip.MustParseAddrPort("127.0.0.1:0"),
+		publicMkInner(),
+		acidns.WithPublicACLOptions(
+			acidns.WithACLAllow(netip.MustParsePrefix("127.0.0.0/8")),
+		),
+	)
+	require.ErrorIs(t, err, acidns.ErrPublicCookiesServerRequired)
+}
+
+func TestNewPublicTCPServer_RequiresCookiesServer(t *testing.T) {
+	t.Parallel()
+
+	_, err := acidns.NewPublicTCPServer(
+		netip.MustParseAddrPort("127.0.0.1:0"),
+		publicMkInner(),
+		acidns.WithPublicACLOptions(
+			acidns.WithACLAllow(netip.MustParsePrefix("127.0.0.0/8")),
+		),
+	)
+	require.ErrorIs(t, err, acidns.ErrPublicCookiesServerRequired)
+}
+
 func TestNewPublicUDPServer_HappyPath(t *testing.T) {
 	t.Parallel()
 
@@ -59,6 +105,7 @@ func TestNewPublicUDPServer_HappyPath(t *testing.T) {
 		acidns.WithPublicACLOptions(
 			acidns.WithACLAllow(netip.MustParsePrefix("127.0.0.0/8")),
 		),
+		acidns.WithPublicCookiesServer(publicMkCookiesServer(t)),
 	)
 	require.NoError(t, err)
 
@@ -94,6 +141,7 @@ func TestNewPublicUDPServer_DropsDeniedSilently(t *testing.T) {
 		acidns.WithPublicACLOptions(
 			acidns.WithACLAllow(netip.MustParsePrefix("198.51.100.0/24")),
 		),
+		acidns.WithPublicCookiesServer(publicMkCookiesServer(t)),
 	)
 	require.NoError(t, err)
 

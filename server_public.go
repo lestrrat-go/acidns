@@ -33,15 +33,17 @@ package acidns
 //     list is almost certainly a misconfiguration (open resolver / open
 //     authoritative). NewPublicUDPServer / NewPublicTCPServer return
 //     [ErrPublicACLRequired] when the caller supplies no ACL options.
-//   - The cookies middleware needs a [cookies.Server]; if one is not
-//     supplied via [WithPublicCookiesServer], the wrapper builds an
-//     in-process [cookies.MemorySecretPool] + [cookies.Server] with
-//     defaults — and deliberately leaves automatic secret rotation
-//     OFF, because the public-listener constructor has no shutdown
-//     context to plumb in. Operators who want rotation must build
-//     the pool themselves (passing a ctx via [cookies.WithPoolContext]
-//     paired with [cookies.WithPoolRotateEvery]) and supply the
-//     resulting server via [WithPublicCookiesServer].
+//   - The cookies middleware is required and the caller MUST supply a
+//     [cookies.Server] via [WithPublicCookiesServer]. An in-process
+//     [cookies.MemorySecretPool] with no rotation is not a safe
+//     default for an internet-exposed listener — HMAC secrets would
+//     never roll for the lifetime of the process, making cached
+//     server cookies indistinguishable from long-lived shared
+//     credentials. The constructor returns
+//     [ErrPublicCookiesServerRequired] when no server is supplied.
+//     Build the pool with [cookies.WithPoolContext] paired with
+//     [cookies.WithPoolRotateEvery] (or pass a pre-rotated pool from
+//     elsewhere in the process) and feed it to [cookies.NewServer].
 //
 // To opt out of any single layer, build the stack manually and use
 // [NewUDPServer] / [NewTCPServer] directly.
@@ -61,6 +63,16 @@ import (
 // certainly a misconfiguration; refuse the construction so the
 // operator notices immediately.
 var ErrPublicACLRequired = errors.New("acidns: public listener requires at least one ACL option (use WithPublicACLOptions(WithACLAllow(...)))")
+
+// ErrPublicCookiesServerRequired is returned by [NewPublicUDPServer]
+// / [NewPublicTCPServer] when no [cookies.Server] is supplied via
+// [WithPublicCookiesServer]. The wrappers refuse to synthesise a
+// default pool: a process-lifetime non-rotating HMAC secret is not a
+// safe default for an internet-exposed listener. Build the pool with
+// [cookies.NewSecretPool] (typically with [cookies.WithPoolContext]
+// + [cookies.WithPoolRotateEvery]) and pass the resulting server in
+// explicitly.
+var ErrPublicCookiesServerRequired = errors.New("acidns: public listener requires an explicit cookies server (use WithPublicCookiesServer with a rotating cookies.SecretPool)")
 
 // PublicServerOption configures the public-listener wrappers.
 type PublicServerOption interface {
@@ -116,11 +128,15 @@ func WithPublicCookiesOptions(opts ...CookieOption) PublicServerOption {
 	return publicServerOption{option.New(identPublicCookiesOptions{}, opts)}
 }
 
-// WithPublicCookiesServer supplies a pre-built [cookies.Server] to
-// the cookies middleware. When unset, the wrapper builds an
-// in-process secret pool and server with defaults. Supply a
-// pre-built server when the secret pool needs a custom rotation
-// cadence or shared lifetime with the calling process.
+// WithPublicCookiesServer supplies the [cookies.Server] backing the
+// public listener's cookies middleware. This option is REQUIRED —
+// the public-listener constructors return
+// [ErrPublicCookiesServerRequired] when it is missing, because
+// silently spinning up an in-process pool with no rotation is not a
+// safe default for an internet-exposed listener. Build the pool with
+// [cookies.NewSecretPool] (typically with [cookies.WithPoolContext]
+// + [cookies.WithPoolRotateEvery]) and wrap it with
+// [cookies.NewServer].
 func WithPublicCookiesServer(srv cookies.Server) PublicServerOption {
 	return publicServerOption{option.New(identPublicCookiesServer{}, srv)}
 }
@@ -176,23 +192,24 @@ func applyPublicOptions(opts []PublicServerOption) publicServerConfig {
 // UDP listener where REFUSED replies would themselves be a small
 // amplification primitive against spoofed sources.
 //
-// The cookies layer requires a [cookies.Server]; if none is supplied
-// via [WithPublicCookiesServer], a fresh in-process secret pool +
-// server is built with defaults.
+// The cookies layer requires a [cookies.Server]; the caller MUST
+// supply one via [WithPublicCookiesServer]. The wrapper deliberately
+// refuses to synthesise a default in-process secret pool because a
+// non-rotating HMAC secret pinned for the process lifetime is unsafe
+// on a public listener; [ErrPublicCookiesServerRequired] is returned
+// when the option is missing.
 func NewPublicUDPServer(addr netip.AddrPort, h Handler, opts ...PublicServerOption) (*UDPServer, error) {
 	cfg := applyPublicOptions(opts)
 	if len(cfg.aclOpts) == 0 {
 		return nil, ErrPublicACLRequired
 	}
-
-	cookiesSrv, err := resolvePublicCookiesServer(cfg.cookiesSrv)
-	if err != nil {
-		return nil, err
+	if cfg.cookiesSrv == nil {
+		return nil, ErrPublicCookiesServerRequired
 	}
 
 	// Build inside-out: cookies wraps the user handler, RRL wraps
 	// cookies, rate limit wraps RRL, ACL wraps everything.
-	stack, err := NewCookies(h, cookiesSrv, cfg.cookiesOpts...)
+	stack, err := NewCookies(h, cfg.cookiesSrv, cfg.cookiesOpts...)
 	if err != nil {
 		return nil, fmt.Errorf("acidns: public udp server: %w", err)
 	}
@@ -220,19 +237,19 @@ func NewPublicUDPServer(addr netip.AddrPort, h Handler, opts ...PublicServerOpti
 //
 // As with [NewPublicUDPServer], at least one ACL option MUST be
 // supplied via [WithPublicACLOptions]; otherwise
-// [ErrPublicACLRequired] is returned.
+// [ErrPublicACLRequired] is returned. A [cookies.Server] MUST be
+// supplied via [WithPublicCookiesServer]; otherwise
+// [ErrPublicCookiesServerRequired] is returned.
 func NewPublicTCPServer(addr netip.AddrPort, h Handler, opts ...PublicServerOption) (*TCPServer, error) {
 	cfg := applyPublicOptions(opts)
 	if len(cfg.aclOpts) == 0 {
 		return nil, ErrPublicACLRequired
 	}
-
-	cookiesSrv, err := resolvePublicCookiesServer(cfg.cookiesSrv)
-	if err != nil {
-		return nil, err
+	if cfg.cookiesSrv == nil {
+		return nil, ErrPublicCookiesServerRequired
 	}
 
-	stack, err := NewCookies(h, cookiesSrv, cfg.cookiesOpts...)
+	stack, err := NewCookies(h, cfg.cookiesSrv, cfg.cookiesOpts...)
 	if err != nil {
 		return nil, fmt.Errorf("acidns: public tcp server: %w", err)
 	}
@@ -249,19 +266,4 @@ func NewPublicTCPServer(addr netip.AddrPort, h Handler, opts ...PublicServerOpti
 		return nil, fmt.Errorf("acidns: public tcp server: %w", err)
 	}
 	return srv, nil
-}
-
-func resolvePublicCookiesServer(srv cookies.Server) (cookies.Server, error) {
-	if srv != nil {
-		return srv, nil
-	}
-	pool, err := cookies.NewSecretPool()
-	if err != nil {
-		return nil, fmt.Errorf("acidns: public listener: cookies pool: %w", err)
-	}
-	out, err := cookies.NewServer(pool)
-	if err != nil {
-		return nil, fmt.Errorf("acidns: public listener: cookies server: %w", err)
-	}
-	return out, nil
 }
