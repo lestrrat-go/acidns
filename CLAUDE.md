@@ -27,7 +27,7 @@ Follows `lestrrat-go/jwx` and `lestrrat-go/helium` conventions.
 ```
 acidns/                root: high-level convenience layer + UDP/TCP exchangers + Server framework
   resolver.go          Resolver, NewResolver, WithAttempts/WithDNSSEC/etc.
-  lookup.go            LookupHost, LookupA, LookupMX, ...
+  lookup.go            LookupHost / LookupA / LookupAAAA / LookupMX / LookupTXT / LookupSRV / LookupCNAME / LookupNS / LookupPTR
   extract.go           Extract[T], ResolveAs[T]
   exchanger.go         Exchanger / StreamExchanger / MessageStream interfaces
   exchanger_udp.go     NewUDPClient, WithUDPTimeout, WithUDPClientBufferSize
