@@ -1000,59 +1000,74 @@ func (r *Recursive) serversFromReferral(ctx context.Context, resp wire.Message, 
 	}
 	var out []netip.AddrPort
 	for _, ns := range ungluedNS {
-		nsKey := nameKey(ns)
-		// Resolver-wide cycle set: if any goroutine (this one OR a
-		// concurrent Resolve) is currently chasing ns up its NS
-		// graph, treat it as a cycle and skip. This collapses the
-		// per-Resolve cycle detection (which only protected against
-		// in-stack loops) into a global guard that also bounds the
-		// amplification an attacker would gain from triggering many
-		// parallel walks of an adversarial graph.
-		if !r.markNSInProgress(nsKey) {
-			continue
-		}
-		// Resolve A and AAAA in parallel — there's no causal
-		// dependency between them and the recursive walks they
-		// trigger don't share contention beyond the cache. Halving
-		// the latency on every NS-target resolution compounds
-		// noticeably across the full delegation chain. Result
-		// ordering is preserved: A first, then AAAA, matching the
-		// dual-stack preference of most callers.
-		var (
-			a4Addrs []netip.AddrPort
-			a6Addrs []netip.AddrPort
-			wg      sync.WaitGroup
-		)
-		wg.Add(2)
-		go func() {
-			defer wg.Done()
-			a4Entry, err := r.resolveDepth(ctx, ns, rrtype.A, depth+1)
-			if err != nil {
-				return
-			}
-			for _, rec := range a4Entry.answer {
-				if a, ok := wire.RDataAs[rdata.A](rec); ok {
-					a4Addrs = append(a4Addrs, netip.AddrPortFrom(a.Addr(), 53))
-				}
-			}
-		}()
-		go func() {
-			defer wg.Done()
-			a6Entry, err := r.resolveDepth(ctx, ns, rrtype.AAAA, depth+1)
-			if err != nil {
-				return
-			}
-			for _, rec := range a6Entry.answer {
-				if aaaa, ok := wire.RDataAs[rdata.AAAA](rec); ok {
-					a6Addrs = append(a6Addrs, netip.AddrPortFrom(aaaa.Addr(), 53))
-				}
-			}
-		}()
-		wg.Wait()
-		out = append(out, a4Addrs...)
-		out = append(out, a6Addrs...)
-		r.unmarkNSInProgress(nsKey)
+		out = append(out, r.resolveUngluedNS(ctx, ns, depth)...)
 	}
+	return out
+}
+
+// resolveUngluedNS performs the global in-progress claim + parallel
+// A/AAAA resolution for a single out-of-bailiwick NS target. It is
+// split out of serversFromReferral so that `defer unmarkNSInProgress`
+// runs at each iteration's boundary rather than accumulating until
+// the caller returns — and so a panic anywhere between mark and the
+// goroutines' completion still releases the claim. Without the
+// defer, a panic in this body would permanently strand the NS in
+// the resolver-wide in-progress map, silently breaking that NS for
+// the lifetime of the process.
+func (r *Recursive) resolveUngluedNS(ctx context.Context, ns wire.Name, depth int) []netip.AddrPort {
+	nsKey := nameKey(ns)
+	// Resolver-wide cycle set: if any goroutine (this one OR a
+	// concurrent Resolve) is currently chasing ns up its NS
+	// graph, treat it as a cycle and skip. This collapses the
+	// per-Resolve cycle detection (which only protected against
+	// in-stack loops) into a global guard that also bounds the
+	// amplification an attacker would gain from triggering many
+	// parallel walks of an adversarial graph.
+	if !r.markNSInProgress(nsKey) {
+		return nil
+	}
+	defer r.unmarkNSInProgress(nsKey)
+	// Resolve A and AAAA in parallel — there's no causal
+	// dependency between them and the recursive walks they
+	// trigger don't share contention beyond the cache. Halving
+	// the latency on every NS-target resolution compounds
+	// noticeably across the full delegation chain. Result
+	// ordering is preserved: A first, then AAAA, matching the
+	// dual-stack preference of most callers.
+	var (
+		a4Addrs []netip.AddrPort
+		a6Addrs []netip.AddrPort
+		wg      sync.WaitGroup
+	)
+	wg.Add(2)
+	go func() {
+		defer wg.Done()
+		a4Entry, err := r.resolveDepth(ctx, ns, rrtype.A, depth+1)
+		if err != nil {
+			return
+		}
+		for _, rec := range a4Entry.answer {
+			if a, ok := wire.RDataAs[rdata.A](rec); ok {
+				a4Addrs = append(a4Addrs, netip.AddrPortFrom(a.Addr(), 53))
+			}
+		}
+	}()
+	go func() {
+		defer wg.Done()
+		a6Entry, err := r.resolveDepth(ctx, ns, rrtype.AAAA, depth+1)
+		if err != nil {
+			return
+		}
+		for _, rec := range a6Entry.answer {
+			if aaaa, ok := wire.RDataAs[rdata.AAAA](rec); ok {
+				a6Addrs = append(a6Addrs, netip.AddrPortFrom(aaaa.Addr(), 53))
+			}
+		}
+	}()
+	wg.Wait()
+	out := make([]netip.AddrPort, 0, len(a4Addrs)+len(a6Addrs))
+	out = append(out, a4Addrs...)
+	out = append(out, a6Addrs...)
 	return out
 }
 
