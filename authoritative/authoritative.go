@@ -402,10 +402,17 @@ func (a *Authoritative) answer(q wire.Message) wire.Message {
 	// full-walk path is the classic ANY amplification vector; the
 	// minimal reply keeps the listener under 1× while still letting an
 	// RFC 8482-aware client recognise the intent.
+	//
+	// Gate the synthesis on findDelegation first: a query for a name
+	// inside a delegated subzone must produce a referral (AA=0, NS in
+	// authority), not a synthetic HINFO with AA=1 that would falsely
+	// claim authority over delegated namespace.
 	if a.minimalANY && question.Type() == rrtype.ANY && question.Class() == rrtype.ClassIN {
-		hinfo := buildRFC8482HINFO(question.Name(), zone)
-		b = b.Authoritative(true).Answer(hinfo)
-		return mustBuild(setRCODE(b, q, wire.RCODENoError), q)
+		if _, nsRecs := zone.findDelegation(question.Name()); len(nsRecs) == 0 {
+			hinfo := buildRFC8482HINFO(question.Name(), zone)
+			b = b.Authoritative(true).Answer(hinfo)
+			return mustBuild(setRCODE(b, q, wire.RCODENoError), q)
+		}
 	}
 
 	res := zone.lookup(question.Name(), question.Type())

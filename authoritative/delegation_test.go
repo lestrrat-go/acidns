@@ -100,3 +100,45 @@ func TestDelegationDoesNotShadowOutsideNames(t *testing.T) {
 	require.Equal(t, 1, len(resp.Answers()))
 	require.Equal(t, "192.0.2.2", resp.Answers()[0].RData().(rdata.A).Addr().String())
 }
+
+// TestANYBelowDelegationReferralNotMinimalHINFO guards against the
+// RFC 8482 minimal-ANY synthesiser claiming authority over a name in a
+// delegated subzone. The synthesis must fire only AFTER findDelegation
+// confirms the name is in-zone; otherwise the server would return AA=1
+// with the parent zone's SOA for a name it has delegated away.
+func TestANYBelowDelegationReferralNotMinimalHINFO(t *testing.T) {
+	t.Parallel()
+	a := newDelegationAuth(t)
+	resp := ask(t, a, "host.sub.example.com", rrtype.ANY)
+
+	require.Equal(t, wire.RCODENoError, resp.Flags().RCODE())
+	require.False(t, resp.Flags().Authoritative(),
+		"AA must be 0 for ANY against a name below a delegation")
+	require.Equal(t, 0, len(resp.Answers()),
+		"ANY below delegation must not synthesise an RFC 8482 HINFO")
+	require.Equal(t, 2, len(resp.Authorities()),
+		"ANY below delegation must return NS records of the delegation point")
+	for _, r := range resp.Authorities() {
+		require.Equal(t, rrtype.NS, r.Type())
+		require.Equal(t, "sub.example.com.", r.Name().String())
+	}
+}
+
+// TestANYInZoneStillSynthesisesMinimalHINFO ensures the gating fix does
+// not regress the RFC 8482 path for names the server IS authoritative
+// for: an ANY query for an in-zone name still collapses to the single
+// synthetic HINFO answer with AA=1.
+func TestANYInZoneStillSynthesisesMinimalHINFO(t *testing.T) {
+	t.Parallel()
+	a := newDelegationAuth(t)
+	resp := ask(t, a, "host.example.com", rrtype.ANY)
+
+	require.Equal(t, wire.RCODENoError, resp.Flags().RCODE())
+	require.True(t, resp.Flags().Authoritative())
+	require.Equal(t, 1, len(resp.Answers()))
+	rec := resp.Answers()[0]
+	require.Equal(t, rrtype.HINFO, rec.Type())
+	hi, ok := wire.RDataAs[rdata.HINFO](rec)
+	require.True(t, ok)
+	require.Equal(t, "RFC8482", hi.CPU())
+}
