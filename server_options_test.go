@@ -23,7 +23,7 @@ func TestUDPListenWithOptions(t *testing.T) {
 	t.Parallel()
 	srv, err := acidns.NewUDPServer(netip.MustParseAddrPort("127.0.0.1:0"), echoHandler{},
 		acidns.WithUDPListenerBufferSize(4096),
-		acidns.WithUDPMaxResponse(1232),
+		acidns.WithUDPListenerMaxResponse(1232),
 	)
 	require.NoError(t, err)
 	ctx, cancel := context.WithCancel(t.Context())
@@ -48,7 +48,7 @@ func TestUDPListenWithOptions(t *testing.T) {
 func TestTCPListenWithOptions(t *testing.T) {
 	t.Parallel()
 	srv, err := acidns.NewTCPServer(netip.MustParseAddrPort("127.0.0.1:0"), echoHandler{},
-		acidns.WithTCPIdleTimeout(2*time.Second),
+		acidns.WithTCPListenerIdleTimeout(2*time.Second),
 	)
 	require.NoError(t, err)
 	ctx, cancel := context.WithCancel(t.Context())

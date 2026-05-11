@@ -30,8 +30,8 @@ acidns/                root: high-level convenience layer + UDP/TCP exchangers +
   lookup.go            LookupHost / LookupA / LookupAAAA / LookupMX / LookupTXT / LookupSRV / LookupCNAME / LookupNS / LookupPTR
   extract.go           Extract[T], ResolveAs[T]
   exchanger.go         Exchanger / StreamExchanger / MessageStream interfaces
-  exchanger_udp.go     NewUDPClient, WithUDPTimeout, WithUDPClientBufferSize
-  exchanger_tcp.go     NewTCPClient, WithTCPTimeout
+  exchanger_udp.go     NewUDPClient, WithUDPClientTimeout, WithUDPClientBufferSize
+  exchanger_tcp.go     NewTCPClient, WithTCPClientTimeout
   server.go            Server, Handler, HandlerFunc, ResponseWriter
   server_udp.go        NewUDPServer (returns *UDPServer; bind on Run), UDPListenerOption
   server_tcp.go        NewTCPServer (returns *TCPServer; bind on Run), TCPListenerOption
@@ -87,7 +87,7 @@ acidns/                root: high-level convenience layer + UDP/TCP exchangers +
 - Functional names (`recursive`, `authoritative`, `resolvconf`, `zonefile`, `wire`) describe what the package does; used where no single spec name fits.
 - Top-level convenience names (`Resolver`, `Server`, `Exchanger`) live in the root `acidns` package.
 - The `wire/wirebb` and `dnssec/dnssecbb` (etc.) sub-packages follow jwx's xxxbb pattern: pure-function primitive layer below the ergonomic package.
-- Option types are prefixed when they would otherwise collide in `acidns`: `UDPClientOption` vs `UDPListenerOption`, `WithUDPTimeout` vs `WithUDPReadBuffer`, etc.
+- Option types and constructors for UDP/TCP carry an explicit `Client` / `Listener` infix on every `WithUDP*` / `WithTCP*` name so the call-site telegraphs which side it configures: `UDPClientOption` vs `UDPListenerOption`, `WithUDPClientTimeout` / `WithUDPClientBufferSize` / `WithUDPClientCaseRandomization` (client) vs `WithUDPListenerBufferSize` / `WithUDPListenerMaxResponse` / `WithUDPListenerWriteTimeout` (listener); ditto `WithTCPClientTimeout` vs `WithTCPListenerIdleTimeout` / `WithTCPListenerMaxConnections` / etc. Transport variants that already have a disambiguating infix in their own option type (e.g. `TCPKeepAliveOption` / `WithTCPKeepAliveTimeout`) keep that form.
 
 ## Supported RFCs
 

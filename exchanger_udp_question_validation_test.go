@@ -61,7 +61,7 @@ func TestUDPClientRejectsMismatchedQuestion(t *testing.T) {
 		netip.MustParseAddr("127.0.0.1"),
 		uint16(pc.LocalAddr().(*net.UDPAddr).Port))
 
-	ex, err := acidns.NewUDPClient(addr, acidns.WithUDPTimeout(300*time.Millisecond))
+	ex, err := acidns.NewUDPClient(addr, acidns.WithUDPClientTimeout(300*time.Millisecond))
 	require.NoError(t, err)
 
 	q, err := wire.NewMessageBuilder().

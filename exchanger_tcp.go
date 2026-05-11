@@ -34,13 +34,13 @@ type tcpClientConfig struct {
 	timeout time.Duration
 }
 
-type identTCPTimeout struct{}
+type identTCPClientTimeout struct{}
 
-// WithTCPTimeout sets a per-exchange timeout used when the caller's
+// WithTCPClientTimeout sets a per-exchange timeout used when the caller's
 // context has no deadline. Defaults to 5 seconds. Pass 0 to disable
-// the fallback — see [WithUDPTimeout] for the same semantics.
-func WithTCPTimeout(d time.Duration) TCPClientOption {
-	return tcpClientOption{option.New(identTCPTimeout{}, d)}
+// the fallback — see [WithUDPClientTimeout] for the same semantics.
+func WithTCPClientTimeout(d time.Duration) TCPClientOption {
+	return tcpClientOption{option.New(identTCPClientTimeout{}, d)}
 }
 
 // TCPClient talks TCP to a single fixed address using length-prefixed
@@ -63,7 +63,7 @@ func NewTCPClient(addr netip.AddrPort, opts ...TCPClientOption) (*TCPClient, err
 	c := tcpClientConfig{timeout: 5 * time.Second}
 	for _, o := range opts {
 		switch o.Ident() {
-		case identTCPTimeout{}:
+		case identTCPClientTimeout{}:
 			c.timeout = option.MustGet[time.Duration](o)
 		}
 	}

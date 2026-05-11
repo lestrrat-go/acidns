@@ -39,65 +39,65 @@ type tcpListenerConfig struct {
 	maxInflightPer     int
 }
 
-type identTCPIdleTimeout struct{}
-type identTCPWriteTimeout struct{}
-type identTCPMaxConnections struct{}
-type identTCPMaxConnsPerSource struct{}
-type identTCPMaxMessageSize struct{}
-type identTCPMaxQueriesPerConn struct{}
-type identTCPMaxConnLifetime struct{}
-type identTCPMessageReadTimeout struct{}
-type identTCPMaxInflightPerConn struct{}
+type identTCPListenerIdleTimeout struct{}
+type identTCPListenerWriteTimeout struct{}
+type identTCPListenerMaxConnections struct{}
+type identTCPListenerMaxConnsPerSource struct{}
+type identTCPListenerMaxMessageSize struct{}
+type identTCPListenerMaxQueriesPerConn struct{}
+type identTCPListenerMaxConnLifetime struct{}
+type identTCPListenerMessageReadTimeout struct{}
+type identTCPListenerMaxInflightPerConn struct{}
 
-// WithTCPIdleTimeout sets how long an idle connection is kept open between
+// WithTCPListenerIdleTimeout sets how long an idle connection is kept open between
 // queries. RFC 7766 §6.5 recommends a few seconds; the default is 10s.
 // A non-positive value disables the idle timeout.
-func WithTCPIdleTimeout(d time.Duration) TCPListenerOption {
-	return tcpListenerOption{option.New(identTCPIdleTimeout{}, d)}
+func WithTCPListenerIdleTimeout(d time.Duration) TCPListenerOption {
+	return tcpListenerOption{option.New(identTCPListenerIdleTimeout{}, d)}
 }
 
-// WithTCPWriteTimeout caps how long a single response write may take.
+// WithTCPListenerWriteTimeout caps how long a single response write may take.
 // Without a write deadline a slow-read attacker (TCP receive window 0)
 // can pin a server goroutine indefinitely. Default 5s; non-positive
 // disables the deadline.
-func WithTCPWriteTimeout(d time.Duration) TCPListenerOption {
-	return tcpListenerOption{option.New(identTCPWriteTimeout{}, d)}
+func WithTCPListenerWriteTimeout(d time.Duration) TCPListenerOption {
+	return tcpListenerOption{option.New(identTCPListenerWriteTimeout{}, d)}
 }
 
-// WithTCPMaxConnections caps the number of concurrent TCP connections.
+// WithTCPListenerMaxConnections caps the number of concurrent TCP connections.
 // Once the cap is reached the accept loop blocks until a slot frees,
 // providing natural backpressure via the kernel's TCP listen backlog.
 // A non-positive value disables the cap. Defaults to 1024.
-func WithTCPMaxConnections(n int) TCPListenerOption {
-	return tcpListenerOption{option.New(identTCPMaxConnections{}, n)}
+func WithTCPListenerMaxConnections(n int) TCPListenerOption {
+	return tcpListenerOption{option.New(identTCPListenerMaxConnections{}, n)}
 }
 
-// WithTCPMaxConnsPerSource caps the number of concurrent TCP
+// WithTCPListenerMaxConnsPerSource caps the number of concurrent TCP
 // connections originating from a single remote IP (canonicalised via
 // netip.Addr.Unmap so v4-mapped v6 addresses share a bucket with their
 // v4 counterpart). Without this cap a single peer can occupy every slot
-// permitted by [WithTCPMaxConnections] and starve all other sources.
+// permitted by [WithTCPListenerMaxConnections] and starve all other sources.
 // On exceeding the cap the new connection is closed immediately and the
 // accept loop continues. A non-positive value disables the per-source
 // cap. Defaults to 32 — high enough that a well-behaved client running
 // many parallel queries from one host is never affected, low enough
 // that a hostile peer cannot starve the listener.
-func WithTCPMaxConnsPerSource(n int) TCPListenerOption {
-	return tcpListenerOption{option.New(identTCPMaxConnsPerSource{}, n)}
+func WithTCPListenerMaxConnsPerSource(n int) TCPListenerOption {
+	return tcpListenerOption{option.New(identTCPListenerMaxConnsPerSource{}, n)}
 }
 
-// WithTCPMaxMessageSize caps the length-prefixed body the server is
+// WithTCPListenerMaxMessageSize caps the length-prefixed body the server is
 // willing to read from a single TCP query. The 16-bit length prefix
 // permits up to 65535 bytes per message; without a tighter ceiling, a
 // hostile client can force the server to allocate a 64 KiB buffer per
 // connection. Default 16 KiB — wide enough for the largest envelopes
 // the bundled AXFR chunker emits while keeping per-connection memory
 // bounded. A non-positive value disables the cap (allows up to 65535).
-func WithTCPMaxMessageSize(n int) TCPListenerOption {
-	return tcpListenerOption{option.New(identTCPMaxMessageSize{}, n)}
+func WithTCPListenerMaxMessageSize(n int) TCPListenerOption {
+	return tcpListenerOption{option.New(identTCPListenerMaxMessageSize{}, n)}
 }
 
-// WithTCPMaxQueriesPerConn caps the total queries served on a single
+// WithTCPListenerMaxQueriesPerConn caps the total queries served on a single
 // connection before it is closed. Mitigates a peer that holds a slot
 // indefinitely at idle-timeout cadence. A non-positive value disables
 // the cap. Defaults to 10000 — high enough that a well-behaved RFC
@@ -105,22 +105,22 @@ func WithTCPMaxMessageSize(n int) TCPListenerOption {
 // that a peer cannot pin a slot through arbitrarily many trickled
 // queries. Operators MUST tune this for unusual workloads (long-lived
 // internal mirrors, AXFR-heavy backplanes).
-func WithTCPMaxQueriesPerConn(n int) TCPListenerOption {
-	return tcpListenerOption{option.New(identTCPMaxQueriesPerConn{}, n)}
+func WithTCPListenerMaxQueriesPerConn(n int) TCPListenerOption {
+	return tcpListenerOption{option.New(identTCPListenerMaxQueriesPerConn{}, n)}
 }
 
-// WithTCPMaxConnLifetime caps wall-clock time a single connection may
+// WithTCPListenerMaxConnLifetime caps wall-clock time a single connection may
 // remain open. Backstop for misbehaving peers and a way to cycle TLS
 // session state on a sane cadence. A non-positive value disables the
 // cap. Defaults to 1 hour. Operators MUST tune this for workloads that
 // rely on multi-hour streams (e.g. long-lived internal AXFR mirrors).
-func WithTCPMaxConnLifetime(d time.Duration) TCPListenerOption {
-	return tcpListenerOption{option.New(identTCPMaxConnLifetime{}, d)}
+func WithTCPListenerMaxConnLifetime(d time.Duration) TCPListenerOption {
+	return tcpListenerOption{option.New(identTCPListenerMaxConnLifetime{}, d)}
 }
 
-// WithTCPMessageReadTimeout caps how long the server will wait for the
+// WithTCPListenerMessageReadTimeout caps how long the server will wait for the
 // body bytes of a single message after the 2-byte length prefix has
-// arrived. The idle timeout ([WithTCPIdleTimeout]) governs the wait
+// arrived. The idle timeout ([WithTCPListenerIdleTimeout]) governs the wait
 // between messages; once a length prefix is in hand the peer is
 // committed to delivering the body promptly, so this deadline is
 // tighter. Without this distinction a peer that sends the prefix and
@@ -128,18 +128,18 @@ func WithTCPMaxConnLifetime(d time.Duration) TCPListenerOption {
 // for hours (idle * maxQueriesPerConn). Default 5s; non-positive
 // disables the per-message deadline (falls back to the idle timeout
 // for the body read as well).
-func WithTCPMessageReadTimeout(d time.Duration) TCPListenerOption {
-	return tcpListenerOption{option.New(identTCPMessageReadTimeout{}, d)}
+func WithTCPListenerMessageReadTimeout(d time.Duration) TCPListenerOption {
+	return tcpListenerOption{option.New(identTCPListenerMessageReadTimeout{}, d)}
 }
 
-// WithTCPMaxInflightPerConn caps the number of concurrently-running
+// WithTCPListenerMaxInflightPerConn caps the number of concurrently-running
 // handler goroutines per connection. Pipelined responses (RFC 7766
 // §6.2.1.1) may be returned out of order; this cap prevents a single
 // connection from spawning unbounded handler goroutines if the peer
 // pushes queries faster than they complete. Defaults to 32; a
 // non-positive value disables pipelining (handlers run serially).
-func WithTCPMaxInflightPerConn(n int) TCPListenerOption {
-	return tcpListenerOption{option.New(identTCPMaxInflightPerConn{}, n)}
+func WithTCPListenerMaxInflightPerConn(n int) TCPListenerOption {
+	return tcpListenerOption{option.New(identTCPListenerMaxInflightPerConn{}, n)}
 }
 
 // TCPServer is an immutable configuration holder for a TCP DNS server.
@@ -178,23 +178,23 @@ func NewTCPServer(addr netip.AddrPort, h Handler, opts ...TCPListenerOption) (*T
 	}
 	for _, o := range opts {
 		switch o.Ident() {
-		case identTCPIdleTimeout{}:
+		case identTCPListenerIdleTimeout{}:
 			cfg.idleTimeout = option.MustGet[time.Duration](o)
-		case identTCPWriteTimeout{}:
+		case identTCPListenerWriteTimeout{}:
 			cfg.writeTimeout = option.MustGet[time.Duration](o)
-		case identTCPMaxConnections{}:
+		case identTCPListenerMaxConnections{}:
 			cfg.maxConnections = option.MustGet[int](o)
-		case identTCPMaxConnsPerSource{}:
+		case identTCPListenerMaxConnsPerSource{}:
 			cfg.maxConnsPerSource = option.MustGet[int](o)
-		case identTCPMaxMessageSize{}:
+		case identTCPListenerMaxMessageSize{}:
 			cfg.maxMessageSize = option.MustGet[int](o)
-		case identTCPMaxQueriesPerConn{}:
+		case identTCPListenerMaxQueriesPerConn{}:
 			cfg.maxQueriesPerConn = option.MustGet[int](o)
-		case identTCPMaxConnLifetime{}:
+		case identTCPListenerMaxConnLifetime{}:
 			cfg.maxConnLifetime = option.MustGet[time.Duration](o)
-		case identTCPMessageReadTimeout{}:
+		case identTCPListenerMessageReadTimeout{}:
 			cfg.messageReadTimeout = option.MustGet[time.Duration](o)
-		case identTCPMaxInflightPerConn{}:
+		case identTCPListenerMaxInflightPerConn{}:
 			cfg.maxInflightPer = option.MustGet[int](o)
 		}
 	}

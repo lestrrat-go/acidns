@@ -15,7 +15,7 @@ import (
 func TestTCPStream(t *testing.T) {
 	t.Parallel()
 	addr := startTCPEcho(t)
-	ex, err := acidns.NewTCPClient(addr, acidns.WithTCPTimeout(2*time.Second))
+	ex, err := acidns.NewTCPClient(addr, acidns.WithTCPClientTimeout(2*time.Second))
 	require.NoError(t, err)
 
 	q, err := wire.NewMessageBuilder().

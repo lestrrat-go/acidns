@@ -147,14 +147,14 @@ type UDPController struct {
 func (c *UDPController) PacketsDroppedParseError() uint64 { return c.parseDrops.Load() }
 
 // PacketsDroppedAtSemaphore returns the cumulative count of inbound
-// datagrams refused at the [WithUDPMaxInflight] cap. Steady growth
+// datagrams refused at the [WithUDPListenerMaxInflight] cap. Steady growth
 // means the listener is pinned at its concurrency bound — either the
 // handler is slow, the workload is too large for the configured
 // inflight cap, or the listener is being flooded.
 func (c *UDPController) PacketsDroppedAtSemaphore() uint64 { return c.inflightDrops.Load() }
 
 // PacketsDroppedByPreFilter returns the cumulative count of datagrams
-// rejected by the [WithUDPPreParseFilter] gate. Useful to measure
+// rejected by the [WithUDPListenerPreParseFilter] gate. Useful to measure
 // the effectiveness of an operator's source-prefix denylist.
 func (c *UDPController) PacketsDroppedByPreFilter() uint64 { return c.preFilterDrops.Load() }
 

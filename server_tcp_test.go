@@ -73,14 +73,14 @@ func TestTCPServerShutdown(t *testing.T) {
 }
 
 // TestTCPServerOversizedBodyClosesConnection verifies that a length-prefix
-// claiming more than WithTCPMaxMessageSize bytes causes the server to
+// claiming more than WithTCPListenerMaxMessageSize bytes causes the server to
 // close the connection without ever allocating the body buffer.
 // Without the cap, a hostile peer could force the server to allocate up
 // to 64 KiB per simultaneous connection (the wire-format ceiling).
 func TestTCPServerOversizedBodyClosesConnection(t *testing.T) {
 	t.Parallel()
 	h := acidns.HandlerFunc(func(_ context.Context, _ acidns.ResponseWriter, _ wire.Message) {})
-	ctrl := startTCP(t, h, acidns.WithTCPMaxMessageSize(512))
+	ctrl := startTCP(t, h, acidns.WithTCPListenerMaxMessageSize(512))
 
 	c, err := net.Dial("tcp", ctrl.Addr().String())
 	require.NoError(t, err)
@@ -157,15 +157,15 @@ func TestTCPServerCancelsHandlerOnShutdown(t *testing.T) {
 }
 
 // TestTCPServerMaxConnsPerSource verifies that connections from a
-// single source above WithTCPMaxConnsPerSource are closed promptly so
-// one peer cannot occupy every slot allowed by WithTCPMaxConnections.
+// single source above WithTCPListenerMaxConnsPerSource are closed promptly so
+// one peer cannot occupy every slot allowed by WithTCPListenerMaxConnections.
 func TestTCPServerMaxConnsPerSource(t *testing.T) {
 	t.Parallel()
 	const limit = 4
 	h := acidns.HandlerFunc(func(_ context.Context, _ acidns.ResponseWriter, _ wire.Message) {})
 	ctrl := startTCP(t, h,
-		acidns.WithTCPMaxConnsPerSource(limit),
-		acidns.WithTCPMaxConnections(64),
+		acidns.WithTCPListenerMaxConnsPerSource(limit),
+		acidns.WithTCPListenerMaxConnections(64),
 	)
 
 	// Open `limit` connections and hold them open. They must stay alive.
@@ -204,14 +204,14 @@ func TestTCPServerMaxConnsPerSource(t *testing.T) {
 
 // TestTCPServerMessageReadTimeout verifies that once the 2-byte length
 // prefix has arrived, the body must be delivered within
-// WithTCPMessageReadTimeout regardless of the (longer) idle timeout.
+// WithTCPListenerMessageReadTimeout regardless of the (longer) idle timeout.
 func TestTCPServerMessageReadTimeout(t *testing.T) {
 	t.Parallel()
 	const msgTO = 200 * time.Millisecond
 	h := acidns.HandlerFunc(func(_ context.Context, _ acidns.ResponseWriter, _ wire.Message) {})
 	ctrl := startTCP(t, h,
-		acidns.WithTCPIdleTimeout(10*time.Second),
-		acidns.WithTCPMessageReadTimeout(msgTO),
+		acidns.WithTCPListenerIdleTimeout(10*time.Second),
+		acidns.WithTCPListenerMessageReadTimeout(msgTO),
 	)
 
 	c, err := net.Dial("tcp", ctrl.Addr().String())

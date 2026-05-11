@@ -33,22 +33,21 @@ type udpListenerConfig struct {
 }
 
 type identUDPListenerBufferSize struct{}
-type identUDPMaxResponse struct{}
-type identUDPMaxInflight struct{}
-type identUDPWriteTimeout struct{}
-type identUDPPreParseFilter struct{}
+type identUDPListenerMaxResponse struct{}
+type identUDPListenerMaxInflight struct{}
+type identUDPListenerWriteTimeout struct{}
+type identUDPListenerPreParseFilter struct{}
 
 // WithUDPListenerBufferSize sets the size of the read buffer per
 // packet. Defaults to 4096, large enough for an EDNS-extended
 // request. The client-side counterpart is [WithUDPClientBufferSize];
-// the names diverge because Go disallows two top-level functions
-// with the same identifier in the same package, so the listener
-// form takes the explicit Listener prefix.
+// both sides carry the explicit Client/Listener infix so the
+// call-site telegraphs which side it configures.
 func WithUDPListenerBufferSize(n int) UDPListenerOption {
 	return udpListenerOption{option.New(identUDPListenerBufferSize{}, n)}
 }
 
-// WithUDPMaxResponse sets the absolute upper bound on response size before
+// WithUDPListenerMaxResponse sets the absolute upper bound on response size before
 // truncation, regardless of any EDNS payload size advertised by the client.
 // Defaults to 1232 per DNS Flag Day 2020 — staying at or below the typical
 // IPv6 minimum MTU minus headers avoids IP fragmentation, which is the
@@ -59,23 +58,23 @@ func WithUDPListenerBufferSize(n int) UDPListenerOption {
 // caller passing 0 (a zero-valued config field) must not end up with
 // truncation disabled, which would expose the listener as an
 // amplification primitive serving up to the wire ceiling (65535).
-func WithUDPMaxResponse(n int) UDPListenerOption {
+func WithUDPListenerMaxResponse(n int) UDPListenerOption {
 	if n <= 0 {
 		n = 1232
 	}
-	return udpListenerOption{option.New(identUDPMaxResponse{}, n)}
+	return udpListenerOption{option.New(identUDPListenerMaxResponse{}, n)}
 }
 
-// WithUDPMaxInflight caps the number of concurrently-running handler
+// WithUDPListenerMaxInflight caps the number of concurrently-running handler
 // goroutines. Packets that arrive while the cap is reached are dropped
 // silently — the kernel UDP buffer absorbs short bursts and a busy-but-
 // healthy server returns to steady state without unbounded goroutine
 // growth. A non-positive value disables the cap. Defaults to 4096.
-func WithUDPMaxInflight(n int) UDPListenerOption {
-	return udpListenerOption{option.New(identUDPMaxInflight{}, n)}
+func WithUDPListenerMaxInflight(n int) UDPListenerOption {
+	return udpListenerOption{option.New(identUDPListenerMaxInflight{}, n)}
 }
 
-// WithUDPPreParseFilter installs a per-datagram source-address gate
+// WithUDPListenerPreParseFilter installs a per-datagram source-address gate
 // that runs BEFORE wire.Unmarshal. A return of false drops the
 // datagram immediately, skipping every Handler middleware (ACL,
 // ratelimit, RRL, cookies, observe). Use this when an operator
@@ -86,11 +85,11 @@ func WithUDPMaxInflight(n int) UDPListenerOption {
 // The filter must be safe for concurrent use and should be O(1) —
 // it runs on the hot read path. Returning true falls through to
 // normal handler dispatch. A nil filter is a no-op.
-func WithUDPPreParseFilter(f func(netip.AddrPort) bool) UDPListenerOption {
-	return udpListenerOption{option.New(identUDPPreParseFilter{}, f)}
+func WithUDPListenerPreParseFilter(f func(netip.AddrPort) bool) UDPListenerOption {
+	return udpListenerOption{option.New(identUDPListenerPreParseFilter{}, f)}
 }
 
-// WithUDPWriteTimeout caps how long a single response WriteTo may
+// WithUDPListenerWriteTimeout caps how long a single response WriteTo may
 // take. UDP writes are normally instant — the kernel send buffer
 // fills and the syscall returns — but on a saturated host or a
 // pathological socket configuration a write can block. Default 5s;
@@ -101,8 +100,8 @@ func WithUDPPreParseFilter(f func(netip.AddrPort) bool) UDPListenerOption {
 // writers. The implementation serialises Deadline+WriteTo through a
 // per-listener mutex so each writer sees its own deadline. The hold
 // time is bounded by the deadline itself.
-func WithUDPWriteTimeout(d time.Duration) UDPListenerOption {
-	return udpListenerOption{option.New(identUDPWriteTimeout{}, d)}
+func WithUDPListenerWriteTimeout(d time.Duration) UDPListenerOption {
+	return udpListenerOption{option.New(identUDPListenerWriteTimeout{}, d)}
 }
 
 // UDPServer is an immutable configuration holder for a UDP DNS server.
@@ -139,18 +138,18 @@ func NewUDPServer(addr netip.AddrPort, h Handler, opts ...UDPListenerOption) (*U
 		switch o.Ident() {
 		case identUDPListenerBufferSize{}:
 			cfg.bufferSize = option.MustGet[int](o)
-		case identUDPMaxResponse{}:
+		case identUDPListenerMaxResponse{}:
 			n := option.MustGet[int](o)
 			if n > 0 {
 				cfg.maxResponseLen = n
 			}
 			// Non-positive: keep the default to avoid an open
 			// amplification surface.
-		case identUDPMaxInflight{}:
+		case identUDPListenerMaxInflight{}:
 			cfg.maxInflight = option.MustGet[int](o)
-		case identUDPWriteTimeout{}:
+		case identUDPListenerWriteTimeout{}:
 			cfg.writeTimeout = option.MustGet[time.Duration](o)
-		case identUDPPreParseFilter{}:
+		case identUDPListenerPreParseFilter{}:
 			cfg.preParseFilter = option.MustGet[func(netip.AddrPort) bool](o)
 		}
 	}

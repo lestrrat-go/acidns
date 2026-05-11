@@ -427,7 +427,7 @@ type defaultDialer struct {
 
 func (d defaultDialer) Exchange(ctx context.Context, server netip.AddrPort, q wire.Message) (wire.Message, error) {
 	uex, err := acidns.NewUDPClient(server,
-		acidns.WithUDPCaseRandomization(d.use0x20),
+		acidns.WithUDPClientCaseRandomization(d.use0x20),
 	)
 	if err != nil {
 		return wire.Message{}, err

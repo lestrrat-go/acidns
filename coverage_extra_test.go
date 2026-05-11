@@ -464,7 +464,7 @@ func TestUDPDropsMalformedThenDelivers(t *testing.T) {
 		_, _ = pc.WriteTo(gw, src)
 	}()
 
-	ex, err := acidns.NewUDPClient(addr, acidns.WithUDPTimeout(2*time.Second))
+	ex, err := acidns.NewUDPClient(addr, acidns.WithUDPClientTimeout(2*time.Second))
 	require.NoError(t, err)
 	q, _ := wire.NewMessageBuilder().
 		ID(0x4321).

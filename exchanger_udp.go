@@ -10,12 +10,12 @@ package acidns
 // # Option naming
 //
 // Client-side options live on [UDPClientOption]; server-side options on
-// [UDPListenerOption] (see server_udp.go). The two are prefixed
-// `UDPClient*` / `UDPListener*` ONLY when the same concept exists on
-// both sides — for example [WithUDPClientBufferSize] vs
-// [WithUDPListenerBufferSize]. Concepts unique to one side use the
-// plain name ([WithUDPTimeout] is client-only; [WithUDPWriteTimeout],
-// [WithUDPMaxResponse] etc. are listener-only and unambiguous).
+// [UDPListenerOption] (see server_udp.go). Every option carries an
+// explicit `UDPClient*` / `UDPListener*` prefix so the call-site
+// telegraphs which side it configures — for example
+// [WithUDPClientTimeout] / [WithUDPClientBufferSize] /
+// [WithUDPClientCaseRandomization] vs [WithUDPListenerBufferSize] /
+// [WithUDPListenerMaxResponse] / [WithUDPListenerWriteTimeout].
 
 import (
 	"bytes"
@@ -46,17 +46,17 @@ type udpClientConfig struct {
 	use0x20    bool
 }
 
-type identUDPTimeout struct{}
+type identUDPClientTimeout struct{}
 type identUDPClientBufferSize struct{}
-type identUDPCaseRandomization struct{}
+type identUDPClientCaseRandomization struct{}
 
-// WithUDPTimeout sets a per-exchange timeout that takes effect when
+// WithUDPClientTimeout sets a per-exchange timeout that takes effect when
 // the caller supplies a context without its own deadline. Defaults
 // to 5 seconds. Pass 0 to disable the fallback (the context deadline
 // or kernel socket timeout becomes the only bound — typically what
 // you want only in tests or with a hard ctx deadline).
-func WithUDPTimeout(d time.Duration) UDPClientOption {
-	return udpClientOption{option.New(identUDPTimeout{}, d)}
+func WithUDPClientTimeout(d time.Duration) UDPClientOption {
+	return udpClientOption{option.New(identUDPClientTimeout{}, d)}
 }
 
 // WithUDPClientBufferSize sets the size of the UDP read buffer in bytes. Defaults
@@ -65,7 +65,7 @@ func WithUDPClientBufferSize(n int) UDPClientOption {
 	return udpClientOption{option.New(identUDPClientBufferSize{}, n)}
 }
 
-// WithUDPCaseRandomization toggles RFC 5452 §9.3 "0x20" hardening:
+// WithUDPClientCaseRandomization toggles RFC 5452 §9.3 "0x20" hardening:
 // the exchanger randomly toggles the case of ASCII letters in the
 // QNAME of every outbound query, then verifies the response's
 // question section matches case-exactly. A spoofer that guesses the
@@ -75,10 +75,10 @@ func WithUDPClientBufferSize(n int) UDPClientOption {
 // Defaults to true so the safe behaviour is uniform across every
 // construction path ([NewUDPClient] direct, [NewResolver] with
 // [WithServers], [recursive.New]). Pass
-// [WithUDPCaseRandomization](false) to opt out for upstreams known
+// [WithUDPClientCaseRandomization](false) to opt out for upstreams known
 // to silently lowercase the qname in responses (rare).
-func WithUDPCaseRandomization(v bool) UDPClientOption {
-	return udpClientOption{option.New(identUDPCaseRandomization{}, v)}
+func WithUDPClientCaseRandomization(v bool) UDPClientOption {
+	return udpClientOption{option.New(identUDPClientCaseRandomization{}, v)}
 }
 
 type UDPClient struct {
@@ -99,11 +99,11 @@ func NewUDPClient(addr netip.AddrPort, opts ...UDPClientOption) (*UDPClient, err
 	c := udpClientConfig{timeout: 5 * time.Second, bufferSize: 4096, use0x20: true}
 	for _, o := range opts {
 		switch o.Ident() {
-		case identUDPTimeout{}:
+		case identUDPClientTimeout{}:
 			c.timeout = option.MustGet[time.Duration](o)
 		case identUDPClientBufferSize{}:
 			c.bufferSize = option.MustGet[int](o)
-		case identUDPCaseRandomization{}:
+		case identUDPClientCaseRandomization{}:
 			c.use0x20 = option.MustGet[bool](o)
 		}
 	}
@@ -129,7 +129,7 @@ func (e *UDPClient) Exchange(ctx context.Context, q wire.Message) (wire.Message,
 	//      [acidns.RawRequest] consumers asserting on the wire bytes)
 	//      depend on the qname surviving unmolested.
 	// Hardcoding the negative reason here is uglier than having callers
-	// pass [WithUDPCaseRandomization](false), but the friendlier
+	// pass [WithUDPClientCaseRandomization](false), but the friendlier
 	// default avoids a landmine for every UPDATE / NOTIFY user who
 	// would otherwise have to know to opt out.
 	var sentQuestion []byte
