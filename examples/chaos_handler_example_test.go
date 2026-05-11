@@ -25,7 +25,7 @@ func Example_chaos_handler() {
 	// ServeDNS with a captured writer. Demonstrates RFC 4892 mapping:
 	// id.server / hostname.bind both yield the configured identifier;
 	// version.server / version.bind both yield the configured version.
-	h, err := chaos.New(
+	h, err := chaos.New(nil,
 		chaos.WithIdentifier("ns1.example.net"),
 		chaos.WithVersion("acidns/dev"),
 	)

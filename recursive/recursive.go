@@ -484,7 +484,7 @@ func (r *Recursive) ServeDNS(ctx context.Context, w acidns.ResponseWriter, q wir
 	// id.server, RFC 4892) would be silently mistyped as IN at every
 	// cache lookup and put. Refuse non-IN at the door with NOTIMP per
 	// RFC 1035 §6.1.1; operators serving CHAOS should compose
-	// chaos.NewHandler ahead of this resolver in the middleware chain.
+	// chaos.New ahead of this resolver in the middleware chain.
 	if question.Class() != rrtype.ClassIN {
 		_ = w.WriteMsg(must(b.RCODE(wire.RCODENotImp).Build()))
 		return

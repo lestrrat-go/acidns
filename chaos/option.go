@@ -23,7 +23,6 @@ type config struct {
 
 type identIdentifier struct{}
 type identVersion struct{}
-type identNext struct{}
 
 // WithIdentifier sets the response for id.server. and hostname.bind.
 // queries. Empty string disables matching for those names.
@@ -35,11 +34,4 @@ func WithIdentifier(id string) Option {
 // queries. Empty string disables matching for those names.
 func WithVersion(version string) Option {
 	return chaosOption{option.New(identVersion{}, version)}
-}
-
-// WithNext sets the Handler to delegate to when the query is not a CHAOS
-// identity query handled by this Handler. Without WithNext, non-matching
-// queries receive a REFUSED response so this handler can stand alone.
-func WithNext(h acidns.Handler) Option {
-	return chaosOption{option.New(identNext{}, h)}
 }

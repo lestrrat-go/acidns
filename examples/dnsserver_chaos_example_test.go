@@ -16,8 +16,9 @@ import (
 func Example_dnsserver_chaos() {
 	// chaos.New responds to RFC 4892 identity queries (id.server,
 	// hostname.bind, version.server, version.bind) on the CHAOS class.
-	// Compose with another Handler via WithNext, or run it standalone.
-	h, err := chaos.New(
+	// Pass an inner Handler positionally to delegate non-matching
+	// queries, or nil to run standalone (non-matches receive REFUSED).
+	h, err := chaos.New(nil,
 		chaos.WithIdentifier("ns1.example.net"),
 		chaos.WithVersion("acidns/dev"),
 	)

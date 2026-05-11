@@ -37,7 +37,7 @@ func mustQuery(t *testing.T, name string, class rrtype.Class) wire.Message {
 
 func TestChaosIDServer(t *testing.T) {
 	t.Parallel()
-	h, err := chaos.New(chaos.WithIdentifier("ns1.example.net"))
+	h, err := chaos.New(nil, chaos.WithIdentifier("ns1.example.net"))
 	require.NoError(t, err)
 	w := &captureWriter{}
 	h.ServeDNS(t.Context(), w, mustQuery(t, "id.server.", rrtype.ClassCH))
@@ -52,7 +52,7 @@ func TestChaosIDServer(t *testing.T) {
 
 func TestChaosHostnameBindAlias(t *testing.T) {
 	t.Parallel()
-	h, err := chaos.New(chaos.WithIdentifier("alpha"))
+	h, err := chaos.New(nil, chaos.WithIdentifier("alpha"))
 	require.NoError(t, err)
 	w := &captureWriter{}
 	h.ServeDNS(t.Context(), w, mustQuery(t, "hostname.bind.", rrtype.ClassCH))
@@ -62,7 +62,7 @@ func TestChaosHostnameBindAlias(t *testing.T) {
 
 func TestChaosVersion(t *testing.T) {
 	t.Parallel()
-	h, err := chaos.New(chaos.WithVersion("acidns/dev"))
+	h, err := chaos.New(nil, chaos.WithVersion("acidns/dev"))
 	require.NoError(t, err)
 	w := &captureWriter{}
 	h.ServeDNS(t.Context(), w, mustQuery(t, "version.bind.", rrtype.ClassCH))
@@ -78,7 +78,7 @@ func TestChaosDelegatesOnNonChaos(t *testing.T) {
 		resp, _ := wire.NewMessageBuilder().ID(q.ID()).Response(true).Build()
 		_ = w.WriteMsg(resp)
 	})
-	h, err := chaos.New(chaos.WithIdentifier("foo"), chaos.WithNext(next))
+	h, err := chaos.New(next, chaos.WithIdentifier("foo"))
 	require.NoError(t, err)
 	w := &captureWriter{}
 	h.ServeDNS(t.Context(), w, mustQuery(t, "example.com.", rrtype.ClassIN))
@@ -87,7 +87,7 @@ func TestChaosDelegatesOnNonChaos(t *testing.T) {
 
 func TestChaosRefusesWithoutNext(t *testing.T) {
 	t.Parallel()
-	h, err := chaos.New(chaos.WithIdentifier("foo"))
+	h, err := chaos.New(nil, chaos.WithIdentifier("foo"))
 	require.NoError(t, err)
 	w := &captureWriter{}
 	h.ServeDNS(t.Context(), w, mustQuery(t, "example.com.", rrtype.ClassIN))
@@ -96,7 +96,7 @@ func TestChaosRefusesWithoutNext(t *testing.T) {
 
 func TestChaosVersionServerAlias(t *testing.T) {
 	t.Parallel()
-	h, err := chaos.New(chaos.WithVersion("1.2.3"))
+	h, err := chaos.New(nil, chaos.WithVersion("1.2.3"))
 	require.NoError(t, err)
 	w := &captureWriter{}
 	h.ServeDNS(t.Context(), w, mustQuery(t, "version.server.", rrtype.ClassCH))
@@ -108,7 +108,7 @@ func TestChaosVersionServerAlias(t *testing.T) {
 
 func TestChaosCaseInsensitiveName(t *testing.T) {
 	t.Parallel()
-	h, err := chaos.New(chaos.WithIdentifier("upper"))
+	h, err := chaos.New(nil, chaos.WithIdentifier("upper"))
 	require.NoError(t, err)
 	w := &captureWriter{}
 	h.ServeDNS(t.Context(), w, mustQuery(t, "ID.SERVER.", rrtype.ClassCH))
@@ -126,7 +126,7 @@ func TestChaosWrongTypePassesThrough(t *testing.T) {
 		resp, _ := wire.NewMessageBuilder().ID(q.ID()).Response(true).Build()
 		_ = w.WriteMsg(resp)
 	})
-	h, err := chaos.New(chaos.WithIdentifier("foo"), chaos.WithNext(next))
+	h, err := chaos.New(next, chaos.WithIdentifier("foo"))
 	require.NoError(t, err)
 	w := &captureWriter{}
 	q, err := wire.NewMessageBuilder().
@@ -146,7 +146,7 @@ func TestChaosNonChaosClassWithMatchingNamePassesThrough(t *testing.T) {
 		resp, _ := wire.NewMessageBuilder().ID(q.ID()).Response(true).Build()
 		_ = w.WriteMsg(resp)
 	})
-	h, err := chaos.New(chaos.WithIdentifier("foo"), chaos.WithNext(next))
+	h, err := chaos.New(next, chaos.WithIdentifier("foo"))
 	require.NoError(t, err)
 	w := &captureWriter{}
 	h.ServeDNS(t.Context(), w, mustQuery(t, "id.server.", rrtype.ClassIN))
@@ -155,7 +155,7 @@ func TestChaosNonChaosClassWithMatchingNamePassesThrough(t *testing.T) {
 
 func TestChaosUnknownChaosNameRefused(t *testing.T) {
 	t.Parallel()
-	h, err := chaos.New(chaos.WithIdentifier("foo"))
+	h, err := chaos.New(nil, chaos.WithIdentifier("foo"))
 	require.NoError(t, err)
 	w := &captureWriter{}
 	h.ServeDNS(t.Context(), w, mustQuery(t, "trustanchor.server.", rrtype.ClassCH))
@@ -167,7 +167,7 @@ func TestChaosUnknownChaosNameRefused(t *testing.T) {
 func TestChaosIDDisabledFallsThrough(t *testing.T) {
 	t.Parallel()
 	// no WithIdentifier → id.server lookup returns ok=false → refused
-	h, err := chaos.New(chaos.WithVersion("only-version"))
+	h, err := chaos.New(nil, chaos.WithVersion("only-version"))
 	require.NoError(t, err)
 	w := &captureWriter{}
 	h.ServeDNS(t.Context(), w, mustQuery(t, "id.server.", rrtype.ClassCH))
@@ -184,7 +184,7 @@ func TestChaosVersionDisabledFallsThrough(t *testing.T) {
 		resp, _ := wire.NewMessageBuilder().ID(q.ID()).Response(true).Build()
 		_ = w.WriteMsg(resp)
 	})
-	h, err := chaos.New(chaos.WithIdentifier("only-id"), chaos.WithNext(next))
+	h, err := chaos.New(next, chaos.WithIdentifier("only-id"))
 	require.NoError(t, err)
 	w := &captureWriter{}
 	h.ServeDNS(t.Context(), w, mustQuery(t, "version.bind.", rrtype.ClassCH))
@@ -193,7 +193,7 @@ func TestChaosVersionDisabledFallsThrough(t *testing.T) {
 
 func TestChaosNoQuestionRefused(t *testing.T) {
 	t.Parallel()
-	h, err := chaos.New(chaos.WithIdentifier("foo"))
+	h, err := chaos.New(nil, chaos.WithIdentifier("foo"))
 	require.NoError(t, err)
 	w := &captureWriter{}
 	q, err := wire.NewMessageBuilder().ID(7).Build()
@@ -211,7 +211,7 @@ func TestChaosMultiQuestionDelegates(t *testing.T) {
 		resp, _ := wire.NewMessageBuilder().ID(q.ID()).Response(true).Build()
 		_ = w.WriteMsg(resp)
 	})
-	h, err := chaos.New(chaos.WithIdentifier("foo"), chaos.WithNext(next))
+	h, err := chaos.New(next, chaos.WithIdentifier("foo"))
 	require.NoError(t, err)
 	w := &captureWriter{}
 	q, err := wire.NewMessageBuilder().

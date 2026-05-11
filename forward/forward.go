@@ -242,7 +242,7 @@ func (h *Forwarder) ServeDNS(ctx context.Context, w acidns.ResponseWriter, q wir
 	// then key cache entries under exotic classes the operator never
 	// expected to be cacheable. Refuse with NOTIMP per RFC 1035 §6.1.1,
 	// mirroring the recursive resolver's posture. Operators serving
-	// CHAOS should compose chaos.NewHandler ahead of this forwarder.
+	// CHAOS should compose chaos.New ahead of this forwarder.
 	if first := q.Questions()[0]; first.Class() != rrtype.ClassIN {
 		_ = w.WriteMsg(buildErrorResponse(q, wire.RCODENotImp))
 		h.cfg.logger.LogAttrs(ctx, slog.LevelDebug, "forward.serve",

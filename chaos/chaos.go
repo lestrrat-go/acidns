@@ -7,7 +7,8 @@
 //
 // It is intended to be composed with another authoritative or recursive
 // Handler: the chaos.Handler responds to matching queries, otherwise it
-// delegates to the wrapped next Handler.
+// delegates to the wrapped inner Handler. Passing a nil inner makes the
+// handler stand alone — non-matching queries receive REFUSED.
 package chaos
 
 import (
@@ -22,19 +23,19 @@ import (
 	"github.com/lestrrat-go/option/v3"
 )
 
-// New returns a Handler that answers CHAOS identity queries. The
-// error return is currently always nil; it is part of the signature so
-// future option-validation can be added without breaking callers.
-func New(opts ...Option) (acidns.Handler, error) {
-	c := config{}
+// New returns a Handler that answers CHAOS identity queries, delegating
+// non-matching queries to inner. If inner is nil, non-matching queries
+// receive a REFUSED response so this handler can stand alone. The error
+// return is currently always nil; it is part of the signature so future
+// option-validation can be added without breaking callers.
+func New(inner acidns.Handler, opts ...Option) (acidns.Handler, error) {
+	c := config{next: inner}
 	for _, o := range opts {
 		switch o.Ident() {
 		case identIdentifier{}:
 			c.id = option.MustGet[string](o)
 		case identVersion{}:
 			c.version = option.MustGet[string](o)
-		case identNext{}:
-			c.next = option.MustGet[acidns.Handler](o)
 		}
 	}
 	return &handler{cfg: c}, nil
