@@ -875,3 +875,115 @@ func TestResolveSingleflightCoalesces(t *testing.T) {
 	require.Equal(t, int64(1), calls.Load(),
 		"singleflight must collapse %d concurrent identical queries to one upstream exchange", callers)
 }
+
+// TestResolveSingleflightLeaderCancelDoesNotOrphanFollowers verifies
+// that when the singleflight leader's context is cancelled mid-flight,
+// followers waiting on the same in-flight call still observe the
+// upstream's successful answer rather than the leader's
+// context.Canceled. Without context detachment (see
+// recursive.startResolveDepth), a cancelled leader would tear down the
+// shared work and surface ctx.Err() to every follower — an RFC 5452 §6
+// amplification vector, since every orphaned follower would have to
+// re-issue the full iterative walk and open a fresh spoofing window.
+func TestResolveSingleflightLeaderCancelDoesNotOrphanFollowers(t *testing.T) {
+	t.Parallel()
+	// release gates the upstream response; close it to let the dialer
+	// return. The leader's ctx is cancelled before release is closed,
+	// so the in-flight goroutine is actively running when the leader
+	// abandons it.
+	release := make(chan struct{})
+	leaderJoined := make(chan struct{})
+	followerJoined := make(chan struct{})
+	var calls atomic.Int64
+	dialer := stubDialer{
+		fn: func(ctx context.Context, _ netip.AddrPort, q wire.Message) (wire.Message, error) {
+			calls.Add(1)
+			select {
+			case <-release:
+			case <-ctx.Done():
+				return wire.Message{}, ctx.Err()
+			}
+			question := q.Questions()[0]
+			ar, err := rdata.NewA(netip.MustParseAddr("203.0.113.7"))
+			require.NoError(t, err)
+			a := wire.NewRecord(question.Name(), 60*time.Second, ar)
+			return mkResp(t, q, func(b *wire.MessageBuilder) *wire.MessageBuilder {
+				return b.Authoritative(true).Answer(a)
+			}), nil
+		},
+	}
+	r := mustRecursive(t,
+		recursive.WithRoots(netip.MustParseAddrPort("127.0.0.1:1")),
+		recursive.WithDialer(dialer),
+		// Disable qname-minimisation: this test counts on a single
+		// (qname, qtype) singleflight entry, not per-step queries.
+		recursive.WithQNameMinimisation(false),
+	)
+
+	name := wire.MustParseName("orphan.example.")
+
+	leaderCtx, cancelLeader := context.WithCancel(t.Context())
+	leaderErrCh := make(chan error, 1)
+	go func() {
+		close(leaderJoined)
+		_, err := r.ResolveEntry(leaderCtx, name, rrtype.A)
+		leaderErrCh <- err
+	}()
+
+	// Wait until the leader is in-flight, then start the follower.
+	<-leaderJoined
+	// Give the leader time to enter the dialer (the dialer's first
+	// call increments calls.Load to 1 before blocking on release).
+	require.Eventually(t, func() bool { return calls.Load() == 1 },
+		2*time.Second, time.Millisecond, "leader must reach the dialer")
+
+	followerCtx, cancelFollower := context.WithTimeout(t.Context(), 5*time.Second)
+	defer cancelFollower()
+	followerResultCh := make(chan struct {
+		entry recursive.Entry
+		err   error
+	}, 1)
+	go func() {
+		close(followerJoined)
+		entry, err := r.ResolveEntry(followerCtx, name, rrtype.A)
+		followerResultCh <- struct {
+			entry recursive.Entry
+			err   error
+		}{entry, err}
+	}()
+	<-followerJoined
+	// Give the follower a moment to join the in-flight entry.
+	time.Sleep(50 * time.Millisecond)
+
+	// Cancel the leader while the upstream is still blocked. The
+	// follower must still be able to complete.
+	cancelLeader()
+
+	// The leader sees context.Canceled (its own ctx fired).
+	select {
+	case err := <-leaderErrCh:
+		require.ErrorIs(t, err, context.Canceled, "leader must observe its own cancel")
+	case <-time.After(2 * time.Second):
+		t.Fatal("leader did not return after cancellation")
+	}
+
+	// The detached in-flight goroutine is still running; release it
+	// so the follower can complete.
+	close(release)
+
+	select {
+	case got := <-followerResultCh:
+		require.NoError(t, got.err,
+			"follower must NOT inherit the leader's cancellation")
+		// Sanity: the answer is the upstream's, not a stale/empty entry.
+		require.NotEmpty(t, got.entry.Answer(),
+			"follower must receive the iterative-walk answer")
+	case <-time.After(3 * time.Second):
+		t.Fatal("follower did not complete after upstream release")
+	}
+
+	// Exactly one upstream call: singleflight coalesced the two
+	// resolutions even though the leader cancelled mid-flight.
+	require.Equal(t, int64(1), calls.Load(),
+		"singleflight must hold across leader cancellation; got %d upstream calls", calls.Load())
+}

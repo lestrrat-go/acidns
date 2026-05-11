@@ -721,46 +721,89 @@ func (r *Recursive) resolveDepth(ctx context.Context, name wire.Name, t rrtype.T
 	}
 
 	// Singleflight: coalesce concurrent misses for the same key.
+	// Both leader and followers wait on <-call.done vs their own
+	// ctx.Done(). The iterative work itself runs in a dedicated
+	// goroutine under a context detached from any individual caller
+	// (see startResolveDepth) so a cancelled leader cannot strand the
+	// followers — RFC 5452 §6 spoofing window amplification would
+	// otherwise multiply with every aborted leader (each surviving
+	// follower having to re-issue the full iterative walk).
 	key := nameKey(name) + "\x00" + fmt.Sprintf("%d", t)
 	r.inflightMu.Lock()
-	if call, ok := r.inflight[key]; ok {
-		r.inflightMu.Unlock()
-		select {
-		case <-call.done:
-			return call.entry, call.err
-		case <-ctx.Done():
-			return Entry{}, ctx.Err()
-		}
-	}
-	// Try to acquire a slot in the inflight semaphore before publishing
-	// a new call entry. Followers (the same key) pay no slot — they
-	// share the leader's. Distinct cache-miss keys each cost a slot;
-	// saturation surfaces ErrInflightFull so callers can shed load.
-	if r.inflightSem != nil {
-		select {
-		case r.inflightSem <- struct{}{}:
-		default:
-			r.inflightMu.Unlock()
-			return Entry{}, ErrInflightFull
-		}
-	}
-	call := &inflightCall{done: make(chan struct{})}
-	r.inflight[key] = call
-	r.inflightMu.Unlock()
-	defer func() {
-		r.inflightMu.Lock()
-		delete(r.inflight, key)
-		r.inflightMu.Unlock()
+	call, ok := r.inflight[key]
+	if !ok {
+		// Try to acquire a slot in the inflight semaphore before
+		// publishing a new call entry. Followers (the same key)
+		// pay no slot — they share the leader's. Distinct
+		// cache-miss keys each cost a slot; saturation surfaces
+		// ErrInflightFull so callers can shed load.
 		if r.inflightSem != nil {
-			<-r.inflightSem
+			select {
+			case r.inflightSem <- struct{}{}:
+			default:
+				r.inflightMu.Unlock()
+				return Entry{}, ErrInflightFull
+			}
 		}
-		close(call.done)
-	}()
+		call = &inflightCall{done: make(chan struct{})}
+		r.inflight[key] = call
+		r.startResolveDepth(ctx, call, key, name, t, depth)
+	}
+	r.inflightMu.Unlock()
 
-	entry, err := r.resolveDepthInner(ctx, name, t, depth)
-	call.entry = entry
-	call.err = err
-	return entry, err
+	select {
+	case <-call.done:
+		return call.entry, call.err
+	case <-ctx.Done():
+		return Entry{}, ctx.Err()
+	}
+}
+
+// startResolveDepth spawns the goroutine that drives resolveDepthInner
+// for the given inflight call. The goroutine's context detaches the
+// caller's cancellation via [context.WithoutCancel] — so a cancelled
+// leader does not abort an in-flight iterative walk that other waiters
+// still need — while preserving caller-installed values (slog
+// correlation ids, trace spans, …) for observers down the stack.
+// The detached context is bounded by resolveBudget (or queryTimeout
+// when resolveBudget is unset) so the work cannot run forever once
+// every caller has dropped.
+//
+// This mirrors forward.startExchange. See the regression test
+// TestResolveSingleflightLeaderCancelDoesNotOrphanFollowers.
+func (r *Recursive) startResolveDepth(callerCtx context.Context, call *inflightCall, key string, name wire.Name, t rrtype.Type, depth int) {
+	go func() {
+		defer func() {
+			r.inflightMu.Lock()
+			delete(r.inflight, key)
+			r.inflightMu.Unlock()
+			if r.inflightSem != nil {
+				<-r.inflightSem
+			}
+			close(call.done)
+		}()
+		// Detach from callerCtx so a leader cancel does not orphan
+		// followers. Preserve caller values (slog ids, trace spans).
+		innerCtx := context.WithoutCancel(callerCtx)
+		// Bound the detached work so it cannot run forever once the
+		// last waiter has dropped. resolveBudget is the natural
+		// upper bound (ResolveEntry already applies it on the
+		// caller side); falling back to queryTimeout keeps a sane
+		// ceiling when neither has been configured by a custom
+		// caller bypassing ResolveEntry.
+		bound := r.resolveBudget
+		if bound <= 0 {
+			bound = r.queryTimeout
+		}
+		if bound > 0 {
+			var cancel context.CancelFunc
+			innerCtx, cancel = context.WithTimeout(innerCtx, bound)
+			defer cancel()
+		}
+		entry, err := r.resolveDepthInner(innerCtx, name, t, depth)
+		call.entry = entry
+		call.err = err
+	}()
 }
 
 func (r *Recursive) resolveDepthInner(ctx context.Context, target wire.Name, t rrtype.Type, depth int) (Entry, error) {
