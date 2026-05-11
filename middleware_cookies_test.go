@@ -78,7 +78,8 @@ func extractCookieOpt(t *testing.T, m wire.Message) ([8]byte, []byte) {
 func TestCookiesPassThroughForNonCookieClient(t *testing.T) {
 	t.Parallel()
 	srv := newCookiesServer(t)
-	h := acidns.NewCookies(cookieMkInner(), srv)
+	h, err := acidns.NewCookies(cookieMkInner(), srv)
+	require.NoError(t, err)
 
 	q, err := wire.NewMessageBuilder().
 		ID(1).
@@ -97,7 +98,8 @@ func TestCookiesPassThroughForNonCookieClient(t *testing.T) {
 func TestCookiesAttachesServerCookieOnFirstContact(t *testing.T) {
 	t.Parallel()
 	srv := newCookiesServer(t)
-	h := acidns.NewCookies(cookieMkInner(), srv)
+	h, err := acidns.NewCookies(cookieMkInner(), srv)
+	require.NoError(t, err)
 
 	cc := [8]byte{1, 2, 3, 4, 5, 6, 7, 8}
 	clientOpt := wire.NewClientCookie(cc)
@@ -119,7 +121,8 @@ func TestCookiesAttachesServerCookieOnFirstContact(t *testing.T) {
 func TestCookiesAcceptsValidServerCookie(t *testing.T) {
 	t.Parallel()
 	srv := newCookiesServer(t)
-	h := acidns.NewCookies(cookieMkInner(), srv)
+	h, err := acidns.NewCookies(cookieMkInner(), srv)
+	require.NoError(t, err)
 	addr := netip.MustParseAddr("198.51.100.3")
 
 	cc := [8]byte{9, 9, 9, 9, 9, 9, 9, 9}
@@ -146,10 +149,11 @@ func TestCookiesRejectsInvalidServerCookieWithBADCOOKIE(t *testing.T) {
 	t.Parallel()
 	srv := newCookiesServer(t)
 	innerCalled := false
-	h := acidns.NewCookies(acidns.HandlerFunc(func(ctx context.Context, w acidns.ResponseWriter, q wire.Message) {
+	h, err := acidns.NewCookies(acidns.HandlerFunc(func(ctx context.Context, w acidns.ResponseWriter, q wire.Message) {
 		innerCalled = true
 		cookieMkInner().ServeDNS(ctx, w, q)
 	}), srv)
+	require.NoError(t, err)
 
 	cc := [8]byte{1, 1, 1, 1, 1, 1, 1, 1}
 	// Forge a 16-byte server cookie that won't validate.
@@ -210,8 +214,9 @@ func largeAnswerInner() acidns.Handler {
 func TestCookiesLargeResponseGateUDPTruncates(t *testing.T) {
 	t.Parallel()
 	srv := newCookiesServer(t)
-	h := acidns.NewCookies(largeAnswerInner(), srv,
+	h, err := acidns.NewCookies(largeAnswerInner(), srv,
 		acidns.WithRequireCookieForLargeResponse(true), acidns.WithRequireCookieMaxBytes(512))
+	require.NoError(t, err)
 
 	q, err := wire.NewMessageBuilder().
 		ID(10).
@@ -233,8 +238,9 @@ func TestCookiesLargeResponseGateUDPTruncates(t *testing.T) {
 func TestCookiesLargeResponseGateTCPPassesThrough(t *testing.T) {
 	t.Parallel()
 	srv := newCookiesServer(t)
-	h := acidns.NewCookies(largeAnswerInner(), srv,
+	h, err := acidns.NewCookies(largeAnswerInner(), srv,
 		acidns.WithRequireCookieForLargeResponse(true), acidns.WithRequireCookieMaxBytes(512))
+	require.NoError(t, err)
 
 	q, err := wire.NewMessageBuilder().
 		ID(11).
@@ -256,8 +262,9 @@ func TestCookiesLargeResponseGateTCPPassesThrough(t *testing.T) {
 func TestCookiesLargeResponseGateValidCookieAllowsLarge(t *testing.T) {
 	t.Parallel()
 	srv := newCookiesServer(t)
-	h := acidns.NewCookies(largeAnswerInner(), srv,
+	h, err := acidns.NewCookies(largeAnswerInner(), srv,
 		acidns.WithRequireCookieForLargeResponse(true), acidns.WithRequireCookieMaxBytes(512))
+	require.NoError(t, err)
 
 	addr := netip.MustParseAddr("198.51.100.12")
 	cc := [8]byte{2, 2, 2, 2, 2, 2, 2, 2}
@@ -286,7 +293,8 @@ func TestCookiesLargeResponseGateValidCookieAllowsLarge(t *testing.T) {
 func TestCookiesBadCookieEchoesRequestorUDPSize(t *testing.T) {
 	t.Parallel()
 	srv := newCookiesServer(t)
-	h := acidns.NewCookies(cookieMkInner(), srv)
+	h, err := acidns.NewCookies(cookieMkInner(), srv)
+	require.NoError(t, err)
 
 	cc := [8]byte{3, 3, 3, 3, 3, 3, 3, 3}
 	bogus := make([]byte, 16)
@@ -309,4 +317,16 @@ func TestCookiesBadCookieEchoesRequestorUDPSize(t *testing.T) {
 	require.True(t, ok)
 	require.Equal(t, requestedUDPSize, e.UDPSize(),
 		"BADCOOKIE must echo the requestor's advertised UDPSize")
+}
+
+// TestCookiesNilServerReturnsSentinel pins the constructor's
+// behaviour when the caller hands in a nil cookies.Server: it must
+// return ErrNilCookieServer rather than panicking. A nil server would
+// NPE on the first request that carried a COOKIE option, so refusing
+// at construction is the only safe option.
+func TestCookiesNilServerReturnsSentinel(t *testing.T) {
+	t.Parallel()
+	h, err := acidns.NewCookies(cookieMkInner(), nil)
+	require.Nil(t, h)
+	require.ErrorIs(t, err, acidns.ErrNilCookieServer)
 }

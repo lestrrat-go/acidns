@@ -27,12 +27,21 @@ package acidns
 
 import (
 	"context"
+	"errors"
 	"time"
 
 	"github.com/lestrrat-go/acidns/cookies"
 	"github.com/lestrrat-go/acidns/wire"
 	"github.com/lestrrat-go/option/v3"
 )
+
+// ErrNilCookieServer is returned by [NewCookies] when the supplied
+// [cookies.Server] is nil. A nil server would NPE inside Validate/Make
+// on the first request that carried a COOKIE option, and silently
+// bypassing the middleware would surprise an operator who composed it
+// expecting cookies to be enforced — so the constructor refuses at
+// startup with a matchable sentinel.
+var ErrNilCookieServer = errors.New("acidns: NewCookies requires a non-nil cookies.Server")
 
 // CookieOption configures the cookies middleware.
 type CookieOption interface {
@@ -86,8 +95,10 @@ func WithRequireCookieMaxBytes(maxBytes int) CookieOption {
 }
 
 // NewCookies wraps inner with EDNS-Cookie processing backed by srv.
-// srv must outlive the returned Handler. See the package-level comment
-// in middleware_cookies.go for the precise behavioural contract.
+// srv must outlive the returned Handler, and must be non-nil —
+// otherwise [ErrNilCookieServer] is returned. See the package-level
+// comment in middleware_cookies.go for the precise behavioural
+// contract.
 //
 // The middleware does not _require_ cookies — clients that send no
 // cookie option are passed through unchanged. To enforce cookies (e.g.
@@ -104,7 +115,7 @@ func WithRequireCookieMaxBytes(maxBytes int) CookieOption {
 // bucket bounds the BADCOOKIE emission rate before this layer ever
 // runs. Cookies on a localhost-only or LAN-only listener do not
 // benefit from the rate limit and need no extra layer.
-func NewCookies(inner Handler, srv cookies.Server, opts ...CookieOption) Handler {
+func NewCookies(inner Handler, srv cookies.Server, opts ...CookieOption) (Handler, error) {
 	if srv == nil {
 		// A nil cookie server would NPE inside Validate/Make on the
 		// first request that carried a COOKIE option. The middleware is
@@ -113,7 +124,7 @@ func NewCookies(inner Handler, srv cookies.Server, opts ...CookieOption) Handler
 		// when srv is nil would surprise an operator who composed the
 		// middleware expecting cookies to be enforced. Refuse at
 		// construction — this is a programming error caught at startup.
-		panic("acidns: NewCookies: srv is nil")
+		return nil, ErrNilCookieServer
 	}
 	c := cookieConfig{
 		now:              time.Now,
@@ -138,7 +149,7 @@ func NewCookies(inner Handler, srv cookies.Server, opts ...CookieOption) Handler
 		now:              c.now,
 		requireForLarge:  c.requireForLarge,
 		largeRespMaxSize: c.largeRespMaxSize,
-	}
+	}, nil
 }
 
 type cookiesMW struct {

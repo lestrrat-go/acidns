@@ -192,7 +192,10 @@ func NewPublicUDPServer(addr netip.AddrPort, h Handler, opts ...PublicServerOpti
 
 	// Build inside-out: cookies wraps the user handler, RRL wraps
 	// cookies, rate limit wraps RRL, ACL wraps everything.
-	stack := NewCookies(h, cookiesSrv, cfg.cookiesOpts...)
+	stack, err := NewCookies(h, cookiesSrv, cfg.cookiesOpts...)
+	if err != nil {
+		return nil, fmt.Errorf("acidns: public udp server: %w", err)
+	}
 	stack = NewRRL(stack, cfg.rrlOpts...)
 	stack = NewRateLimit(stack, cfg.rateLimitOpts...)
 	aclOpts := append([]ACLOption{WithACLDropDenied(true)}, cfg.aclOpts...)
@@ -229,7 +232,10 @@ func NewPublicTCPServer(addr netip.AddrPort, h Handler, opts ...PublicServerOpti
 		return nil, err
 	}
 
-	stack := NewCookies(h, cookiesSrv, cfg.cookiesOpts...)
+	stack, err := NewCookies(h, cookiesSrv, cfg.cookiesOpts...)
+	if err != nil {
+		return nil, fmt.Errorf("acidns: public tcp server: %w", err)
+	}
 	stack = NewRRL(stack, cfg.rrlOpts...)
 	stack = NewRateLimit(stack, cfg.rateLimitOpts...)
 	aclOpts := append([]ACLOption{WithACLDropDenied(true)}, cfg.aclOpts...)
