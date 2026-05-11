@@ -26,6 +26,17 @@ import (
 //   - Authority: keep records whose owner is at-or-above qname
 //     (parent zones are legitimate sources of NS/SOA/RRSIG for the
 //     query). Records owned by unrelated names are dropped.
+//     Authority records owned at the DNS root (".") are also
+//     rejected unless qname itself is the root: a legitimate
+//     upstream never answers for "bank.example." with an SOA owned
+//     at ".", but a compromised upstream could otherwise stuff a
+//     root-owned SOA plus crafted NSEC records covering arbitrary
+//     names into the authority section and have them pass the
+//     bailiwick check. The recursive resolver bounds denial
+//     records by the zone the SOA names ([recursive.bailiwickFilter]);
+//     the forwarder does no validation and no zone-cut walk, so
+//     the safest posture is to reject the root as a claimed zone
+//     outright.
 //   - Additional: keep OPT pseudo-RRs and records whose owner is
 //     referenced by a kept Answer-section CNAME target or kept
 //     Authority-section NS rdata. A/AAAA glue for unrelated names
@@ -73,9 +84,19 @@ func filterBailiwick(qname wire.Name, resp wire.Message) wire.Message {
 
 	keptAuthority := make([]wire.Record, 0, len(resp.Authorities()))
 	for _, r := range resp.Authorities() {
-		if isAtOrAbove(r.Name(), qname) {
-			keptAuthority = append(keptAuthority, r)
+		if !isAtOrAbove(r.Name(), qname) {
+			continue
 		}
+		// Reject authority owned at the DNS root unless the qname
+		// itself is the root. See the top-of-file comment for the
+		// rationale: a root-owned SOA from an upstream answering a
+		// non-root query is never legitimate, and admitting it would
+		// let a hostile upstream gate forged NSECs covering arbitrary
+		// names through the cache-poisoning filter.
+		if r.Name().IsRoot() && !qname.IsRoot() {
+			continue
+		}
+		keptAuthority = append(keptAuthority, r)
 	}
 
 	referenced := map[string]struct{}{}

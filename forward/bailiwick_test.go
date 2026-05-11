@@ -65,6 +65,71 @@ func TestFilterBailiwickKeepsCNAMEChain(t *testing.T) {
 	require.Equal(t, 2, len(out.Answers()))
 }
 
+// TestFilterBailiwickDropsRootOwnedAuthority verifies that authority
+// records owned at the DNS root are rejected when qname is not the
+// root itself. A compromised upstream answering "bank.example." with
+// SOA owned at "." plus crafted NSEC records covering the qname would
+// otherwise satisfy the at-or-above ancestor check and reach the
+// cache; the forwarder has no validator behind it, so the records
+// must be filtered up front.
+func TestFilterBailiwickDropsRootOwnedAuthority(t *testing.T) {
+	qname := wire.MustParseName("bank.example.")
+	root := wire.MustParseName(".")
+	soa, err := rdata.NewSOA(
+		wire.MustParseName("ns.evil."),
+		wire.MustParseName("hostmaster.evil."),
+		1,
+		3600*time.Second,
+		600*time.Second,
+		86400*time.Second,
+		300*time.Second,
+	)
+	require.NoError(t, err)
+	// A crafted NSEC owned at the victim qname — same shape an
+	// attacker would use to manufacture an NXDOMAIN-like denial.
+	nsec := rdata.NewNSEC(
+		wire.MustParseName("nextdomain.evil."),
+		[]rrtype.Type{rrtype.A, rrtype.AAAA},
+	)
+	resp, err := wire.NewMessageBuilder().
+		ID(1).
+		Response(true).
+		Question(wire.NewQuestion(qname, rrtype.A)).
+		Authority(wire.NewRecord(root, time.Hour, soa)).
+		Authority(wire.NewRecord(qname, time.Hour, nsec)).
+		Build()
+	require.NoError(t, err)
+
+	out := filterBailiwick(qname, resp)
+	for _, r := range out.Authorities() {
+		require.False(t, r.Name().IsRoot(),
+			"root-owned authority record must be rejected for non-root qname")
+		require.NotEqual(t, rrtype.SOA, r.Type(),
+			"forged root-owned SOA must not reach the filtered output")
+	}
+}
+
+// TestFilterBailiwickKeepsRootOwnedAuthorityForRootQuery verifies the
+// root-owner rejection only applies when qname is below the root; a
+// genuine root query (e.g. "." NS) must still see root-owned authority
+// records pass through.
+func TestFilterBailiwickKeepsRootOwnedAuthorityForRootQuery(t *testing.T) {
+	root := wire.MustParseName(".")
+	nsrd, err := rdata.NewNS(wire.MustParseName("a.root-servers.net."))
+	require.NoError(t, err)
+	resp, err := wire.NewMessageBuilder().
+		ID(1).
+		Response(true).
+		Question(wire.NewQuestion(root, rrtype.NS)).
+		Authority(wire.NewRecord(root, time.Hour, nsrd)).
+		Build()
+	require.NoError(t, err)
+
+	out := filterBailiwick(root, resp)
+	require.Equal(t, 1, len(out.Authorities()))
+	require.True(t, out.Authorities()[0].Name().IsRoot())
+}
+
 // TestFilterBailiwickDropsOutOfBailiwickAuthority verifies authority
 // records owned by unrelated parent zones are removed.
 func TestFilterBailiwickDropsOutOfBailiwickAuthority(t *testing.T) {
