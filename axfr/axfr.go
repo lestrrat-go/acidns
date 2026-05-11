@@ -34,15 +34,12 @@ type Transfer interface {
 }
 
 // RecordEvent carries a single record from the transfer.
-type RecordEvent interface {
-	isAXFREvent()
-	Record() wire.Record
+type RecordEvent struct {
+	rec wire.Record
 }
 
-type recordEvent struct{ rec wire.Record }
-
-func (recordEvent) isAXFREvent()          {}
-func (e recordEvent) Record() wire.Record { return e.rec }
+// Record returns the wire record carried by this event.
+func (e RecordEvent) Record() wire.Record { return e.rec }
 
 // ErrEmptyResponse is returned when the server's first response
 // contains no records.
@@ -180,11 +177,11 @@ func (t *transfer) init(ctx context.Context) error {
 
 func (t *transfer) Next(ctx context.Context) (RecordEvent, error) {
 	if t.done {
-		return nil, io.EOF
+		return RecordEvent{}, io.EOF
 	}
 	rec, err := t.reader.Read(ctx)
 	if err != nil {
-		return nil, err
+		return RecordEvent{}, err
 	}
 	if soa, ok := wire.RDataAs[rdata.SOA](rec); ok && soa.Serial() == t.newSOA.Serial() {
 		if !t.emittedFirstSOA {
@@ -193,7 +190,7 @@ func (t *transfer) Next(ctx context.Context) (RecordEvent, error) {
 			t.done = true
 		}
 	}
-	return recordEvent{rec: rec}, nil
+	return RecordEvent{rec: rec}, nil
 }
 
 // recReader pulls records from successive stream messages with a small
