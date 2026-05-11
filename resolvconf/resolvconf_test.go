@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/lestrrat-go/acidns/resolvconf"
+	"github.com/lestrrat-go/acidns/wire"
 	"github.com/stretchr/testify/require"
 )
 
@@ -100,4 +101,37 @@ func TestParseEOFIsNotError(t *testing.T) {
 	cfg, err := resolvconf.Parse(&errReader{err: io.EOF})
 	require.NoError(t, err)
 	require.NotNil(t, cfg)
+}
+
+// TestConfigBuilderSingleShot verifies that ConfigBuilder.Build resets
+// the builder so a second Build returns a fresh Config carrying the
+// constructor-seeded defaults rather than the first build's overrides.
+func TestConfigBuilderSingleShot(t *testing.T) {
+	t.Parallel()
+	b := resolvconf.NewConfigBuilder().
+		Nameservers(netip.MustParseAddrPort("192.0.2.1:53")).
+		Ndots(3).
+		Timeout(7 * time.Second).
+		Attempts(5).
+		Search(wire.MustParseName("example.com"))
+
+	first, err := b.Build()
+	require.NoError(t, err)
+	require.Equal(t, 3, first.Ndots())
+	require.Equal(t, 7*time.Second, first.Timeout())
+	require.Equal(t, 5, first.Attempts())
+	require.Len(t, first.Nameservers(), 1)
+
+	// Builder reset: defaults are re-seeded, slices cleared.
+	second, err := b.Build()
+	require.NoError(t, err)
+	require.Equal(t, 1, second.Ndots(), "reset must re-seed ndots default")
+	require.Equal(t, 5*time.Second, second.Timeout(), "reset must re-seed timeout default")
+	require.Equal(t, 2, second.Attempts(), "reset must re-seed attempts default")
+	require.Empty(t, second.Nameservers())
+	require.Empty(t, second.Search())
+
+	// First Config is unaffected.
+	require.Equal(t, 3, first.Ndots())
+	require.Len(t, first.Nameservers(), 1)
 }

@@ -51,6 +51,33 @@ func TestBuilderDeleteRecord(t *testing.T) {
 	require.Equal(t, rrtype.A, auth.Type())
 }
 
+// TestBuilderSingleShot verifies that Builder.Build resets prereq /
+// update queues so a second build does not carry over records from
+// the first. (The zone is supplied via NewBuilder and is intentionally
+// not retained across builds.)
+func TestBuilderSingleShot(t *testing.T) {
+	t.Parallel()
+	b := update.NewBuilder(wire.MustParseName("example.com")).
+		DeleteRRset(wire.MustParseName("a.example.com"), rrtype.A).
+		PrereqNameInUse(wire.MustParseName("a.example.com"))
+
+	first, err := b.Build()
+	require.NoError(t, err)
+	require.Equal(t, 1, len(first.Authorities()))
+	require.Equal(t, 1, len(first.Answers()))
+
+	// Second build off the same builder must produce a fresh empty
+	// message (no carryover) — Build resets prereqs/updates.
+	second, err := b.Build()
+	require.NoError(t, err)
+	require.Equal(t, 0, len(second.Authorities()), "reset must clear updates")
+	require.Equal(t, 0, len(second.Answers()), "reset must clear prereqs")
+
+	// First build's slices are unaffected.
+	require.Equal(t, 1, len(first.Authorities()))
+	require.Equal(t, 1, len(first.Answers()))
+}
+
 func TestBuilderPrerequisites(t *testing.T) {
 	t.Parallel()
 	msg, err := update.NewBuilder(wire.MustParseName("example.com")).

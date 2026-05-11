@@ -243,3 +243,26 @@ func TestWithdrawWithoutAnnounceNoOp(t *testing.T) {
 	require.NoError(t, a.Withdraw(ctx))
 	require.Equal(t, 0, tr.sentCount())
 }
+
+// TestPublicationBuilderSingleShot verifies that
+// PublicationBuilder.Build resets the builder so a second bare Build
+// fails the required-fields check (Instance/Type/Host cleared), proving
+// no carryover from the first build.
+func TestPublicationBuilderSingleShot(t *testing.T) {
+	t.Parallel()
+	b := mdns.NewPublicationBuilder().
+		Instance(wire.MustParseName("Living Room TV._http._tcp.local.")).
+		Type(wire.MustParseName("_http._tcp.local.")).
+		Host(wire.MustParseName("tv-living-room.local.")).
+		Port(8080).
+		Addr(netip.MustParseAddr("192.0.2.10")).
+		Text("path", "/")
+
+	_, err := b.Build()
+	require.NoError(t, err)
+
+	// Builder is reset. A bare Build now fails the required-fields
+	// check — proving Instance/Type/Host were cleared.
+	_, err = b.Build()
+	require.Error(t, err)
+}
