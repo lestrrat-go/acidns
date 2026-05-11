@@ -90,3 +90,31 @@ func TestEDNSExtendedRCODE(t *testing.T) {
 		ExtendedRCODE(1)) // upper bits push the effective RCODE > 15
 	require.Equal(t, uint8(1), e.ExtendedRCODE())
 }
+
+// TestEDNSBuilderSingleShot verifies that EDNSBuilder.Build resets the
+// builder so a subsequent Build produces a fresh, independent EDNS
+// value without leaking the previous Options slice.
+func TestEDNSBuilderSingleShot(t *testing.T) {
+	t.Parallel()
+	o1, err := wire.NewEDNSOption(8, []byte{0x01})
+	require.NoError(t, err)
+	b := wire.NewEDNSBuilder().UDPSize(4096).DO(true).Option(o1)
+
+	first, err := b.Build()
+	require.NoError(t, err)
+	require.Equal(t, uint16(4096), first.UDPSize())
+	require.True(t, first.DO())
+	require.Equal(t, 1, len(first.Options()))
+
+	// After Build the builder is reset to the constructor's default
+	// (UDPSize=1232, no options, DO=false).
+	second, err := b.Build()
+	require.NoError(t, err)
+	require.Equal(t, uint16(1232), second.UDPSize(), "reset must re-seed UDPSize default")
+	require.False(t, second.DO(), "reset must clear DO")
+	require.Equal(t, 0, len(second.Options()), "reset must clear Options")
+
+	// First build is unaffected.
+	require.Equal(t, uint16(4096), first.UDPSize())
+	require.Equal(t, 1, len(first.Options()))
+}

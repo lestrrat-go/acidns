@@ -178,12 +178,12 @@ func (b *EDNSBuilder) DO(v bool) *EDNSBuilder { b.e.do = v; return b }
 // Option appends an EDNS option to the OPT rdata.
 func (b *EDNSBuilder) Option(o EDNSOption) *EDNSBuilder { b.e.opts = append(b.e.opts, o); return b }
 
-// Build returns the EDNS payload and resets b to the zero state
-// — single-shot semantics. The returned EDNS's option slice ALIASES
-// the slice the builder accumulated; the reset ensures a subsequent
-// reuse of b cannot mutate the previously-built EDNS via append
-// grow-in-place. Returns an error if validation fails (e.g.
-// duplicate EDNS option code).
+// Build returns the EDNS payload and resets b to its constructor
+// state (UDPSize=1232 default re-seeded) — single-shot semantics. The
+// returned EDNS's option slice ALIASES the slice the builder
+// accumulated; the reset ensures a subsequent reuse of b cannot
+// mutate the previously-built EDNS via append grow-in-place. Returns
+// an error if validation fails (e.g. duplicate EDNS option code).
 func (b *EDNSBuilder) Build() (EDNS, error) {
 	// Reject duplicate option codes — RFC 6891 §6.1.2 doesn't
 	// expressly forbid them but the on-wire interpretation is
@@ -193,13 +193,13 @@ func (b *EDNSBuilder) Build() (EDNS, error) {
 	for _, o := range b.e.opts {
 		c := o.Code()
 		if _, dup := seen[c]; dup {
-			*b = EDNSBuilder{}
+			*b = EDNSBuilder{e: EDNS{udpSize: 1232}}
 			return EDNS{}, fmt.Errorf("wire: duplicate EDNS option code %d", c)
 		}
 		seen[c] = struct{}{}
 	}
 	out := b.e
-	*b = EDNSBuilder{}
+	*b = EDNSBuilder{e: EDNS{udpSize: 1232}}
 	return out, nil
 }
 
