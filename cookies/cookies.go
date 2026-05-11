@@ -27,6 +27,7 @@ import (
 	"crypto/hmac"
 	"crypto/rand"
 	"crypto/sha256"
+	"crypto/subtle"
 	"encoding/binary"
 	"errors"
 	"fmt"
@@ -547,14 +548,20 @@ func (s *serverImpl) Validate(serverCookie []byte, clientCookie [8]byte, clientA
 	// form still validates the cookie minted under the mapped form
 	// (and vice versa).
 	addr := clientAddr.Unmap()
-	matched := false
+	// Constant-time secret-pool walk. Naively breaking on the first
+	// matching secret leaks (via timing) WHICH secret in the pool
+	// matched — distinguishing the current secret from the previous
+	// one. The break is removed and results are accumulated via a
+	// bitwise OR so the loop always visits every secret and the Go
+	// compiler can't legally short-circuit. subtle.ConstantTimeCompare
+	// returns 1 on equal and 0 otherwise, so OR-ing yields 1 iff at
+	// least one secret accepted the cookie.
+	var ok int
 	for _, sec := range s.pool.All() {
 		want := mintCookie(sec, clientCookie, addr, ts)
-		if hmac.Equal(want[8:], serverCookie[8:]) {
-			matched = true
-			break
-		}
+		ok |= subtle.ConstantTimeCompare(want[8:], serverCookie[8:])
 	}
+	matched := ok == 1
 	if !matched {
 		return time.Time{}, ErrCookieMismatch
 	}

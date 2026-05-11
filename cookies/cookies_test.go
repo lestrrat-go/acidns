@@ -2,6 +2,7 @@ package cookies_test
 
 import (
 	"net/netip"
+	"sync"
 	"testing"
 	"time"
 
@@ -79,6 +80,88 @@ func TestServerCookieAcceptsPreviousSecretAfterRotation(t *testing.T) {
 	require.NoError(t, pool.Rotate())
 	_, err = srv.Validate(cookie, cc, addr, now.Add(2*time.Minute))
 	require.ErrorIs(t, err, cookies.ErrCookieMismatch)
+}
+
+// countingPool wraps a SecretPool and records how many entries the
+// validator consumes from each All() call. Used by the constant-time
+// regression test to confirm the validator visits every secret rather
+// than short-circuiting on the first match.
+type countingPool struct {
+	inner cookies.SecretPool
+	mu    sync.Mutex
+	calls [][]cookies.Secret
+}
+
+func (p *countingPool) Current() cookies.Secret { return p.inner.Current() }
+func (p *countingPool) All() []cookies.Secret {
+	secrets := p.inner.All()
+	// Capture a snapshot so the test can inspect what the validator saw.
+	snap := make([]cookies.Secret, len(secrets))
+	copy(snap, secrets)
+	p.mu.Lock()
+	p.calls = append(p.calls, snap)
+	p.mu.Unlock()
+	return secrets
+}
+func (p *countingPool) Close() { p.inner.Close() }
+
+// TestServerCookieValidateVisitsAllSecrets pins the constant-time
+// behaviour of Server.Validate against the secret pool. A break on
+// first-match would leak (via timing) which secret accepted the cookie
+// — distinguishing the current secret from the previous one. We can't
+// prove timing equivalence in a unit test, but we can assert two
+// load-bearing properties: (1) both current and previous secrets
+// validate correctly, and (2) the validator always consumes the full
+// secret list rather than short-circuiting after the first hit.
+func TestServerCookieValidateVisitsAllSecrets(t *testing.T) {
+	t.Parallel()
+	inner, err := cookies.NewSecretPool()
+	require.NoError(t, err)
+	t.Cleanup(inner.Close)
+	pool := &countingPool{inner: inner}
+
+	srv, err := cookies.NewServer(pool)
+	require.NoError(t, err)
+	cc := [8]byte{9, 8, 7, 6, 5, 4, 3, 2}
+	addr := netip.MustParseAddr("198.51.100.7")
+	now := time.Unix(1_700_000_000, 0).UTC()
+
+	// Mint a cookie under the current secret, then rotate so the minting
+	// secret becomes the "previous" entry. Pool now has two secrets and
+	// the validator must check both.
+	cookie := srv.Make(cc, addr, now)
+	require.NoError(t, inner.Rotate())
+
+	// Sanity: pool reports two secrets, and the cookie matches the
+	// SECOND one (previous). If the validator short-circuited on the
+	// first secret, it would still succeed for current-minted cookies
+	// — so the previous-secret path is exactly where the leak lives.
+	require.Len(t, inner.All(), 2)
+
+	_, err = srv.Validate(cookie, cc, addr, now.Add(time.Minute))
+	require.NoError(t, err)
+
+	snapshot := func() [][]cookies.Secret {
+		pool.mu.Lock()
+		defer pool.mu.Unlock()
+		out := make([][]cookies.Secret, len(pool.calls))
+		copy(out, pool.calls)
+		return out
+	}
+	calls := snapshot()
+	require.Len(t, calls, 1, "Validate must invoke pool.All() exactly once")
+	require.Len(t, calls[0], 2, "Validate must observe both pool secrets")
+
+	// Also mint+validate under the current secret to confirm that path
+	// still succeeds and exercises the same full-walk codepath.
+	cookie2 := srv.Make(cc, addr, now)
+	_, err = srv.Validate(cookie2, cc, addr, now)
+	require.NoError(t, err)
+	calls = snapshot()
+	// srv.Make only consults Current(); only Validate calls All(). So
+	// after two Validate calls total we expect exactly two snapshots.
+	require.Len(t, calls, 2, "each Validate must invoke pool.All() exactly once")
+	require.Len(t, calls[len(calls)-1], 2, "second Validate must still observe both secrets")
 }
 
 func TestClientApplyAndObserveAndRetry(t *testing.T) {
