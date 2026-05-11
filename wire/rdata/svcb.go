@@ -72,7 +72,14 @@ func (s svcbBody) ALPN() []string {
 		if p.Key() != SvcParamALPN {
 			continue
 		}
-		return decodeALPN(p.Value())
+		// Errors are unreachable: both NewSVCB and unpackSvcbBody call
+		// validateALPNParam during construction. nil is returned only
+		// from the defensive path if a future caller skips validation.
+		out, err := decodeALPN(p.Value())
+		if err != nil {
+			return nil
+		}
+		return out
 	}
 	return nil
 }
@@ -196,18 +203,42 @@ func decodeAddrHint(params []SVCBParam, key SvcParamKey, sz int) []netip.Addr {
 	return nil
 }
 
-func decodeALPN(buf []byte) []string {
+// decodeALPN parses the on-the-wire ALPN SvcParamValue (RFC 9460 §7.1):
+// a sequence of length-prefixed protocol-id octet strings. Each entry's
+// length octet MUST be in [1,255]; a zero-length entry is rejected
+// because NewSvcParamALPN cannot reconstruct it (round-trip asymmetry
+// would let a peer ship records we silently lose on re-encode), and
+// strict implementations reject the form outright.
+func decodeALPN(buf []byte) ([]string, error) {
 	var out []string
 	for off := 0; off < len(buf); {
 		l := int(buf[off])
 		off++
+		if l == 0 {
+			return nil, fmt.Errorf("%w: SVCB ALPN entry has zero length", ErrInvalidRData)
+		}
 		if off+l > len(buf) {
-			return nil
+			return nil, fmt.Errorf("%w: SVCB ALPN entry length %d exceeds remaining %d", ErrInvalidRData, l, len(buf)-off)
 		}
 		out = append(out, string(buf[off:off+l]))
 		off += l
 	}
-	return out
+	return out, nil
+}
+
+// validateSvcParam runs key-specific validation on a single SvcParam
+// during decode (unpackSvcbBody) and construction (newSvcbBody) so that
+// malformed payloads are rejected at the boundary rather than silently
+// surfacing as nil from accessors. Only keys with a typed value form
+// are checked here; opaque/unknown keys round-trip as raw bytes.
+func validateSvcParam(p SVCBParam) error {
+	switch p.Key() {
+	case SvcParamALPN:
+		if _, err := decodeALPN(p.Value()); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 // NewSVCB returns an SVCB rdata. params are sorted by key (RFC 9460
@@ -240,6 +271,11 @@ func newSvcbBody(priority uint16, target wirebb.Name, params []SVCBParam) (svcbB
 	for i := 1; i < len(cp); i++ {
 		if cp[i].key == cp[i-1].key {
 			return svcbBody{}, fmt.Errorf("%w: duplicate SVCB param key %d", ErrInvalidRData, cp[i].key)
+		}
+	}
+	for i := range cp {
+		if err := validateSvcParam(cp[i]); err != nil {
+			return svcbBody{}, err
 		}
 	}
 	if err := validateMandatoryParam(cp); err != nil {
@@ -302,7 +338,11 @@ func unpackSvcbBody(u *wirebb.Unpacker, rdlen int) (svcbBody, error) {
 		}
 		cp := make([]byte, len(v))
 		copy(cp, v)
-		params = append(params, SVCBParam{key: SvcParamKey(key), data: cp})
+		sp := SVCBParam{key: SvcParamKey(key), data: cp}
+		if err := validateSvcParam(sp); err != nil {
+			return zero, err
+		}
+		params = append(params, sp)
 	}
 	if err := validateMandatoryParam(params); err != nil {
 		return zero, err

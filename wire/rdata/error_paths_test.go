@@ -710,16 +710,18 @@ func TestSVCBALPNAccessorMissed(t *testing.T) {
 	require.Equal(t, []string{"h2"}, s.ALPN())
 }
 
-// TestDecodeALPNTruncated exercises the truncated-ALPN branch via the
-// SVCB ALPN accessor (returns nil on length-overflow).
+// TestDecodeALPNTruncated exercises the truncated-ALPN branch. NewSVCB
+// validates each typed SvcParam at construction time, so a payload
+// claiming length 5 but providing only 2 bytes is rejected upfront
+// rather than silently surfacing as a nil slice from ALPN().
 func TestDecodeALPNTruncated(t *testing.T) {
 	t.Parallel()
 	// Construct an ALPN SvcParam with raw bytes claiming length 5 but
 	// only 2 bytes follow.
 	bad := rdata.NewSVCBParam(rdata.SvcParamALPN, []byte{5, 'h', '2'})
-	s, err := rdata.NewSVCB(1, wirebb.MustParse("example.com"), bad)
-	require.NoError(t, err)
-	require.Nil(t, s.ALPN())
+	_, err := rdata.NewSVCB(1, wirebb.MustParse("example.com"), bad)
+	require.Error(t, err)
+	require.ErrorIs(t, err, rdata.ErrInvalidRData)
 }
 
 // TestDecodeAddrHintMisaligned drives the `len(v)%sz != 0` early return in
