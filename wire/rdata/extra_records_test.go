@@ -42,7 +42,8 @@ func TestIPSECKEYAddr(t *testing.T) {
 func TestIPSECKEYName(t *testing.T) {
 	t.Parallel()
 	pk := []byte{0xaa, 0xbb}
-	r := rdata.MustNewIPSECKEYName(5, rdata.IPSECKEYAlgECDSA, wirebb.MustParse("gw.example.com"), pk)
+	r, err := rdata.NewIPSECKEYName(5, rdata.IPSECKEYAlgECDSA, wirebb.MustParse("gw.example.com"), pk)
+	require.NoError(t, err)
 	got := packUnpack(t, r).(rdata.IPSECKEY)
 	require.Equal(t, rdata.IPSECKEYGatewayName, got.GatewayType())
 	require.True(t, got.GatewayName().Equal(wirebb.MustParse("gw.example.com")))
@@ -102,7 +103,8 @@ func TestL64(t *testing.T) {
 
 func TestLP(t *testing.T) {
 	t.Parallel()
-	r := rdata.MustNewLP(40, wirebb.MustParse("l64.example.com"))
+	r, err := rdata.NewLP(40, wirebb.MustParse("l64.example.com"))
+	require.NoError(t, err)
 	got := packUnpack(t, r).(rdata.LP)
 	require.True(t, got.FQDN().Equal(wirebb.MustParse("l64.example.com")))
 }

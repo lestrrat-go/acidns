@@ -33,8 +33,10 @@ func TestNewObservedCapturesEvent(t *testing.T) {
 	t.Parallel()
 
 	inner := acidns.HandlerFunc(func(_ context.Context, w acidns.ResponseWriter, q wire.Message) {
+		ar, err := rdata.NewA(netip.MustParseAddr("203.0.113.7"))
+		require.NoError(t, err)
 		ans := wire.NewRecord(q.Questions()[0].Name(), 30*time.Second,
-			rdata.MustNewA(netip.MustParseAddr("203.0.113.7")))
+			ar)
 		resp, _ := wire.NewMessageBuilder().
 			ID(q.ID()).
 			Response(true).

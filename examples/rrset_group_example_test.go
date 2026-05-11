@@ -13,10 +13,13 @@ func Example_rrset_group() {
 	// GroupRecords partitions a flat record list into RRsets per RFC 2181.
 	// Mixed TTLs harmonise to the minimum (§5.2).
 	name := wire.MustParseName("example.com")
+	aaaa, _ := rdata.NewAAAA(netip.MustParseAddr("2001:db8::1"))
+	ar2, _ := rdata.NewA(netip.MustParseAddr("192.0.2.2"))
+	ar, _ := rdata.NewA(netip.MustParseAddr("192.0.2.1"))
 	records := []wire.Record{
-		wire.NewRecord(name, 60*time.Second, rdata.MustNewA(netip.MustParseAddr("192.0.2.1"))),
-		wire.NewRecord(name, 30*time.Second, rdata.MustNewA(netip.MustParseAddr("192.0.2.2"))),
-		wire.NewRecord(name, 60*time.Second, rdata.MustNewAAAA(netip.MustParseAddr("2001:db8::1"))),
+		wire.NewRecord(name, 60*time.Second, ar),
+		wire.NewRecord(name, 30*time.Second, ar2),
+		wire.NewRecord(name, 60*time.Second, aaaa),
 	}
 
 	groups, err := wire.GroupRecords(records)

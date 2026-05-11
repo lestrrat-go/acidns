@@ -5,13 +5,14 @@ import (
 
 	"github.com/lestrrat-go/acidns/wire"
 	"github.com/lestrrat-go/acidns/wire/rrtype"
-	"github.com/lestrrat-go/acidns/wire/wiretest"
+	"github.com/lestrrat-go/acidns/internal/wiretest"
 	"github.com/stretchr/testify/require"
 )
 
 func TestPadEncrypted_AlignsTo128(t *testing.T) {
 	t.Parallel()
-	q := wiretest.Query(wire.MustParseName("example.com"), rrtype.A)
+	q, err := wiretest.Query(wire.MustParseName("example.com"), rrtype.A)
+	require.NoError(t, err)
 	padded := wire.PadEncrypted(q)
 	buf, err := wire.Marshal(padded)
 	require.NoError(t, err)
@@ -32,7 +33,8 @@ func TestPadEncrypted_AlignsTo128(t *testing.T) {
 
 func TestPadEncrypted_AlreadyPadded_NoChange(t *testing.T) {
 	t.Parallel()
-	q := wiretest.Query(wire.MustParseName("example.com"), rrtype.A)
+	q, err := wiretest.Query(wire.MustParseName("example.com"), rrtype.A)
+	require.NoError(t, err)
 
 	// Add a 5-byte Padding option ourselves.
 	preset, err := wire.NewEDNSOption(wire.EDNSOptionPadding, []byte{0, 0, 0, 0, 0})

@@ -13,7 +13,8 @@ import (
 
 func TestDNSKEYAccessors(t *testing.T) {
 	t.Parallel()
-	k := rdata.NewDNSKEY(257, 3, rdata.AlgED25519, []byte{1, 2, 3, 4})
+	k, err := rdata.NewDNSKEY(257, 3, rdata.AlgED25519, []byte{1, 2, 3, 4})
+	require.NoError(t, err)
 	require.Equal(t, uint16(257), k.Flags())
 	require.Equal(t, uint8(3), k.Protocol())
 	require.Equal(t, rdata.AlgED25519, k.Algorithm())
@@ -22,11 +23,14 @@ func TestDNSKEYAccessors(t *testing.T) {
 
 func TestDSAccessors(t *testing.T) {
 	t.Parallel()
-	d := rdata.NewDS(0xfeed, rdata.AlgRSASHA256, rdata.DigestSHA256, []byte{0xaa})
+	digest := make([]byte, 32)
+	digest[0] = 0xaa
+	d, err := rdata.NewDS(0xfeed, rdata.AlgRSASHA256, rdata.DigestSHA256, digest)
+	require.NoError(t, err)
 	require.Equal(t, uint16(0xfeed), d.KeyTag())
 	require.Equal(t, rdata.AlgRSASHA256, d.Algorithm())
 	require.Equal(t, rdata.DigestSHA256, d.DigestType())
-	require.Equal(t, []byte{0xaa}, d.Digest())
+	require.Equal(t, digest, d.Digest())
 }
 
 func TestRRSIGAccessors(t *testing.T) {
@@ -43,14 +47,16 @@ func TestRRSIGAccessors(t *testing.T) {
 
 func TestNSEC3PARAMAccessors(t *testing.T) {
 	t.Parallel()
-	p := rdata.MustNewNSEC3PARAM(rdata.NSEC3HashSHA1, 0, 100, []byte{0xca, 0xfe})
+	p, err := rdata.NewNSEC3PARAM(rdata.NSEC3HashSHA1, 0, 100, []byte{0xca, 0xfe})
+	require.NoError(t, err)
 	require.Equal(t, rdata.NSEC3HashSHA1, p.HashAlgorithm())
 	require.Equal(t, uint8(0), p.Flags())
 }
 
 func TestNSEC3Accessors(t *testing.T) {
 	t.Parallel()
-	n := rdata.MustNewNSEC3(rdata.NSEC3HashSHA1, 2, 3, []byte{0x01}, []byte{0x02}, []rrtype.Type{rrtype.A})
+	n, err := rdata.NewNSEC3(rdata.NSEC3HashSHA1, 2, 3, []byte{0x01}, []byte{0x02}, []rrtype.Type{rrtype.A})
+	require.NoError(t, err)
 	require.Equal(t, rdata.NSEC3HashSHA1, n.HashAlgorithm())
 	require.Equal(t, uint8(2), n.Flags())
 	require.Equal(t, uint16(3), n.Iterations())
@@ -68,7 +74,9 @@ func TestILNPPreferenceAccessors(t *testing.T) {
 	require.Equal(t, uint16(10), rdata.NewNID(10, 0).Preference())
 	require.Equal(t, uint16(20), rdata.NewL32(20, 0).Preference())
 	require.Equal(t, uint16(30), rdata.NewL64(30, 0).Preference())
-	require.Equal(t, uint16(40), rdata.MustNewLP(40, wirebb.MustParse("a.b")).Preference())
+	lp, err := rdata.NewLP(40, wirebb.MustParse("a.b"))
+	require.NoError(t, err)
+	require.Equal(t, uint16(40), lp.Preference())
 }
 
 func TestIPSECKEYAccessors(t *testing.T) {
@@ -102,7 +110,8 @@ func TestZONEMDAccessors(t *testing.T) {
 
 func TestSVCBPropertiesAccessors(t *testing.T) {
 	t.Parallel()
-	s := rdata.MustNewSVCB(1, wirebb.MustParse("example.com"))
+	s, err := rdata.NewSVCB(1, wirebb.MustParse("example.com"))
+	require.NoError(t, err)
 	require.Equal(t, "example.com.", s.Target().String())
 	require.Empty(t, s.Params())
 	_, hasPort := s.Port()
@@ -122,13 +131,14 @@ func TestSVCBParamRoundTrip(t *testing.T) {
 	require.NoError(t, err)
 	v6, err := rdata.NewSvcParamIPv6Hint(netip.MustParseAddr("2001:db8::1"))
 	require.NoError(t, err)
-	s := rdata.MustNewSVCB(1, wirebb.MustParse("example.com"),
+	s, err := rdata.NewSVCB(1, wirebb.MustParse("example.com"),
 		alpn,
 		rdata.NewSvcParamPort(443),
 		v4, v6,
 		rdata.NewSvcParamDOHPath("/dns-query{?dns}"),
 		rdata.NewSVCBParam(rdata.SvcParamECH, []byte{0xab, 0xcd}),
 	)
+	require.NoError(t, err)
 	port, ok := s.Port()
 	require.True(t, ok)
 	require.Equal(t, uint16(443), port)

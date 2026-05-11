@@ -6,16 +6,20 @@ import (
 
 	"github.com/lestrrat-go/acidns/wire"
 	"github.com/lestrrat-go/acidns/wire/rrtype"
-	"github.com/lestrrat-go/acidns/wire/wiretest"
+	"github.com/lestrrat-go/acidns/internal/wiretest"
 	"github.com/stretchr/testify/require"
 )
 
 func TestSortRecords_OwnerThenTypeThenRData(t *testing.T) {
 	t.Parallel()
-	a := wiretest.ARecord(wire.MustParseName("b.example.com"), time.Minute, "192.0.2.2")
-	b := wiretest.ARecord(wire.MustParseName("a.example.com"), time.Minute, "192.0.2.5")
-	c := wiretest.ARecord(wire.MustParseName("a.example.com"), time.Minute, "192.0.2.1")
-	d := wiretest.AAAARecord(wire.MustParseName("a.example.com"), time.Minute, "2001:db8::1")
+	a, err := wiretest.ARecord(wire.MustParseName("b.example.com"), time.Minute, "192.0.2.2")
+	require.NoError(t, err)
+	b, err := wiretest.ARecord(wire.MustParseName("a.example.com"), time.Minute, "192.0.2.5")
+	require.NoError(t, err)
+	c, err := wiretest.ARecord(wire.MustParseName("a.example.com"), time.Minute, "192.0.2.1")
+	require.NoError(t, err)
+	d, err := wiretest.AAAARecord(wire.MustParseName("a.example.com"), time.Minute, "2001:db8::1")
+	require.NoError(t, err)
 
 	in := []wire.Record{a, b, c, d}
 	wire.SortRecords(in)
@@ -32,39 +36,56 @@ func TestSortRecords_OwnerThenTypeThenRData(t *testing.T) {
 
 func TestMessageEqual_OrderInsensitive(t *testing.T) {
 	t.Parallel()
-	q := wiretest.Query(wire.MustParseName("example.com"), rrtype.A)
-	r1 := wiretest.ARecord(wire.MustParseName("example.com"), time.Minute, "192.0.2.1")
-	r2 := wiretest.ARecord(wire.MustParseName("example.com"), time.Minute, "192.0.2.2")
+	q, err := wiretest.Query(wire.MustParseName("example.com"), rrtype.A)
+	require.NoError(t, err)
+	r1, err := wiretest.ARecord(wire.MustParseName("example.com"), time.Minute, "192.0.2.1")
+	require.NoError(t, err)
+	r2, err := wiretest.ARecord(wire.MustParseName("example.com"), time.Minute, "192.0.2.2")
+	require.NoError(t, err)
 
-	a := wiretest.Response(q, r1, r2)
-	b := wiretest.Response(q, r2, r1)
+	a, err := wiretest.Response(q, r1, r2)
+	require.NoError(t, err)
+	b, err := wiretest.Response(q, r2, r1)
+	require.NoError(t, err)
 	require.True(t, wire.MessageEqual(a, b))
 }
 
 func TestMessageEqual_DiffersOnRCODE(t *testing.T) {
 	t.Parallel()
-	q := wiretest.Query(wire.MustParseName("example.com"), rrtype.A)
-	a := wiretest.Response(q)
-	b := wiretest.NXDOMAIN(q)
+	q, err := wiretest.Query(wire.MustParseName("example.com"), rrtype.A)
+	require.NoError(t, err)
+	a, err := wiretest.Response(q)
+	require.NoError(t, err)
+	b, err := wiretest.NXDOMAIN(q)
+	require.NoError(t, err)
 	require.False(t, wire.MessageEqual(a, b))
 }
 
 func TestMessageEqual_DiffersOnRecordSet(t *testing.T) {
 	t.Parallel()
-	q := wiretest.Query(wire.MustParseName("example.com"), rrtype.A)
-	r := wiretest.ARecord(wire.MustParseName("example.com"), time.Minute, "192.0.2.1")
-	a := wiretest.Response(q)
-	b := wiretest.Response(q, r)
+	q, err := wiretest.Query(wire.MustParseName("example.com"), rrtype.A)
+	require.NoError(t, err)
+	r, err := wiretest.ARecord(wire.MustParseName("example.com"), time.Minute, "192.0.2.1")
+	require.NoError(t, err)
+	a, err := wiretest.Response(q)
+	require.NoError(t, err)
+	b, err := wiretest.Response(q, r)
+	require.NoError(t, err)
 	require.False(t, wire.MessageEqual(a, b))
 }
 
 func TestMessageEqual_DiffersOnTTL(t *testing.T) {
 	t.Parallel()
-	q := wiretest.Query(wire.MustParseName("example.com"), rrtype.A)
-	r1 := wiretest.ARecord(wire.MustParseName("example.com"), time.Minute, "192.0.2.1")
-	r2 := wiretest.ARecord(wire.MustParseName("example.com"), 2*time.Minute, "192.0.2.1")
-	a := wiretest.Response(q, r1)
-	b := wiretest.Response(q, r2)
+	q, err := wiretest.Query(wire.MustParseName("example.com"), rrtype.A)
+	require.NoError(t, err)
+	r1, err := wiretest.ARecord(wire.MustParseName("example.com"), time.Minute, "192.0.2.1")
+	require.NoError(t, err)
+	r2, err := wiretest.ARecord(wire.MustParseName("example.com"), 2*time.Minute, "192.0.2.1")
+	require.NoError(t, err)
+	a, err := wiretest.Response(q, r1)
+	require.NoError(t, err)
+	b, err := wiretest.Response(q, r2)
+	require.NoError(t, err)
 	require.False(t, wire.MessageEqual(a, b))
 }
 

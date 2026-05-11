@@ -47,12 +47,13 @@ func (f *fakeStreamExchanger) Stream(_ context.Context, q wire.Message) (acidns.
 }
 
 func mkSOA(serial uint32) rdata.SOA {
-	return rdata.MustNewSOA(
+	soa, _ := rdata.NewSOA(
 		wire.MustParseName("ns.example.com"),
 		wire.MustParseName("hm.example.com"),
 		serial,
 		7200*time.Second, 3600*time.Second, 1209600*time.Second, 60*time.Second,
 	)
+	return soa
 }
 
 func soaRR(serial uint32) wire.Record {
@@ -65,10 +66,14 @@ func TestIncrementalDiffEvents(t *testing.T) {
 	t.Parallel()
 
 	zone := wire.MustParseName("example.com")
+	ar, err := rdata.NewA(netip.MustParseAddr("192.0.2.1"))
+	require.NoError(t, err)
 	removed := wire.NewRecord(wire.MustParseName("a.example.com"), 60*time.Second,
-		rdata.MustNewA(netip.MustParseAddr("192.0.2.1")))
+		ar)
+	ar2, err := rdata.NewA(netip.MustParseAddr("192.0.2.2"))
+	require.NoError(t, err)
 	added := wire.NewRecord(wire.MustParseName("b.example.com"), 60*time.Second,
-		rdata.MustNewA(netip.MustParseAddr("192.0.2.2")))
+		ar2)
 
 	// Wire layout:
 	//   SOA(101)               // newSOA — declared up front

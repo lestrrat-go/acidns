@@ -32,16 +32,6 @@ func NewMX(pref uint16, exchange wirebb.Name) (MX, error) {
 	}
 	return MX{pref: pref, exchange: exchange}, nil
 }
-
-// MustNewMX is the panic-on-error variant of [NewMX].
-func MustNewMX(pref uint16, exchange wirebb.Name) MX {
-	m, err := NewMX(pref, exchange)
-	if err != nil {
-		panic(err)
-	}
-	return m
-}
-
 func unpackMX(u *wirebb.Unpacker, rdlen int) (MX, error) {
 	var zero MX
 	// preference(2) + minimum 1-byte name (root). Reject obvious garbage

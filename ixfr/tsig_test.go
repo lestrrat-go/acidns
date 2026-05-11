@@ -57,11 +57,12 @@ func signResp(t *testing.T, m wire.Message, key tsig.Key, requestMAC []byte, now
 func TestIXFRTSIGSignedQueryAndVerifiedResponse(t *testing.T) {
 	t.Parallel()
 
-	key := tsig.MustNewKey(
+	key, err := tsig.NewKey(
 		wire.MustParseName("ixfr.key"),
 		tsig.HMACSHA256,
 		[]byte("0123456789abcdef0123456789abcdef"),
 	)
+	require.NoError(t, err)
 	now := time.Unix(1700000000, 0)
 
 	ex := &programmableStreamEx{
@@ -104,11 +105,12 @@ func TestIXFRTSIGSignedQueryAndVerifiedResponse(t *testing.T) {
 func TestIXFRTSIGUnsignedFirstFails(t *testing.T) {
 	t.Parallel()
 
-	key := tsig.MustNewKey(
+	key, err := tsig.NewKey(
 		wire.MustParseName("ixfr.key"),
 		tsig.HMACSHA256,
 		[]byte("0123456789abcdef0123456789abcdef"),
 	)
+	require.NoError(t, err)
 	now := time.Unix(1700000000, 0)
 
 	ex := &programmableStreamEx{
@@ -122,7 +124,7 @@ func TestIXFRTSIGUnsignedFirstFails(t *testing.T) {
 		},
 	}
 
-	_, err := ixfr.Start(t.Context(), ex, wire.MustParseName("example.com"), mkSOA(100),
+	_, err = ixfr.Start(t.Context(), ex, wire.MustParseName("example.com"), mkSOA(100),
 		ixfr.WithTSIGKey(&key),
 		ixfr.WithTSIGClock(func() time.Time { return now }),
 	)

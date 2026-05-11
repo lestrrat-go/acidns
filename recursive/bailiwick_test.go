@@ -39,9 +39,11 @@ func TestGlueForRejectsOutOfBailiwickAdditional(t *testing.T) {
 	target := wire.MustParseName("ns.example.com")
 
 	// In-bailiwick glue is accepted.
+	ar, err := rdata.NewA(netip.MustParseAddr("192.0.2.1"))
+	require.NoError(t, err)
 	good := []wire.Record{
 		wire.NewRecord(target, 0,
-			rdata.MustNewA(netip.MustParseAddr("192.0.2.1"))),
+			ar),
 	}
 	require.Len(t, glueFor(target, good, zone), 1)
 
@@ -50,9 +52,11 @@ func TestGlueForRejectsOutOfBailiwickAdditional(t *testing.T) {
 	// resolver is looking up. RFC 5452 §5.4.1: only in-bailiwick glue
 	// is trustworthy.
 	evilTarget := wire.MustParseName("evil.test")
+	ar2, err := rdata.NewA(netip.MustParseAddr("198.51.100.1"))
+	require.NoError(t, err)
 	poisoned := []wire.Record{
 		wire.NewRecord(evilTarget, 0,
-			rdata.MustNewA(netip.MustParseAddr("198.51.100.1"))),
+			ar2),
 	}
 	require.Empty(t, glueFor(evilTarget, poisoned, zone),
 		"glue for out-of-bailiwick name must be rejected")
@@ -63,12 +67,16 @@ func TestRecordsAtFiltersByOwner(t *testing.T) {
 	cur := wire.MustParseName("evil.example")
 	other := wire.MustParseName("victim.bank.com")
 
+	ar3, err := rdata.NewA(netip.MustParseAddr("198.51.100.1"))
+	require.NoError(t, err)
+	cn, err := rdata.NewCNAME(other)
+	require.NoError(t, err)
 	records := []wire.Record{
 		// Legitimate record at the queried name.
-		wire.NewRecord(cur, 60, rdata.MustNewCNAME(other)),
+		wire.NewRecord(cur, 60, cn),
 		// Forged record bundled by a malicious authoritative.
 		wire.NewRecord(other, 60,
-			rdata.MustNewA(netip.MustParseAddr("198.51.100.1"))),
+			ar3),
 	}
 	got := recordsAt(records, cur)
 	require.Len(t, got, 1, "only records owned by cur must survive")
@@ -83,13 +91,15 @@ func TestEntryFromResponseCapsNegativeTTL(t *testing.T) {
 	t.Parallel()
 	r := &Recursive{maxNegTTL: time.Hour}
 
-	soa := wire.NewRecord(wire.MustParseName("evil.example."), 365*24*time.Hour,
-		rdata.MustNewSOA(
+	soa2, err := rdata.NewSOA(
 			wire.MustParseName("ns.evil.example."),
 			wire.MustParseName("hm.evil.example."),
 			1, 7200, 3600, 1209600,
 			365*24*time.Hour, // SOA MINIMUM = 1 year
-		))
+		)
+	require.NoError(t, err)
+	soa := wire.NewRecord(wire.MustParseName("evil.example."), 365*24*time.Hour,
+		soa2)
 
 	resp, err := wire.NewMessageBuilder().
 		ID(1).
@@ -115,16 +125,26 @@ func TestBailiwickFilterDropsForgedAnswerRecords(t *testing.T) {
 	t.Parallel()
 	qname := wire.MustParseName("www.evil.example.")
 
+	ar4, err := rdata.NewA(netip.MustParseAddr("198.51.100.1"))
+	require.NoError(t, err)
 	good := wire.NewRecord(qname, 60*time.Second,
-		rdata.MustNewA(netip.MustParseAddr("198.51.100.1")))
+		ar4)
+	ar5, err := rdata.NewA(netip.MustParseAddr("203.0.113.1"))
+	require.NoError(t, err)
 	forgedAnswer := wire.NewRecord(wire.MustParseName("bank.com."), 60*time.Second,
-		rdata.MustNewA(netip.MustParseAddr("203.0.113.1")))
+		ar5)
+	nsrd, err := rdata.NewNS(wire.MustParseName("ns.evil.example."))
+	require.NoError(t, err)
 	forgedAuthority := wire.NewRecord(wire.MustParseName("bank.com."), 60*time.Second,
-		rdata.MustNewNS(wire.MustParseName("ns.evil.example.")))
+		nsrd)
+	ar6, err := rdata.NewA(netip.MustParseAddr("203.0.113.2"))
+	require.NoError(t, err)
 	forgedAdditional := wire.NewRecord(wire.MustParseName("bank.com."), 60*time.Second,
-		rdata.MustNewA(netip.MustParseAddr("203.0.113.2")))
+		ar6)
+	nsrd2, err := rdata.NewNS(wire.MustParseName("ns.evil.example."))
+	require.NoError(t, err)
 	zoneNS := wire.NewRecord(wire.MustParseName("evil.example."), 60*time.Second,
-		rdata.MustNewNS(wire.MustParseName("ns.evil.example.")))
+		nsrd2)
 
 	resp, err := wire.NewMessageBuilder().
 		ID(1).
@@ -156,8 +176,10 @@ func TestBailiwickFilterDropsForgedAnswerRecords(t *testing.T) {
 
 func TestReferralZone(t *testing.T) {
 	t.Parallel()
+	nsrd3, err := rdata.NewNS(wire.MustParseName("ns1.example.com"))
+	require.NoError(t, err)
 	rec := wire.NewRecord(wire.MustParseName("example.com"), 0,
-		rdata.MustNewNS(wire.MustParseName("ns1.example.com")))
+		nsrd3)
 	resp, err := wire.NewMessageBuilder().Authority(rec).Build()
 	require.NoError(t, err)
 	z := referralZone(resp)

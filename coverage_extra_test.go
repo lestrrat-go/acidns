@@ -451,12 +451,14 @@ func TestUDPDropsMalformedThenDelivers(t *testing.T) {
 		// Garbage first.
 		_, _ = pc.WriteTo([]byte{0x00}, src)
 		// Then a valid response.
+		ar, err := rdata.NewA(netip.MustParseAddr("203.0.113.99"))
+		require.NoError(t, err)
 		good, _ := wire.NewMessageBuilder().
 			ID(req.ID()).
 			Response(true).
 			Question(req.Questions()[0]).
 			Answer(wire.NewRecord(req.Questions()[0].Name(), time.Minute,
-				rdata.MustNewA(netip.MustParseAddr("203.0.113.99")))).
+				ar)).
 			Build()
 		gw, _ := wire.Marshal(good)
 		_, _ = pc.WriteTo(gw, src)
@@ -535,12 +537,14 @@ func TestTCFallbackOnTruncation(t *testing.T) {
 				if err != nil {
 					return
 				}
+				ar2, err := rdata.NewA(netip.MustParseAddr("198.51.100.10"))
+				require.NoError(t, err)
 				resp, _ := wire.NewMessageBuilder().
 					ID(req.ID()).
 					Response(true).
 					Question(req.Questions()[0]).
 					Answer(wire.NewRecord(req.Questions()[0].Name(), time.Minute,
-						rdata.MustNewA(netip.MustParseAddr("198.51.100.10")))).
+						ar2)).
 					Build()
 				raw, _ := wire.Marshal(resp)
 				binary.BigEndian.PutUint16(hdr[:], uint16(len(raw)))
@@ -603,12 +607,14 @@ func TestRetryEventuallySucceeds(t *testing.T) {
 			if err != nil {
 				continue
 			}
+			ar3, err := rdata.NewA(netip.MustParseAddr("198.51.100.50"))
+			require.NoError(t, err)
 			resp, _ := wire.NewMessageBuilder().
 				ID(req.ID()).
 				Response(true).
 				Question(req.Questions()[0]).
 				Answer(wire.NewRecord(req.Questions()[0].Name(), time.Minute,
-					rdata.MustNewA(netip.MustParseAddr("198.51.100.50")))).
+					ar3)).
 				Build()
 			raw, _ := wire.Marshal(resp)
 			_, _ = pc.WriteTo(raw, src)
@@ -642,8 +648,10 @@ func TestSystemResolversApplies(t *testing.T) {
 // when records of a different type satisfy the structural assertion.
 func TestExtractMissingType(t *testing.T) {
 	t.Parallel()
+	aaaa, err := rdata.NewAAAA(netip.MustParseAddr("2001:db8::1"))
+	require.NoError(t, err)
 	rec := wire.NewRecord(wire.MustParseName("example.com"), time.Minute,
-		rdata.MustNewAAAA(netip.MustParseAddr("2001:db8::1")))
+		aaaa)
 	got := acidns.Extract[rdata.A]([]wire.Record{rec})
 	require.Empty(t, got)
 }

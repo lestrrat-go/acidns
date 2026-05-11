@@ -46,9 +46,11 @@ func TestUpdateRecordOutOfZoneNotZone(t *testing.T) {
 	require.NoError(t, err)
 
 	// Targets example.com (we own it) but plants `evil.com` inside.
+	ar, err := rdata.NewA(netip.MustParseAddr("198.51.100.99"))
+	require.NoError(t, err)
 	msg, err := update.NewBuilder(wire.MustParseName("example.com")).
 		AddRRset(wire.NewRecord(wire.MustParseName("evil.com"), 60*time.Second,
-			rdata.MustNewA(netip.MustParseAddr("198.51.100.99")))).
+			ar)).
 		Build()
 	require.NoError(t, err)
 
@@ -67,9 +69,11 @@ func TestUpdateApexCNAMEAddRejected(t *testing.T) {
 	ex, err := acidns.NewUDPClient(addr)
 	require.NoError(t, err)
 
+	cn, err := rdata.NewCNAME(wire.MustParseName("other.example.com"))
+	require.NoError(t, err)
 	msg, err := update.NewBuilder(wire.MustParseName("example.com")).
 		AddRRset(wire.NewRecord(wire.MustParseName("example.com"), 60*time.Second,
-			rdata.MustNewCNAME(wire.MustParseName("other.example.com")))).
+			cn)).
 		Build()
 	require.NoError(t, err)
 	resp, err := ex.Exchange(t.Context(), msg)
@@ -87,15 +91,19 @@ func TestUpdateValueDependentPrereqMatch(t *testing.T) {
 	require.NoError(t, err)
 
 	// www.example.com IN A 192.0.2.42 — see the fixture.
+	ar2, err := rdata.NewA(netip.MustParseAddr("192.0.2.42"))
+	require.NoError(t, err)
 	prereq := wire.NewRecord(wire.MustParseName("www.example.com"), 0,
-		rdata.MustNewA(netip.MustParseAddr("192.0.2.42")))
+		ar2)
+	ar3, err := rdata.NewA(netip.MustParseAddr("198.51.100.7"))
+	require.NoError(t, err)
 	msg, err := wire.NewMessageBuilder().
 		ID(0x1111).
 		Opcode(wire.OpcodeUpdate).
 		Question(wire.NewQuestion(wire.MustParseName("example.com"), rrtype.SOA)).
 		Answer(prereq).
 		Authority(wire.NewRecord(wire.MustParseName("blog.example.com"), 60*time.Second,
-			rdata.MustNewA(netip.MustParseAddr("198.51.100.7")))).
+			ar3)).
 		Build()
 	require.NoError(t, err)
 	resp, err := ex.Exchange(t.Context(), msg)
@@ -112,15 +120,19 @@ func TestUpdateValueDependentPrereqMismatch(t *testing.T) {
 	require.NoError(t, err)
 
 	// www.example.com IN A 192.0.2.42 in the zone; we claim 192.0.2.99.
+	ar4, err := rdata.NewA(netip.MustParseAddr("192.0.2.99"))
+	require.NoError(t, err)
 	prereq := wire.NewRecord(wire.MustParseName("www.example.com"), 0,
-		rdata.MustNewA(netip.MustParseAddr("192.0.2.99")))
+		ar4)
+	ar5, err := rdata.NewA(netip.MustParseAddr("198.51.100.7"))
+	require.NoError(t, err)
 	msg, err := wire.NewMessageBuilder().
 		ID(0x2222).
 		Opcode(wire.OpcodeUpdate).
 		Question(wire.NewQuestion(wire.MustParseName("example.com"), rrtype.SOA)).
 		Answer(prereq).
 		Authority(wire.NewRecord(wire.MustParseName("blog.example.com"), 60*time.Second,
-			rdata.MustNewA(netip.MustParseAddr("198.51.100.7")))).
+			ar5)).
 		Build()
 	require.NoError(t, err)
 	resp, err := ex.Exchange(t.Context(), msg)
@@ -158,8 +170,10 @@ func TestUpdateBumpsSOAOnChange(t *testing.T) {
 	ex, err := acidns.NewUDPClient(addr)
 	require.NoError(t, err)
 
+	ar6, err := rdata.NewA(netip.MustParseAddr("198.51.100.5"))
+	require.NoError(t, err)
 	added := wire.NewRecord(wire.MustParseName("blog.example.com"), 60*time.Second,
-		rdata.MustNewA(netip.MustParseAddr("198.51.100.5")))
+		ar6)
 	msg, err := update.NewBuilder(wire.MustParseName("example.com")).
 		AddRRset(added).
 		Build()

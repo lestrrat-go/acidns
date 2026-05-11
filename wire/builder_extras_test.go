@@ -14,8 +14,10 @@ import (
 
 func TestBuilderFullSetters(t *testing.T) {
 	t.Parallel()
+	ar, err := rdata.NewA(netip.MustParseAddr("192.0.2.1"))
+	require.NoError(t, err)
 	rec := wire.NewRecord(wirebb.MustParse("example.com"), 60*time.Second,
-		rdata.MustNewA(netip.MustParseAddr("192.0.2.1")))
+		ar)
 	q := wire.NewQuestion(wirebb.MustParse("example.com"), rrtype.A)
 
 	m, err := wire.NewMessageBuilder().

@@ -25,8 +25,9 @@ func (w *fakeWriter) Network() string               { return "udp" }
 
 func aclMkInner() acidns.Handler {
 	return acidns.HandlerFunc(func(_ context.Context, w acidns.ResponseWriter, q wire.Message) {
+		ar, _ := rdata.NewA(netip.MustParseAddr("203.0.113.1"))
 		ans := wire.NewRecord(q.Questions()[0].Name(), time.Minute,
-			rdata.MustNewA(netip.MustParseAddr("203.0.113.1")))
+			ar)
 		resp, _ := wire.NewMessageBuilder().
 			ID(q.ID()).
 			Response(true).

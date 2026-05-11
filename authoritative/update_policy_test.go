@@ -37,9 +37,11 @@ func TestUpdateRefusedByDefault(t *testing.T) {
 
 	ex, err := acidns.NewUDPClient(ctrl.Addr())
 	require.NoError(t, err)
+	ar, err := rdata.NewA(netip.MustParseAddr("198.51.100.1"))
+	require.NoError(t, err)
 	msg, err := update.NewBuilder(wire.MustParseName("example.com")).
 		AddRRset(wire.NewRecord(wire.MustParseName("blog.example.com"),
-			60*time.Second, rdata.MustNewA(netip.MustParseAddr("198.51.100.1")))).
+			60*time.Second, ar)).
 		Build()
 	require.NoError(t, err)
 
@@ -98,9 +100,11 @@ func TestUpdatePolicyReceivesRawRequest(t *testing.T) {
 
 	ex, err := acidns.NewUDPClient(ctrl.Addr())
 	require.NoError(t, err)
+	ar2, err := rdata.NewA(netip.MustParseAddr("198.51.100.5"))
+	require.NoError(t, err)
 	msg, err := update.NewBuilder(wire.MustParseName("example.com")).
 		AddRRset(wire.NewRecord(wire.MustParseName("blog.example.com"),
-			60*time.Second, rdata.MustNewA(netip.MustParseAddr("198.51.100.5")))).
+			60*time.Second, ar2)).
 		Build()
 	require.NoError(t, err)
 
@@ -143,9 +147,11 @@ func TestUpdatePolicyAllowsExplicitOptIn(t *testing.T) {
 
 	ex, err := acidns.NewUDPClient(ctrl.Addr())
 	require.NoError(t, err)
+	ar3, err := rdata.NewA(netip.MustParseAddr("198.51.100.5"))
+	require.NoError(t, err)
 	msg, err := update.NewBuilder(wire.MustParseName("example.com")).
 		AddRRset(wire.NewRecord(wire.MustParseName("blog.example.com"),
-			60*time.Second, rdata.MustNewA(netip.MustParseAddr("198.51.100.5")))).
+			60*time.Second, ar3)).
 		Build()
 	require.NoError(t, err)
 	resp, err := ex.Exchange(ctx, msg)

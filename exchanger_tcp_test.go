@@ -43,13 +43,15 @@ func startTCPEcho(t *testing.T) netip.AddrPort {
 				if err != nil {
 					return
 				}
+				ar, err := rdata.NewA(netip.MustParseAddr("203.0.113.5"))
+				require.NoError(t, err)
 				resp, err := wire.NewMessageBuilder().
 					ID(req.ID()).
 					Response(true).
 					RecursionAvailable(true).
 					Question(req.Questions()[0]).
 					Answer(wire.NewRecord(req.Questions()[0].Name(), 60*time.Second,
-						rdata.MustNewA(netip.MustParseAddr("203.0.113.5")))).
+						ar)).
 					Build()
 				if err != nil {
 					return

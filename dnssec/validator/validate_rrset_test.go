@@ -23,7 +23,8 @@ func makeECDSAP256Key(t *testing.T) (*ecdsa.PrivateKey, rdata.DNSKEY) {
 	encPK, err2 := priv.PublicKey.Bytes()
 	require.NoError(t, err2)
 	pub := encPK[1:]
-	key := rdata.NewDNSKEY(257, 3, rdata.AlgECDSAP256SHA256, pub)
+	key, err := rdata.NewDNSKEY(257, 3, rdata.AlgECDSAP256SHA256, pub)
+	require.NoError(t, err)
 	return priv, key
 }
 
@@ -50,9 +51,11 @@ func TestValidateRRsetSecure(t *testing.T) {
 	t.Parallel()
 	priv, key := makeECDSAP256Key(t)
 	now := time.Now().UTC().Truncate(time.Second)
+	ar, err := rdata.NewA(netip.MustParseAddr("192.0.2.1"))
+	require.NoError(t, err)
 	set := []wire.Record{
 		wire.NewRecord(wire.MustParseName("example.com"), time.Hour,
-			rdata.MustNewA(netip.MustParseAddr("192.0.2.1"))),
+			ar),
 	}
 	sig := signRRSIG(t, priv, set, key, now.Add(-time.Hour), now.Add(time.Hour))
 
@@ -76,9 +79,11 @@ func TestValidateRRsetNoRRSIG(t *testing.T) {
 	t.Parallel()
 	v, err := validator.New()
 	require.NoError(t, err)
+	ar2, err := rdata.NewA(netip.MustParseAddr("192.0.2.1"))
+	require.NoError(t, err)
 	set := []wire.Record{
 		wire.NewRecord(wire.MustParseName("example.com"), time.Hour,
-			rdata.MustNewA(netip.MustParseAddr("192.0.2.1"))),
+			ar2),
 	}
 	res, _, err := v.ValidateRRset(set, nil, nil)
 	require.Equal(t, validator.Bogus, res)
@@ -90,9 +95,11 @@ func TestValidateRRsetNTAShortCircuits(t *testing.T) {
 	store := validator.NewNTAStore(wire.MustParseName("example.com"))
 	v, err := validator.New(validator.WithValidatorNTAStore(store))
 	require.NoError(t, err)
+	ar3, err := rdata.NewA(netip.MustParseAddr("192.0.2.1"))
+	require.NoError(t, err)
 	set := []wire.Record{
 		wire.NewRecord(wire.MustParseName("example.com"), time.Hour,
-			rdata.MustNewA(netip.MustParseAddr("192.0.2.1"))),
+			ar3),
 	}
 	res, _, err := v.ValidateRRset(set, nil, nil)
 	require.NoError(t, err)
@@ -103,9 +110,11 @@ func TestValidateRRsetExpiredRRSIG(t *testing.T) {
 	t.Parallel()
 	priv, key := makeECDSAP256Key(t)
 	now := time.Now().UTC().Truncate(time.Second)
+	ar4, err := rdata.NewA(netip.MustParseAddr("192.0.2.1"))
+	require.NoError(t, err)
 	set := []wire.Record{
 		wire.NewRecord(wire.MustParseName("example.com"), time.Hour,
-			rdata.MustNewA(netip.MustParseAddr("192.0.2.1"))),
+			ar4),
 	}
 	// Inception/expiration both in the past.
 	sig := signRRSIG(t, priv, set, key, now.Add(-2*time.Hour), now.Add(-time.Hour))
@@ -121,14 +130,17 @@ func TestValidateRRsetNoMatchingKey(t *testing.T) {
 	t.Parallel()
 	priv, key := makeECDSAP256Key(t)
 	now := time.Now().UTC().Truncate(time.Second)
+	ar5, err := rdata.NewA(netip.MustParseAddr("192.0.2.1"))
+	require.NoError(t, err)
 	set := []wire.Record{
 		wire.NewRecord(wire.MustParseName("example.com"), time.Hour,
-			rdata.MustNewA(netip.MustParseAddr("192.0.2.1"))),
+			ar5),
 	}
 	sig := signRRSIG(t, priv, set, key, now.Add(-time.Hour), now.Add(time.Hour))
 
 	// Pass a wrong-algorithm key (synthetic).
-	wrongKey := rdata.NewDNSKEY(257, 3, rdata.AlgED25519, make([]byte, 32))
+	wrongKey, err := rdata.NewDNSKEY(257, 3, rdata.AlgED25519, make([]byte, 32))
+	require.NoError(t, err)
 	v, err := validator.New(validator.WithValidatorClock(func() time.Time { return now }), validator.WithValidatorBogusPolicy(validator.BogusReturnAnswer))
 	require.NoError(t, err)
 	res, _, err := v.ValidateRRset(set, []rdata.RRSIG{sig}, []rdata.DNSKEY{wrongKey})
@@ -142,9 +154,11 @@ func TestValidateRRsetDefaultBogusPolicy(t *testing.T) {
 	t.Parallel()
 	priv, key := makeECDSAP256Key(t)
 	now := time.Now().UTC().Truncate(time.Second)
+	ar6, err := rdata.NewA(netip.MustParseAddr("192.0.2.1"))
+	require.NoError(t, err)
 	set := []wire.Record{
 		wire.NewRecord(wire.MustParseName("example.com"), time.Hour,
-			rdata.MustNewA(netip.MustParseAddr("192.0.2.1"))),
+			ar6),
 	}
 	sig := signRRSIG(t, priv, set, key, now.Add(-2*time.Hour), now.Add(-time.Hour))
 	v, err := validator.New(validator.WithValidatorClock(func() time.Time { return now }))
@@ -160,15 +174,18 @@ func TestValidateRRsetSameAlgDifferentKeyTag(t *testing.T) {
 	t.Parallel()
 	priv, key := makeECDSAP256Key(t)
 	now := time.Now().UTC().Truncate(time.Second)
+	ar7, err := rdata.NewA(netip.MustParseAddr("192.0.2.1"))
+	require.NoError(t, err)
 	set := []wire.Record{
 		wire.NewRecord(wire.MustParseName("example.com"), time.Hour,
-			rdata.MustNewA(netip.MustParseAddr("192.0.2.1"))),
+			ar7),
 	}
 	sig := signRRSIG(t, priv, set, key, now.Add(-time.Hour), now.Add(time.Hour))
 
 	// Build a different DNSKEY with the same algorithm but different bytes
 	// (so its KeyTag differs from `key`'s tag).
-	other := rdata.NewDNSKEY(257, 3, rdata.AlgECDSAP256SHA256, make([]byte, 64))
+	other, err := rdata.NewDNSKEY(257, 3, rdata.AlgECDSAP256SHA256, make([]byte, 64))
+	require.NoError(t, err)
 	v, err := validator.New(validator.WithValidatorClock(func() time.Time { return now }), validator.WithValidatorBogusPolicy(validator.BogusReturnAnswer))
 	require.NoError(t, err)
 	res, _, err := v.ValidateRRset(set, []rdata.RRSIG{sig}, []rdata.DNSKEY{other, key})
@@ -183,9 +200,11 @@ func TestValidateRRsetMatchingKeyButVerifyFails(t *testing.T) {
 	t.Parallel()
 	_, key := makeECDSAP256Key(t)
 	now := time.Now().UTC().Truncate(time.Second)
+	ar8, err := rdata.NewA(netip.MustParseAddr("192.0.2.1"))
+	require.NoError(t, err)
 	set := []wire.Record{
 		wire.NewRecord(wire.MustParseName("example.com"), time.Hour,
-			rdata.MustNewA(netip.MustParseAddr("192.0.2.1"))),
+			ar8),
 	}
 	// Build an RRSIG whose KeyTag/Algorithm match `key` but signature is
 	// random bytes.
@@ -205,8 +224,10 @@ func TestValidateRRsetMatchingKeyButVerifyFails(t *testing.T) {
 func TestValidateRRsetNTACovers(t *testing.T) {
 	t.Parallel()
 	owner := wire.MustParseName("nta.example.")
+	ar9, err := rdata.NewA(netip.MustParseAddr("192.0.2.1"))
+	require.NoError(t, err)
 	set := []wire.Record{
-		wire.NewRecord(owner, time.Hour, rdata.MustNewA(netip.MustParseAddr("192.0.2.1"))),
+		wire.NewRecord(owner, time.Hour, ar9),
 	}
 	ntas := validator.NewNTAStore()
 	require.True(t, ntas.Add(owner, 0))
@@ -248,7 +269,8 @@ func TestVerifyDelegationSecure(t *testing.T) {
 	// Build a real DS that matches.
 	digest, err := dnssec.DSDigest(owner, key, rdata.DigestSHA256)
 	require.NoError(t, err)
-	ds := rdata.NewDS(dnssec.KeyTag(key), key.Algorithm(), rdata.DigestSHA256, digest)
+	ds, err := rdata.NewDS(dnssec.KeyTag(key), key.Algorithm(), rdata.DigestSHA256, digest)
+	require.NoError(t, err)
 
 	v, err := validator.New()
 	require.NoError(t, err)
@@ -262,7 +284,8 @@ func TestVerifyDelegationBogus(t *testing.T) {
 	_, key := makeECDSAP256Key(t)
 	owner := wire.MustParseName("example.com")
 	// Bogus DS — random bytes.
-	ds := rdata.NewDS(dnssec.KeyTag(key), key.Algorithm(), rdata.DigestSHA256, make([]byte, 32))
+	ds, err := rdata.NewDS(dnssec.KeyTag(key), key.Algorithm(), rdata.DigestSHA256, make([]byte, 32))
+	require.NoError(t, err)
 	v, err := validator.New()
 	require.NoError(t, err)
 	res, err := v.VerifyDelegation(owner, []rdata.DS{ds}, []rdata.DNSKEY{key})

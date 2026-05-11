@@ -167,12 +167,15 @@ func (z *signedZone) addRR(r wire.Record) {
 // the DS rrset (using the child's KSK).
 func (z *signedZone) addDelegation(t *testing.T, child *signedZone) {
 	t.Helper()
+	nsrd, err := rdata.NewNS(child.apex)
+	require.NoError(t, err)
 	z.addRR(wire.NewRecord(child.apex, time.Hour,
-		rdata.MustNewNS(child.apex)))
+		nsrd))
 	digest, err := dnssec.DSDigest(child.apex, child.ksk.dnskey, rdata.DigestSHA256)
 	require.NoError(t, err)
-	ds := rdata.NewDS(dnssec.KeyTag(child.ksk.dnskey), child.ksk.dnskey.Algorithm(),
+	ds, err := rdata.NewDS(dnssec.KeyTag(child.ksk.dnskey), child.ksk.dnskey.Algorithm(),
 		rdata.DigestSHA256, digest)
+	require.NoError(t, err)
 	z.addRR(wire.NewRecord(child.apex, time.Hour, ds))
 	z.dsForChild[child.apex.String()] = []rdata.DS{ds}
 }
@@ -369,9 +372,11 @@ func newKey(t *testing.T, alg rdata.DNSSECAlgorithm, ksk bool) keyMat {
 		// SEC 1 uncompressed: 0x04 || X || Y, each padded to 32 bytes.
 		enc, err := priv.PublicKey.Bytes()
 		require.NoError(t, err)
+		dnskey, err := rdata.NewDNSKEY(flags, 3, alg, enc[1:])
+		require.NoError(t, err)
 		return keyMat{
 			alg:    alg,
-			dnskey: rdata.NewDNSKEY(flags, 3, alg, enc[1:]),
+			dnskey: dnskey,
 			ecdsa:  priv,
 		}
 	case rdata.AlgECDSAP384SHA384:
@@ -379,17 +384,21 @@ func newKey(t *testing.T, alg rdata.DNSSECAlgorithm, ksk bool) keyMat {
 		require.NoError(t, err)
 		enc, err := priv.PublicKey.Bytes()
 		require.NoError(t, err)
+		dnskey, err := rdata.NewDNSKEY(flags, 3, alg, enc[1:])
+		require.NoError(t, err)
 		return keyMat{
 			alg:    alg,
-			dnskey: rdata.NewDNSKEY(flags, 3, alg, enc[1:]),
+			dnskey: dnskey,
 			ecdsa:  priv,
 		}
 	case rdata.AlgED25519:
 		pub, priv, err := ed25519.GenerateKey(rand.Reader)
 		require.NoError(t, err)
+		dnskey, err := rdata.NewDNSKEY(flags, 3, alg, pub)
+		require.NoError(t, err)
 		return keyMat{
 			alg:     alg,
-			dnskey:  rdata.NewDNSKEY(flags, 3, alg, pub),
+			dnskey:  dnskey,
 			ed25519: priv,
 		}
 	default:
@@ -463,10 +472,14 @@ func (z *signedZone) rootAnchor(t *testing.T) (anchorWithDS, error) {
 	if err != nil {
 		return anchorWithDS{}, err
 	}
+	ds, err := rdata.NewDS(dnssec.KeyTag(z.ksk.dnskey), z.ksk.dnskey.Algorithm(),
+		rdata.DigestSHA256, digest)
+	if err != nil {
+		return anchorWithDS{}, err
+	}
 	return anchorWithDS{
 		apex: z.apex,
-		ds: rdata.NewDS(dnssec.KeyTag(z.ksk.dnskey), z.ksk.dnskey.Algorithm(),
-			rdata.DigestSHA256, digest),
+		ds:   ds,
 	}, nil
 }
 

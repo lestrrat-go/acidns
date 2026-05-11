@@ -8,7 +8,7 @@ import (
 	"github.com/lestrrat-go/acidns/internal/streamframe"
 	"github.com/lestrrat-go/acidns/wire"
 	"github.com/lestrrat-go/acidns/wire/rrtype"
-	"github.com/lestrrat-go/acidns/wire/wiretest"
+	"github.com/lestrrat-go/acidns/internal/wiretest"
 )
 
 // FuzzReadFrame feeds streamframe.ReadFrame arbitrary bytes. The contract:
@@ -18,12 +18,18 @@ import (
 func FuzzReadFrame(f *testing.F) {
 	// Seed: a couple of valid framed packets built via WriteFrame, so the
 	// fuzzer has shape it can mutate.
-	q := wiretest.Query(wire.MustParseName("example.com"), rrtype.A)
+	q, err := wiretest.Query(wire.MustParseName("example.com"), rrtype.A)
+	if err != nil {
+		f.Fatal(err)
+	}
 	var buf bytes.Buffer
 	if err := streamframe.WriteFrame(&buf, q); err == nil {
 		f.Add(buf.Bytes())
 	}
-	resp := wiretest.NXDOMAIN(q)
+	resp, err := wiretest.NXDOMAIN(q)
+	if err != nil {
+		f.Fatal(err)
+	}
 	buf.Reset()
 	if err := streamframe.WriteFrame(&buf, resp); err == nil {
 		f.Add(buf.Bytes())

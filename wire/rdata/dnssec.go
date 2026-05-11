@@ -80,13 +80,18 @@ func (k DNSKEY) Pack(p *wirebb.Packer) {
 	p.Raw(k.pubkey)
 }
 
-// NewDNSKEY returns a DNSKEY rdata.
-func NewDNSKEY(flags uint16, protocol uint8, algorithm DNSSECAlgorithm, pubkey []byte) DNSKEY {
+// NewDNSKEY returns a DNSKEY rdata. The protocol field MUST be 3
+// (DNSSEC) per RFC 4034 §2.1.2; other values are rejected because
+// they have no defined wire interpretation and would silently
+// poison signature-validation downstream.
+func NewDNSKEY(flags uint16, protocol uint8, algorithm DNSSECAlgorithm, pubkey []byte) (DNSKEY, error) {
+	if protocol != 3 {
+		return DNSKEY{}, fmt.Errorf("%w: DNSKEY protocol %d, RFC 4034 §2.1.2 mandates 3", ErrInvalidRData, protocol)
+	}
 	cp := make([]byte, len(pubkey))
 	copy(cp, pubkey)
-	return DNSKEY{flags: flags, protocol: protocol, algorithm: algorithm, pubkey: cp}
+	return DNSKEY{flags: flags, protocol: protocol, algorithm: algorithm, pubkey: cp}, nil
 }
-
 func unpackDNSKEY(u *wirebb.Unpacker, rdlen int) (DNSKEY, error) {
 	var zero DNSKEY
 	if rdlen < 4 {
@@ -135,13 +140,35 @@ func (d DS) Pack(p *wirebb.Packer) {
 	p.Raw(d.digest)
 }
 
-// NewDS returns a DS rdata.
-func NewDS(keyTag uint16, alg DNSSECAlgorithm, dt DSDigestType, digest []byte) DS {
-	cp := make([]byte, len(digest))
-	copy(cp, digest)
-	return DS{keyTag: keyTag, algorithm: alg, digestT: dt, digest: cp}
+// dsDigestLen returns the expected digest length in bytes for the
+// digest types this package knows about. Returns 0 for unknown types
+// (no validation enforced for digest types this package does not
+// implement; the receiver still parses them, it just cannot validate
+// the digest length).
+func dsDigestLen(dt DSDigestType) int {
+	switch dt {
+	case DigestSHA1:
+		return 20
+	case DigestSHA256:
+		return 32
+	case DigestSHA384:
+		return 48
+	}
+	return 0
 }
 
+// NewDS returns a DS rdata. The digest length is validated against
+// the digest-type field for known types (SHA-1=20, SHA-256=32,
+// SHA-384=48 per RFC 4034 §5.1.4 / RFC 4509 / RFC 6605). Unknown
+// digest types pass through unvalidated.
+func NewDS(keyTag uint16, alg DNSSECAlgorithm, dt DSDigestType, digest []byte) (DS, error) {
+	if want := dsDigestLen(dt); want != 0 && len(digest) != want {
+		return DS{}, fmt.Errorf("%w: DS digest type %d expects %d bytes, got %d", ErrInvalidRData, dt, want, len(digest))
+	}
+	cp := make([]byte, len(digest))
+	copy(cp, digest)
+	return DS{keyTag: keyTag, algorithm: alg, digestT: dt, digest: cp}, nil
+}
 func unpackDS(u *wirebb.Unpacker, rdlen int) (DS, error) {
 	var zero DS
 	if rdlen < 4 {
@@ -499,17 +526,6 @@ func NewNSEC3(hashAlg NSEC3HashAlgorithm, flags uint8, iterations uint16, salt, 
 		salt: saltCp, nextOwner: nextCp, types: tCp,
 	}, nil
 }
-
-// MustNewNSEC3 is the panic-on-error variant of [NewNSEC3], for
-// static fixtures and tests.
-func MustNewNSEC3(hashAlg NSEC3HashAlgorithm, flags uint8, iterations uint16, salt, nextOwner []byte, types []rrtype.Type) NSEC3 {
-	n, err := NewNSEC3(hashAlg, flags, iterations, salt, nextOwner, types)
-	if err != nil {
-		panic(err)
-	}
-	return n
-}
-
 func unpackNSEC3(u *wirebb.Unpacker, rdlen int) (NSEC3, error) {
 	var zero NSEC3
 	end := u.Off() + rdlen

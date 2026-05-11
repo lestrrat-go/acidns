@@ -136,12 +136,14 @@ func buildQuery(t *testing.T, id uint16) wire.Message {
 
 func buildAnswer(t *testing.T, id uint16, q wire.Question) wire.Message {
 	t.Helper()
+	ar, err := rdata.NewA(netip.MustParseAddr("198.51.100.77"))
+	require.NoError(t, err)
 	resp, err := wire.NewMessageBuilder().
 		ID(id).
 		Response(true).
 		Question(q).
 		Answer(wire.NewRecord(q.Name(), time.Minute,
-			rdata.MustNewA(netip.MustParseAddr("198.51.100.77")))).
+			ar)).
 		Build()
 	require.NoError(t, err)
 	return resp

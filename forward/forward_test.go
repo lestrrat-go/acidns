@@ -54,19 +54,20 @@ func (f *fakeUpstream) Exchange(_ context.Context, q wire.Message) (wire.Message
 }
 
 func answer(q wire.Message, ttl time.Duration, addr netip.Addr) wire.Message {
+	ar, _ := rdata.NewA(addr)
 	a, _ := wire.NewMessageBuilder().
 		ID(q.ID()).
 		Response(true).
 		RecursionDesired(q.Flags().RecursionDesired()).
 		RecursionAvailable(true).
 		Question(q.Questions()[0]).
-		Answer(wire.NewRecord(q.Questions()[0].Name(), ttl, rdata.MustNewA(addr))).
+		Answer(wire.NewRecord(q.Questions()[0].Name(), ttl, ar)).
 		Build()
 	return a
 }
 
 func nxdomain(q wire.Message, soaTTL, soaMin time.Duration) wire.Message {
-	soa := rdata.MustNewSOA(
+	soa, _ := rdata.NewSOA(
 		wire.MustParseName("ns.example."),
 		wire.MustParseName("hostmaster.example."),
 		1, time.Hour, time.Minute, 24*time.Hour, soaMin,
@@ -84,7 +85,7 @@ func nxdomain(q wire.Message, soaTTL, soaMin time.Duration) wire.Message {
 }
 
 func nodata(q wire.Message, soaTTL, soaMin time.Duration) wire.Message {
-	soa := rdata.MustNewSOA(
+	soa, _ := rdata.NewSOA(
 		wire.MustParseName("ns.example."),
 		wire.MustParseName("hostmaster.example."),
 		1, time.Hour, time.Minute, 24*time.Hour, soaMin,
@@ -447,6 +448,8 @@ func TestEDNSPreservedAndForwarded(t *testing.T) {
 	t.Parallel()
 	var sawDO atomic.Bool
 	var sawUDPSize atomic.Uint32
+	ar2, err := rdata.NewA(netip.MustParseAddr("203.0.113.99"))
+	require.NoError(t, err)
 	up := &fakeUpstream{
 		handler: func(q wire.Message) wire.Message {
 			if e, ok := q.EDNS(); ok {
@@ -461,7 +464,7 @@ func TestEDNSPreservedAndForwarded(t *testing.T) {
 				RecursionAvailable(true).
 				Question(q.Questions()[0]).
 				Answer(wire.NewRecord(q.Questions()[0].Name(), 30*time.Second,
-					rdata.MustNewA(netip.MustParseAddr("203.0.113.99")))).
+					ar2)).
 				EDNS(respEDNS).
 				Build()
 			return a

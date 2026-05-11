@@ -52,16 +52,6 @@ func NewSOA(mname, rname wirebb.Name, serial uint32, refresh, retry, expire, min
 		refresh: refresh, retry: retry, expire: expire, minimum: minimum,
 	}, nil
 }
-
-// MustNewSOA is the panic-on-error variant of [NewSOA].
-func MustNewSOA(mname, rname wirebb.Name, serial uint32, refresh, retry, expire, minimum time.Duration) SOA {
-	s, err := NewSOA(mname, rname, serial, refresh, retry, expire, minimum)
-	if err != nil {
-		panic(err)
-	}
-	return s
-}
-
 func unpackSOA(u *wirebb.Unpacker, rdlen int) (SOA, error) {
 	var zero SOA
 	end := u.Off() + rdlen

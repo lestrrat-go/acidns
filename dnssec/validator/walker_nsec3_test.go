@@ -20,8 +20,10 @@ func buildNSEC3Chain(t *testing.T, alg rdata.DNSSECAlgorithm, mode nsec3Mode, no
 	tld := newSignedZone(t, wire.MustParseName("example."), alg, now)
 	leaf := newSignedZone(t, wire.MustParseName("sub.example."), alg, now)
 
+	ar, err := rdata.NewA(netip.MustParseAddr("192.0.2.1"))
+	require.NoError(t, err)
 	leaf.addRR(wire.NewRecord(wire.MustParseName("www.sub.example."), time.Hour,
-		rdata.MustNewA(netip.MustParseAddr("192.0.2.1"))))
+		ar))
 
 	root.publishDNSKEY()
 	tld.publishDNSKEY()
@@ -76,8 +78,10 @@ func TestWalkerNSEC3OptOutInsecure(t *testing.T) {
 	// Add an unsigned NS delegation. With opt-out, the parent has NO DS
 	// record but the name exists (NS record present). DS lookup → NoData
 	// covered by opt-out NSEC3 → Insecure.
+	nsrd, err := rdata.NewNS(wire.MustParseName("ns.insecure.example."))
+	require.NoError(t, err)
 	tld.addRR(wire.NewRecord(wire.MustParseName("insecure.example."), time.Hour,
-		rdata.MustNewNS(wire.MustParseName("ns.insecure.example."))))
+		nsrd))
 
 	src := newNSEC3Source(mode, root, tld)
 	rootDS, _ := root.rootAnchor(t)
@@ -118,8 +122,10 @@ func newNSEC3SourceFrom(t *testing.T, mode nsec3Mode, alg rdata.DNSSECAlgorithm,
 	root := newSignedZone(t, wire.RootName(), alg, now)
 	tld := newSignedZone(t, wire.MustParseName("example."), alg, now)
 	leaf := newSignedZone(t, wire.MustParseName("sub.example."), alg, now)
+	ar2, err := rdata.NewA(netip.MustParseAddr("192.0.2.1"))
+	require.NoError(t, err)
 	leaf.addRR(wire.NewRecord(wire.MustParseName("www.sub.example."), time.Hour,
-		rdata.MustNewA(netip.MustParseAddr("192.0.2.1"))))
+		ar2))
 	root.publishDNSKEY()
 	tld.publishDNSKEY()
 	leaf.publishDNSKEY()

@@ -35,28 +35,38 @@ func TestQNameMinimisationSendsMinimisedQueries(t *testing.T) {
 			qname := question.Name()
 			switch qname.String() {
 			case "com.":
+				ar, err := rdata.NewA(netip.MustParseAddr("192.0.2.10"))
+				require.NoError(t, err)
+				nsrd, err := rdata.NewNS(wire.MustParseName("ns.com."))
+				require.NoError(t, err)
 				// Root referral to com.
 				return mkResp(t, q, func(b *wire.MessageBuilder) *wire.MessageBuilder {
 					ns := wire.NewRecord(wire.MustParseName("com."), time.Hour,
-						rdata.MustNewNS(wire.MustParseName("ns.com.")))
+						nsrd)
 					glue := wire.NewRecord(wire.MustParseName("ns.com."), time.Hour,
-						rdata.MustNewA(netip.MustParseAddr("192.0.2.10")))
+						ar)
 					return b.Authority(ns).Additional(glue)
 				}), nil
 			case "example.com.":
+				ar2, err := rdata.NewA(netip.MustParseAddr("192.0.2.20"))
+				require.NoError(t, err)
+				nsrd2, err := rdata.NewNS(wire.MustParseName("ns.example.com."))
+				require.NoError(t, err)
 				// com. referral to example.com.
 				return mkResp(t, q, func(b *wire.MessageBuilder) *wire.MessageBuilder {
 					ns := wire.NewRecord(wire.MustParseName("example.com."), time.Hour,
-						rdata.MustNewNS(wire.MustParseName("ns.example.com.")))
+						nsrd2)
 					glue := wire.NewRecord(wire.MustParseName("ns.example.com."), time.Hour,
-						rdata.MustNewA(netip.MustParseAddr("192.0.2.20")))
+						ar2)
 					return b.Authority(ns).Additional(glue)
 				}), nil
 			case "www.example.com.":
+				ar3, err := rdata.NewA(netip.MustParseAddr("203.0.113.5"))
+				require.NoError(t, err)
 				// example.com. authoritative answer.
 				return mkResp(t, q, func(b *wire.MessageBuilder) *wire.MessageBuilder {
 					a := wire.NewRecord(qname, time.Minute,
-						rdata.MustNewA(netip.MustParseAddr("203.0.113.5")))
+						ar3)
 					return b.Authoritative(true).Answer(a)
 				}), nil
 			}
@@ -105,25 +115,35 @@ func TestQNameMinimisationDisabled(t *testing.T) {
 			// com., com. referrals to example.com., final answer.
 			switch len(sentQNames) {
 			case 1:
+				ar4, err := rdata.NewA(netip.MustParseAddr("192.0.2.10"))
+				require.NoError(t, err)
+				nsrd3, err := rdata.NewNS(wire.MustParseName("ns.com."))
+				require.NoError(t, err)
 				return mkResp(t, q, func(b *wire.MessageBuilder) *wire.MessageBuilder {
 					ns := wire.NewRecord(wire.MustParseName("com."), time.Hour,
-						rdata.MustNewNS(wire.MustParseName("ns.com.")))
+						nsrd3)
 					glue := wire.NewRecord(wire.MustParseName("ns.com."), time.Hour,
-						rdata.MustNewA(netip.MustParseAddr("192.0.2.10")))
+						ar4)
 					return b.Authority(ns).Additional(glue)
 				}), nil
 			case 2:
+				ar5, err := rdata.NewA(netip.MustParseAddr("192.0.2.20"))
+				require.NoError(t, err)
+				nsrd4, err := rdata.NewNS(wire.MustParseName("ns.example.com."))
+				require.NoError(t, err)
 				return mkResp(t, q, func(b *wire.MessageBuilder) *wire.MessageBuilder {
 					ns := wire.NewRecord(wire.MustParseName("example.com."), time.Hour,
-						rdata.MustNewNS(wire.MustParseName("ns.example.com.")))
+						nsrd4)
 					glue := wire.NewRecord(wire.MustParseName("ns.example.com."), time.Hour,
-						rdata.MustNewA(netip.MustParseAddr("192.0.2.20")))
+						ar5)
 					return b.Authority(ns).Additional(glue)
 				}), nil
 			default:
+				ar6, err := rdata.NewA(netip.MustParseAddr("203.0.113.5"))
+				require.NoError(t, err)
 				return mkResp(t, q, func(b *wire.MessageBuilder) *wire.MessageBuilder {
 					a := wire.NewRecord(question.Name(), time.Minute,
-						rdata.MustNewA(netip.MustParseAddr("203.0.113.5")))
+						ar6)
 					return b.Authoritative(true).Answer(a)
 				}), nil
 			}
@@ -162,9 +182,11 @@ func TestQNameMinimisationFallsBackOnNXDOMAIN(t *testing.T) {
 			qname := q.Questions()[0].Name()
 			if qname.String() == "www.example.com." {
 				seenFullTarget = true
+				ar7, err := rdata.NewA(netip.MustParseAddr("203.0.113.7"))
+				require.NoError(t, err)
 				return mkResp(t, q, func(b *wire.MessageBuilder) *wire.MessageBuilder {
 					a := wire.NewRecord(qname, time.Minute,
-						rdata.MustNewA(netip.MustParseAddr("203.0.113.7")))
+						ar7)
 					return b.Authoritative(true).Answer(a)
 				}), nil
 			}

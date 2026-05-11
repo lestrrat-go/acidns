@@ -87,11 +87,15 @@ func Example_dot_exchange() {
 				if err != nil {
 					return
 				}
+				ar, err := rdata.NewA(netip.MustParseAddr("198.51.100.42"))
+				if err != nil {
+					return
+				}
 				resp, _ := wire.NewMessageBuilder().
 					ID(req.ID()).Response(true).
 					Question(req.Questions()[0]).
 					Answer(wire.NewRecord(req.Questions()[0].Name(), time.Minute,
-						rdata.MustNewA(netip.MustParseAddr("198.51.100.42")))).
+						ar)).
 					Build()
 				out, _ := wire.Marshal(resp)
 				binary.BigEndian.PutUint16(hdr[:], uint16(len(out)))

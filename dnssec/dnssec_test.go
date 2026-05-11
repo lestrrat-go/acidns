@@ -45,9 +45,12 @@ func makeRRSIG(t *testing.T, set []wire.Record, alg rdata.DNSSECAlgorithm,
 		origTTL, exp, inc, keyTag, signer, sig)
 }
 
-func mkARRSet(name string, ip string) []wire.Record {
+func mkARRSet(t *testing.T, name string, ip string) []wire.Record {
+	t.Helper()
 	n := wire.MustParseName(name)
-	r := wire.NewRecord(n, time.Hour, rdata.MustNewA(netip.MustParseAddr(ip)))
+	ar, err := rdata.NewA(netip.MustParseAddr(ip))
+	require.NoError(t, err)
+	r := wire.NewRecord(n, time.Hour, ar)
 	return []wire.Record{r}
 }
 
@@ -59,7 +62,8 @@ func TestVerifyECDSAP256(t *testing.T) {
 	encPK, err2 := priv.PublicKey.Bytes()
 	require.NoError(t, err2)
 	pub := encPK[1:]
-	key := rdata.NewDNSKEY(257, 3, rdata.AlgECDSAP256SHA256, pub)
+	key, err := rdata.NewDNSKEY(257, 3, rdata.AlgECDSAP256SHA256, pub)
+	require.NoError(t, err)
 
 	signer := wire.MustParseName("example.com")
 	sign := func(payload []byte) ([]byte, error) {
@@ -74,12 +78,12 @@ func TestVerifyECDSAP256(t *testing.T) {
 		return out, nil
 	}
 
-	set := mkARRSet("www.example.com", "192.0.2.1")
+	set := mkARRSet(t, "www.example.com", "192.0.2.1")
 	rrsig := makeRRSIG(t, set, rdata.AlgECDSAP256SHA256, dnssec.KeyTag(key), signer, sign)
 	require.NoError(t, dnssec.Verify(set, rrsig, key))
 
 	// Tamper: a different IP must fail verification.
-	bad := mkARRSet("www.example.com", "192.0.2.99")
+	bad := mkARRSet(t, "www.example.com", "192.0.2.99")
 	require.ErrorIs(t, dnssec.Verify(bad, rrsig, key), dnssec.ErrSignatureMismatch)
 }
 
@@ -90,7 +94,8 @@ func TestVerifyECDSAP384(t *testing.T) {
 	encPK, err2 := priv.PublicKey.Bytes()
 	require.NoError(t, err2)
 	pub := encPK[1:]
-	key := rdata.NewDNSKEY(257, 3, rdata.AlgECDSAP384SHA384, pub)
+	key, err := rdata.NewDNSKEY(257, 3, rdata.AlgECDSAP384SHA384, pub)
+	require.NoError(t, err)
 
 	signer := wire.MustParseName("example.com")
 	sign := func(payload []byte) ([]byte, error) {
@@ -105,7 +110,7 @@ func TestVerifyECDSAP384(t *testing.T) {
 		return out, nil
 	}
 
-	set := mkARRSet("www.example.com", "192.0.2.2")
+	set := mkARRSet(t, "www.example.com", "192.0.2.2")
 	rrsig := makeRRSIG(t, set, rdata.AlgECDSAP384SHA384, dnssec.KeyTag(key), signer, sign)
 	require.NoError(t, dnssec.Verify(set, rrsig, key))
 }
@@ -115,14 +120,15 @@ func TestVerifyED25519(t *testing.T) {
 	pub, priv, err := ed25519.GenerateKey(rand.Reader)
 	require.NoError(t, err)
 
-	key := rdata.NewDNSKEY(257, 3, rdata.AlgED25519, pub)
+	key, err := rdata.NewDNSKEY(257, 3, rdata.AlgED25519, pub)
+	require.NoError(t, err)
 
 	signer := wire.MustParseName("example.com")
 	sign := func(payload []byte) ([]byte, error) {
 		return ed25519.Sign(priv, payload), nil
 	}
 
-	set := mkARRSet("www.example.com", "192.0.2.3")
+	set := mkARRSet(t, "www.example.com", "192.0.2.3")
 	rrsig := makeRRSIG(t, set, rdata.AlgED25519, dnssec.KeyTag(key), signer, sign)
 	require.NoError(t, dnssec.Verify(set, rrsig, key))
 }
@@ -138,7 +144,8 @@ func TestVerifyRSASHA256(t *testing.T) {
 	pubWire = append(pubWire, byte(len(expBytes)))
 	pubWire = append(pubWire, expBytes...)
 	pubWire = append(pubWire, priv.N.Bytes()...)
-	key := rdata.NewDNSKEY(257, 3, rdata.AlgRSASHA256, pubWire)
+	key, err := rdata.NewDNSKEY(257, 3, rdata.AlgRSASHA256, pubWire)
+	require.NoError(t, err)
 
 	signer := wire.MustParseName("example.com")
 	sign := func(payload []byte) ([]byte, error) {
@@ -146,7 +153,7 @@ func TestVerifyRSASHA256(t *testing.T) {
 		return rsa.SignPKCS1v15(rand.Reader, priv, sha256Hasher, h[:])
 	}
 
-	set := mkARRSet("www.example.com", "192.0.2.4")
+	set := mkARRSet(t, "www.example.com", "192.0.2.4")
 	rrsig := makeRRSIG(t, set, rdata.AlgRSASHA256, dnssec.KeyTag(key), signer, sign)
 	require.NoError(t, dnssec.Verify(set, rrsig, key))
 }
@@ -164,7 +171,8 @@ func TestKeyTagKnownVector(t *testing.T) {
 	for i := range pub {
 		pub[i] = byte(i)
 	}
-	key := rdata.NewDNSKEY(257, 3, rdata.AlgED25519, pub)
+	key, err := rdata.NewDNSKEY(257, 3, rdata.AlgED25519, pub)
+	require.NoError(t, err)
 	tag := dnssec.KeyTag(key)
 	require.NotZero(t, tag)
 
@@ -189,7 +197,8 @@ func TestVerifyDS(t *testing.T) {
 	for i := range pub {
 		pub[i] = byte(0xcc ^ i)
 	}
-	key := rdata.NewDNSKEY(257, 3, rdata.AlgED25519, pub)
+	key, err := rdata.NewDNSKEY(257, 3, rdata.AlgED25519, pub)
+	require.NoError(t, err)
 	owner := wire.MustParseName("example.com")
 
 	// Build the digest by hand: sha256(owner | dnskey rdata)
@@ -203,25 +212,28 @@ func TestVerifyDS(t *testing.T) {
 	data = append(data, pub...)
 	digest := sha256.Sum256(data)
 
-	ds := rdata.NewDS(dnssec.KeyTag(key), rdata.AlgED25519, rdata.DigestSHA256, digest[:])
+	ds, err := rdata.NewDS(dnssec.KeyTag(key), rdata.AlgED25519, rdata.DigestSHA256, digest[:])
+	require.NoError(t, err)
 	require.NoError(t, dnssec.VerifyDS(owner, ds, key))
 
 	// Tamper digest → mismatch.
 	bad := append([]byte(nil), digest[:]...)
 	bad[0] ^= 0xff
-	dsBad := rdata.NewDS(dnssec.KeyTag(key), rdata.AlgED25519, rdata.DigestSHA256, bad)
+	dsBad, err := rdata.NewDS(dnssec.KeyTag(key), rdata.AlgED25519, rdata.DigestSHA256, bad)
+	require.NoError(t, err)
 	require.ErrorIs(t, dnssec.VerifyDS(owner, dsBad, key), dnssec.ErrSignatureMismatch)
 }
 
 func TestUnsupportedAlgorithm(t *testing.T) {
 	t.Parallel()
 	pub := make([]byte, 32)
-	key := rdata.NewDNSKEY(257, 3, rdata.DNSSECAlgorithm(99), pub)
+	key, err := rdata.NewDNSKEY(257, 3, rdata.DNSSECAlgorithm(99), pub)
+	require.NoError(t, err)
 	signer := wire.MustParseName("example.com")
 	rrsig := rdata.NewRRSIG(rrtype.A, rdata.DNSSECAlgorithm(99), 3,
 		time.Hour, time.Now().Add(time.Hour), time.Now().Add(-time.Hour),
 		dnssec.KeyTag(key), signer, []byte{0xaa})
-	set := mkARRSet("x.example.com", "192.0.2.7")
-	err := dnssec.Verify(set, rrsig, key)
+	set := mkARRSet(t, "x.example.com", "192.0.2.7")
+	err = dnssec.Verify(set, rrsig, key)
 	require.ErrorIs(t, err, dnssec.ErrUnsupportedAlgorithm)
 }

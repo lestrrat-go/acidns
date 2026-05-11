@@ -51,7 +51,11 @@ func NewAnchor(name wire.Name, dss ...rdata.DS) (Anchor, error) {
 // reference the IANA-published material directly.
 func IANARootKSK2017DS() rdata.DS {
 	digest := validatorbb.MustHex("E06D44B80B8F1D39A95C0B0D7C65D08458E880409BBC683457104237C7F8EC8D")
-	return rdata.NewDS(20326, rdata.AlgRSASHA256, rdata.DigestSHA256, digest)
+	ds, err := rdata.NewDS(20326, rdata.AlgRSASHA256, rdata.DigestSHA256, digest)
+	if err != nil {
+		panic(err) // hard-coded IANA values; unreachable
+	}
+	return ds
 }
 
 // IANARootKSK2024DS returns the DS record for the 2024 root KSK
@@ -62,7 +66,11 @@ func IANARootKSK2017DS() rdata.DS {
 // https://data.iana.org/root-anchors/root-anchors.xml.
 func IANARootKSK2024DS() rdata.DS {
 	digest := validatorbb.MustHex("683D2D0ACB8C9B712A1948B27F741219298D0A450D612C483AF444A4C0FB2B16")
-	return rdata.NewDS(38696, rdata.AlgRSASHA256, rdata.DigestSHA256, digest)
+	ds, err := rdata.NewDS(38696, rdata.AlgRSASHA256, rdata.DigestSHA256, digest)
+	if err != nil {
+		panic(err) // hard-coded IANA values; unreachable
+	}
+	return ds
 }
 
 // IANARootAnchor returns the IANA root KSK trust anchor pinned at the

@@ -590,8 +590,12 @@ func (z *zoneIndex) lookupAuthoritative(qname wire.Name, qtype rrtype.Type) (ans
 		// continue the chase.
 		if dnameRR, synth, ok := z.findDNAMEAncestor(current); ok {
 			// synth is constructed from already-validated zone names so
-			// CNAME construction cannot fail under correct zone loading.
-			cnameRD := rdata.MustNewCNAME(synth)
+			// CNAME construction cannot fail under correct zone loading;
+			// the panic is an invariant assertion.
+			cnameRD, err := rdata.NewCNAME(synth)
+			if err != nil {
+				panic(fmt.Errorf("authoritative: synth CNAME: %w", err))
+			}
 			cnameRR := wire.NewRecord(current, dnameRR.TTL(), cnameRD)
 			answer = append(answer, dnameRR, cnameRR)
 			current = synth

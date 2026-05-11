@@ -14,11 +14,12 @@ import (
 func TestTSIGMarshalRoundtripIsStable(t *testing.T) {
 	t.Parallel()
 
-	key := tsig.MustNewKey(
+	key, err := tsig.NewKey(
 		wire.MustParseName("xfr.key"),
 		tsig.HMACSHA256,
 		[]byte("0123456789abcdef0123456789abcdef"),
 	)
+	require.NoError(t, err)
 	now := time.Unix(1700000000, 0)
 
 	soa := soaRec(t, 7)

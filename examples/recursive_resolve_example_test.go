@@ -25,15 +25,27 @@ func (d scriptedDialer) Exchange(_ context.Context, server netip.AddrPort, q wir
 
 	switch server {
 	case d.root:
+		nsrd, err := rdata.NewNS(wire.MustParseName("ns1.example.com"))
+		if err != nil {
+			return wire.Message{}, err
+		}
 		// Root returns a referral to the example.com authoritative.
 		b = b.Authority(wire.NewRecord(wire.MustParseName("example.com"), time.Minute,
-			rdata.MustNewNS(wire.MustParseName("ns1.example.com"))))
+			nsrd))
+		ar, err := rdata.NewA(netip.MustParseAddr("127.0.0.1"))
+		if err != nil {
+			return wire.Message{}, err
+		}
 		b = b.Additional(wire.NewRecord(wire.MustParseName("ns1.example.com"), time.Minute,
-			rdata.MustNewA(netip.MustParseAddr("127.0.0.1"))))
+			ar))
 	case d.auth:
+		ar2, err := rdata.NewA(netip.MustParseAddr("198.51.100.7"))
+		if err != nil {
+			return wire.Message{}, err
+		}
 		// Authoritative answers the query.
 		b = b.Authoritative(true).Answer(wire.NewRecord(question.Name(), time.Minute,
-			rdata.MustNewA(netip.MustParseAddr("198.51.100.7"))))
+			ar2))
 	}
 
 	m, _ := b.Build()

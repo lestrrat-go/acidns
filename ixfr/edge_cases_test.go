@@ -62,8 +62,9 @@ func (e *errStreamExchangerOpens) Stream(_ context.Context, q wire.Message) (aci
 }
 
 func aRR(name string, ip string) wire.Record {
+	ar, _ := rdata.NewA(netip.MustParseAddr(ip))
 	return wire.NewRecord(wire.MustParseName(name), 60*time.Second,
-		rdata.MustNewA(netip.MustParseAddr(ip)))
+		ar)
 }
 
 // TestStartStreamError covers the "ex.Stream returned error" branch in Start.

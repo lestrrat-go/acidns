@@ -32,16 +32,6 @@ func NewRP(mbox, txt wirebb.Name) (RP, error) {
 	}
 	return RP{mbox: mbox, txt: txt}, nil
 }
-
-// MustNewRP is the panic-on-error variant of [NewRP].
-func MustNewRP(mbox, txt wirebb.Name) RP {
-	r, err := NewRP(mbox, txt)
-	if err != nil {
-		panic(err)
-	}
-	return r
-}
-
 func unpackRP(u *wirebb.Unpacker, rdlen int) (RP, error) {
 	var zero RP
 	end := u.Off() + rdlen
@@ -79,16 +69,6 @@ func NewAFSDB(subtype uint16, hostname wirebb.Name) (AFSDB, error) {
 	}
 	return AFSDB{subtype: subtype, hostname: hostname}, nil
 }
-
-// MustNewAFSDB is the panic-on-error variant of [NewAFSDB].
-func MustNewAFSDB(subtype uint16, hostname wirebb.Name) AFSDB {
-	a, err := NewAFSDB(subtype, hostname)
-	if err != nil {
-		panic(err)
-	}
-	return a
-}
-
 func unpackAFSDB(u *wirebb.Unpacker, rdlen int) (AFSDB, error) {
 	var zero AFSDB
 	end := u.Off() + rdlen
@@ -201,16 +181,6 @@ func NewRT(pref uint16, host wirebb.Name) (RT, error) {
 	}
 	return RT{pref: pref, host: host}, nil
 }
-
-// MustNewRT is the panic-on-error variant of [NewRT].
-func MustNewRT(pref uint16, host wirebb.Name) RT {
-	r, err := NewRT(pref, host)
-	if err != nil {
-		panic(err)
-	}
-	return r
-}
-
 func unpackRT(u *wirebb.Unpacker, rdlen int) (RT, error) {
 	var zero RT
 	end := u.Off() + rdlen

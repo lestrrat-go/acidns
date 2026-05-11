@@ -16,7 +16,8 @@ func TestSignMessageRoundTrip(t *testing.T) {
 	secret := make([]byte, 32)
 	_, err := rand.Read(secret)
 	require.NoError(t, err)
-	key := tsig.MustNewKey(wire.MustParseName("k.example"), tsig.HMACSHA256, secret)
+	key, err := tsig.NewKey(wire.MustParseName("k.example"), tsig.HMACSHA256, secret)
+	require.NoError(t, err)
 	q, err := wire.NewMessageBuilder().
 		ID(1).
 		Question(wire.NewQuestion(wire.MustParseName("example.com"), rrtype.A)).

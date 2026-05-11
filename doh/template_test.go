@@ -47,12 +47,14 @@ func templateProbeServer(t *testing.T) *httptest.Server {
 			http.Error(w, err.Error(), http.StatusBadRequest)
 			return
 		}
+		ar, err := rdata.NewA(netip.MustParseAddr("198.51.100.7"))
+		require.NoError(t, err)
 		resp, _ := wire.NewMessageBuilder().
 			ID(req.ID()).
 			Response(true).
 			Question(req.Questions()[0]).
 			Answer(wire.NewRecord(req.Questions()[0].Name(), time.Minute,
-				rdata.MustNewA(netip.MustParseAddr("198.51.100.7")))).
+				ar)).
 			Build()
 		out, _ := wire.Marshal(resp)
 		w.Header().Set("Content-Type", "application/dns-message")
@@ -83,12 +85,14 @@ func pathProbeServer(t *testing.T) *httptest.Server {
 		}
 		body, _ := io.ReadAll(r.Body)
 		_ = body
+		ar2, err := rdata.NewA(netip.MustParseAddr("198.51.100.7"))
+		require.NoError(t, err)
 		resp, _ := wire.NewMessageBuilder().
 			ID(req.ID()).
 			Response(true).
 			Question(req.Questions()[0]).
 			Answer(wire.NewRecord(req.Questions()[0].Name(), time.Minute,
-				rdata.MustNewA(netip.MustParseAddr("198.51.100.7")))).
+				ar2)).
 			Build()
 		out, _ := wire.Marshal(resp)
 		w.Header().Set("Content-Type", "application/dns-message")

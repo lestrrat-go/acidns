@@ -88,16 +88,6 @@ func NewAMTRELAYName(prec uint8, discovery bool, name wirebb.Name) (AMTRELAY, er
 	}
 	return AMTRELAY{prec: prec, discovery: discovery, rt: AMTRELAYTypeName, relayName: name}, nil
 }
-
-// MustNewAMTRELAYName is the panic-on-error variant of [NewAMTRELAYName].
-func MustNewAMTRELAYName(prec uint8, discovery bool, name wirebb.Name) AMTRELAY {
-	a, err := NewAMTRELAYName(prec, discovery, name)
-	if err != nil {
-		panic(err)
-	}
-	return a
-}
-
 func unpackAMTRELAY(u *wirebb.Unpacker, rdlen int) (AMTRELAY, error) {
 	var zero AMTRELAY
 	if rdlen < 2 {

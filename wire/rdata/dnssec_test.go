@@ -12,7 +12,8 @@ import (
 
 func TestDNSKEY(t *testing.T) {
 	t.Parallel()
-	r := rdata.NewDNSKEY(257, 3, rdata.AlgECDSAP256SHA256, []byte{1, 2, 3, 4, 5, 6, 7, 8})
+	r, err := rdata.NewDNSKEY(257, 3, rdata.AlgECDSAP256SHA256, []byte{1, 2, 3, 4, 5, 6, 7, 8})
+	require.NoError(t, err)
 	require.Equal(t, uint16(257), r.Flags())
 	require.Equal(t, rdata.AlgECDSAP256SHA256, r.Algorithm())
 
@@ -27,7 +28,8 @@ func TestDS(t *testing.T) {
 	for i := range digest {
 		digest[i] = byte(i)
 	}
-	r := rdata.NewDS(12345, rdata.AlgECDSAP256SHA256, rdata.DigestSHA256, digest)
+	r, err := rdata.NewDS(12345, rdata.AlgECDSAP256SHA256, rdata.DigestSHA256, digest)
+	require.NoError(t, err)
 	got := packUnpack(t, r).(rdata.DS)
 	require.Equal(t, r.KeyTag(), got.KeyTag())
 	require.Equal(t, r.Digest(), got.Digest())
@@ -65,7 +67,8 @@ func TestNSEC3(t *testing.T) {
 	salt := []byte{0xde, 0xad, 0xbe, 0xef}
 	hash := []byte{1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20}
 	types := []rrtype.Type{rrtype.A, rrtype.RRSIG}
-	r := rdata.MustNewNSEC3(1, 0, 100, salt, hash, types)
+	r, err := rdata.NewNSEC3(1, 0, 100, salt, hash, types)
+	require.NoError(t, err)
 
 	got := packUnpack(t, r).(rdata.NSEC3)
 	require.Equal(t, salt, got.Salt())

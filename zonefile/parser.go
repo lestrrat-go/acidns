@@ -408,7 +408,11 @@ func (p *parser) parseDS(fields []fieldTok) (rdata.RData, error) {
 	if err != nil {
 		return nil, fmt.Errorf("DS digest: %w", err)
 	}
-	return rdata.NewDS(uint16(keytag), rdata.DNSSECAlgorithm(alg), rdata.DSDigestType(dt), digest), nil
+	ds, err := rdata.NewDS(uint16(keytag), rdata.DNSSECAlgorithm(alg), rdata.DSDigestType(dt), digest)
+	if err != nil {
+		return nil, fmt.Errorf("DS: %w", err)
+	}
+	return ds, nil
 }
 
 func (p *parser) parseDNSKEY(fields []fieldTok) (rdata.RData, error) {
@@ -436,7 +440,11 @@ func (p *parser) parseDNSKEY(fields []fieldTok) (rdata.RData, error) {
 	if err != nil {
 		return nil, fmt.Errorf("DNSKEY public key: %w", err)
 	}
-	return rdata.NewDNSKEY(uint16(flags), uint8(proto), rdata.DNSSECAlgorithm(alg), key), nil
+	dk, err := rdata.NewDNSKEY(uint16(flags), uint8(proto), rdata.DNSSECAlgorithm(alg), key)
+	if err != nil {
+		return nil, fmt.Errorf("DNSKEY: %w", err)
+	}
+	return dk, nil
 }
 
 func (p *parser) parseSOA(fields []fieldTok) (rdata.SOA, error) {

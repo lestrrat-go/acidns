@@ -16,10 +16,15 @@ func Example_dnsupdate_build() {
 	// prerequisite, an addition, and a delete; Build returns a wire.Message
 	// you can ship over any acidns.Exchanger.
 	zone := wire.MustParseName("example.com")
+	ar, err := rdata.NewA(netip.MustParseAddr("198.51.100.5"))
+	if err != nil {
+		fmt.Println("a:", err)
+		return
+	}
 	rec := wire.NewRecord(
 		wire.MustParseName("blog.example.com"),
 		60*time.Second,
-		rdata.MustNewA(netip.MustParseAddr("198.51.100.5")),
+		ar,
 	)
 
 	msg, err := update.NewBuilder(zone).

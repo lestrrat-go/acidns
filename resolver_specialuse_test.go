@@ -59,12 +59,16 @@ type recordingExchanger struct{ called bool }
 
 func (r *recordingExchanger) Exchange(_ context.Context, q wire.Message) (wire.Message, error) {
 	r.called = true
+	ar, err := rdata.NewA(netip.MustParseAddr("192.0.2.1"))
+	if err != nil {
+		return wire.Message{}, err
+	}
 	resp, _ := wire.NewMessageBuilder().
 		ID(q.ID()).
 		Response(true).
 		Question(q.Questions()[0]).
 		Answer(wire.NewRecord(q.Questions()[0].Name(), 0,
-			rdata.MustNewA(netip.MustParseAddr("192.0.2.1")))).
+			ar)).
 		Build()
 	return resp, nil
 }

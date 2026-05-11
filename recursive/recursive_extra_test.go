@@ -31,12 +31,14 @@ func (h chainHandler) ServeDNS(_ context.Context, w acidns.ResponseWriter, q wir
 	cur := question.Name()
 	for range 16 {
 		if next, ok := h.chain[cur.String()]; ok {
-			b.Answer(wire.NewRecord(cur, time.Hour, rdata.MustNewCNAME(next)))
+			cn, _ := rdata.NewCNAME(next)
+			b.Answer(wire.NewRecord(cur, time.Hour, cn))
 			cur = next
 			continue
 		}
 		if a, ok := h.final[cur.String()]; ok {
-			b.Answer(wire.NewRecord(cur, time.Hour, rdata.MustNewA(a)))
+			ar, _ := rdata.NewA(a)
+			b.Answer(wire.NewRecord(cur, time.Hour, ar))
 		}
 		break
 	}

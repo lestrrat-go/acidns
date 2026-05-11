@@ -12,14 +12,14 @@ import (
 	"github.com/lestrrat-go/acidns"
 	"github.com/lestrrat-go/acidns/wire"
 	"github.com/lestrrat-go/acidns/wire/rrtype"
-	"github.com/lestrrat-go/acidns/wire/wiretest"
+	"github.com/lestrrat-go/acidns/internal/wiretest"
 	"github.com/stretchr/testify/require"
 )
 
 type echoExchanger struct{}
 
 func (echoExchanger) Exchange(_ context.Context, q wire.Message) (wire.Message, error) {
-	return wiretest.Response(q), nil
+	return wiretest.Response(q)
 }
 
 func TestResolver_LogsResolveDebug(t *testing.T) {
@@ -72,8 +72,10 @@ func TestResolver_LogsRCODE(t *testing.T) {
 	var buf bytes.Buffer
 	logger := slog.New(slog.NewJSONHandler(&buf, &slog.HandlerOptions{Level: slog.LevelDebug}))
 
-	q := wiretest.Query(wire.MustParseName("nope.example.com"), rrtype.A)
-	resp := wiretest.NXDOMAIN(q)
+	q, err := wiretest.Query(wire.MustParseName("nope.example.com"), rrtype.A)
+	require.NoError(t, err)
+	resp, err := wiretest.NXDOMAIN(q)
+	require.NoError(t, err)
 
 	r, err := acidns.NewResolver(
 		acidns.WithExchanger(&stubExchanger{resp: resp}),

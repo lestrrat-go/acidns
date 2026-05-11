@@ -144,16 +144,6 @@ func NewLP(pref uint16, fqdn wirebb.Name) (LP, error) {
 	}
 	return LP{pref: pref, fqdn: fqdn}, nil
 }
-
-// MustNewLP is the panic-on-error variant of [NewLP].
-func MustNewLP(pref uint16, fqdn wirebb.Name) LP {
-	l, err := NewLP(pref, fqdn)
-	if err != nil {
-		panic(err)
-	}
-	return l
-}
-
 func unpackLP(u *wirebb.Unpacker, rdlen int) (LP, error) {
 	var zero LP
 	end := u.Off() + rdlen

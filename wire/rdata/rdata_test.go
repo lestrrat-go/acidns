@@ -25,7 +25,8 @@ func packUnpack(t *testing.T, r rdata.RData) rdata.RData {
 
 func TestA(t *testing.T) {
 	t.Parallel()
-	r := rdata.MustNewA(netip.MustParseAddr("93.184.216.34"))
+	r, err := rdata.NewA(netip.MustParseAddr("93.184.216.34"))
+	require.NoError(t, err)
 	require.Equal(t, rrtype.A, r.Type())
 	require.Equal(t, netip.MustParseAddr("93.184.216.34"), r.Addr())
 
@@ -35,14 +36,14 @@ func TestA(t *testing.T) {
 
 func TestANewRejectsV6(t *testing.T) {
 	t.Parallel()
-	require.Panics(t, func() {
-		rdata.MustNewA(netip.MustParseAddr("::1"))
-	})
+	_, err := rdata.NewA(netip.MustParseAddr("::1"))
+	require.Error(t, err)
 }
 
 func TestAAAA(t *testing.T) {
 	t.Parallel()
-	r := rdata.MustNewAAAA(netip.MustParseAddr("2606:2800:220:1:248:1893:25c8:1946"))
+	r, err := rdata.NewAAAA(netip.MustParseAddr("2606:2800:220:1:248:1893:25c8:1946"))
+	require.NoError(t, err)
 	require.Equal(t, rrtype.AAAA, r.Type())
 
 	got := packUnpack(t, r).(rdata.AAAA)
@@ -51,7 +52,8 @@ func TestAAAA(t *testing.T) {
 
 func TestCNAME(t *testing.T) {
 	t.Parallel()
-	r := rdata.MustNewCNAME(wirebb.MustParse("alias.example.com"))
+	r, err := rdata.NewCNAME(wirebb.MustParse("alias.example.com"))
+	require.NoError(t, err)
 	require.Equal(t, rrtype.CNAME, r.Type())
 	require.Equal(t, "alias.example.com.", r.Target().String())
 
@@ -61,21 +63,24 @@ func TestCNAME(t *testing.T) {
 
 func TestNS(t *testing.T) {
 	t.Parallel()
-	r := rdata.MustNewNS(wirebb.MustParse("ns1.example.com"))
+	r, err := rdata.NewNS(wirebb.MustParse("ns1.example.com"))
+	require.NoError(t, err)
 	got := packUnpack(t, r).(rdata.NS)
 	require.True(t, r.Target().Equal(got.Target()))
 }
 
 func TestPTR(t *testing.T) {
 	t.Parallel()
-	r := rdata.MustNewPTR(wirebb.MustParse("host.example.com"))
+	r, err := rdata.NewPTR(wirebb.MustParse("host.example.com"))
+	require.NoError(t, err)
 	got := packUnpack(t, r).(rdata.PTR)
 	require.True(t, r.Target().Equal(got.Target()))
 }
 
 func TestMX(t *testing.T) {
 	t.Parallel()
-	r := rdata.MustNewMX(10, wirebb.MustParse("mail.example.com"))
+	r, err := rdata.NewMX(10, wirebb.MustParse("mail.example.com"))
+	require.NoError(t, err)
 	require.Equal(t, uint16(10), r.Preference())
 	require.Equal(t, "mail.example.com.", r.Exchange().String())
 
@@ -99,7 +104,7 @@ func TestTXT(t *testing.T) {
 
 func TestSOA(t *testing.T) {
 	t.Parallel()
-	r := rdata.MustNewSOA(
+	r, err := rdata.NewSOA(
 		wirebb.MustParse("ns.example.com"),
 		wirebb.MustParse("hostmaster.example.com"),
 		2024010100,
@@ -108,6 +113,7 @@ func TestSOA(t *testing.T) {
 		86400*time.Second,
 		3600*time.Second,
 	)
+	require.NoError(t, err)
 	require.Equal(t, uint32(2024010100), r.Serial())
 	require.Equal(t, 3600*time.Second, r.Refresh())
 

@@ -35,7 +35,11 @@ func Example_sig0_sign_verify() {
 
 	signer := wire.MustParseName("test.signer")
 	now := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
-	key := rdata.NewDNSKEY(257, 3, rdata.AlgED25519, pub)
+	key, err := rdata.NewDNSKEY(257, 3, rdata.AlgED25519, pub)
+	if err != nil {
+		fmt.Println("dnskey:", err)
+		return
+	}
 	signed, err := sig0.Sign(msg, signer, rdata.AlgED25519, dnssec.KeyTag(key),
 		func(payload []byte) ([]byte, error) {
 			return ed25519.Sign(priv, payload), nil

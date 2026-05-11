@@ -82,10 +82,14 @@ www IN  A    192.0.2.55
 	// referral pointing at ns1.example.com with 127.0.0.1 as glue.
 	rootHandler := acidns.HandlerFunc(func(_ context.Context, w acidns.ResponseWriter, q wire.Message) {
 		question := q.Questions()[0]
+		nsrd, err := rdata.NewNS(wire.MustParseName("ns1.example.com"))
+		require.NoError(t, err)
 		ns := wire.NewRecord(wire.MustParseName("example.com"), 60*time.Second,
-			rdata.MustNewNS(wire.MustParseName("ns1.example.com")))
+			nsrd)
+		ar, err := rdata.NewA(netip.MustParseAddr("127.0.0.1"))
+		require.NoError(t, err)
 		glue := wire.NewRecord(wire.MustParseName("ns1.example.com"), 60*time.Second,
-			rdata.MustNewA(netip.MustParseAddr("127.0.0.1")))
+			ar)
 		resp, _ := wire.NewMessageBuilder().
 			ID(q.ID()).
 			Response(true).

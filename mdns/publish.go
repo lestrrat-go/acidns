@@ -492,16 +492,30 @@ func publicationRecords(p Publication, flushBit bool) []wire.Record {
 		}
 	}
 	// PTR at type → instance (cache-flush bit NOT set on PTR; PTR is a
-	// shared-set record per RFC 6762 §10.2).
-	out = append(out, wire.NewRecord(p.typ, p.ttl,
-		rdata.MustNewPTR(p.instance)))
+	// shared-set record per RFC 6762 §10.2). The Publication's
+	// instance name is validated at PublicationBuilder.Build time, so
+	// the PTR constructor cannot fail here — the panic is an
+	// invariant assertion.
+	ptr, err := rdata.NewPTR(p.instance)
+	if err != nil {
+		panic(fmt.Errorf("mdns: PTR rdata: %w", err))
+	}
+	out = append(out, wire.NewRecord(p.typ, p.ttl, ptr))
 	// A/AAAA at host.
 	for _, a := range p.addrs {
 		if a.Is4() {
-			out = append(out, wire.NewRecordClass(p.host, cls, p.ttl, rdata.MustNewA(a)))
+			ar, err := rdata.NewA(a)
+			if err != nil {
+				panic(fmt.Errorf("mdns: A rdata: %w", err))
+			}
+			out = append(out, wire.NewRecordClass(p.host, cls, p.ttl, ar))
 		}
 		if a.Is6() {
-			out = append(out, wire.NewRecordClass(p.host, cls, p.ttl, rdata.MustNewAAAA(a)))
+			ar, err := rdata.NewAAAA(a)
+			if err != nil {
+				panic(fmt.Errorf("mdns: AAAA rdata: %w", err))
+			}
+			out = append(out, wire.NewRecordClass(p.host, cls, p.ttl, ar))
 		}
 	}
 	return out

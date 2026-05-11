@@ -88,12 +88,14 @@ func startMultiDoT(t *testing.T, idleTimeout time.Duration) (netip.AddrPort, *tl
 					if idleTimeout > 0 {
 						eb = eb.Option(wire.NewTCPKeepalive(idleTimeout))
 					}
+					ar, err := rdata.NewA(netip.MustParseAddr("198.51.100.99"))
+					require.NoError(t, err)
 					resp, _ := wire.NewMessageBuilder().
 						ID(req.ID()).
 						Response(true).
 						Question(req.Questions()[0]).
 						Answer(wire.NewRecord(req.Questions()[0].Name(), time.Minute,
-							rdata.MustNewA(netip.MustParseAddr("198.51.100.99")))).
+							ar)).
 						EDNS(mustEDNS(t, eb)).
 						Build()
 					out, _ := wire.Marshal(resp)

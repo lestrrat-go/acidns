@@ -10,7 +10,7 @@ import (
 	"github.com/lestrrat-go/acidns/doh"
 	"github.com/lestrrat-go/acidns/wire"
 	"github.com/lestrrat-go/acidns/wire/rrtype"
-	"github.com/lestrrat-go/acidns/wire/wiretest"
+	"github.com/lestrrat-go/acidns/internal/wiretest"
 	"github.com/stretchr/testify/require"
 )
 
@@ -25,7 +25,8 @@ func TestExchange_HTTPStatusError(t *testing.T) {
 	ex, err := doh.New(srv.URL, doh.WithInsecure(true))
 	require.NoError(t, err)
 
-	q := wiretest.Query(wire.MustParseName("example.com"), rrtype.A)
+	q, err := wiretest.Query(wire.MustParseName("example.com"), rrtype.A)
+	require.NoError(t, err)
 	_, err = ex.Exchange(context.Background(), q)
 	require.Error(t, err)
 

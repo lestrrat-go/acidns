@@ -181,7 +181,9 @@ func TestNewAnchorRejectsInvalidInputs(t *testing.T) {
 	require.ErrorContains(t, err, "no DS records")
 
 	// Invalid name rejected (zero-value Name has IsValid == false).
-	_, err = validator.NewAnchor(wire.Name{}, rdata.NewDS(1, rdata.AlgRSASHA256, rdata.DigestSHA256, make([]byte, 32)))
+	ds, err := rdata.NewDS(1, rdata.AlgRSASHA256, rdata.DigestSHA256, make([]byte, 32))
+	require.NoError(t, err)
+	_, err = validator.NewAnchor(wire.Name{}, ds)
 	require.ErrorContains(t, err, "invalid anchor name")
 }
 
@@ -285,8 +287,9 @@ func TestWalkerOptionGuards(t *testing.T) {
 func TestWalkerSourceLookupError(t *testing.T) {
 	t.Parallel()
 	src := &erroringSource{err: errors.New("dial timeout")}
-	a, err := validator.NewAnchor(wire.RootName(),
-		rdata.NewDS(1, rdata.AlgRSASHA256, rdata.DigestSHA256, make([]byte, 32)))
+	ds, err := rdata.NewDS(1, rdata.AlgRSASHA256, rdata.DigestSHA256, make([]byte, 32))
+	require.NoError(t, err)
+	a, err := validator.NewAnchor(wire.RootName(), ds)
 	require.NoError(t, err)
 	w, err := validator.NewWalker(src,
 		validator.WithWalkerAnchors(a),
@@ -305,8 +308,9 @@ func TestWalkerSourceLookupError(t *testing.T) {
 func TestWalkerSourceLookupErrorDefaultPolicy(t *testing.T) {
 	t.Parallel()
 	src := &erroringSource{err: errors.New("dial timeout")}
-	a, err := validator.NewAnchor(wire.RootName(),
-		rdata.NewDS(1, rdata.AlgRSASHA256, rdata.DigestSHA256, make([]byte, 32)))
+	ds, err := rdata.NewDS(1, rdata.AlgRSASHA256, rdata.DigestSHA256, make([]byte, 32))
+	require.NoError(t, err)
+	a, err := validator.NewAnchor(wire.RootName(), ds)
 	require.NoError(t, err)
 	w, err := validator.NewWalker(src, validator.WithWalkerAnchors(a))
 	require.NoError(t, err)
@@ -351,8 +355,10 @@ func TestWalkerNoDataMissingProof(t *testing.T) {
 	root.addDelegation(t, tld)
 	// Add a real RR so leaf-style queries hit the zone and a separate name
 	// ("ghost.example.") exists in the zone but only with a different type.
+	ar, err := rdata.NewA(netip.MustParseAddr("192.0.2.42"))
+	require.NoError(t, err)
 	tld.addRR(wire.NewRecord(wire.MustParseName("ghost.example."), time.Hour,
-		rdata.MustNewA(netip.MustParseAddr("192.0.2.42"))))
+		ar))
 
 	// Wrap the fixture source with one that strips authority records on
 	// NoData responses so the walker can't validate denial.
@@ -467,8 +473,10 @@ func TestWalkerInsecureDelegationAnswerLookupError(t *testing.T) {
 	root.publishDNSKEY()
 	tld.publishDNSKEY()
 	root.addDelegation(t, tld)
+	nsrd, err := rdata.NewNS(wire.MustParseName("ns.insecure.example."))
+	require.NoError(t, err)
 	tld.addRR(wire.NewRecord(wire.MustParseName("insecure.example."), time.Hour,
-		rdata.MustNewNS(wire.MustParseName("ns.insecure.example."))))
+		nsrd))
 
 	src := newFixtureSource(root, tld)
 	wrapped := &errorAfterInsecure{inner: src, fail: wire.MustParseName("ns.insecure.example.")}
@@ -503,9 +511,11 @@ func TestValidatorRRSIGFutureInception(t *testing.T) {
 	t.Parallel()
 	priv, key := makeECDSAP256Key(t)
 	now := time.Now().UTC().Truncate(time.Second)
+	ar2, err := rdata.NewA(netip.MustParseAddr("192.0.2.1"))
+	require.NoError(t, err)
 	set := []wire.Record{
 		wire.NewRecord(wire.MustParseName("example.com"), time.Hour,
-			rdata.MustNewA(netip.MustParseAddr("192.0.2.1"))),
+			ar2),
 	}
 	// Inception in the future.
 	sig := signRRSIG(t, priv, set, key, now.Add(time.Hour), now.Add(2*time.Hour))

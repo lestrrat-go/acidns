@@ -13,7 +13,8 @@ import (
 
 func TestDNAME(t *testing.T) {
 	t.Parallel()
-	r := rdata.MustNewDNAME(wirebb.MustParse("frob.example.com"))
+	r, err := rdata.NewDNAME(wirebb.MustParse("frob.example.com"))
+	require.NoError(t, err)
 	require.Equal(t, rrtype.DNAME, r.Type())
 	require.Equal(t, "frob.example.com.", r.Target().String())
 
@@ -45,7 +46,8 @@ func TestHINFORejectsTooLong(t *testing.T) {
 
 func TestKX(t *testing.T) {
 	t.Parallel()
-	r := rdata.MustNewKX(10, wirebb.MustParse("kx.example.com"))
+	r, err := rdata.NewKX(10, wirebb.MustParse("kx.example.com"))
+	require.NoError(t, err)
 	require.Equal(t, rrtype.KX, r.Type())
 	require.Equal(t, uint16(10), r.Preference())
 
@@ -58,7 +60,8 @@ func TestCDS(t *testing.T) {
 	t.Parallel()
 	digest := []byte{1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16,
 		17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32}
-	r := rdata.NewCDS(12345, rdata.AlgRSASHA256, rdata.DigestSHA256, digest)
+	r, err := rdata.NewCDS(12345, rdata.AlgRSASHA256, rdata.DigestSHA256, digest)
+	require.NoError(t, err)
 	require.Equal(t, rrtype.CDS, r.Type())
 	require.Equal(t, uint16(12345), r.KeyTag())
 
@@ -72,7 +75,8 @@ func TestCDS(t *testing.T) {
 func TestCDSDeleteSentinel(t *testing.T) {
 	t.Parallel()
 	// RFC 8078 §4: (alg=0, dt=0, digest=0x00) means "delete the parent DS RRset".
-	r := rdata.NewCDS(0, 0, 0, []byte{0})
+	r, err := rdata.NewCDS(0, 0, 0, []byte{0})
+	require.NoError(t, err)
 	got := packUnpack(t, r).(rdata.CDS)
 	require.Equal(t, []byte{0}, got.Digest())
 	require.Equal(t, rdata.DNSSECAlgorithm(0), got.Algorithm())
@@ -81,7 +85,8 @@ func TestCDSDeleteSentinel(t *testing.T) {
 func TestCDNSKEY(t *testing.T) {
 	t.Parallel()
 	pk := []byte{0x01, 0x02, 0x03, 0x04, 0x05}
-	r := rdata.NewCDNSKEY(rdata.DNSKEYFlagZone|rdata.DNSKEYFlagSEP, 3, rdata.AlgED25519, pk)
+	r, err := rdata.NewCDNSKEY(rdata.DNSKEYFlagZone|rdata.DNSKEYFlagSEP, 3, rdata.AlgED25519, pk)
+	require.NoError(t, err)
 	require.Equal(t, rrtype.CDNSKEY, r.Type())
 
 	got := packUnpack(t, r).(rdata.CDNSKEY)
@@ -156,7 +161,8 @@ func TestAMTRELAYIPv6(t *testing.T) {
 
 func TestAMTRELAYName(t *testing.T) {
 	t.Parallel()
-	r := rdata.MustNewAMTRELAYName(2, false, wirebb.MustParse("relay.example.com"))
+	r, err := rdata.NewAMTRELAYName(2, false, wirebb.MustParse("relay.example.com"))
+	require.NoError(t, err)
 	require.Equal(t, rdata.AMTRELAYTypeName, r.RelayType())
 
 	got := packUnpack(t, r).(rdata.AMTRELAY)

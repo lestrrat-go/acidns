@@ -186,12 +186,15 @@ func TestValidatorFix4SkewTolerance(t *testing.T) {
 	require.NoError(t, err)
 	encPK, err := priv.PublicKey.Bytes()
 	require.NoError(t, err)
-	key := rdata.NewDNSKEY(257, 3, rdata.AlgECDSAP256SHA256, encPK[1:])
+	key, err := rdata.NewDNSKEY(257, 3, rdata.AlgECDSAP256SHA256, encPK[1:])
+	require.NoError(t, err)
 
 	now := time.Now().UTC().Truncate(time.Second)
+	ar, err := rdata.NewA(netip.MustParseAddr("192.0.2.1"))
+	require.NoError(t, err)
 	set := []wire.Record{
 		wire.NewRecord(wire.MustParseName("example.com"), time.Hour,
-			rdata.MustNewA(netip.MustParseAddr("192.0.2.1"))),
+			ar),
 	}
 	// Inception 30s in the future — without skew, this is outside the window.
 	inception := now.Add(30 * time.Second)

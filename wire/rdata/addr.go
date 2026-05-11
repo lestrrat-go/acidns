@@ -27,18 +27,6 @@ func NewA(addr netip.Addr) (A, error) {
 	}
 	return A{addr: addr}, nil
 }
-
-// MustNewA is the panicking variant of [NewA] for tests and constants
-// where a static IPv4 literal is known good. Production code that
-// constructs A rdata from caller-supplied input should prefer NewA.
-func MustNewA(addr netip.Addr) A {
-	a, err := NewA(addr)
-	if err != nil {
-		panic(err)
-	}
-	return a
-}
-
 func unpackA(u *wirebb.Unpacker, rdlen int) (A, error) {
 	var zero A
 	if rdlen != 4 {
@@ -70,17 +58,6 @@ func NewAAAA(addr netip.Addr) (AAAA, error) {
 	}
 	return AAAA{addr: addr}, nil
 }
-
-// MustNewAAAA is the panicking variant of [NewAAAA] for tests and
-// constants where a static IPv6 literal is known good.
-func MustNewAAAA(addr netip.Addr) AAAA {
-	a, err := NewAAAA(addr)
-	if err != nil {
-		panic(err)
-	}
-	return a
-}
-
 func unpackAAAA(u *wirebb.Unpacker, rdlen int) (AAAA, error) {
 	var zero AAAA
 	if rdlen != 16 {

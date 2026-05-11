@@ -35,7 +35,8 @@ func TestSSHFPFingerprintType(t *testing.T) {
 
 func TestRDataPack(t *testing.T) {
 	t.Parallel()
-	rd := rdata.MustNewA(netip.MustParseAddr("192.0.2.1"))
+	rd, err := rdata.NewA(netip.MustParseAddr("192.0.2.1"))
+	require.NoError(t, err)
 	got := rdata.Pack(rd)
 	require.Equal(t, []byte{192, 0, 2, 1}, got)
 }
@@ -50,11 +51,12 @@ func TestUnknownRDataPath(t *testing.T) {
 
 func TestSOAAccessorsAll(t *testing.T) {
 	t.Parallel()
-	soa := rdata.MustNewSOA(
+	soa, err := rdata.NewSOA(
 		wirebb.MustParse("ns.example.com"),
 		wirebb.MustParse("hm.example.com"),
 		1, 2*time.Hour, 30*time.Minute, 7*24*time.Hour, 60*time.Second,
 	)
+	require.NoError(t, err)
 	require.Equal(t, "ns.example.com.", soa.MName().String())
 	require.Equal(t, "hm.example.com.", soa.RName().String())
 	require.Equal(t, uint32(1), soa.Serial())

@@ -26,8 +26,10 @@ func buildChain(t *testing.T, alg rdata.DNSSECAlgorithm, now time.Time) (*fixtur
 	leaf := newSignedZone(t, wire.MustParseName("sub.example."), alg, now)
 
 	// Add data records.
+	ar, err := rdata.NewA(netip.MustParseAddr("192.0.2.1"))
+	require.NoError(t, err)
 	leaf.addRR(wire.NewRecord(wire.MustParseName("www.sub.example."), time.Hour,
-		rdata.MustNewA(netip.MustParseAddr("192.0.2.1"))))
+		ar))
 
 	// Publish DNSKEYs at each apex and wire up delegations.
 	root.publishDNSKEY()
@@ -109,8 +111,9 @@ func TestWalkerNoTrustAnchor(t *testing.T) {
 	t.Parallel()
 	now := time.Now().UTC().Truncate(time.Second)
 	src := newFixtureSource()
-	otherAnchor, err := validator.NewAnchor(wire.MustParseName("other."),
-		rdata.NewDS(1, rdata.AlgECDSAP256SHA256, rdata.DigestSHA256, make([]byte, 32)))
+	ds, err := rdata.NewDS(1, rdata.AlgECDSAP256SHA256, rdata.DigestSHA256, make([]byte, 32))
+	require.NoError(t, err)
+	otherAnchor, err := validator.NewAnchor(wire.MustParseName("other."), ds)
 	require.NoError(t, err)
 	w, err := validator.NewWalker(src,
 		validator.WithWalkerAnchors(otherAnchor),
@@ -150,8 +153,10 @@ func TestWalkerInsecureDelegation(t *testing.T) {
 	// Add an NS record for "insecure.example." but NO DS record. The TLD's
 	// NSEC at "insecure.example." should reflect: NS, RRSIG, NSEC — no DS,
 	// no SOA. Our fixture source synthesises NSEC from typesAt.
+	nsrd, err := rdata.NewNS(wire.MustParseName("ns.insecure.example."))
+	require.NoError(t, err)
 	tld.addRR(wire.NewRecord(wire.MustParseName("insecure.example."), time.Hour,
-		rdata.MustNewNS(wire.MustParseName("ns.insecure.example."))))
+		nsrd))
 
 	src := newFixtureSource(root, tld)
 	rootDS, _ := root.rootAnchor(t)

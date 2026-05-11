@@ -21,12 +21,21 @@ func Example_dnssec_verify() {
 		fmt.Println("keygen:", err)
 		return
 	}
-	key := rdata.NewDNSKEY(257, 3, rdata.AlgED25519, pub)
+	key, err := rdata.NewDNSKEY(257, 3, rdata.AlgED25519, pub)
+	if err != nil {
+		fmt.Println("dnskey:", err)
+		return
+	}
 
 	// The RRset we'll sign.
+	ar, err := rdata.NewA(netip.MustParseAddr("192.0.2.1"))
+	if err != nil {
+		fmt.Println("a:", err)
+		return
+	}
 	set := []wire.Record{
 		wire.NewRecord(wire.MustParseName("www.example.com"), time.Hour,
-			rdata.MustNewA(netip.MustParseAddr("192.0.2.1"))),
+			ar),
 	}
 
 	// Build an RRSIG skeleton (no signature yet), compute the canonical

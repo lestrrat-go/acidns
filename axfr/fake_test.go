@@ -83,23 +83,27 @@ func mustBuild(t *testing.T, b *wire.MessageBuilder) wire.Message {
 
 func soaRec(t *testing.T, serial uint32) wire.Record {
 	t.Helper()
-	return wire.NewRecord(
-		wire.MustParseName("example.com"),
-		60*time.Second,
-		rdata.MustNewSOA(
+	soa2, err := rdata.NewSOA(
 			wire.MustParseName("ns.example.com"),
 			wire.MustParseName("hostmaster.example.com"),
 			serial, 7200*time.Second, 3600*time.Second, 1209600*time.Second, 60*time.Second,
-		),
+		)
+	require.NoError(t, err)
+	return wire.NewRecord(
+		wire.MustParseName("example.com"),
+		60*time.Second,
+		soa2,
 	)
 }
 
 func aRec(t *testing.T, name string, addr string) wire.Record {
 	t.Helper()
+	ar, err := rdata.NewA(netip.MustParseAddr(addr))
+	require.NoError(t, err)
 	return wire.NewRecord(
 		wire.MustParseName(name),
 		60*time.Second,
-		rdata.MustNewA(netip.MustParseAddr(addr)),
+		ar,
 	)
 }
 

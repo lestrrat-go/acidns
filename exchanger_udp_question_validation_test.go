@@ -39,8 +39,10 @@ func TestUDPClientRejectsMismatchedQuestion(t *testing.T) {
 			}
 			// Build a "spoofed" answer for the wrong name.
 			spoofedQ := wire.NewQuestion(wire.MustParseName("attacker.example"), rrtype.A)
+			ar, err := rdata.NewA(netip.MustParseAddr("198.51.100.66"))
+			require.NoError(t, err)
 			ans := wire.NewRecord(wire.MustParseName("attacker.example"), 60*time.Second,
-				rdata.MustNewA(netip.MustParseAddr("198.51.100.66")))
+				ar)
 			resp, err := wire.NewMessageBuilder().
 				ID(req.ID()).
 				Response(true).

@@ -15,8 +15,12 @@ import (
 func TestRRset(t *testing.T) {
 	t.Parallel()
 	name := wirebb.MustParse("example.com")
-	a1 := wire.NewRecord(name, 60*time.Second, rdata.MustNewA(netip.MustParseAddr("192.0.2.1")))
-	a2 := wire.NewRecord(name, 30*time.Second, rdata.MustNewA(netip.MustParseAddr("192.0.2.2")))
+	ar, err := rdata.NewA(netip.MustParseAddr("192.0.2.1"))
+	require.NoError(t, err)
+	a1 := wire.NewRecord(name, 60*time.Second, ar)
+	ar2, err := rdata.NewA(netip.MustParseAddr("192.0.2.2"))
+	require.NoError(t, err)
+	a2 := wire.NewRecord(name, 30*time.Second, ar2)
 
 	s, err := wire.NewRRset(a1, a2)
 	require.NoError(t, err)
@@ -28,19 +32,27 @@ func TestRRset(t *testing.T) {
 func TestRRsetMixedTypeRejected(t *testing.T) {
 	t.Parallel()
 	name := wirebb.MustParse("example.com")
-	a := wire.NewRecord(name, 60*time.Second, rdata.MustNewA(netip.MustParseAddr("192.0.2.1")))
-	aaaa := wire.NewRecord(name, 60*time.Second, rdata.MustNewAAAA(netip.MustParseAddr("2001:db8::1")))
-	_, err := wire.NewRRset(a, aaaa)
+	ar3, err := rdata.NewA(netip.MustParseAddr("192.0.2.1"))
+	require.NoError(t, err)
+	a := wire.NewRecord(name, 60*time.Second, ar3)
+	aaaa2, err := rdata.NewAAAA(netip.MustParseAddr("2001:db8::1"))
+	require.NoError(t, err)
+	aaaa := wire.NewRecord(name, 60*time.Second, aaaa2)
+	_, err = wire.NewRRset(a, aaaa)
 	require.Error(t, err)
 }
 
 func TestNewRRsetFromRDatas(t *testing.T) {
 	t.Parallel()
+	ar5, err := rdata.NewA(netip.MustParseAddr("192.0.2.2"))
+	require.NoError(t, err)
+	ar4, err := rdata.NewA(netip.MustParseAddr("192.0.2.1"))
+	require.NoError(t, err)
 	s, err := wire.NewRRsetFromRDatas(
 		wirebb.MustParse("ns.example.com"),
 		rrtype.ClassIN, 3600*time.Second,
-		rdata.MustNewA(netip.MustParseAddr("192.0.2.1")),
-		rdata.MustNewA(netip.MustParseAddr("192.0.2.2")),
+		ar4,
+		ar5,
 	)
 	require.NoError(t, err)
 	require.Equal(t, 2, s.Len())
@@ -50,9 +62,15 @@ func TestNewRRsetFromRDatas(t *testing.T) {
 func TestGroupRecords(t *testing.T) {
 	t.Parallel()
 	name := wirebb.MustParse("example.com")
-	a := wire.NewRecord(name, 60*time.Second, rdata.MustNewA(netip.MustParseAddr("192.0.2.1")))
-	aaaa := wire.NewRecord(name, 60*time.Second, rdata.MustNewAAAA(netip.MustParseAddr("2001:db8::1")))
-	a2 := wire.NewRecord(name, 60*time.Second, rdata.MustNewA(netip.MustParseAddr("192.0.2.2")))
+	ar6, err := rdata.NewA(netip.MustParseAddr("192.0.2.1"))
+	require.NoError(t, err)
+	a := wire.NewRecord(name, 60*time.Second, ar6)
+	aaaa3, err := rdata.NewAAAA(netip.MustParseAddr("2001:db8::1"))
+	require.NoError(t, err)
+	aaaa := wire.NewRecord(name, 60*time.Second, aaaa3)
+	ar7, err := rdata.NewA(netip.MustParseAddr("192.0.2.2"))
+	require.NoError(t, err)
+	a2 := wire.NewRecord(name, 60*time.Second, ar7)
 
 	groups, err := wire.GroupRecords([]wire.Record{a, aaaa, a2})
 	require.NoError(t, err)

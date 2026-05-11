@@ -102,16 +102,6 @@ func NewIPSECKEYName(prec uint8, alg IPSECKEYAlgorithm, name wirebb.Name, pubkey
 	copy(cp, pubkey)
 	return IPSECKEY{prec: prec, gt: IPSECKEYGatewayName, alg: alg, gwName: name, pubkey: cp}, nil
 }
-
-// MustNewIPSECKEYName is the panic-on-error variant of [NewIPSECKEYName].
-func MustNewIPSECKEYName(prec uint8, alg IPSECKEYAlgorithm, name wirebb.Name, pubkey []byte) IPSECKEY {
-	k, err := NewIPSECKEYName(prec, alg, name, pubkey)
-	if err != nil {
-		panic(err)
-	}
-	return k
-}
-
 func unpackIPSECKEY(u *wirebb.Unpacker, rdlen int) (IPSECKEY, error) {
 	var zero IPSECKEY
 	end := u.Off() + rdlen

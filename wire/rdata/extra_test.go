@@ -11,7 +11,8 @@ import (
 
 func TestSRV(t *testing.T) {
 	t.Parallel()
-	r := rdata.MustNewSRV(10, 100, 443, wirebb.MustParse("svc.example.com"))
+	r, err := rdata.NewSRV(10, 100, 443, wirebb.MustParse("svc.example.com"))
+	require.NoError(t, err)
 	require.Equal(t, rrtype.SRV, r.Type())
 	require.Equal(t, uint16(443), r.Port())
 
@@ -88,7 +89,8 @@ func TestSSHFP(t *testing.T) {
 func TestNSEC3PARAM(t *testing.T) {
 	t.Parallel()
 	salt := []byte{0xca, 0xfe, 0xba, 0xbe}
-	r := rdata.MustNewNSEC3PARAM(1, 0, 100, salt)
+	r, err := rdata.NewNSEC3PARAM(1, 0, 100, salt)
+	require.NoError(t, err)
 	got := packUnpack(t, r).(rdata.NSEC3PARAM)
 	require.Equal(t, salt, got.Salt())
 	require.Equal(t, uint16(100), got.Iterations())

@@ -697,14 +697,16 @@ func TestTKEYErrorAccessor(t *testing.T) {
 func TestSVCBALPNAccessorMissed(t *testing.T) {
 	t.Parallel()
 	// SVCB with a Port param but no ALPN — exercises the falsy branch.
-	s := rdata.MustNewSVCB(1, wirebb.MustParse("example.com"),
+	s, err := rdata.NewSVCB(1, wirebb.MustParse("example.com"),
 		rdata.NewSvcParamPort(443))
+	require.NoError(t, err)
 	require.Nil(t, s.ALPN())
 	// Now with ALPN present after another param.
 	a, err := rdata.NewSvcParamALPN("h2")
 	require.NoError(t, err)
-	s = rdata.MustNewSVCB(1, wirebb.MustParse("example.com"),
+	s, err = rdata.NewSVCB(1, wirebb.MustParse("example.com"),
 		rdata.NewSvcParamPort(443), a)
+	require.NoError(t, err)
 	require.Equal(t, []string{"h2"}, s.ALPN())
 }
 
@@ -715,7 +717,8 @@ func TestDecodeALPNTruncated(t *testing.T) {
 	// Construct an ALPN SvcParam with raw bytes claiming length 5 but
 	// only 2 bytes follow.
 	bad := rdata.NewSVCBParam(rdata.SvcParamALPN, []byte{5, 'h', '2'})
-	s := rdata.MustNewSVCB(1, wirebb.MustParse("example.com"), bad)
+	s, err := rdata.NewSVCB(1, wirebb.MustParse("example.com"), bad)
+	require.NoError(t, err)
 	require.Nil(t, s.ALPN())
 }
 
@@ -725,15 +728,15 @@ func TestDecodeAddrHintMisaligned(t *testing.T) {
 	t.Parallel()
 	// IPv4Hint param with 5 bytes (not multiple of 4) -> nil.
 	bad := rdata.NewSVCBParam(rdata.SvcParamIPv4Hint, []byte{1, 2, 3, 4, 5})
-	s := rdata.MustNewSVCB(1, wirebb.MustParse("example.com"), bad)
+	s, err := rdata.NewSVCB(1, wirebb.MustParse("example.com"), bad)
+	require.NoError(t, err)
 	require.Nil(t, s.IPv4Hints())
 }
 
-// TestNewAAAARejectsV4 covers the panic branch of NewAAAA when an IPv4
+// TestNewAAAARejectsV4 covers the error branch of NewAAAA when an IPv4
 // address is supplied.
 func TestNewAAAARejectsV4(t *testing.T) {
 	t.Parallel()
-	require.Panics(t, func() {
-		rdata.MustNewAAAA(parseAddr("1.2.3.4"))
-	})
+	_, err := rdata.NewAAAA(parseAddr("1.2.3.4"))
+	require.Error(t, err)
 }

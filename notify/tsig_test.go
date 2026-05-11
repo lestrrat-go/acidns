@@ -63,15 +63,16 @@ func (u *unsignedExchanger) Exchange(_ context.Context, q wire.Message) (wire.Me
 func TestNotifySignedQueryHasTSIG(t *testing.T) {
 	t.Parallel()
 
-	key := tsig.MustNewKey(
+	key, err := tsig.NewKey(
 		wire.MustParseName("notify.key"),
 		tsig.HMACSHA256,
 		[]byte("0123456789abcdef0123456789abcdef"),
 	)
+	require.NoError(t, err)
 	now := time.Unix(1700000000, 0)
 	ex := &signingExchanger{key: key, now: now}
 
-	_, err := notify.Send(t.Context(), ex, wire.MustParseName("example.com"),
+	_, err = notify.Send(t.Context(), ex, wire.MustParseName("example.com"),
 		notify.WithTSIGKey(&key),
 		notify.WithTSIGClock(func() time.Time { return now }),
 	)
@@ -92,11 +93,12 @@ func TestNotifySignedQueryHasTSIG(t *testing.T) {
 func TestNotifyUnsignedResponseRejectedWhenSigned(t *testing.T) {
 	t.Parallel()
 
-	key := tsig.MustNewKey(
+	key, err := tsig.NewKey(
 		wire.MustParseName("notify.key"),
 		tsig.HMACSHA256,
 		[]byte("0123456789abcdef0123456789abcdef"),
 	)
+	require.NoError(t, err)
 	resp, err := wire.NewMessageBuilder().
 		ID(1).
 		Opcode(wire.OpcodeNotify).
@@ -134,15 +136,16 @@ func (r *captureSigningExchanger) Exchange(ctx context.Context, q wire.Message) 
 func TestNotifySignedQueryRoundTripVerifies(t *testing.T) {
 	t.Parallel()
 
-	key := tsig.MustNewKey(
+	key, err := tsig.NewKey(
 		wire.MustParseName("notify.key"),
 		tsig.HMACSHA256,
 		[]byte("abcdefabcdefabcdefabcdefabcdef00"),
 	)
+	require.NoError(t, err)
 	now := time.Unix(1700000000, 0)
 
 	ex := &captureSigningExchanger{signingExchanger: signingExchanger{key: key, now: now}}
-	_, err := notify.Send(t.Context(), ex, wire.MustParseName("example.com"),
+	_, err = notify.Send(t.Context(), ex, wire.MustParseName("example.com"),
 		notify.WithTSIGKey(&key),
 		notify.WithTSIGClock(func() time.Time { return now }),
 	)

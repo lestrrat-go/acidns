@@ -118,18 +118,6 @@ func (a Algorithm) IsKnown() bool {
 	}
 	return false
 }
-
-// MustNewKey is the panic-on-error variant of [NewKey], intended for
-// tests and one-shot fixtures where validation failure indicates a
-// programmer bug rather than a recoverable condition.
-func MustNewKey(name wire.Name, alg Algorithm, secret []byte, opts ...KeyOption) Key {
-	k, err := NewKey(name, alg, secret, opts...)
-	if err != nil {
-		panic(err)
-	}
-	return k
-}
-
 // Name returns the key name (the DNS name used as the TSIG owner).
 func (k Key) Name() wire.Name { return k.name }
 

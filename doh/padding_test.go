@@ -10,7 +10,7 @@ import (
 	"github.com/lestrrat-go/acidns/doh"
 	"github.com/lestrrat-go/acidns/wire"
 	"github.com/lestrrat-go/acidns/wire/rrtype"
-	"github.com/lestrrat-go/acidns/wire/wiretest"
+	"github.com/lestrrat-go/acidns/internal/wiretest"
 	"github.com/stretchr/testify/require"
 )
 
@@ -30,7 +30,8 @@ func TestWithPadding_DisablesPadding(t *testing.T) {
 					}
 				}
 			}
-			out, _ := wire.Marshal(wiretest.Response(m))
+			resp, _ := wiretest.Response(m)
+			out, _ := wire.Marshal(resp)
 			w.Header().Set("Content-Type", "application/dns-message")
 			_, _ = w.Write(out)
 			return
@@ -42,7 +43,8 @@ func TestWithPadding_DisablesPadding(t *testing.T) {
 	ex, err := doh.New(srv.URL, doh.WithPadding(false), doh.WithInsecure(true))
 	require.NoError(t, err)
 
-	q := wiretest.Query(wire.MustParseName("example.com"), rrtype.A)
+	q, err := wiretest.Query(wire.MustParseName("example.com"), rrtype.A)
+	require.NoError(t, err)
 	_, err = ex.Exchange(context.Background(), q)
 	require.NoError(t, err)
 	require.False(t, seenPaddingOption, "WithPadding(false) must skip the EDNS Padding option")

@@ -21,16 +21,19 @@ func (s *stubResolver) Resolve(_ context.Context, _ wire.Name, _ rrtype.Type) (*
 }
 
 func Example_amt_discover() {
+	srv3, _ := rdata.NewSRV(10, 50, 2268, wire.MustParseName("relay-c.example.com"))
+	srv2, _ := rdata.NewSRV(10, 0, 2268, wire.MustParseName("relay-a.example.com"))
+	srv, _ := rdata.NewSRV(20, 0, 2268, wire.MustParseName("relay-b.example.com"))
 	// Three SRV candidates for `_amt._udp.example.com.`. Discover sorts
 	// by priority ascending; weight ties preserve server-supplied order.
 	r := &stubResolver{
 		records: []wire.Record{
 			wire.NewRecord(wire.MustParseName("_amt._udp.example.com"), 60*time.Second,
-				rdata.MustNewSRV(20, 0, 2268, wire.MustParseName("relay-b.example.com"))),
+				srv),
 			wire.NewRecord(wire.MustParseName("_amt._udp.example.com"), 60*time.Second,
-				rdata.MustNewSRV(10, 0, 2268, wire.MustParseName("relay-a.example.com"))),
+				srv2),
 			wire.NewRecord(wire.MustParseName("_amt._udp.example.com"), 60*time.Second,
-				rdata.MustNewSRV(10, 50, 2268, wire.MustParseName("relay-c.example.com"))),
+				srv3),
 		},
 	}
 

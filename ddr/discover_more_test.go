@@ -37,18 +37,22 @@ func TestDiscover_SkipsNonSVCB(t *testing.T) {
 	t.Parallel()
 
 	// Non-SVCB record: an A record snuck into the answer section.
+	ar, err := rdata.NewA(netip.MustParseAddr("192.0.2.42"))
+	require.NoError(t, err)
 	aRec := wire.NewRecord(ddr.ResolverDomain(), 60*time.Second,
-		rdata.MustNewA(netip.MustParseAddr("192.0.2.42")))
+		ar)
 
 	// AliasMode SVCB (priority 0) — must be filtered.
-	alias := rdata.MustNewSVCB(0, wire.MustParseName("alias.example.net"))
+	alias, err := rdata.NewSVCB(0, wire.MustParseName("alias.example.net"))
+	require.NoError(t, err)
 	aliasRec := wire.NewRecord(ddr.ResolverDomain(), 60*time.Second, alias)
 
 	// One legitimate ServiceMode SVCB so the result list is non-empty.
 	alpnDoT, err := rdata.NewSvcParamALPN("dot")
 	require.NoError(t, err)
-	good := rdata.MustNewSVCB(5, wire.MustParseName("dot.example.net"), alpnDoT,
+	good, err := rdata.NewSVCB(5, wire.MustParseName("dot.example.net"), alpnDoT,
 		rdata.NewSvcParamPort(853))
+	require.NoError(t, err)
 	goodRec := wire.NewRecord(ddr.ResolverDomain(), 60*time.Second, good)
 
 	r := &fakeResolver{answer: newFakeAnswer(wire.Question{}, []wire.Record{
@@ -67,9 +71,12 @@ func TestDiscover_SortsByPriority(t *testing.T) {
 
 	alpnDoT, err := rdata.NewSvcParamALPN("dot")
 	require.NoError(t, err)
-	hi := rdata.MustNewSVCB(10, wire.MustParseName("hi.example.net"), alpnDoT)
-	lo := rdata.MustNewSVCB(1, wire.MustParseName("lo.example.net"), alpnDoT)
-	mid := rdata.MustNewSVCB(5, wire.MustParseName("mid.example.net"), alpnDoT)
+	hi, err := rdata.NewSVCB(10, wire.MustParseName("hi.example.net"), alpnDoT)
+	require.NoError(t, err)
+	lo, err := rdata.NewSVCB(1, wire.MustParseName("lo.example.net"), alpnDoT)
+	require.NoError(t, err)
+	mid, err := rdata.NewSVCB(5, wire.MustParseName("mid.example.net"), alpnDoT)
+	require.NoError(t, err)
 
 	records := []wire.Record{
 		wire.NewRecord(ddr.ResolverDomain(), 60*time.Second, hi),
@@ -93,24 +100,29 @@ func TestDiscover_InferProtocolVariants(t *testing.T) {
 
 	alpnH3, err := rdata.NewSvcParamALPN("h3")
 	require.NoError(t, err)
-	h3SVCB := rdata.MustNewSVCB(1, wire.MustParseName("h3.example.net"), alpnH3)
+	h3SVCB, err := rdata.NewSVCB(1, wire.MustParseName("h3.example.net"), alpnH3)
+	require.NoError(t, err)
 
 	alpnH1, err := rdata.NewSvcParamALPN("http/1.1")
 	require.NoError(t, err)
-	h1SVCB := rdata.MustNewSVCB(2, wire.MustParseName("h1.example.net"), alpnH1)
+	h1SVCB, err := rdata.NewSVCB(2, wire.MustParseName("h1.example.net"), alpnH1)
+	require.NoError(t, err)
 
 	alpnDoQ, err := rdata.NewSvcParamALPN("doq")
 	require.NoError(t, err)
-	doqSVCB := rdata.MustNewSVCB(3, wire.MustParseName("doq.example.net"), alpnDoQ,
+	doqSVCB, err := rdata.NewSVCB(3, wire.MustParseName("doq.example.net"), alpnDoQ,
 		rdata.NewSvcParamPort(853))
+	require.NoError(t, err)
 
 	// No ALPN, no DOHPath → ProtoUnknown.
-	bareSVCB := rdata.MustNewSVCB(4, wire.MustParseName("bare.example.net"))
+	bareSVCB, err := rdata.NewSVCB(4, wire.MustParseName("bare.example.net"))
+	require.NoError(t, err)
 
 	// Mixed case ALPN — exercise the strings.ToLower normalization.
 	alpnMixed, err := rdata.NewSvcParamALPN("DoT")
 	require.NoError(t, err)
-	mixedSVCB := rdata.MustNewSVCB(5, wire.MustParseName("mixed.example.net"), alpnMixed)
+	mixedSVCB, err := rdata.NewSVCB(5, wire.MustParseName("mixed.example.net"), alpnMixed)
+	require.NoError(t, err)
 
 	records := []wire.Record{
 		wire.NewRecord(ddr.ResolverDomain(), 60*time.Second, h3SVCB),
@@ -142,11 +154,12 @@ func TestDiscover_IPv6Hints(t *testing.T) {
 	require.NoError(t, err)
 	v6hint, err := rdata.NewSvcParamIPv6Hint(netip.MustParseAddr("2001:db8::1"))
 	require.NoError(t, err)
-	s := rdata.MustNewSVCB(1, wire.MustParseName("dot.example.net"),
+	s, err := rdata.NewSVCB(1, wire.MustParseName("dot.example.net"),
 		alpnDoT,
 		rdata.NewSvcParamPort(853),
 		v6hint,
 	)
+	require.NoError(t, err)
 	rec := wire.NewRecord(ddr.ResolverDomain(), 60*time.Second, s)
 	r := &fakeResolver{answer: newFakeAnswer(wire.Question{}, []wire.Record{rec})}
 	endpoints, err := ddr.DiscoverUnverified(t.Context(), r)

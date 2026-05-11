@@ -74,11 +74,12 @@ func (p *programmableStreamEx) Stream(_ context.Context, q wire.Message) (acidns
 func TestAXFRTSIGSignedQueryAndVerifiedResponse(t *testing.T) {
 	t.Parallel()
 
-	key := tsig.MustNewKey(
+	key, err := tsig.NewKey(
 		wire.MustParseName("xfr.key"),
 		tsig.HMACSHA256,
 		[]byte("0123456789abcdef0123456789abcdef"),
 	)
+	require.NoError(t, err)
 	now := time.Unix(1700000000, 0)
 
 	// Build the response factory: signs the response using the actual
@@ -125,11 +126,12 @@ func TestAXFRTSIGSignedQueryAndVerifiedResponse(t *testing.T) {
 func TestAXFRTSIGUnsignedFirstFails(t *testing.T) {
 	t.Parallel()
 
-	key := tsig.MustNewKey(
+	key, err := tsig.NewKey(
 		wire.MustParseName("xfr.key"),
 		tsig.HMACSHA256,
 		[]byte("0123456789abcdef0123456789abcdef"),
 	)
+	require.NoError(t, err)
 	now := time.Unix(1700000000, 0)
 
 	soa := soaRec(t, 7)
@@ -143,7 +145,7 @@ func TestAXFRTSIGUnsignedFirstFails(t *testing.T) {
 		},
 	}
 
-	_, err := axfr.Start(t.Context(), ex, wire.MustParseName("example.com"),
+	_, err = axfr.Start(t.Context(), ex, wire.MustParseName("example.com"),
 		axfr.WithTSIGKey(&key),
 		axfr.WithTSIGClock(func() time.Time { return now }),
 	)

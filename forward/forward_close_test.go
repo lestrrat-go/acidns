@@ -8,7 +8,7 @@ import (
 
 	"github.com/lestrrat-go/acidns/forward"
 	"github.com/lestrrat-go/acidns/wire"
-	"github.com/lestrrat-go/acidns/wire/wiretest"
+	"github.com/lestrrat-go/acidns/internal/wiretest"
 	"github.com/stretchr/testify/require"
 )
 
@@ -18,7 +18,7 @@ type closableUpstream struct {
 }
 
 func (u *closableUpstream) Exchange(_ context.Context, q wire.Message) (wire.Message, error) {
-	return wiretest.Response(q), nil
+	return wiretest.Response(q)
 }
 
 func (u *closableUpstream) Close() error {
@@ -30,7 +30,7 @@ func (u *closableUpstream) Close() error {
 type plainUpstream struct{}
 
 func (plainUpstream) Exchange(_ context.Context, q wire.Message) (wire.Message, error) {
-	return wiretest.Response(q), nil
+	return wiretest.Response(q)
 }
 
 // TestForwarder_CtxCancel_ClosesUpstream verifies that cancelling the

@@ -67,12 +67,13 @@ func (h *echoHandler) ServeDNS(_ context.Context, w acidns.ResponseWriter, q wir
 		return
 	}
 	qq := q.Questions()[0]
+	ar, _ := rdata.NewA(netip.MustParseAddr("203.0.113.5"))
 	resp, _ := wire.NewMessageBuilder().
 		ID(q.ID()).
 		Response(true).
 		Question(qq).
 		Answer(wire.NewRecord(qq.Name(), time.Minute,
-			rdata.MustNewA(netip.MustParseAddr("203.0.113.5")))).
+			ar)).
 		Build()
 	_ = w.WriteMsg(resp)
 }

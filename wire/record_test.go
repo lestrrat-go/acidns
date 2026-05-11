@@ -13,7 +13,9 @@ import (
 func TestRDataAs_Match(t *testing.T) {
 	t.Parallel()
 	name := wire.MustParseName("example.com")
-	rec := wire.NewRecord(name, 60*time.Second, rdata.MustNewA(netip.MustParseAddr("192.0.2.1")))
+	ar, err := rdata.NewA(netip.MustParseAddr("192.0.2.1"))
+	require.NoError(t, err)
+	rec := wire.NewRecord(name, 60*time.Second, ar)
 
 	a, ok := wire.RDataAs[rdata.A](rec)
 	require.True(t, ok)
@@ -27,7 +29,9 @@ func TestRDataAs_Match(t *testing.T) {
 func TestRDataAs_TypeFilterPreventsACollision(t *testing.T) {
 	t.Parallel()
 	name := wire.MustParseName("example.com")
-	rec := wire.NewRecord(name, 60*time.Second, rdata.MustNewA(netip.MustParseAddr("192.0.2.1")))
+	ar2, err := rdata.NewA(netip.MustParseAddr("192.0.2.1"))
+	require.NoError(t, err)
+	rec := wire.NewRecord(name, 60*time.Second, ar2)
 
 	v, ok := wire.RDataAs[rdata.AAAA](rec)
 	require.False(t, ok)
@@ -42,7 +46,9 @@ func TestRDataAs_TypeFilterPreventsCNAMECollision(t *testing.T) {
 	t.Parallel()
 	name := wire.MustParseName("example.com")
 	target := wire.MustParseName("svc.example.net")
-	rec := wire.NewRecord(name, 60*time.Second, rdata.MustNewSVCB(1, target))
+	svcb, err := rdata.NewSVCB(1, target)
+	require.NoError(t, err)
+	rec := wire.NewRecord(name, 60*time.Second, svcb)
 
 	v, ok := wire.RDataAs[rdata.CNAME](rec)
 	require.False(t, ok)
@@ -54,7 +60,9 @@ func TestRDataAs_TypeFilterPreventsCNAMECollision(t *testing.T) {
 func TestRDataAs_TypeMismatch(t *testing.T) {
 	t.Parallel()
 	name := wire.MustParseName("example.com")
-	rec := wire.NewRecord(name, 60*time.Second, rdata.MustNewA(netip.MustParseAddr("192.0.2.1")))
+	ar3, err := rdata.NewA(netip.MustParseAddr("192.0.2.1"))
+	require.NoError(t, err)
+	rec := wire.NewRecord(name, 60*time.Second, ar3)
 
 	v, ok := wire.RDataAs[rdata.MX](rec)
 	require.False(t, ok)

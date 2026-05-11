@@ -36,8 +36,9 @@ func (w *rrlCapturingWriter) Network() string {
 
 func rrlPositiveAnswer() acidns.Handler {
 	return acidns.HandlerFunc(func(_ context.Context, w acidns.ResponseWriter, q wire.Message) {
+		ar, _ := rdata.NewA(netip.MustParseAddr("203.0.113.7"))
 		ans := wire.NewRecord(q.Questions()[0].Name(), 60*time.Second,
-			rdata.MustNewA(netip.MustParseAddr("203.0.113.7")))
+			ar)
 		resp, _ := wire.NewMessageBuilder().
 			ID(q.ID()).
 			Response(true).

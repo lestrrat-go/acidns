@@ -39,7 +39,8 @@ func TestVerifyAcceptsTruncatedMAC(t *testing.T) {
 	t.Parallel()
 	secret := make([]byte, 32)
 	_, _ = rand.Read(secret)
-	key := MustNewKey(wire.MustParseName("test.key"), HMACSHA256, secret)
+	key, err := NewKey(wire.MustParseName("test.key"), HMACSHA256, secret)
+	require.NoError(t, err)
 	now := time.Now().Truncate(time.Second)
 
 	q, err := wire.NewMessageBuilder().
@@ -62,7 +63,8 @@ func TestVerifyRejectsBelowFloor(t *testing.T) {
 	t.Parallel()
 	secret := make([]byte, 32)
 	_, _ = rand.Read(secret)
-	key := MustNewKey(wire.MustParseName("test.key"), HMACSHA256, secret)
+	key, err := NewKey(wire.MustParseName("test.key"), HMACSHA256, secret)
+	require.NoError(t, err)
 	now := time.Now().Truncate(time.Second)
 
 	q, err := wire.NewMessageBuilder().

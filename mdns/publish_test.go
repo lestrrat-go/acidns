@@ -94,12 +94,14 @@ func TestAnnounceConflictAborts(t *testing.T) {
 
 	// Inject a conflicting answer: someone else owns Host with a
 	// different address.
+	ar, err := rdata.NewA(netip.MustParseAddr("192.0.2.99"))
+	require.NoError(t, err)
 	conflict, _ := wire.NewMessageBuilder().
 		Response(true).
 		Authoritative(true).
 		Answer(wire.NewRecord(wire.MustParseName("tv-living-room.local."),
 			120*time.Second,
-			rdata.MustNewA(netip.MustParseAddr("192.0.2.99")))).
+			ar)).
 		Build()
 	tr.inbox <- conflict
 
@@ -124,11 +126,13 @@ func TestAnnounceTiebreakLoserAborts(t *testing.T) {
 
 	// Theirs proposes A=255.255.255.254, lexically larger than our
 	// 192.0.2.10 → they win the byte-compare.
+	ar2, err := rdata.NewA(netip.MustParseAddr("255.255.255.254"))
+	require.NoError(t, err)
 	probe, _ := wire.NewMessageBuilder().
 		Question(wire.NewQuestionClass(wire.MustParseName("Living Room TV._http._tcp.local."), rrtype.ANY, rrtype.ClassIN)).
 		Authority(wire.NewRecord(wire.MustParseName("tv-living-room.local."),
 			120*time.Second,
-			rdata.MustNewA(netip.MustParseAddr("255.255.255.254")))).
+			ar2)).
 		Build()
 	tr.inbox <- probe
 
@@ -152,11 +156,13 @@ func TestAnnounceTiebreakWinnerProceeds(t *testing.T) {
 
 	// Theirs proposes A=0.0.0.1, lexically smaller than our
 	// 192.0.2.10 → we win.
+	ar3, err := rdata.NewA(netip.MustParseAddr("0.0.0.1"))
+	require.NoError(t, err)
 	probe, _ := wire.NewMessageBuilder().
 		Question(wire.NewQuestionClass(wire.MustParseName("Living Room TV._http._tcp.local."), rrtype.ANY, rrtype.ClassIN)).
 		Authority(wire.NewRecord(wire.MustParseName("tv-living-room.local."),
 			120*time.Second,
-			rdata.MustNewA(netip.MustParseAddr("0.0.0.1")))).
+			ar3)).
 		Build()
 	tr.inbox <- probe
 

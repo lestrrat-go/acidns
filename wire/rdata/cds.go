@@ -31,13 +31,20 @@ func (d CDS) Pack(p *wirebb.Packer) {
 	p.Raw(d.digest)
 }
 
-// NewCDS returns a CDS rdata.
-func NewCDS(keyTag uint16, alg DNSSECAlgorithm, dt DSDigestType, digest []byte) CDS {
+// NewCDS returns a CDS rdata. The digest length is validated against
+// the digest-type field for known types (see [NewDS]). The RFC 8078
+// §4 delete-DS sentinel (algorithm=0) bypasses the length check
+// because the sentinel's digest is the literal byte 0x00.
+func NewCDS(keyTag uint16, alg DNSSECAlgorithm, dt DSDigestType, digest []byte) (CDS, error) {
+	if alg != 0 {
+		if want := dsDigestLen(dt); want != 0 && len(digest) != want {
+			return CDS{}, fmt.Errorf("%w: CDS digest type %d expects %d bytes, got %d", ErrInvalidRData, dt, want, len(digest))
+		}
+	}
 	cp := make([]byte, len(digest))
 	copy(cp, digest)
-	return CDS{keyTag: keyTag, algorithm: alg, digestT: dt, digest: cp}
+	return CDS{keyTag: keyTag, algorithm: alg, digestT: dt, digest: cp}, nil
 }
-
 func unpackCDS(u *wirebb.Unpacker, rdlen int) (CDS, error) {
 	var zero CDS
 	if rdlen < 4 {
@@ -87,13 +94,19 @@ func (k CDNSKEY) Pack(p *wirebb.Packer) {
 	p.Raw(k.pubkey)
 }
 
-// NewCDNSKEY returns a CDNSKEY rdata.
-func NewCDNSKEY(flags uint16, protocol uint8, algorithm DNSSECAlgorithm, pubkey []byte) CDNSKEY {
+// NewCDNSKEY returns a CDNSKEY rdata. Like [NewDNSKEY] the protocol
+// field MUST be 3, with one exception: the RFC 8078 §4 delete-DS
+// sentinel uses (flags=0, protocol=0, algorithm=0) and is preserved
+// for callers signalling the parent to drop its DS RRset.
+func NewCDNSKEY(flags uint16, protocol uint8, algorithm DNSSECAlgorithm, pubkey []byte) (CDNSKEY, error) {
+	sentinel := flags == 0 && protocol == 0 && algorithm == 0
+	if !sentinel && protocol != 3 {
+		return CDNSKEY{}, fmt.Errorf("%w: CDNSKEY protocol %d, RFC 4034 §2.1.2 mandates 3", ErrInvalidRData, protocol)
+	}
 	cp := make([]byte, len(pubkey))
 	copy(cp, pubkey)
-	return CDNSKEY{flags: flags, protocol: protocol, algorithm: algorithm, pubkey: cp}
+	return CDNSKEY{flags: flags, protocol: protocol, algorithm: algorithm, pubkey: cp}, nil
 }
-
 func unpackCDNSKEY(u *wirebb.Unpacker, rdlen int) (CDNSKEY, error) {
 	var zero CDNSKEY
 	if rdlen < 4 {

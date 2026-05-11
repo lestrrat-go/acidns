@@ -22,16 +22,6 @@ func NewCNAME(target wirebb.Name) (CNAME, error) {
 	}
 	return CNAME{target: target}, nil
 }
-
-// MustNewCNAME is the panic-on-error variant of [NewCNAME].
-func MustNewCNAME(target wirebb.Name) CNAME {
-	c, err := NewCNAME(target)
-	if err != nil {
-		panic(err)
-	}
-	return c
-}
-
 func unpackCNAME(u *wirebb.Unpacker, rdlen int) (CNAME, error) {
 	var zero CNAME
 	n, err := u.NameInRange(u.Off() + rdlen)
@@ -56,16 +46,6 @@ func NewNS(name wirebb.Name) (NS, error) {
 	}
 	return NS{name: name}, nil
 }
-
-// MustNewNS is the panic-on-error variant of [NewNS].
-func MustNewNS(name wirebb.Name) NS {
-	n, err := NewNS(name)
-	if err != nil {
-		panic(err)
-	}
-	return n
-}
-
 func unpackNS(u *wirebb.Unpacker, rdlen int) (NS, error) {
 	var zero NS
 	n, err := u.NameInRange(u.Off() + rdlen)
@@ -90,16 +70,6 @@ func NewPTR(name wirebb.Name) (PTR, error) {
 	}
 	return PTR{name: name}, nil
 }
-
-// MustNewPTR is the panic-on-error variant of [NewPTR].
-func MustNewPTR(name wirebb.Name) PTR {
-	p, err := NewPTR(name)
-	if err != nil {
-		panic(err)
-	}
-	return p
-}
-
 func unpackPTR(u *wirebb.Unpacker, rdlen int) (PTR, error) {
 	var zero PTR
 	n, err := u.NameInRange(u.Off() + rdlen)

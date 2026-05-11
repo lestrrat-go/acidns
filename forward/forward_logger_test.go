@@ -12,7 +12,7 @@ import (
 	"github.com/lestrrat-go/acidns/forward"
 	"github.com/lestrrat-go/acidns/wire"
 	"github.com/lestrrat-go/acidns/wire/rrtype"
-	"github.com/lestrrat-go/acidns/wire/wiretest"
+	"github.com/lestrrat-go/acidns/internal/wiretest"
 	"github.com/stretchr/testify/require"
 )
 
@@ -27,7 +27,8 @@ func TestServeDNS_LogsForwardedDecision(t *testing.T) {
 	)
 	require.NoError(t, err)
 
-	q := wiretest.Query(wire.MustParseName("example.com"), rrtype.A)
+	q, err := wiretest.Query(wire.MustParseName("example.com"), rrtype.A)
+	require.NoError(t, err)
 	h.ServeDNS(context.Background(), &captureWriter{}, q)
 
 	lines := strings.Split(strings.TrimSpace(buf.String()), "\n")
@@ -52,7 +53,8 @@ func TestServeDNS_LogsUpstreamError(t *testing.T) {
 	)
 	require.NoError(t, err)
 
-	q := wiretest.Query(wire.MustParseName("example.com"), rrtype.A)
+	q, err := wiretest.Query(wire.MustParseName("example.com"), rrtype.A)
+	require.NoError(t, err)
 	h.ServeDNS(context.Background(), &captureWriter{}, q)
 
 	var ev map[string]any

@@ -19,8 +19,9 @@ func TestSignMessageMarshalError(t *testing.T) {
 	// SignMessage on a default-constructed (zero) Message should work
 	// because wire.Marshal on an empty message succeeds. Use Sign directly
 	// to exercise its msg-length guard.
-	key := tsig.MustNewKey(wire.MustParseName("k.example."), tsig.HMACSHA256, []byte("secret"))
-	_, err := tsig.Sign([]byte{0x00, 0x01}, key, time.Now(), time.Minute)
+	key, err := tsig.NewKey(wire.MustParseName("k.example."), tsig.HMACSHA256, []byte("secret"))
+	require.NoError(t, err)
+	_, err = tsig.Sign([]byte{0x00, 0x01}, key, time.Now(), time.Minute)
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "msg too short")
 }
@@ -36,16 +37,19 @@ func TestNewKeyRejectsUnsupportedAlgorithm(t *testing.T) {
 
 func TestVerifyMsgTooShort(t *testing.T) {
 	t.Parallel()
-	key := tsig.MustNewKey(wire.MustParseName("k.example."), tsig.HMACSHA256, []byte("s"))
-	_, _, err := tsig.Verify([]byte{0x00, 0x01}, key, time.Now(), time.Minute)
+	key, err := tsig.NewKey(wire.MustParseName("k.example."), tsig.HMACSHA256, []byte("s"))
+	require.NoError(t, err)
+	_, _, err = tsig.Verify([]byte{0x00, 0x01}, key, time.Now(), time.Minute)
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "msg too short")
 }
 
 func TestVerifyKeyNameMismatch(t *testing.T) {
 	t.Parallel()
-	signKey := tsig.MustNewKey(wire.MustParseName("alice.example."), tsig.HMACSHA256, []byte("shared-secret-bytes"))
-	verifyKey := tsig.MustNewKey(wire.MustParseName("bob.example."), tsig.HMACSHA256, []byte("shared-secret-bytes"))
+	signKey, err := tsig.NewKey(wire.MustParseName("alice.example."), tsig.HMACSHA256, []byte("shared-secret-bytes"))
+	require.NoError(t, err)
+	verifyKey, err := tsig.NewKey(wire.MustParseName("bob.example."), tsig.HMACSHA256, []byte("shared-secret-bytes"))
+	require.NoError(t, err)
 
 	msg := mkMessage(t)
 	now := time.Now().Truncate(time.Second)
@@ -59,8 +63,10 @@ func TestVerifyKeyNameMismatch(t *testing.T) {
 
 func TestVerifyAlgorithmMismatch(t *testing.T) {
 	t.Parallel()
-	signKey := tsig.MustNewKey(wire.MustParseName("k.example."), tsig.HMACSHA256, []byte("shared-secret-bytes"))
-	verifyKey := tsig.MustNewKey(wire.MustParseName("k.example."), tsig.HMACSHA512, []byte("shared-secret-bytes"))
+	signKey, err := tsig.NewKey(wire.MustParseName("k.example."), tsig.HMACSHA256, []byte("shared-secret-bytes"))
+	require.NoError(t, err)
+	verifyKey, err := tsig.NewKey(wire.MustParseName("k.example."), tsig.HMACSHA512, []byte("shared-secret-bytes"))
+	require.NoError(t, err)
 
 	msg := mkMessage(t)
 	now := time.Now().Truncate(time.Second)
@@ -76,7 +82,8 @@ func TestVerifyAlgorithmMismatch(t *testing.T) {
 // fudge check (signature from the future).
 func TestVerifyClockSkewBefore(t *testing.T) {
 	t.Parallel()
-	key := tsig.MustNewKey(wire.MustParseName("k.example."), tsig.HMACSHA256, []byte("shared-secret-bytes"))
+	key, err := tsig.NewKey(wire.MustParseName("k.example."), tsig.HMACSHA256, []byte("shared-secret-bytes"))
+	require.NoError(t, err)
 	msg := mkMessage(t)
 	signedAt := time.Now().Truncate(time.Second).Add(2 * time.Hour)
 	signed, err := tsig.Sign(msg, key, signedAt, 60*time.Second)
@@ -97,8 +104,9 @@ func TestVerifyTruncatedRRHeader(t *testing.T) {
 	msg := make([]byte, 12+1)
 	binary.BigEndian.PutUint16(msg[10:12], 1) // ARCOUNT = 1
 	// msg[12] = 0x00 already (root name)
-	key := tsig.MustNewKey(wire.MustParseName("k.example."), tsig.HMACSHA256, []byte("s"))
-	_, _, err := tsig.Verify(msg, key, time.Now(), time.Minute)
+	key, err := tsig.NewKey(wire.MustParseName("k.example."), tsig.HMACSHA256, []byte("s"))
+	require.NoError(t, err)
+	_, _, err = tsig.Verify(msg, key, time.Now(), time.Minute)
 	require.ErrorContains(t, err, "truncated rr header")
 }
 
@@ -115,8 +123,9 @@ func TestVerifyNonTSIGRRType(t *testing.T) {
 	binary.BigEndian.PutUint16(msg[off+2:off+4], 1)  // CLASS=IN
 	binary.BigEndian.PutUint32(msg[off+4:off+8], 0)  // TTL
 	binary.BigEndian.PutUint16(msg[off+8:off+10], 0) // rdlen=0
-	key := tsig.MustNewKey(wire.MustParseName("k.example."), tsig.HMACSHA256, []byte("s"))
-	_, _, err := tsig.Verify(msg, key, time.Now(), time.Minute)
+	key, err := tsig.NewKey(wire.MustParseName("k.example."), tsig.HMACSHA256, []byte("s"))
+	require.NoError(t, err)
+	_, _, err = tsig.Verify(msg, key, time.Now(), time.Minute)
 	require.ErrorIs(t, err, tsig.ErrTSIGMissing)
 }
 
@@ -137,8 +146,9 @@ func TestVerifyTruncatedTSIGAlgName(t *testing.T) {
 	binary.BigEndian.PutUint16(msg[off+8:off+10], uint16(rdlen))
 	copy(msg[off+10:], rdata)
 
-	key := tsig.MustNewKey(wire.MustParseName("k.example."), tsig.HMACSHA256, []byte("s"))
-	_, _, err := tsig.Verify(msg, key, time.Now(), time.Minute)
+	key, err := tsig.NewKey(wire.MustParseName("k.example."), tsig.HMACSHA256, []byte("s"))
+	require.NoError(t, err)
+	_, _, err = tsig.Verify(msg, key, time.Now(), time.Minute)
 	require.ErrorContains(t, err, "parse alg")
 }
 
@@ -158,8 +168,9 @@ func TestVerifyTruncatedTimeFudgeMacSize(t *testing.T) {
 	binary.BigEndian.PutUint16(msg[off+8:off+10], uint16(rdlen))
 	copy(msg[off+10:], rdata)
 
-	key := tsig.MustNewKey(wire.MustParseName("k.example."), tsig.HMACSHA256, []byte("s"))
-	_, _, err := tsig.Verify(msg, key, time.Now(), time.Minute)
+	key, err := tsig.NewKey(wire.MustParseName("k.example."), tsig.HMACSHA256, []byte("s"))
+	require.NoError(t, err)
+	_, _, err = tsig.Verify(msg, key, time.Now(), time.Minute)
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "truncated time/fudge/mac-size")
 }
@@ -186,8 +197,9 @@ func TestVerifyTruncatedMacOrigIDErrOtherLen(t *testing.T) {
 	binary.BigEndian.PutUint16(msg[off+8:off+10], uint16(rdlen))
 	copy(msg[off+10:], rdata)
 
-	key := tsig.MustNewKey(wire.MustParseName("k.example."), tsig.HMACSHA256, []byte("s"))
-	_, _, err := tsig.Verify(msg, key, time.Now(), time.Minute)
+	key, err := tsig.NewKey(wire.MustParseName("k.example."), tsig.HMACSHA256, []byte("s"))
+	require.NoError(t, err)
+	_, _, err = tsig.Verify(msg, key, time.Now(), time.Minute)
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "truncated mac/origID/err/otherLen")
 }
@@ -214,8 +226,9 @@ func TestVerifyTruncatedOtherData(t *testing.T) {
 	binary.BigEndian.PutUint16(msg[off+8:off+10], uint16(rdlen))
 	copy(msg[off+10:], rdata)
 
-	key := tsig.MustNewKey(wire.MustParseName("k.example."), tsig.HMACSHA256, []byte("s"))
-	_, _, err := tsig.Verify(msg, key, time.Now(), time.Minute)
+	key, err := tsig.NewKey(wire.MustParseName("k.example."), tsig.HMACSHA256, []byte("s"))
+	require.NoError(t, err)
+	_, _, err = tsig.Verify(msg, key, time.Now(), time.Minute)
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "truncated other-data")
 }
@@ -231,8 +244,9 @@ func TestVerifyTruncatedQuestionWalk(t *testing.T) {
 	binary.BigEndian.PutUint16(msg[10:12], 1) // ARCOUNT=1
 	// msg[12] = 0x00 (root name), but no QTYPE/QCLASS
 
-	key := tsig.MustNewKey(wire.MustParseName("k.example."), tsig.HMACSHA256, []byte("s"))
-	_, _, err := tsig.Verify(msg, key, time.Now(), time.Minute)
+	key, err := tsig.NewKey(wire.MustParseName("k.example."), tsig.HMACSHA256, []byte("s"))
+	require.NoError(t, err)
+	_, _, err = tsig.Verify(msg, key, time.Now(), time.Minute)
 	require.ErrorContains(t, err, "truncated question")
 }
 
@@ -251,8 +265,9 @@ func TestVerifyTruncatedRRBody(t *testing.T) {
 	binary.BigEndian.PutUint32(msg[off+4:off+8], 0)    // TTL
 	binary.BigEndian.PutUint16(msg[off+8:off+10], 200) // rdlen=200 (lie)
 
-	key := tsig.MustNewKey(wire.MustParseName("k.example."), tsig.HMACSHA256, []byte("s"))
-	_, _, err := tsig.Verify(msg, key, time.Now(), time.Minute)
+	key, err := tsig.NewKey(wire.MustParseName("k.example."), tsig.HMACSHA256, []byte("s"))
+	require.NoError(t, err)
+	_, _, err = tsig.Verify(msg, key, time.Now(), time.Minute)
 	require.ErrorContains(t, err, "truncated rr body")
 }
 
@@ -265,7 +280,8 @@ func TestVerifyValidWithExplicitFudgeWindow(t *testing.T) {
 	t.Parallel()
 	// Round-trip with a fudge of 0 to exercise the boundary "delta == 0"
 	// case and make sure no off-by-one rejects valid signatures.
-	key := tsig.MustNewKey(wire.MustParseName("k.example."), tsig.HMACSHA384, []byte("a-real-secret-that-is-bytes"))
+	key, err := tsig.NewKey(wire.MustParseName("k.example."), tsig.HMACSHA384, []byte("a-real-secret-that-is-bytes"))
+	require.NoError(t, err)
 	msg := mkMessage(t)
 	now := time.Unix(1234567890, 0).UTC()
 	signed, err := tsig.Sign(msg, key, now, time.Second)

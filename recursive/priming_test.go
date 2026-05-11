@@ -16,15 +16,23 @@ import (
 func primingResponseDialer(t *testing.T, newA, newB netip.Addr) stubDialer {
 	t.Helper()
 	return stubDialer{fn: func(_ context.Context, _ netip.AddrPort, q wire.Message) (wire.Message, error) {
+		ar2, err := rdata.NewA(newB)
+		require.NoError(t, err)
+		ar, err := rdata.NewA(newA)
+		require.NoError(t, err)
+		nsrd2, err := rdata.NewNS(wire.MustParseName("b.root-servers.test."))
+		require.NoError(t, err)
+		nsrd, err := rdata.NewNS(wire.MustParseName("a.root-servers.test."))
+		require.NoError(t, err)
 		return mkResp(t, q, func(b *wire.MessageBuilder) *wire.MessageBuilder {
 			ns1 := wire.NewRecord(wire.RootName(), 86400*time.Second,
-				rdata.MustNewNS(wire.MustParseName("a.root-servers.test.")))
+				nsrd)
 			ns2 := wire.NewRecord(wire.RootName(), 86400*time.Second,
-				rdata.MustNewNS(wire.MustParseName("b.root-servers.test.")))
+				nsrd2)
 			a1 := wire.NewRecord(wire.MustParseName("a.root-servers.test."),
-				86400*time.Second, rdata.MustNewA(newA))
+				86400*time.Second, ar)
 			a2 := wire.NewRecord(wire.MustParseName("b.root-servers.test."),
-				86400*time.Second, rdata.MustNewA(newB))
+				86400*time.Second, ar2)
 			return b.Authoritative(true).
 				Answer(ns1).Answer(ns2).
 				Additional(a1).Additional(a2)

@@ -52,12 +52,14 @@ func TestAggressiveNSECSynthesisesNXDOMAIN(t *testing.T) {
 			// match — plus the zone's SOA. The aggressive cache
 			// requires the wildcard-denying NSEC to be present
 			// before it will synthesize for other names.
-			soa := wire.NewRecord(wire.MustParseName("example."), 5*time.Minute,
-				rdata.MustNewSOA(
+			soa2, err := rdata.NewSOA(
 					wire.MustParseName("ns.example."),
 					wire.MustParseName("hm.example."),
 					1, 7200, 3600, 1209600, 60,
-				))
+				)
+			require.NoError(t, err)
+			soa := wire.NewRecord(wire.MustParseName("example."), 5*time.Minute,
+				soa2)
 			nsec := wire.NewRecord(wire.MustParseName("a.example."), 5*time.Minute,
 				rdata.NewNSEC(wire.MustParseName("d.example."), nil))
 			// Wildcard-denying NSEC: covers *.example.
@@ -121,12 +123,14 @@ func TestAggressiveNSECDisabledByDefault(t *testing.T) {
 	dialer := stubDialer{
 		fn: func(_ context.Context, _ netip.AddrPort, q wire.Message) (wire.Message, error) {
 			upstreamCalls.Add(1)
-			soa := wire.NewRecord(wire.MustParseName("example."), 5*time.Minute,
-				rdata.MustNewSOA(
+			soa3, err := rdata.NewSOA(
 					wire.MustParseName("ns.example."),
 					wire.MustParseName("hm.example."),
 					1, 7200, 3600, 1209600, 60,
-				))
+				)
+			require.NoError(t, err)
+			soa := wire.NewRecord(wire.MustParseName("example."), 5*time.Minute,
+				soa3)
 			nsec := wire.NewRecord(wire.MustParseName("a.example."), 5*time.Minute,
 				rdata.NewNSEC(wire.MustParseName("d.example."), nil))
 			return mkResp(t, q, func(b *wire.MessageBuilder) *wire.MessageBuilder {

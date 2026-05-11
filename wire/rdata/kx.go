@@ -30,16 +30,6 @@ func NewKX(pref uint16, exchanger wirebb.Name) (KX, error) {
 	}
 	return KX{pref: pref, exchange: exchanger}, nil
 }
-
-// MustNewKX is the panic-on-error variant of [NewKX].
-func MustNewKX(pref uint16, exchanger wirebb.Name) KX {
-	k, err := NewKX(pref, exchanger)
-	if err != nil {
-		panic(err)
-	}
-	return k
-}
-
 func unpackKX(u *wirebb.Unpacker, rdlen int) (KX, error) {
 	var zero KX
 	end := u.Off() + rdlen

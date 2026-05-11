@@ -5,7 +5,7 @@ import (
 
 	"github.com/lestrrat-go/acidns/wire"
 	"github.com/lestrrat-go/acidns/wire/rrtype"
-	"github.com/lestrrat-go/acidns/wire/wiretest"
+	"github.com/lestrrat-go/acidns/internal/wiretest"
 )
 
 // FuzzUnmarshal feeds wire.Unmarshal arbitrary bytes. The contract: must
@@ -15,11 +15,17 @@ import (
 func FuzzUnmarshal(f *testing.F) {
 	// Seed corpus: a couple of valid messages so the fuzzer has a base to
 	// mutate, plus some pathologically-short inputs.
-	q := wiretest.Query(wire.MustParseName("example.com"), rrtype.A)
+	q, err := wiretest.Query(wire.MustParseName("example.com"), rrtype.A)
+	if err != nil {
+		f.Fatal(err)
+	}
 	if buf, err := wire.Marshal(q); err == nil {
 		f.Add(buf)
 	}
-	resp := wiretest.NXDOMAIN(q)
+	resp, err := wiretest.NXDOMAIN(q)
+	if err != nil {
+		f.Fatal(err)
+	}
 	if buf, err := wire.Marshal(resp); err == nil {
 		f.Add(buf)
 	}

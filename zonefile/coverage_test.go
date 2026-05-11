@@ -420,7 +420,8 @@ func TestWriteUnknownRData(t *testing.T) {
 // formatRDataPresentation's switch (e.g. SRV).
 func TestWriteUnsupportedRData(t *testing.T) {
 	t.Parallel()
-	srv := rdata.MustNewSRV(0, 0, 80, wire.MustParseName("host.example.com"))
+	srv, err := rdata.NewSRV(0, 0, 80, wire.MustParseName("host.example.com"))
+	require.NoError(t, err)
 	owner := wire.MustParseName("_http._tcp.example.com")
 	rec := wire.NewRecordClass(owner, rrtype.ClassIN, 60*time.Second, srv)
 
@@ -429,7 +430,7 @@ func TestWriteUnsupportedRData(t *testing.T) {
 		records: []wire.Record{rec},
 	}
 	var buf bytes.Buffer
-	err := zonefile.Write(&buf, zsyn)
+	err = zonefile.Write(&buf, zsyn)
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "cannot present rdata")
 }
@@ -439,8 +440,10 @@ func TestWriteUnsupportedRData(t *testing.T) {
 func TestWriteNonSuffixOwner(t *testing.T) {
 	t.Parallel()
 	owner := wire.MustParseName("foreign.invalid")
+	ar, err := rdata.NewA(parseAddr(t, "192.0.2.99"))
+	require.NoError(t, err)
 	rec := wire.NewRecordClass(owner, rrtype.ClassIN, 60*time.Second,
-		rdata.MustNewA(parseAddr(t, "192.0.2.99")))
+		ar)
 	zsyn := &syntheticZone{
 		origin:  wire.MustParseName("example.com"),
 		records: []wire.Record{rec},

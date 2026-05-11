@@ -40,7 +40,8 @@ func TestSigningAlgorithmsFromChain(t *testing.T) {
 }
 
 func fakeDS(alg rdata.DNSSECAlgorithm) rdata.DS {
-	return rdata.NewDS(0, alg, rdata.DigestSHA256, []byte{0})
+	ds, _ := rdata.NewDS(0, alg, rdata.DigestSHA256, make([]byte, 32))
+	return ds
 }
 
 // TestVerifyRRsetAllAlgsRejectsMissingAlgorithm constructs an answer
@@ -59,9 +60,11 @@ func TestVerifyRRsetAllAlgsRejectsMissingAlgorithm(t *testing.T) {
 	}
 	// One placeholder record so the "empty rrset" guard does not fire
 	// before we reach the algorithm-coverage check.
+	ar, err := rdata.NewA(netip.MustParseAddr("192.0.2.1"))
+	require.NoError(t, err)
 	rec := wire.NewRecord(wire.MustParseName("example."), 0,
-		rdata.MustNewA(netip.MustParseAddr("192.0.2.1")))
-	err := w.verifyRRsetAllAlgs([]wire.Record{rec}, nil, nil, required)
+		ar)
+	err = w.verifyRRsetAllAlgs([]wire.Record{rec}, nil, nil, required)
 	require.ErrorIs(t, err, ErrAlgorithmIncomplete)
 }
 
@@ -116,14 +119,18 @@ func makeNSEC3Record(t *testing.T, hash, next []byte, types []rrtype.Type, flags
 	label := validatorbb.Base32HexEncode(hash)
 	owner, err := wire.NameFromLabels(label, "example")
 	require.NoError(t, err)
-	return wire.NewRecord(owner, time.Hour, rdata.MustNewNSEC3(1, flags, 0, nil, next, types))
+	nsec3, err := rdata.NewNSEC3(1, flags, 0, nil, next, types)
+	require.NoError(t, err)
+	return wire.NewRecord(owner, time.Hour, nsec3)
 }
 
 func TestNSEC3MatchSkipsNonNSEC3(t *testing.T) {
 	t.Parallel()
 	// Records that are not NSEC3 are ignored.
+	nsrd, err := rdata.NewNS(wire.MustParseName("ns.example."))
+	require.NoError(t, err)
 	a := wire.NewRecord(wire.MustParseName("x.example."), time.Hour,
-		rdata.MustNewNS(wire.MustParseName("ns.example.")))
+		nsrd)
 	params := nsec3Params{alg: 1, iterations: 0, salt: nil}
 	_, ok := nsec3Match(wire.MustParseName("foo.example."), params, []wire.Record{a})
 	require.False(t, ok)
@@ -182,10 +189,14 @@ func TestNSEC3OwnerHashEmptyName(t *testing.T) {
 func TestExtractNSEC3ParamsMismatch(t *testing.T) {
 	t.Parallel()
 	// Two NSEC3s with different iterations/salt → params disagree.
+	nsec32, err := rdata.NewNSEC3(1, 0, 5, []byte{1}, make([]byte, 20), nil)
+	require.NoError(t, err)
 	r1 := wire.NewRecord(wire.MustParseName("aaa.example."), time.Hour,
-		rdata.MustNewNSEC3(1, 0, 5, []byte{1}, make([]byte, 20), nil))
+		nsec32)
+	nsec33, err := rdata.NewNSEC3(1, 0, 10, []byte{1}, make([]byte, 20), nil)
+	require.NoError(t, err)
 	r2 := wire.NewRecord(wire.MustParseName("bbb.example."), time.Hour,
-		rdata.MustNewNSEC3(1, 0, 10, []byte{1}, make([]byte, 20), nil))
+		nsec33)
 	_, ok := extractNSEC3Params([]wire.Record{r1, r2})
 	require.False(t, ok)
 }
@@ -198,8 +209,10 @@ func TestNSEC3ProveDenialNoParams(t *testing.T) {
 
 func TestNSEC3ProveDenialIterationsTooHigh(t *testing.T) {
 	t.Parallel()
+	nsec34, err := rdata.NewNSEC3(1, 0, MaxNSEC3Iterations+1, nil, make([]byte, 20), nil)
+	require.NoError(t, err)
 	r := wire.NewRecord(wire.MustParseName("aaa.example."), time.Hour,
-		rdata.MustNewNSEC3(1, 0, MaxNSEC3Iterations+1, nil, make([]byte, 20), nil))
+		nsec34)
 	res := nsec3ProveDenial(wire.MustParseName("foo.example."), rrtype.A,
 		wire.MustParseName("example."), []wire.Record{r})
 	// RFC 9276 §3.2: a high iteration count is reported as an
@@ -316,7 +329,9 @@ func makeNSEC3RecordAt(t *testing.T, hash, next []byte, types []rrtype.Type, fla
 	label := validatorbb.Base32HexEncode(hash)
 	owner, err := wire.NameFromLabels(append([]string{label}, suffix...)...)
 	require.NoError(t, err)
-	return wire.NewRecord(owner, time.Hour, rdata.MustNewNSEC3(1, flags, 0, nil, next, types))
+	nsec35, err := rdata.NewNSEC3(1, flags, 0, nil, next, types)
+	require.NoError(t, err)
+	return wire.NewRecord(owner, time.Hour, nsec35)
 }
 
 // TestFindNSEC3ClosestEncloserMatchAtZoneApex covers the zone-equal branch
@@ -402,8 +417,10 @@ func TestNSEC3ProveDenialNoEncloser(t *testing.T) {
 	t.Parallel()
 	// One NSEC3 with a deliberately unrelated owner-hash so no parent of
 	// qname matches.
+	nsec36, err := rdata.NewNSEC3(1, 0, 0, nil, make([]byte, 20), []rrtype.Type{rrtype.A})
+	require.NoError(t, err)
 	rec := wire.NewRecord(wire.MustParseName("0.example."), time.Hour,
-		rdata.MustNewNSEC3(1, 0, 0, nil, make([]byte, 20), []rrtype.Type{rrtype.A}))
+		nsec36)
 	res := nsec3ProveDenial(
 		wire.MustParseName("missing.example."),
 		rrtype.AAAA,
@@ -417,8 +434,10 @@ func TestNSEC3ProveDenialNoEncloser(t *testing.T) {
 // extractNSEC3Params (single-NSEC3 fast path).
 func TestExtractNSEC3ParamsFirstWins(t *testing.T) {
 	t.Parallel()
+	nsec37, err := rdata.NewNSEC3(1, 0, 5, []byte{1, 2, 3}, make([]byte, 20), nil)
+	require.NoError(t, err)
 	r1 := wire.NewRecord(wire.MustParseName("aaa.example."), time.Hour,
-		rdata.MustNewNSEC3(1, 0, 5, []byte{1, 2, 3}, make([]byte, 20), nil))
+		nsec37)
 	got, ok := extractNSEC3Params([]wire.Record{r1})
 	require.True(t, ok)
 	require.Equal(t, uint16(5), got.iterations)

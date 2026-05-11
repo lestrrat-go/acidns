@@ -170,25 +170,31 @@ func TestUnglueOutOfBailiwickReferral(t *testing.T) {
 
 			switch {
 			case server == root && qname == "www.example." && qtype == rrtype.A:
+				nsrd, err := rdata.NewNS(wire.MustParseName("ns1.outsider."))
+				require.NoError(t, err)
 				// referral to ns1.outsider., no glue.
 				return mkResp(t, q, func(b *wire.MessageBuilder) *wire.MessageBuilder {
 					ns := wire.NewRecord(wire.MustParseName("example."),
 						60*time.Second,
-						rdata.MustNewNS(wire.MustParseName("ns1.outsider.")))
+						nsrd)
 					return b.Authority(ns)
 				}), nil
 			case server == root && qname == "ns1.outsider." && qtype == rrtype.A:
+				ar, err := rdata.NewA(netip.MustParseAddr("2.0.0.2"))
+				require.NoError(t, err)
 				return mkResp(t, q, func(b *wire.MessageBuilder) *wire.MessageBuilder {
 					a := wire.NewRecord(wire.MustParseName("ns1.outsider."),
 						60*time.Second,
-						rdata.MustNewA(netip.MustParseAddr("2.0.0.2")))
+						ar)
 					return b.Authoritative(true).Answer(a)
 				}), nil
 			case server == child && qname == "www.example." && qtype == rrtype.A:
+				ar2, err := rdata.NewA(netip.MustParseAddr("192.0.2.55"))
+				require.NoError(t, err)
 				return mkResp(t, q, func(b *wire.MessageBuilder) *wire.MessageBuilder {
 					a := wire.NewRecord(wire.MustParseName("www.example."),
 						60*time.Second,
-						rdata.MustNewA(netip.MustParseAddr("192.0.2.55")))
+						ar2)
 					return b.Authoritative(true).Answer(a)
 				}), nil
 			}
@@ -220,19 +226,25 @@ func TestGlueAAAA(t *testing.T) {
 		fn: func(_ context.Context, server netip.AddrPort, q wire.Message) (wire.Message, error) {
 			question := q.Questions()[0]
 			if server == root {
+				aaaa, err := rdata.NewAAAA(netip.MustParseAddr("2001:db8::1"))
+				require.NoError(t, err)
+				nsrd2, err := rdata.NewNS(wire.MustParseName("ns1.example."))
+				require.NoError(t, err)
 				return mkResp(t, q, func(b *wire.MessageBuilder) *wire.MessageBuilder {
 					ns := wire.NewRecord(wire.MustParseName("example."),
 						60*time.Second,
-						rdata.MustNewNS(wire.MustParseName("ns1.example.")))
+						nsrd2)
 					glue := wire.NewRecord(wire.MustParseName("ns1.example."),
 						60*time.Second,
-						rdata.MustNewAAAA(netip.MustParseAddr("2001:db8::1")))
+						aaaa)
 					return b.Authority(ns).Additional(glue)
 				}), nil
 			}
 			if server == child {
+				ar3, err := rdata.NewA(netip.MustParseAddr("192.0.2.7"))
+				require.NoError(t, err)
 				a := wire.NewRecord(question.Name(), 60*time.Second,
-					rdata.MustNewA(netip.MustParseAddr("192.0.2.7")))
+					ar3)
 				return mkResp(t, q, func(b *wire.MessageBuilder) *wire.MessageBuilder {
 					return b.Authoritative(true).Answer(a)
 				}), nil
@@ -335,8 +347,10 @@ func TestRefusedTreatedAsLame(t *testing.T) {
 				}), nil
 			}
 			question := q.Questions()[0]
+			ar4, err := rdata.NewA(netip.MustParseAddr("192.0.2.1"))
+			require.NoError(t, err)
 			ans := wire.NewRecord(question.Name(), 60*time.Second,
-				rdata.MustNewA(netip.MustParseAddr("192.0.2.1")))
+				ar4)
 			return mkResp(t, q, func(b *wire.MessageBuilder) *wire.MessageBuilder {
 				return b.Authoritative(true).Answer(ans)
 			}), nil
@@ -403,15 +417,21 @@ func TestServeDNSWithAuthorityAndAdditional(t *testing.T) {
 	dialer := stubDialer{
 		fn: func(_ context.Context, _ netip.AddrPort, q wire.Message) (wire.Message, error) {
 			question := q.Questions()[0]
-			soa := wire.NewRecord(wire.MustParseName("example."), 30*time.Second,
-				rdata.MustNewSOA(
+			soa2, err := rdata.NewSOA(
 					wire.MustParseName("ns.example."),
 					wire.MustParseName("hm.example."),
-					1, 60*time.Second, 60*time.Second, 60*time.Second, 30*time.Second))
+					1, 60*time.Second, 60*time.Second, 60*time.Second, 30*time.Second)
+			require.NoError(t, err)
+			soa := wire.NewRecord(wire.MustParseName("example."), 30*time.Second,
+				soa2)
+			nsrd3, err := rdata.NewNS(wire.MustParseName("ns.example."))
+			require.NoError(t, err)
 			ns := wire.NewRecord(wire.MustParseName("example."), 60*time.Second,
-				rdata.MustNewNS(wire.MustParseName("ns.example.")))
+				nsrd3)
+			ar5, err := rdata.NewA(netip.MustParseAddr("192.0.2.1"))
+			require.NoError(t, err)
 			glue := wire.NewRecord(wire.MustParseName("ns.example."), 60*time.Second,
-				rdata.MustNewA(netip.MustParseAddr("192.0.2.1")))
+				ar5)
 			_ = question
 			return mkResp(t, q, func(b *wire.MessageBuilder) *wire.MessageBuilder {
 				// NXDOMAIN with SOA in authority and a glue in additional, AD set.
@@ -461,8 +481,10 @@ func TestServeDNSBogusServfailWithEDE(t *testing.T) {
 	dialer := stubDialer{
 		fn: func(_ context.Context, _ netip.AddrPort, q wire.Message) (wire.Message, error) {
 			question := q.Questions()[0]
+			ar6, err := rdata.NewA(netip.MustParseAddr("192.0.2.1"))
+			require.NoError(t, err)
 			a := wire.NewRecord(question.Name(), 60*time.Second,
-				rdata.MustNewA(netip.MustParseAddr("192.0.2.1")))
+				ar6)
 			return mkResp(t, q, func(b *wire.MessageBuilder) *wire.MessageBuilder {
 				return b.Authoritative(true).Answer(a)
 			}), nil
@@ -503,8 +525,10 @@ func TestValidatorErrorPropagated(t *testing.T) {
 	dialer := stubDialer{
 		fn: func(_ context.Context, _ netip.AddrPort, q wire.Message) (wire.Message, error) {
 			question := q.Questions()[0]
+			ar7, err := rdata.NewA(netip.MustParseAddr("192.0.2.1"))
+			require.NoError(t, err)
 			a := wire.NewRecord(question.Name(), 60*time.Second,
-				rdata.MustNewA(netip.MustParseAddr("192.0.2.1")))
+				ar7)
 			return mkResp(t, q, func(b *wire.MessageBuilder) *wire.MessageBuilder {
 				return b.Authoritative(true).Answer(a)
 			}), nil
@@ -541,8 +565,10 @@ func TestTCPFallbackOnTruncated(t *testing.T) {
 	})
 	tcpHandler := acidns.HandlerFunc(func(_ context.Context, w acidns.ResponseWriter, q wire.Message) {
 		question := q.Questions()[0]
+		ar8, err := rdata.NewA(netip.MustParseAddr("192.0.2.99"))
+		require.NoError(t, err)
 		a := wire.NewRecord(question.Name(), 60*time.Second,
-			rdata.MustNewA(netip.MustParseAddr("192.0.2.99")))
+			ar8)
 		resp, _ := wire.NewMessageBuilder().
 			ID(q.ID()).
 			Response(true).
@@ -628,8 +654,10 @@ func TestNonAAResponseTreatedAsAuthoritative(t *testing.T) {
 	dialer := stubDialer{
 		fn: func(_ context.Context, _ netip.AddrPort, q wire.Message) (wire.Message, error) {
 			question := q.Questions()[0]
+			ar9, err := rdata.NewA(netip.MustParseAddr("192.0.2.50"))
+			require.NoError(t, err)
 			a := wire.NewRecord(question.Name(), 60*time.Second,
-				rdata.MustNewA(netip.MustParseAddr("192.0.2.50")))
+				ar9)
 			return mkResp(t, q, func(b *wire.MessageBuilder) *wire.MessageBuilder {
 				return b.Answer(a) // AA=false
 			}), nil
@@ -655,8 +683,10 @@ func TestResolveCNAMEDirectly(t *testing.T) {
 	dialer := stubDialer{
 		fn: func(_ context.Context, _ netip.AddrPort, q wire.Message) (wire.Message, error) {
 			question := q.Questions()[0]
+			cn, err := rdata.NewCNAME(wire.MustParseName("alias.example."))
+			require.NoError(t, err)
 			cname := wire.NewRecord(question.Name(), 60*time.Second,
-				rdata.MustNewCNAME(wire.MustParseName("alias.example.")))
+				cn)
 			return mkResp(t, q, func(b *wire.MessageBuilder) *wire.MessageBuilder {
 				return b.Authoritative(true).Answer(cname)
 			}), nil
@@ -681,12 +711,14 @@ func TestNegativeCacheTTLTakesRecordTTLWhenSmaller(t *testing.T) {
 	t.Parallel()
 	dialer := stubDialer{
 		fn: func(_ context.Context, _ netip.AddrPort, q wire.Message) (wire.Message, error) {
-			// Record TTL = 5s, SOA MINIMUM = 30s → cache uses the smaller TTL.
-			soa := wire.NewRecord(wire.MustParseName("example."), 5*time.Second,
-				rdata.MustNewSOA(
+			soa3, err := rdata.NewSOA(
 					wire.MustParseName("ns.example."),
 					wire.MustParseName("hm.example."),
-					1, 60*time.Second, 60*time.Second, 60*time.Second, 30*time.Second))
+					1, 60*time.Second, 60*time.Second, 60*time.Second, 30*time.Second)
+			require.NoError(t, err)
+			// Record TTL = 5s, SOA MINIMUM = 30s → cache uses the smaller TTL.
+			soa := wire.NewRecord(wire.MustParseName("example."), 5*time.Second,
+				soa3)
 			return mkResp(t, q, func(b *wire.MessageBuilder) *wire.MessageBuilder {
 				return b.Authoritative(true).RCODE(wire.RCODENXDomain).Authority(soa)
 			}), nil
@@ -714,16 +746,20 @@ func TestHasAnswerForCNAMEAtOwner(t *testing.T) {
 		fn: func(_ context.Context, _ netip.AddrPort, q wire.Message) (wire.Message, error) {
 			question := q.Questions()[0]
 			if question.Name().Equal(wire.MustParseName("www.example.")) {
+				cn2, err := rdata.NewCNAME(target)
+				require.NoError(t, err)
 				cname := wire.NewRecord(question.Name(), 60*time.Second,
-					rdata.MustNewCNAME(target))
+					cn2)
 				// AA=false to drive the hasAnswerFor branch.
 				return mkResp(t, q, func(b *wire.MessageBuilder) *wire.MessageBuilder {
 					return b.Answer(cname)
 				}), nil
 			}
 			// Resolve the alias to an A.
+			ar10, err := rdata.NewA(netip.MustParseAddr("192.0.2.77"))
+			require.NoError(t, err)
 			a := wire.NewRecord(question.Name(), 60*time.Second,
-				rdata.MustNewA(netip.MustParseAddr("192.0.2.77")))
+				ar10)
 			return mkResp(t, q, func(b *wire.MessageBuilder) *wire.MessageBuilder {
 				return b.Authoritative(true).Answer(a)
 			}), nil
@@ -751,12 +787,16 @@ func TestIterationLimitReached(t *testing.T) {
 			count.Add(1)
 			// Each response is a referral to the next "level"; we keep
 			// returning glue at 127.0.0.1:1 (same root) so we just spin.
+			nsrd4, err := rdata.NewNS(wire.MustParseName("ns.example."))
+			require.NoError(t, err)
 			ns := wire.NewRecord(wire.MustParseName("example."),
 				60*time.Second,
-				rdata.MustNewNS(wire.MustParseName("ns.example.")))
+				nsrd4)
+			ar11, err := rdata.NewA(netip.MustParseAddr("127.0.0.1"))
+			require.NoError(t, err)
 			glue := wire.NewRecord(wire.MustParseName("ns.example."),
 				60*time.Second,
-				rdata.MustNewA(netip.MustParseAddr("127.0.0.1")))
+				ar11)
 			return mkResp(t, q, func(b *wire.MessageBuilder) *wire.MessageBuilder {
 				return b.Authority(ns).Additional(glue)
 			}), nil
@@ -788,8 +828,10 @@ func TestResolveSingleflightCoalesces(t *testing.T) {
 			calls.Add(1)
 			<-release // hold all callers until they have all joined
 			question := q.Questions()[0]
+			ar12, err := rdata.NewA(netip.MustParseAddr("203.0.113.99"))
+			require.NoError(t, err)
 			a := wire.NewRecord(question.Name(), 60*time.Second,
-				rdata.MustNewA(netip.MustParseAddr("203.0.113.99")))
+				ar12)
 			return mkResp(t, q, func(b *wire.MessageBuilder) *wire.MessageBuilder {
 				return b.Authoritative(true).Answer(a)
 			}), nil

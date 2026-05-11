@@ -34,8 +34,10 @@ func TestCacheGetDecrementsTTL(t *testing.T) {
 
 	cache := recursive.NewMemoryCache(recursive.WithMemoryCacheClock(clk.Now))
 	name := wire.MustParseName("a.test.")
+	ar, err := rdata.NewA(netip.MustParseAddr("192.0.2.1"))
+	require.NoError(t, err)
 	rec := wire.NewRecord(name, 300*time.Second,
-		rdata.MustNewA(netip.MustParseAddr("192.0.2.1")))
+		ar)
 	cache.Put(name, rrtype.ClassIN, rrtype.A, mustEntry(t, recursive.NewEntryBuilder().
 		Answer([]wire.Record{rec}).
 		ExpiresAt(start.Add(300*time.Second))))

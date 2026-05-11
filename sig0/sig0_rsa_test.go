@@ -26,7 +26,8 @@ func TestSignVerifyRSASHA256(t *testing.T) {
 	pubWire = append(pubWire, byte(len(expBytes)))
 	pubWire = append(pubWire, expBytes...)
 	pubWire = append(pubWire, priv.N.Bytes()...)
-	key := rdata.NewDNSKEY(257, 3, rdata.AlgRSASHA256, pubWire)
+	key, err := rdata.NewDNSKEY(257, 3, rdata.AlgRSASHA256, pubWire)
+	require.NoError(t, err)
 
 	signer := wire.MustParseName("test.signer")
 	msg := mkMessage(t)
@@ -50,7 +51,8 @@ func TestVerifyUnsupportedAlgorithm(t *testing.T) {
 	// Algorithm 99 is unassigned; key+SIG share it so the alg-equality
 	// check passes, keytag matches, and verifySignature's default branch
 	// returns ErrUnsupportedAlg.
-	key := rdata.NewDNSKEY(257, 3, rdata.DNSSECAlgorithm(99), nil)
+	key, err := rdata.NewDNSKEY(257, 3, rdata.DNSSECAlgorithm(99), nil)
+	require.NoError(t, err)
 	signed, err := sig0.Sign(msg, signer, rdata.DNSSECAlgorithm(99), dnssec.KeyTag(key),
 		func(_ []byte) ([]byte, error) { return []byte{1, 2, 3}, nil },
 		time.Now(), time.Hour)

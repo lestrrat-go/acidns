@@ -76,12 +76,14 @@ func startDoT(t *testing.T) (netip.AddrPort, *tls.Config) {
 				if err != nil {
 					return
 				}
+				ar, err := rdata.NewA(netip.MustParseAddr("198.51.100.42"))
+				require.NoError(t, err)
 				resp, _ := wire.NewMessageBuilder().
 					ID(req.ID()).
 					Response(true).
 					Question(req.Questions()[0]).
 					Answer(wire.NewRecord(req.Questions()[0].Name(), time.Minute,
-						rdata.MustNewA(netip.MustParseAddr("198.51.100.42")))).
+						ar)).
 					Build()
 				wire, _ := wire.Marshal(resp)
 				binary.BigEndian.PutUint16(lenBuf[:], uint16(len(wire)))

@@ -231,27 +231,6 @@ func NewHTTPS(priority uint16, target wirebb.Name, params ...SVCBParam) (HTTPS, 
 	}
 	return HTTPS{body}, nil
 }
-
-// MustNewSVCB is like NewSVCB but panics on validation failure. Intended
-// for static caller-known-good literals (tests, examples).
-func MustNewSVCB(priority uint16, target wirebb.Name, params ...SVCBParam) SVCB {
-	r, err := NewSVCB(priority, target, params...)
-	if err != nil {
-		panic(err)
-	}
-	return r
-}
-
-// MustNewHTTPS is like NewHTTPS but panics on validation failure. Intended
-// for static caller-known-good literals (tests, examples).
-func MustNewHTTPS(priority uint16, target wirebb.Name, params ...SVCBParam) HTTPS {
-	r, err := NewHTTPS(priority, target, params...)
-	if err != nil {
-		panic(err)
-	}
-	return r
-}
-
 func newSvcbBody(priority uint16, target wirebb.Name, params []SVCBParam) (svcbBody, error) {
 	if !target.IsValid() {
 		return svcbBody{}, fmt.Errorf("%w: SVCB target name is invalid", ErrInvalidRData)

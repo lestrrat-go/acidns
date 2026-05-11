@@ -19,7 +19,7 @@ import (
 	"github.com/lestrrat-go/acidns/wire"
 	"github.com/lestrrat-go/acidns/wire/rdata"
 	"github.com/lestrrat-go/acidns/wire/rrtype"
-	"github.com/lestrrat-go/acidns/wire/wiretest"
+	"github.com/lestrrat-go/acidns/internal/wiretest"
 )
 
 type fixture struct {
@@ -83,7 +83,10 @@ func main() {
 	ede := wire.NewExtendedError(wire.ExtendedErrorOther, "fuzz fixture")
 
 	// SRV target.
-	srv := rdata.MustNewSRV(10, 60, 5060, sipTarget)
+	srv, err := rdata.NewSRV(10, 60, 5060, sipTarget)
+	if err != nil {
+		panic(err)
+	}
 
 	// NAPTR.
 	naptr, err := rdata.NewNAPTR(100, 10, "u", "E2U+sip",
@@ -118,16 +121,22 @@ func main() {
 	for i := range dnskeyPub {
 		dnskeyPub[i] = byte(i + 7)
 	}
-	dnskey := rdata.NewDNSKEY(rdata.DNSKEYFlagZone, 3,
+	dnskey, err := rdata.NewDNSKEY(rdata.DNSKEYFlagZone, 3,
 		rdata.AlgECDSAP256SHA256, dnskeyPub)
+	if err != nil {
+		panic(err)
+	}
 
 	// DS: matching SHA-256.
 	dsDigest := make([]byte, 32)
 	for i := range dsDigest {
 		dsDigest[i] = byte(0x10 + i)
 	}
-	ds := rdata.NewDS(12345, rdata.AlgECDSAP256SHA256,
+	ds, err := rdata.NewDS(12345, rdata.AlgECDSAP256SHA256,
 		rdata.DigestSHA256, dsDigest)
+	if err != nil {
+		panic(err)
+	}
 
 	// RRSIG over A, dummy 64-byte signature.
 	rrsigSig := make([]byte, 64)
@@ -174,54 +183,76 @@ func main() {
 		panic(err)
 	}
 
-	mkResp := func(qname wire.Name, qtype rrtype.Type, ans ...wire.Record) wire.Message {
-		return wiretest.Response(wiretest.Query(qname, qtype), ans...)
+	exit := func(err error) {
+		if err != nil {
+			fmt.Fprintln(os.Stderr, err)
+			os.Exit(1)
+		}
 	}
+	mkResp := func(qname wire.Name, qtype rrtype.Type, ans ...wire.Record) wire.Message {
+		q, err := wiretest.Query(qname, qtype)
+		exit(err)
+		r, err := wiretest.Response(q, ans...)
+		exit(err)
+		return r
+	}
+
+	aR, err := wiretest.ARecord(exampleCom, 5*time.Minute, "192.0.2.1")
+	exit(err)
+	aaaaR, err := wiretest.AAAARecord(exampleCom, 5*time.Minute, "2001:db8::1")
+	exit(err)
+	mxR, err := wiretest.MXRecord(exampleCom, time.Hour, 10, mxHost)
+	exit(err)
+	txtR, err := wiretest.TXTRecord(exampleCom, time.Hour, "v=spf1 -all")
+	exit(err)
+	cnameR, err := wiretest.CNAMERecord(wwwExample, time.Hour, exampleCom)
+	exit(err)
+	soaR, err := wiretest.SOARecord(exampleCom, time.Hour,
+		ns1, wire.MustParseName("hostmaster.example.com."),
+		2024010101, 7200*time.Second, 3600*time.Second,
+		1209600*time.Second, 3600*time.Second)
+	exit(err)
+	nsR1, err := wiretest.NSRecord(exampleCom, time.Hour, ns1)
+	exit(err)
+	nsR2, err := wiretest.NSRecord(exampleCom, time.Hour, ns2)
+	exit(err)
+	ptrR, err := wiretest.PTRRecord(revIPv4, time.Hour, wwwExample)
+	exit(err)
+	optQ, err := wiretest.Query(exampleCom, rrtype.A)
+	exit(err)
 
 	fixtures := []fixture{
 		{
 			name: "a", desc: "A query for example.com -> 192.0.2.1",
-			msg: mkResp(exampleCom, rrtype.A,
-				wiretest.ARecord(exampleCom, 5*time.Minute, "192.0.2.1")),
+			msg:  mkResp(exampleCom, rrtype.A, aR),
 		},
 		{
 			name: "aaaa", desc: "AAAA query for example.com -> 2001:db8::1",
-			msg: mkResp(exampleCom, rrtype.AAAA,
-				wiretest.AAAARecord(exampleCom, 5*time.Minute, "2001:db8::1")),
+			msg:  mkResp(exampleCom, rrtype.AAAA, aaaaR),
 		},
 		{
 			name: "mx", desc: "MX query for example.com -> 10 mx1.example.com",
-			msg: mkResp(exampleCom, rrtype.MX,
-				wiretest.MXRecord(exampleCom, time.Hour, 10, mxHost)),
+			msg:  mkResp(exampleCom, rrtype.MX, mxR),
 		},
 		{
 			name: "txt", desc: "TXT query for example.com -> v=spf1 -all",
-			msg: mkResp(exampleCom, rrtype.TXT,
-				wiretest.TXTRecord(exampleCom, time.Hour, "v=spf1 -all")),
+			msg:  mkResp(exampleCom, rrtype.TXT, txtR),
 		},
 		{
 			name: "cname", desc: "CNAME www.example.com -> example.com",
-			msg: mkResp(wwwExample, rrtype.CNAME,
-				wiretest.CNAMERecord(wwwExample, time.Hour, exampleCom)),
+			msg:  mkResp(wwwExample, rrtype.CNAME, cnameR),
 		},
 		{
 			name: "soa", desc: "SOA for example.com",
-			msg: mkResp(exampleCom, rrtype.SOA,
-				wiretest.SOARecord(exampleCom, time.Hour,
-					ns1, wire.MustParseName("hostmaster.example.com."),
-					2024010101, 7200*time.Second, 3600*time.Second,
-					1209600*time.Second, 3600*time.Second)),
+			msg:  mkResp(exampleCom, rrtype.SOA, soaR),
 		},
 		{
 			name: "ns", desc: "NS for example.com -> ns1, ns2",
-			msg: mkResp(exampleCom, rrtype.NS,
-				wiretest.NSRecord(exampleCom, time.Hour, ns1),
-				wiretest.NSRecord(exampleCom, time.Hour, ns2)),
+			msg:  mkResp(exampleCom, rrtype.NS, nsR1, nsR2),
 		},
 		{
 			name: "ptr", desc: "PTR 1.0.0.127.in-addr.arpa -> www.example.com",
-			msg: mkResp(revIPv4, rrtype.PTR,
-				wiretest.PTRRecord(revIPv4, time.Hour, wwwExample)),
+			msg:  mkResp(revIPv4, rrtype.PTR, ptrR),
 		},
 		{
 			name: "srv", desc: "SRV _sip._udp.example.com -> sipserver",
@@ -275,7 +306,7 @@ func main() {
 		},
 		{
 			name: "opt", desc: "OPT (EDNS) response with EDE option",
-			msg: mustEDNSResponse(wiretest.Query(exampleCom, rrtype.A), ede),
+			msg:  mustEDNSResponse(optQ, ede),
 		},
 		{
 			name: "svcb", desc: "SVCB _dns.example.com",

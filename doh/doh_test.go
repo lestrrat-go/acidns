@@ -47,12 +47,14 @@ func makeServer(t *testing.T, expectedMethod string) *httptest.Server {
 			http.Error(w, err.Error(), http.StatusBadRequest)
 			return
 		}
+		ar, err := rdata.NewA(netip.MustParseAddr("198.51.100.99"))
+		require.NoError(t, err)
 		resp, _ := wire.NewMessageBuilder().
 			ID(req.ID()).
 			Response(true).
 			Question(req.Questions()[0]).
 			Answer(wire.NewRecord(req.Questions()[0].Name(), time.Minute,
-				rdata.MustNewA(netip.MustParseAddr("198.51.100.99")))).
+				ar)).
 			Build()
 		out, _ := wire.Marshal(resp)
 		w.Header().Set("Content-Type", "application/dns-message")

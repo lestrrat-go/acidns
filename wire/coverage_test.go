@@ -398,10 +398,12 @@ func TestLLQAndUpdateLease(t *testing.T) {
 func TestRDataAsMismatch(t *testing.T) {
 	t.Parallel()
 
+	ar2, err := rdata.NewA(netip.MustParseAddr("192.0.2.1"))
+	require.NoError(t, err)
 	rec := wire.NewRecord(
 		wirebb.MustParse("example.com"),
 		60*time.Second,
-		rdata.MustNewA(netip.MustParseAddr("192.0.2.1")),
+		ar2,
 	)
 
 	// Asking for AAAA on an A record returns false.
@@ -527,12 +529,16 @@ func TestNewRRsetFromRDatasErrors(t *testing.T) {
 
 	t.Run("Mismatch", func(t *testing.T) {
 		t.Parallel()
-		_, err := wire.NewRRsetFromRDatas(
+		aaaa, err := rdata.NewAAAA(netip.MustParseAddr("2001:db8::1"))
+		require.NoError(t, err)
+		ar3, err := rdata.NewA(netip.MustParseAddr("192.0.2.1"))
+		require.NoError(t, err)
+		_, err = wire.NewRRsetFromRDatas(
 			wirebb.MustParse("x."),
 			rrtype.ClassIN,
 			time.Minute,
-			rdata.MustNewA(netip.MustParseAddr("192.0.2.1")),
-			rdata.MustNewAAAA(netip.MustParseAddr("2001:db8::1")),
+			ar3,
+			aaaa,
 		)
 		require.ErrorIs(t, err, wire.ErrInvalidMessage)
 	})

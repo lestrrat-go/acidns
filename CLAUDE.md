@@ -42,7 +42,7 @@ acidns/                root: high-level convenience layer + UDP/TCP exchangers +
     rrtype/            RR type + class constants
     rdata/             rdata codecs (one file per RR type)
     wirebb/            "building blocks" — pure-function packer/unpacker, Name primitive
-    wiretest/          fixture builders for tests (Query, Response, NXDOMAIN, ARecord, ...)
+
     name.go            wire.Name (alias to wirebb.Name) + ParseName/MustParseName/etc.
   zonefile/            RFC 1035 §5 master-file parser + writer
     classless/         RFC 2317 classless in-addr.arpa helper

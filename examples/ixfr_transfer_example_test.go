@@ -51,18 +51,21 @@ func Example_ixfr_transfer() {
 	// Build a single-message IXFR response that takes the zone from
 	// serial 100 to serial 101: one A record removed, one added.
 	soa := func(serial uint32) wire.Record {
+		soaRD, _ := rdata.NewSOA(
+			wire.MustParseName("ns.example.com"),
+			wire.MustParseName("hm.example.com"),
+			serial,
+			7200*time.Second, 3600*time.Second, 1209600*time.Second, 60*time.Second,
+		)
 		return wire.NewRecord(wire.MustParseName("example.com"), 60*time.Second,
-			rdata.MustNewSOA(
-				wire.MustParseName("ns.example.com"),
-				wire.MustParseName("hm.example.com"),
-				serial,
-				7200*time.Second, 3600*time.Second, 1209600*time.Second, 60*time.Second,
-			))
+			soaRD)
 	}
+	ar, _ := rdata.NewA(netip.MustParseAddr("192.0.2.1"))
 	removed := wire.NewRecord(wire.MustParseName("a.example.com"), 60*time.Second,
-		rdata.MustNewA(netip.MustParseAddr("192.0.2.1")))
+		ar)
+	ar2, _ := rdata.NewA(netip.MustParseAddr("192.0.2.2"))
 	added := wire.NewRecord(wire.MustParseName("b.example.com"), 60*time.Second,
-		rdata.MustNewA(netip.MustParseAddr("192.0.2.2")))
+		ar2)
 
 	resp, err := wire.NewMessageBuilder().
 		ID(1).Response(true).
@@ -78,12 +81,16 @@ func Example_ixfr_transfer() {
 		return
 	}
 
-	clientSOA := rdata.MustNewSOA(
+	clientSOA, err := rdata.NewSOA(
 		wire.MustParseName("ns.example.com"),
 		wire.MustParseName("hm.example.com"),
 		100,
 		7200*time.Second, 3600*time.Second, 1209600*time.Second, 60*time.Second,
 	)
+	if err != nil {
+		fmt.Println("soa:", err)
+		return
+	}
 	ex := &fakeIXFRExchanger{s: &fakeIXFRStream{msgs: []wire.Message{resp}}}
 
 	xfer, err := ixfr.Start(context.Background(), ex, wire.MustParseName("example.com"), clientSOA)

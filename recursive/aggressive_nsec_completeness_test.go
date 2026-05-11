@@ -41,12 +41,13 @@ func nsec3OwnerName(ownerHash []byte, zone wire.Name) wire.Name {
 // soaForExample is the standard test-zone SOA used across the
 // completeness tests below.
 func soaForExample() wire.Record {
+	soa2, _ := rdata.NewSOA(
+		wire.MustParseName("ns.example."),
+		wire.MustParseName("hm.example."),
+		1, 7200, 3600, 1209600, 60,
+	)
 	return wire.NewRecord(wire.MustParseName("example."), 5*time.Minute,
-		rdata.MustNewSOA(
-			wire.MustParseName("ns.example."),
-			wire.MustParseName("hm.example."),
-			1, 7200, 3600, 1209600, 60,
-		))
+		soa2)
 }
 
 // TestAggressiveNSECNoDataSynthesis verifies §5.2: a cached NSEC
@@ -196,12 +197,14 @@ func TestAggressiveNSEC3NoData(t *testing.T) {
 	apexHash := iteratedSHA1(zoneApex.AppendWire(nil), salt, 0)
 
 	// A NoData NSEC3 at the queried name's hash — bitmap excludes A.
+	nsec3, err := rdata.NewNSEC3(1 /*sha1*/, 0 /*flags*/, 0 /*iterations*/, salt,
+			apexHash, // any plausible next-hash, doesn't matter for NoData
+			[]rrtype.Type{rrtype.AAAA, rrtype.TXT})
+	require.NoError(t, err)
 	nsec3Match := wire.NewRecord(
 		nsec3OwnerName(matchHash, zoneApex),
 		5*time.Minute,
-		rdata.MustNewNSEC3(1 /*sha1*/, 0 /*flags*/, 0 /*iterations*/, salt,
-			apexHash, // any plausible next-hash, doesn't matter for NoData
-			[]rrtype.Type{rrtype.AAAA, rrtype.TXT}),
+		nsec3,
 	)
 
 	var upstreamCalls atomic.Int32

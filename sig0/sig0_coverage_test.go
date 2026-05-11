@@ -50,7 +50,8 @@ func rsaPubWireLong(t *testing.T, priv *rsa.PrivateKey) []byte {
 // dummyKey returns a syntactically-valid DNSKEY for tests where the parser
 // rejects the message before any key/keytag check runs.
 func dummyKey() rdata.DNSKEY {
-	return rdata.NewDNSKEY(257, 3, rdata.AlgED25519, make([]byte, 32))
+	k, _ := rdata.NewDNSKEY(257, 3, rdata.AlgED25519, make([]byte, 32))
+	return k
 }
 
 func TestSignVerifyRSASHA512(t *testing.T) {
@@ -58,7 +59,8 @@ func TestSignVerifyRSASHA512(t *testing.T) {
 	priv, err := rsa.GenerateKey(rand.Reader, 2048)
 	require.NoError(t, err)
 	pub := rsaPubWire(t, priv)
-	key := rdata.NewDNSKEY(257, 3, rdata.AlgRSASHA512, pub)
+	key, err := rdata.NewDNSKEY(257, 3, rdata.AlgRSASHA512, pub)
+	require.NoError(t, err)
 
 	signer := wire.MustParseName("test.signer")
 	msg := mkMessage(t)
@@ -82,7 +84,8 @@ func TestSignVerifyECDSAP384(t *testing.T) {
 	encPK, err2 := priv.PublicKey.Bytes()
 	require.NoError(t, err2)
 	pub := encPK[1:]
-	key := rdata.NewDNSKEY(257, 3, rdata.AlgECDSAP384SHA384, pub)
+	key, err := rdata.NewDNSKEY(257, 3, rdata.AlgECDSAP384SHA384, pub)
+	require.NoError(t, err)
 
 	signer := wire.MustParseName("test.signer")
 	msg := mkMessage(t)
@@ -141,7 +144,8 @@ func TestVerifySignerMismatch(t *testing.T) {
 	t.Parallel()
 	pub, priv, err := ed25519.GenerateKey(rand.Reader)
 	require.NoError(t, err)
-	key := rdata.NewDNSKEY(257, 3, rdata.AlgED25519, pub)
+	key, err := rdata.NewDNSKEY(257, 3, rdata.AlgED25519, pub)
+	require.NoError(t, err)
 	signer := wire.MustParseName("alice.example")
 	msg := mkMessage(t)
 	now := time.Now().Truncate(time.Second).UTC()
@@ -166,7 +170,8 @@ func TestVerifyAlgorithmMismatch(t *testing.T) {
 	require.NoError(t, err)
 	// Verifier's DNSKEY announces RSA but the SIG announces Ed25519 → alg
 	// mismatch fires before keytag check.
-	wrongAlgKey := rdata.NewDNSKEY(257, 3, rdata.AlgRSASHA256, []byte{1, 2, 3})
+	wrongAlgKey, err := rdata.NewDNSKEY(257, 3, rdata.AlgRSASHA256, []byte{1, 2, 3})
+	require.NoError(t, err)
 	_, err = sig0.Verify(signed, wrongAlgKey, signer, now)
 	require.ErrorIs(t, err, sig0.ErrUnsupportedAlg)
 }
@@ -175,7 +180,8 @@ func TestVerifyInceptionInFuture(t *testing.T) {
 	t.Parallel()
 	pub, priv, err := ed25519.GenerateKey(rand.Reader)
 	require.NoError(t, err)
-	key := rdata.NewDNSKEY(257, 3, rdata.AlgED25519, pub)
+	key, err := rdata.NewDNSKEY(257, 3, rdata.AlgED25519, pub)
+	require.NoError(t, err)
 	signer := wire.MustParseName("s")
 	msg := mkMessage(t)
 	signedAt := time.Now().Truncate(time.Second).UTC()
@@ -194,7 +200,8 @@ func TestVerifyWrongKey(t *testing.T) {
 	require.NoError(t, err)
 	otherPub, _, err := ed25519.GenerateKey(rand.Reader)
 	require.NoError(t, err)
-	otherKey := rdata.NewDNSKEY(257, 3, rdata.AlgED25519, otherPub)
+	otherKey, err := rdata.NewDNSKEY(257, 3, rdata.AlgED25519, otherPub)
+	require.NoError(t, err)
 	signer := wire.MustParseName("s")
 	msg := mkMessage(t)
 	now := time.Now().Truncate(time.Second).UTC()
@@ -217,7 +224,8 @@ func TestVerifyEd25519WrongPubkeySize(t *testing.T) {
 	// Build a DNSKEY with a deliberately-wrong-size pubkey, then sign using
 	// that key's computed tag so the keytag check passes and the verifier
 	// reaches the ed25519 size check.
-	badKey := rdata.NewDNSKEY(257, 3, rdata.AlgED25519, []byte{1, 2, 3})
+	badKey, err := rdata.NewDNSKEY(257, 3, rdata.AlgED25519, []byte{1, 2, 3})
+	require.NoError(t, err)
 	signer := wire.MustParseName("s")
 	msg := mkMessage(t)
 	now := time.Now().Truncate(time.Second).UTC()
@@ -234,7 +242,8 @@ func TestVerifyECDSAWrongPubkeySize(t *testing.T) {
 	t.Parallel()
 	priv, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
 	require.NoError(t, err)
-	badKey := rdata.NewDNSKEY(257, 3, rdata.AlgECDSAP256SHA256, []byte{1, 2})
+	badKey, err := rdata.NewDNSKEY(257, 3, rdata.AlgECDSAP256SHA256, []byte{1, 2})
+	require.NoError(t, err)
 	signer := wire.MustParseName("s")
 	msg := mkMessage(t)
 	now := time.Now().Truncate(time.Second).UTC()
@@ -264,7 +273,8 @@ func TestVerifyECDSAWrongSignatureSize(t *testing.T) {
 	encPK, err2 := priv.PublicKey.Bytes()
 	require.NoError(t, err2)
 	pub := encPK[1:]
-	key := rdata.NewDNSKEY(257, 3, rdata.AlgECDSAP256SHA256, pub)
+	key, err := rdata.NewDNSKEY(257, 3, rdata.AlgECDSAP256SHA256, pub)
+	require.NoError(t, err)
 	signer := wire.MustParseName("s")
 	msg := mkMessage(t)
 	now := time.Now().Truncate(time.Second).UTC()
@@ -285,7 +295,8 @@ func TestVerifyRSAParseError(t *testing.T) {
 	require.NoError(t, err)
 	// Empty pubkey → parseRSAPublic returns "too short". Sign with the bogus
 	// key's tag so keytag check passes and we reach the parser.
-	badKey := rdata.NewDNSKEY(257, 3, rdata.AlgRSASHA256, nil)
+	badKey, err := rdata.NewDNSKEY(257, 3, rdata.AlgRSASHA256, nil)
+	require.NoError(t, err)
 	signer := wire.MustParseName("s")
 	msg := mkMessage(t)
 	now := time.Now().Truncate(time.Second).UTC()
@@ -305,7 +316,8 @@ func TestVerifyRSABadSignature(t *testing.T) {
 	priv, err := rsa.GenerateKey(rand.Reader, 2048)
 	require.NoError(t, err)
 	pub := rsaPubWire(t, priv)
-	key := rdata.NewDNSKEY(257, 3, rdata.AlgRSASHA256, pub)
+	key, err := rdata.NewDNSKEY(257, 3, rdata.AlgRSASHA256, pub)
+	require.NoError(t, err)
 	signer := wire.MustParseName("s")
 	msg := mkMessage(t)
 	now := time.Now().Truncate(time.Second).UTC()
@@ -329,7 +341,8 @@ func TestVerifyRSASHA512BadSignature(t *testing.T) {
 	priv, err := rsa.GenerateKey(rand.Reader, 2048)
 	require.NoError(t, err)
 	pub := rsaPubWire(t, priv)
-	key := rdata.NewDNSKEY(257, 3, rdata.AlgRSASHA512, pub)
+	key, err := rdata.NewDNSKEY(257, 3, rdata.AlgRSASHA512, pub)
+	require.NoError(t, err)
 	signer := wire.MustParseName("s")
 	msg := mkMessage(t)
 	now := time.Now().Truncate(time.Second).UTC()
@@ -351,7 +364,8 @@ func TestVerifyRSASHA512ParseError(t *testing.T) {
 	t.Parallel()
 	priv, err := rsa.GenerateKey(rand.Reader, 2048)
 	require.NoError(t, err)
-	badKey := rdata.NewDNSKEY(257, 3, rdata.AlgRSASHA512, nil)
+	badKey, err := rdata.NewDNSKEY(257, 3, rdata.AlgRSASHA512, nil)
+	require.NoError(t, err)
 	signer := wire.MustParseName("s")
 	msg := mkMessage(t)
 	now := time.Now().Truncate(time.Second).UTC()
@@ -374,7 +388,8 @@ func TestVerifyRSALongExpForm(t *testing.T) {
 	priv, err := rsa.GenerateKey(rand.Reader, 2048)
 	require.NoError(t, err)
 	pub := rsaPubWireLong(t, priv)
-	key := rdata.NewDNSKEY(257, 3, rdata.AlgRSASHA256, pub)
+	key, err := rdata.NewDNSKEY(257, 3, rdata.AlgRSASHA256, pub)
+	require.NoError(t, err)
 	signer := wire.MustParseName("s")
 	msg := mkMessage(t)
 	now := time.Now().Truncate(time.Second).UTC()
@@ -592,27 +607,30 @@ func TestVerifySignerOverrunsRdata(t *testing.T) {
 
 func TestVerifyRSAEmptyPubkey(t *testing.T) {
 	t.Parallel()
-	badKey := rdata.NewDNSKEY(257, 3, rdata.AlgRSASHA256, []byte{})
+	badKey, err := rdata.NewDNSKEY(257, 3, rdata.AlgRSASHA256, []byte{})
+	require.NoError(t, err)
 	signed := mustRSASigned(t, rdata.AlgRSASHA256, dnssec.KeyTag(badKey))
-	_, err := sig0.Verify(signed, badKey, wire.MustParseName("s"), time.Now())
+	_, err = sig0.Verify(signed, badKey, wire.MustParseName("s"), time.Now())
 	require.ErrorContains(t, err, "rsa pubkey too short")
 }
 
 func TestVerifyRSALongFormTruncated(t *testing.T) {
 	t.Parallel()
 	// b[0]==0 but only 2 bytes total → "rsa pubkey truncated".
-	badKey := rdata.NewDNSKEY(257, 3, rdata.AlgRSASHA256, []byte{0, 0})
+	badKey, err := rdata.NewDNSKEY(257, 3, rdata.AlgRSASHA256, []byte{0, 0})
+	require.NoError(t, err)
 	signed := mustRSASigned(t, rdata.AlgRSASHA256, dnssec.KeyTag(badKey))
-	_, err := sig0.Verify(signed, badKey, wire.MustParseName("s"), time.Now())
+	_, err = sig0.Verify(signed, badKey, wire.MustParseName("s"), time.Now())
 	require.ErrorContains(t, err, "rsa pubkey truncated")
 }
 
 func TestVerifyRSATruncatedExp(t *testing.T) {
 	t.Parallel()
 	// explen = 5 but only 1 exp byte present.
-	badKey := rdata.NewDNSKEY(257, 3, rdata.AlgRSASHA256, []byte{5, 1})
+	badKey, err := rdata.NewDNSKEY(257, 3, rdata.AlgRSASHA256, []byte{5, 1})
+	require.NoError(t, err)
 	signed := mustRSASigned(t, rdata.AlgRSASHA256, dnssec.KeyTag(badKey))
-	_, err := sig0.Verify(signed, badKey, wire.MustParseName("s"), time.Now())
+	_, err = sig0.Verify(signed, badKey, wire.MustParseName("s"), time.Now())
 	require.ErrorContains(t, err, "truncated exponent")
 }
 
@@ -620,9 +638,10 @@ func TestVerifyRSAExponentTooLarge(t *testing.T) {
 	t.Parallel()
 	// 9-byte exponent exceeds the dnssecbb 8-byte exponent cap.
 	pub := []byte{9, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0x01, 0x02}
-	badKey := rdata.NewDNSKEY(257, 3, rdata.AlgRSASHA256, pub)
+	badKey, err := rdata.NewDNSKEY(257, 3, rdata.AlgRSASHA256, pub)
+	require.NoError(t, err)
 	signed := mustRSASigned(t, rdata.AlgRSASHA256, dnssec.KeyTag(badKey))
-	_, err := sig0.Verify(signed, badKey, wire.MustParseName("s"), time.Now())
+	_, err = sig0.Verify(signed, badKey, wire.MustParseName("s"), time.Now())
 	require.ErrorContains(t, err, "exponent length 9 exceeds cap")
 }
 

@@ -19,13 +19,16 @@ func Example_mdns_parse() {
 	host := wire.MustParseName("printer.local")
 
 	txt, _ := rdata.NewTXT("path=/admin", "model=acidns")
+	ar, _ := rdata.NewA(netip.MustParseAddr("192.0.2.50"))
+	srv, _ := rdata.NewSRV(0, 0, 80, host)
+	ptr, _ := rdata.NewPTR(instance)
 	resp, _ := wire.NewMessageBuilder().
 		ID(0).
 		Response(true).
-		Answer(wire.NewRecord(svcType, time.Minute, rdata.MustNewPTR(instance))).
-		Answer(wire.NewRecord(instance, time.Minute, rdata.MustNewSRV(0, 0, 80, host))).
+		Answer(wire.NewRecord(svcType, time.Minute, ptr)).
+		Answer(wire.NewRecord(instance, time.Minute, srv)).
 		Answer(wire.NewRecord(instance, time.Minute, txt)).
-		Additional(wire.NewRecord(host, time.Minute, rdata.MustNewA(netip.MustParseAddr("192.0.2.50")))).
+		Additional(wire.NewRecord(host, time.Minute, ar)).
 		Build()
 
 	for _, s := range mdns.ParseBrowseResponse(resp) {

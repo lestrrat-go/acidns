@@ -213,13 +213,15 @@ func TestConflictsWithSRVBranches(t *testing.T) {
 	)
 	require.NoError(t, err)
 
+	srv2, err := rdata.NewSRV(0, 0, 8080, wire.MustParseName("intruder.local."))
+	require.NoError(t, err)
 	conflict, _ := wire.NewMessageBuilder().
 		Response(true).
 		Authoritative(true).
 		Answer(wire.NewRecord(
 			wire.MustParseName("Living Room TV._http._tcp.local."),
 			120*time.Second,
-			rdata.MustNewSRV(0, 0, 8080, wire.MustParseName("intruder.local.")))).
+			srv2)).
 		Build()
 	tr.inbox <- conflict
 
@@ -239,23 +241,29 @@ func TestConflictsWithSRVNonconflicting(t *testing.T) {
 	require.NoError(t, err)
 
 	// Same Instance, same target+port — NOT a conflict.
+	srv4, err := rdata.NewSRV(0, 0, 1234, wire.MustParseName("other.local."))
+	require.NoError(t, err)
+	ptr, err := rdata.NewPTR(wire.MustParseName("Other._http._tcp.local."))
+	require.NoError(t, err)
+	srv3, err := rdata.NewSRV(0, 0, 8080, wire.MustParseName("tv-living-room.local."))
+	require.NoError(t, err)
 	matching, _ := wire.NewMessageBuilder().
 		Response(true).
 		Authoritative(true).
 		Answer(wire.NewRecord(
 			wire.MustParseName("Living Room TV._http._tcp.local."),
 			120*time.Second,
-			rdata.MustNewSRV(0, 0, 8080, wire.MustParseName("tv-living-room.local.")))).
+			srv3)).
 		// Unrelated PTR (ignored by conflict detector).
 		Answer(wire.NewRecord(
 			wire.MustParseName("_http._tcp.local."),
 			120*time.Second,
-			rdata.MustNewPTR(wire.MustParseName("Other._http._tcp.local.")))).
+			ptr)).
 		// SRV with a different owner name (ignored).
 		Answer(wire.NewRecord(
 			wire.MustParseName("Other._http._tcp.local."),
 			120*time.Second,
-			rdata.MustNewSRV(0, 0, 1234, wire.MustParseName("other.local.")))).
+			srv4)).
 		Build()
 	tr.inbox <- matching
 
@@ -274,13 +282,15 @@ func TestConflictsWithAAAA(t *testing.T) {
 	require.NoError(t, err)
 
 	// AAAA at the host name with an address we don't own.
+	aaaa, err := rdata.NewAAAA(netip.MustParseAddr("2001:db8::1"))
+	require.NoError(t, err)
 	conflict, _ := wire.NewMessageBuilder().
 		Response(true).
 		Authoritative(true).
 		Answer(wire.NewRecord(
 			wire.MustParseName("tv-living-room.local."),
 			120*time.Second,
-			rdata.MustNewAAAA(netip.MustParseAddr("2001:db8::1")))).
+			aaaa)).
 		Build()
 	tr.inbox <- conflict
 
@@ -308,23 +318,29 @@ func TestConflictsWithAAAANonconflicting(t *testing.T) {
 	require.NoError(t, err)
 
 	v6 := netip.MustParseAddr("2001:db8::1")
+	ar, err := rdata.NewA(netip.MustParseAddr("198.51.100.5"))
+	require.NoError(t, err)
+	aaaa3, err := rdata.NewAAAA(netip.MustParseAddr("2001:db8::99"))
+	require.NoError(t, err)
+	aaaa2, err := rdata.NewAAAA(v6)
+	require.NoError(t, err)
 	matching, _ := wire.NewMessageBuilder().
 		Response(true).
 		Authoritative(true).
 		Answer(wire.NewRecord(
 			wire.MustParseName("tv-living-room.local."),
 			120*time.Second,
-			rdata.MustNewAAAA(v6))).
+			aaaa2)).
 		// AAAA at a different name (skipped).
 		Answer(wire.NewRecord(
 			wire.MustParseName("other.local."),
 			120*time.Second,
-			rdata.MustNewAAAA(netip.MustParseAddr("2001:db8::99")))).
+			aaaa3)).
 		// A at a different name (skipped via name mismatch).
 		Answer(wire.NewRecord(
 			wire.MustParseName("other.local."),
 			120*time.Second,
-			rdata.MustNewA(netip.MustParseAddr("198.51.100.5")))).
+			ar)).
 		Build()
 	tr.inbox <- matching
 
@@ -405,11 +421,13 @@ func TestParseBrowseResponsePTRWithoutSRV(t *testing.T) {
 	t.Parallel()
 	svcType := wire.MustParseName("_http._tcp.local")
 	instance := wire.MustParseName("Lonely._http._tcp.local")
+	ptr2, err := rdata.NewPTR(instance)
+	require.NoError(t, err)
 	resp, err := wire.NewMessageBuilder().
 		ID(0).
 		Response(true).
 		// PTR but no matching SRV → service should be skipped.
-		Answer(wire.NewRecord(svcType, time.Minute, rdata.MustNewPTR(instance))).
+		Answer(wire.NewRecord(svcType, time.Minute, ptr2)).
 		Build()
 	require.NoError(t, err)
 
@@ -422,13 +440,17 @@ func TestParseBrowseResponseAAAAFromAdditional(t *testing.T) {
 	instance := wire.MustParseName("V6._http._tcp.local")
 	host := wire.MustParseName("v6.local")
 
-	srv := rdata.MustNewSRV(0, 0, 8080, host)
-	v6 := rdata.MustNewAAAA(netip.MustParseAddr("2001:db8::1"))
+	srv, err := rdata.NewSRV(0, 0, 8080, host)
+	require.NoError(t, err)
+	v6, err := rdata.NewAAAA(netip.MustParseAddr("2001:db8::1"))
+	require.NoError(t, err)
 
+	ptr3, err := rdata.NewPTR(instance)
+	require.NoError(t, err)
 	resp, err := wire.NewMessageBuilder().
 		ID(0).
 		Response(true).
-		Answer(wire.NewRecord(svcType, time.Minute, rdata.MustNewPTR(instance))).
+		Answer(wire.NewRecord(svcType, time.Minute, ptr3)).
 		Answer(wire.NewRecord(instance, time.Minute, srv)).
 		// AAAA in additional section.
 		Additional(wire.NewRecord(host, time.Minute, v6)).
@@ -448,14 +470,17 @@ func TestParseTXTBareKeyAndEmpty(t *testing.T) {
 	instance := wire.MustParseName("BareKey._http._tcp.local")
 	host := wire.MustParseName("barekey.local")
 
-	srv := rdata.MustNewSRV(0, 0, 80, host)
+	srv, err := rdata.NewSRV(0, 0, 80, host)
+	require.NoError(t, err)
 	txt, err := rdata.NewTXT("flag", "key=value", "")
 	require.NoError(t, err)
 
+	ptr4, err := rdata.NewPTR(instance)
+	require.NoError(t, err)
 	resp, err := wire.NewMessageBuilder().
 		ID(0).
 		Response(true).
-		Answer(wire.NewRecord(svcType, time.Minute, rdata.MustNewPTR(instance))).
+		Answer(wire.NewRecord(svcType, time.Minute, ptr4)).
 		Answer(wire.NewRecord(instance, time.Minute, srv)).
 		Answer(wire.NewRecord(instance, time.Minute, txt)).
 		Build()

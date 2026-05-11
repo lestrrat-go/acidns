@@ -51,8 +51,10 @@ func startSearchServer(t *testing.T, wanted string) (netip.AddrPort, func() []st
 				Question(q)
 			if q.Name().String() == wanted {
 				if q.Type() == rrtype.A {
+					ar, err := rdata.NewA(netip.MustParseAddr("192.0.2.1"))
+					require.NoError(t, err)
 					b = b.Answer(wire.NewRecord(q.Name(), time.Minute,
-						rdata.MustNewA(netip.MustParseAddr("192.0.2.1"))))
+						ar))
 				}
 			} else {
 				b = b.RCODE(wire.RCODENXDomain)

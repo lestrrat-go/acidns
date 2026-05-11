@@ -23,16 +23,6 @@ func NewDNAME(target wirebb.Name) (DNAME, error) {
 	}
 	return DNAME{target: target}, nil
 }
-
-// MustNewDNAME is the panic-on-error variant of [NewDNAME].
-func MustNewDNAME(target wirebb.Name) DNAME {
-	d, err := NewDNAME(target)
-	if err != nil {
-		panic(err)
-	}
-	return d
-}
-
 func unpackDNAME(u *wirebb.Unpacker, rdlen int) (DNAME, error) {
 	var zero DNAME
 	end := u.Off() + rdlen

@@ -76,10 +76,14 @@ func TestRoundTripResponse(t *testing.T) {
 
 	name := wirebb.MustParse("example.com")
 	q := wire.NewQuestion(name, rrtype.A)
+	ar, err := rdata.NewA(netip.MustParseAddr("93.184.216.34"))
+	require.NoError(t, err)
 	a := wire.NewRecord(name, 300*time.Second,
-		rdata.MustNewA(netip.MustParseAddr("93.184.216.34")))
+		ar)
+	mx2, err := rdata.NewMX(10, wirebb.MustParse("mail.example.com"))
+	require.NoError(t, err)
 	mx := wire.NewRecord(name, 600*time.Second,
-		rdata.MustNewMX(10, wirebb.MustParse("mail.example.com")))
+		mx2)
 
 	m, err := wire.NewMessageBuilder().
 		ID(1).
@@ -120,10 +124,12 @@ func TestUnmarshalRealResponse(t *testing.T) {
 	//   dig +noedns +qr +noall +answer @1.1.1.1 example.com A
 	// Synthesised here so the test stays hermetic.
 	q := wire.NewQuestion(wirebb.MustParse("example.com"), rrtype.A)
+	ar2, err := rdata.NewA(netip.MustParseAddr("93.184.216.34"))
+	require.NoError(t, err)
 	a := wire.NewRecord(
 		wirebb.MustParse("example.com"),
 		86400*time.Second,
-		rdata.MustNewA(netip.MustParseAddr("93.184.216.34")),
+		ar2,
 	)
 	out, err := wire.NewMessageBuilder().
 		ID(0x4242).

@@ -16,15 +16,19 @@ import (
 // Kashpureff-style cache poisoning vector.
 func TestFilterBailiwickDropsForgedAnswerRecords(t *testing.T) {
 	qname := wire.MustParseName("legit.example.")
+	ar2, err := rdata.NewA(netip.MustParseAddr("198.51.100.99"))
+	require.NoError(t, err)
+	ar, err := rdata.NewA(netip.MustParseAddr("192.0.2.1"))
+	require.NoError(t, err)
 	resp, err := wire.NewMessageBuilder().
 		ID(1).
 		Response(true).
 		Question(wire.NewQuestion(qname, rrtype.A)).
 		Answer(wire.NewRecord(qname, time.Hour,
-			rdata.MustNewA(netip.MustParseAddr("192.0.2.1")))).
+			ar)).
 		// Forged record for an unrelated name.
 		Answer(wire.NewRecord(wire.MustParseName("unrelated.evil."), time.Hour,
-			rdata.MustNewA(netip.MustParseAddr("198.51.100.99")))).
+			ar2)).
 		Build()
 	require.NoError(t, err)
 
@@ -38,16 +42,22 @@ func TestFilterBailiwickDropsForgedAnswerRecords(t *testing.T) {
 func TestFilterBailiwickKeepsCNAMEChain(t *testing.T) {
 	qname := wire.MustParseName("alias.example.")
 	target := wire.MustParseName("real.example.")
+	ar4, err := rdata.NewA(netip.MustParseAddr("198.51.100.99"))
+	require.NoError(t, err)
+	ar3, err := rdata.NewA(netip.MustParseAddr("192.0.2.1"))
+	require.NoError(t, err)
+	cn, err := rdata.NewCNAME(target)
+	require.NoError(t, err)
 	resp, err := wire.NewMessageBuilder().
 		ID(1).
 		Response(true).
 		Question(wire.NewQuestion(qname, rrtype.A)).
-		Answer(wire.NewRecord(qname, time.Hour, rdata.MustNewCNAME(target))).
+		Answer(wire.NewRecord(qname, time.Hour, cn)).
 		Answer(wire.NewRecord(target, time.Hour,
-			rdata.MustNewA(netip.MustParseAddr("192.0.2.1")))).
+			ar3)).
 		// Off-chain record dropped.
 		Answer(wire.NewRecord(wire.MustParseName("other.evil."), time.Hour,
-			rdata.MustNewA(netip.MustParseAddr("198.51.100.99")))).
+			ar4)).
 		Build()
 	require.NoError(t, err)
 
@@ -59,14 +69,18 @@ func TestFilterBailiwickKeepsCNAMEChain(t *testing.T) {
 // records owned by unrelated parent zones are removed.
 func TestFilterBailiwickDropsOutOfBailiwickAuthority(t *testing.T) {
 	qname := wire.MustParseName("a.example.")
+	nsrd2, err := rdata.NewNS(wire.MustParseName("ns1.evil."))
+	require.NoError(t, err)
+	nsrd, err := rdata.NewNS(wire.MustParseName("ns1.example."))
+	require.NoError(t, err)
 	resp, err := wire.NewMessageBuilder().
 		ID(1).
 		Response(true).
 		Question(wire.NewQuestion(qname, rrtype.A)).
 		Authority(wire.NewRecord(wire.MustParseName("example."), time.Hour,
-			rdata.MustNewNS(wire.MustParseName("ns1.example.")))).
+			nsrd)).
 		Authority(wire.NewRecord(wire.MustParseName("evil."), time.Hour,
-			rdata.MustNewNS(wire.MustParseName("ns1.evil.")))).
+			nsrd2)).
 		Build()
 	require.NoError(t, err)
 

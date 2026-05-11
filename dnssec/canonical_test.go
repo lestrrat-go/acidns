@@ -21,6 +21,22 @@ func TestSignedDataAcrossRDataTypes(t *testing.T) {
 			1, wire.MustParseName("example.com"), nil)
 	}
 
+	ar, err := rdata.NewA(netip.MustParseAddr("192.0.2.1"))
+	require.NoError(t, err)
+	mx2, err := rdata.NewMX(10, wire.MustParseName("mx.example.com"))
+	require.NoError(t, err)
+	soa, err := rdata.NewSOA(
+						wire.MustParseName("ns.example.com"),
+						wire.MustParseName("hm.example.com"),
+						1, time.Hour, time.Hour, time.Hour, time.Hour,
+					)
+	require.NoError(t, err)
+	ptr, err := rdata.NewPTR(wire.MustParseName("host.example.com"))
+	require.NoError(t, err)
+	cn, err := rdata.NewCNAME(wire.MustParseName("b.example.com"))
+	require.NoError(t, err)
+	nsrd, err := rdata.NewNS(wire.MustParseName("ns1.example.com"))
+	require.NoError(t, err)
 	cases := []struct {
 		name string
 		set  []wire.Record
@@ -30,7 +46,7 @@ func TestSignedDataAcrossRDataTypes(t *testing.T) {
 			"NS",
 			[]wire.Record{
 				wire.NewRecord(wire.MustParseName("example.com"), time.Hour,
-					rdata.MustNewNS(wire.MustParseName("ns1.example.com"))),
+					nsrd),
 			},
 			rrtype.NS,
 		},
@@ -38,7 +54,7 @@ func TestSignedDataAcrossRDataTypes(t *testing.T) {
 			"CNAME",
 			[]wire.Record{
 				wire.NewRecord(wire.MustParseName("a.example.com"), time.Hour,
-					rdata.MustNewCNAME(wire.MustParseName("b.example.com"))),
+					cn),
 			},
 			rrtype.CNAME,
 		},
@@ -46,7 +62,7 @@ func TestSignedDataAcrossRDataTypes(t *testing.T) {
 			"PTR",
 			[]wire.Record{
 				wire.NewRecord(wire.MustParseName("1.2.0.192.in-addr.arpa"), time.Hour,
-					rdata.MustNewPTR(wire.MustParseName("host.example.com"))),
+					ptr),
 			},
 			rrtype.PTR,
 		},
@@ -54,11 +70,7 @@ func TestSignedDataAcrossRDataTypes(t *testing.T) {
 			"SOA",
 			[]wire.Record{
 				wire.NewRecord(wire.MustParseName("example.com"), time.Hour,
-					rdata.MustNewSOA(
-						wire.MustParseName("ns.example.com"),
-						wire.MustParseName("hm.example.com"),
-						1, time.Hour, time.Hour, time.Hour, time.Hour,
-					)),
+					soa),
 			},
 			rrtype.SOA,
 		},
@@ -66,7 +78,7 @@ func TestSignedDataAcrossRDataTypes(t *testing.T) {
 			"MX",
 			[]wire.Record{
 				wire.NewRecord(wire.MustParseName("example.com"), time.Hour,
-					rdata.MustNewMX(10, wire.MustParseName("mx.example.com"))),
+					mx2),
 			},
 			rrtype.MX,
 		},
@@ -74,7 +86,7 @@ func TestSignedDataAcrossRDataTypes(t *testing.T) {
 			"A_unknown_default",
 			[]wire.Record{
 				wire.NewRecord(wire.MustParseName("example.com"), time.Hour,
-					rdata.MustNewA(netip.MustParseAddr("192.0.2.1"))),
+					ar),
 			},
 			rrtype.A,
 		},
@@ -94,9 +106,11 @@ func TestSignedDataWildcardOwner(t *testing.T) {
 	t.Parallel()
 	// owner has 4 labels but rrsig.Labels=2 → wildcard reconstruction
 	// would walk back two levels.
+	ar2, err := rdata.NewA(netip.MustParseAddr("192.0.2.1"))
+	require.NoError(t, err)
 	set := []wire.Record{
 		wire.NewRecord(wire.MustParseName("foo.bar.example.com"), time.Hour,
-			rdata.MustNewA(netip.MustParseAddr("192.0.2.1"))),
+			ar2),
 	}
 	rrsig := rdata.NewRRSIG(rrtype.A, rdata.AlgED25519, 2,
 		time.Hour, time.Now().Add(time.Hour), time.Now().Add(-time.Hour),

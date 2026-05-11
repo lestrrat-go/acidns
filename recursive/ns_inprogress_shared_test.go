@@ -54,10 +54,12 @@ func TestNSInProgressSharedAcrossResolves(t *testing.T) {
 			}
 			// All other qnames receive a referral to the trap zone
 			// with an out-of-bailiwick NS that requires recursing.
+			nsrd, err := rdata.NewNS(wire.MustParseName("ns.trap.example."))
+			require.NoError(t, err)
 			return mkResp(t, q, func(b *wire.MessageBuilder) *wire.MessageBuilder {
 				ns := wire.NewRecord(wire.MustParseName("trap.example."),
 					60*time.Second,
-					rdata.MustNewNS(wire.MustParseName("ns.trap.example.")))
+					nsrd)
 				return b.Authority(ns)
 			}), nil
 		},

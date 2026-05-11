@@ -133,12 +133,14 @@ func startCaseEchoServer(t *testing.T, preserveCase bool) netip.AddrPort {
 			if !preserveCase {
 				respQ = wire.NewQuestionClass(qq.Name(), qq.Type(), qq.Class())
 			}
+			ar, err := rdata.NewA(netip.MustParseAddr("203.0.113.1"))
+			require.NoError(t, err)
 			respMsg, _ := wire.NewMessageBuilder().
 				ID(req.ID()).
 				Response(true).
 				Question(respQ).
 				Answer(wire.NewRecord(qq.Name(), time.Minute,
-					rdata.MustNewA(netip.MustParseAddr("203.0.113.1")))).
+					ar)).
 				Build()
 			respBytes, _ := wire.Marshal(respMsg)
 			_, _ = pc.WriteTo(respBytes, src)

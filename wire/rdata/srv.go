@@ -40,16 +40,6 @@ func NewSRV(priority, weight, port uint16, target wirebb.Name) (SRV, error) {
 	}
 	return SRV{priority: priority, weight: weight, port: port, target: target}, nil
 }
-
-// MustNewSRV is the panic-on-error variant of [NewSRV].
-func MustNewSRV(priority, weight, port uint16, target wirebb.Name) SRV {
-	s, err := NewSRV(priority, weight, port, target)
-	if err != nil {
-		panic(err)
-	}
-	return s
-}
-
 func unpackSRV(u *wirebb.Unpacker, rdlen int) (SRV, error) {
 	var zero SRV
 	end := u.Off() + rdlen

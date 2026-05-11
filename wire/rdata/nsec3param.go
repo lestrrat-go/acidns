@@ -40,16 +40,6 @@ func NewNSEC3PARAM(alg NSEC3HashAlgorithm, flags uint8, iter uint16, salt []byte
 	cp := append([]byte(nil), salt...)
 	return NSEC3PARAM{alg: alg, flags: flags, iter: iter, salt: cp}, nil
 }
-
-// MustNewNSEC3PARAM is the panic-on-error variant of [NewNSEC3PARAM].
-func MustNewNSEC3PARAM(alg NSEC3HashAlgorithm, flags uint8, iter uint16, salt []byte) NSEC3PARAM {
-	n, err := NewNSEC3PARAM(alg, flags, iter, salt)
-	if err != nil {
-		panic(err)
-	}
-	return n
-}
-
 func unpackNSEC3PARAM(u *wirebb.Unpacker, rdlen int) (NSEC3PARAM, error) {
 	var zero NSEC3PARAM
 	end := u.Off() + rdlen

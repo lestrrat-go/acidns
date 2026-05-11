@@ -16,8 +16,9 @@ import (
 
 func publicMkInner() acidns.Handler {
 	return acidns.HandlerFunc(func(_ context.Context, w acidns.ResponseWriter, q wire.Message) {
+		ar, _ := rdata.NewA(netip.MustParseAddr("203.0.113.42"))
 		ans := wire.NewRecord(q.Questions()[0].Name(), time.Minute,
-			rdata.MustNewA(netip.MustParseAddr("203.0.113.42")))
+			ar)
 		resp, _ := wire.NewMessageBuilder().
 			ID(q.ID()).
 			Response(true).

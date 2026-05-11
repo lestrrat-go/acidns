@@ -21,13 +21,17 @@ type stubUpstream struct {
 
 func (s *stubUpstream) Exchange(_ context.Context, q wire.Message) (wire.Message, error) {
 	s.calls.Add(1)
+	ar, err := rdata.NewA(netip.MustParseAddr("198.51.100.42"))
+	if err != nil {
+		return wire.Message{}, err
+	}
 	resp, _ := wire.NewMessageBuilder().
 		ID(q.ID()).
 		Response(true).
 		RecursionAvailable(true).
 		Question(q.Questions()[0]).
 		Answer(wire.NewRecord(q.Questions()[0].Name(), time.Minute,
-			rdata.MustNewA(netip.MustParseAddr("198.51.100.42")))).
+			ar)).
 		Build()
 	return resp, nil
 }

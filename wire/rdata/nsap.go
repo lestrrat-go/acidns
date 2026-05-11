@@ -49,16 +49,6 @@ func NewNSAPPTR(owner wirebb.Name) (NSAPPTR, error) {
 	}
 	return NSAPPTR{owner: owner}, nil
 }
-
-// MustNewNSAPPTR is the panic-on-error variant of [NewNSAPPTR].
-func MustNewNSAPPTR(owner wirebb.Name) NSAPPTR {
-	n, err := NewNSAPPTR(owner)
-	if err != nil {
-		panic(err)
-	}
-	return n
-}
-
 func unpackNSAPPTR(u *wirebb.Unpacker, rdlen int) (NSAPPTR, error) {
 	var zero NSAPPTR
 	n, err := u.NameInRange(u.Off() + rdlen)
