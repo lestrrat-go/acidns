@@ -81,3 +81,30 @@ func TestDiscover(t *testing.T) {
 	require.Equal(t, ddr.ProtoDoT, endpoints[1].Protocol())
 	require.Equal(t, uint16(853), endpoints[1].Port())
 }
+
+// TestEndpointBuilderSingleShot verifies that EndpointBuilder.Build
+// resets the builder so a second Build does not leak the first
+// Endpoint's hint slices or target.
+func TestEndpointBuilderSingleShot(t *testing.T) {
+	t.Parallel()
+	b := ddr.NewEndpointBuilder().
+		Priority(1).
+		Target(wire.MustParseName("doh.example.net")).
+		Protocol(ddr.ProtoDoH).
+		Port(443).
+		IPv4Hints([]netip.Addr{netip.MustParseAddr("192.0.2.1")})
+
+	first := b.Build()
+	require.Equal(t, uint16(1), first.Priority())
+	require.Equal(t, uint16(443), first.Port())
+	require.Len(t, first.IPv4Hints(), 1)
+
+	// Builder reset — second Build returns the zero Endpoint.
+	second := b.Build()
+	require.Equal(t, uint16(0), second.Priority())
+	require.Equal(t, uint16(0), second.Port())
+	require.Empty(t, second.IPv4Hints())
+
+	// First Endpoint is unaffected.
+	require.Equal(t, uint16(443), first.Port())
+}

@@ -129,10 +129,14 @@ func (b *EndpointBuilder) IPv6Hints(v []netip.Addr) *EndpointBuilder { b.e.ipv6H
 // Build returns the configured Endpoint and resets b to the zero
 // state — single-shot semantics. The Endpoint's slice fields ALIAS
 // the slices passed to the builder's setters.
-func (b *EndpointBuilder) Build() (Endpoint, error) {
+//
+// Endpoint is a pure value carrier populated from a parsed SVCB
+// record, so Build cannot fail. The signature is intentionally
+// infallible.
+func (b *EndpointBuilder) Build() Endpoint {
 	out := b.e
 	*b = EndpointBuilder{}
-	return out, nil
+	return out
 }
 
 // Discover queries _dns.resolver.arpa via r and returns the
@@ -239,8 +243,7 @@ func endpointFromSVCB(s rdata.SVCB) Endpoint {
 		b.DOHPath(path)
 	}
 	b.Protocol(inferProtocol(s.ALPN(), b.e.dohPath))
-	e, _ := b.Build()
-	return e
+	return b.Build()
 }
 
 func inferProtocol(alpn []string, dohpath string) Protocol {
