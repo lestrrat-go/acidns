@@ -127,10 +127,14 @@ func (b *ServiceBuilder) TTL(v time.Duration) *ServiceBuilder { b.s.ttl = v; ret
 // Build returns the assembled Service and resets b to the zero
 // state — single-shot semantics. The Service's slice/map fields
 // ALIAS the values passed to the builder's setters.
-func (b *ServiceBuilder) Build() (Service, error) {
+//
+// Service is a pure value carrier populated from already-parsed
+// mDNS records, so Build cannot fail. The signature is intentionally
+// infallible.
+func (b *ServiceBuilder) Build() Service {
 	out := b.s
 	*b = ServiceBuilder{}
-	return out, nil
+	return out
 }
 
 // BuildBrowseQuery constructs a PTR query for the given service type
@@ -202,7 +206,7 @@ func ParseBrowseResponse(m wire.Message) []Service {
 		if !haveSRV {
 			continue
 		}
-		svc, _ := NewServiceBuilder().
+		svc := NewServiceBuilder().
 			Instance(leadingLabel(instanceName)).
 			Type(rec.Name()).
 			Host(s.Target()).

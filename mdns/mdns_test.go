@@ -78,3 +78,34 @@ func TestServiceNameNormalisation(t *testing.T) {
 		require.Equal(t, "_http._tcp.local.", q.Questions()[0].Name().String())
 	}
 }
+
+// TestServiceBuilderSingleShot verifies that ServiceBuilder.Build
+// resets the builder so a second Build does not leak the first
+// Service's slice/map fields.
+func TestServiceBuilderSingleShot(t *testing.T) {
+	t.Parallel()
+	b := mdns.NewServiceBuilder().
+		Instance("printer").
+		Type(wire.MustParseName("_http._tcp.local.")).
+		Host(wire.MustParseName("printer.local.")).
+		Port(80).
+		Addrs([]netip.Addr{netip.MustParseAddr("192.0.2.1")}).
+		Text(map[string]string{"k": "v"}).
+		TTL(120 * time.Second)
+
+	first := b.Build()
+	require.Equal(t, "printer", first.Instance())
+	require.Equal(t, uint16(80), first.Port())
+	require.Len(t, first.Addrs(), 1)
+	require.Equal(t, "v", first.Text()["k"])
+
+	// Builder reset — second Build is the zero Service.
+	second := b.Build()
+	require.Equal(t, "", second.Instance())
+	require.Equal(t, uint16(0), second.Port())
+	require.Empty(t, second.Addrs())
+	require.Empty(t, second.Text())
+
+	// First Service is unaffected.
+	require.Equal(t, "printer", first.Instance())
+}
