@@ -150,10 +150,14 @@ func (b *QueryEventBuilder) Err(v error) *QueryEventBuilder { b.e.err = v; retur
 // its zero state so the same instance can be reused for a subsequent
 // event without aliasing slices or carrying over fields. Builders in
 // this project are single-shot per Build call.
-func (b *QueryEventBuilder) Build() (QueryEvent, error) {
+//
+// QueryEvent is a pure value carrier — all setters accept already-typed
+// inputs and no invariant spans multiple fields, so Build cannot fail.
+// The signature is intentionally infallible.
+func (b *QueryEventBuilder) Build() QueryEvent {
 	ev := b.e
 	b.e = QueryEvent{}
-	return ev, nil
+	return ev
 }
 
 // QueryObserver receives one [QueryEvent] per Handler invocation. It
@@ -196,7 +200,7 @@ func (o *observed) ServeDNS(ctx context.Context, w ResponseWriter, q wire.Messag
 	captured := &capturingWriter{ResponseWriter: w}
 	started := time.Now()
 	o.inner.ServeDNS(ctx, captured, q)
-	ev, _ := NewQueryEventBuilder().
+	ev := NewQueryEventBuilder().
 		Request(q).
 		Response(captured.snapshot()).
 		RemoteAddr(w.RemoteAddr()).

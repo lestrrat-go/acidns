@@ -92,3 +92,39 @@ func TestNewObservedNilObsReturnsInner(t *testing.T) {
 	wrapped.ServeDNS(context.Background(), &recordingWriter{}, q)
 	require.True(t, called, "nil observer must still invoke inner handler")
 }
+
+// TestQueryEventBuilderSingleShot verifies that
+// QueryEventBuilder.Build resets the builder so a second Build does
+// not leak fields from the first QueryEvent.
+func TestQueryEventBuilderSingleShot(t *testing.T) {
+	t.Parallel()
+	q, err := wire.NewMessageBuilder().
+		ID(7).
+		Question(wire.NewQuestion(wire.MustParseName("example.com"), rrtype.A)).
+		Build()
+	require.NoError(t, err)
+
+	b := acidns.NewQueryEventBuilder().
+		Request(q).
+		RemoteAddr(netip.MustParseAddrPort("198.51.100.1:1234")).
+		Network("udp").
+		Latency(5 * time.Millisecond).
+		Envelopes(1)
+
+	first := b.Build()
+	require.Equal(t, uint16(7), first.Request().ID())
+	require.Equal(t, 1, first.Envelopes())
+	require.Equal(t, "udp", first.Network())
+
+	// Builder reset — second Build is the zero QueryEvent.
+	second := b.Build()
+	require.Equal(t, uint16(0), second.Request().ID(),
+		"reset must clear Request")
+	require.Equal(t, 0, second.Envelopes(),
+		"reset must clear Envelopes")
+	require.Equal(t, "", second.Network(),
+		"reset must clear Network")
+
+	// First QueryEvent is unaffected.
+	require.Equal(t, uint16(7), first.Request().ID())
+}
