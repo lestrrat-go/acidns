@@ -12,9 +12,9 @@ import (
 )
 
 // LookupHost dispatches A and AAAA queries for host concurrently and returns
-// every address either query produced. If r satisfies SearchLister, the host
-// string is expanded against the search list using its Ndots threshold;
-// trailing-dot names bypass expansion.
+// every address either query produced. The host string is expanded against
+// the resolver's SearchList using its Ndots threshold; an empty search list
+// disables expansion. Trailing-dot names bypass expansion regardless.
 //
 // A non-NoError RCODE on any individual sub-query is treated as a soft fail:
 // LookupHost continues to the next candidate name. Only when no candidate
@@ -44,20 +44,19 @@ func LookupHost(ctx context.Context, r Resolver, host string) ([]netip.Addr, err
 }
 
 // candidateNames builds the ordered list of FQDNs to attempt for a LookupHost
-// call. When r does not satisfy SearchLister (or the search list is empty),
-// only the parsed host is returned.
+// call. When the resolver's search list is empty, only the parsed host is
+// returned.
 func candidateNames(r Resolver, host string) ([]wire.Name, error) {
 	absolute := strings.HasSuffix(host, ".")
 	base, err := wire.ParseName(host)
 	if err != nil {
 		return nil, err
 	}
-	sl, ok := r.(SearchLister)
-	if absolute || !ok || len(sl.SearchList()) == 0 {
+	list := r.SearchList()
+	if absolute || len(list) == 0 {
 		return []wire.Name{base}, nil
 	}
 	dots := strings.Count(strings.TrimSuffix(host, "."), ".")
-	list := sl.SearchList()
 	suffixed := make([]wire.Name, 0, len(list))
 	for _, s := range list {
 		n, err := wire.ParseName(host + "." + s.String())
@@ -66,7 +65,7 @@ func candidateNames(r Resolver, host string) ([]wire.Name, error) {
 		}
 		suffixed = append(suffixed, n)
 	}
-	if dots >= sl.Ndots() {
+	if dots >= r.Ndots() {
 		return append([]wire.Name{base}, suffixed...), nil
 	}
 	return append(suffixed, base), nil

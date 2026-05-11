@@ -33,9 +33,10 @@ var ErrNoResolver = errors.New("acidns: no exchanger or servers configured")
 // single primitive — typed convenience helpers (LookupHost, ResolveAs[T],
 // Extract[T], ...) live as package-level functions that wrap a Resolver.
 //
-// Implementations are free to satisfy additional capability interfaces such
-// as SearchLister; helpers type-assert for those capabilities and fall back
-// gracefully when they are absent.
+// SearchList and Ndots feed the search-list expansion performed by
+// helpers like LookupHost. Implementations that don't carry a search list
+// should return a nil slice and zero — LookupHost treats both as "no
+// expansion, query the name as given".
 //
 // Resolver implementations MUST be safe for concurrent use by multiple
 // goroutines. The resolver returned by NewResolver and NewSystemResolver
@@ -46,14 +47,14 @@ type Resolver interface {
 	// *RCodeError carrying the response; the matched record list is empty
 	// in that case.
 	Resolve(ctx context.Context, name wire.Name, t rrtype.Type) (*Answer, error)
-}
 
-// SearchLister is an optional capability satisfied by resolver impls that
-// know about a search list and an ndots threshold. Helpers like LookupHost
-// type-assert against this to expand short names; resolvers without this
-// capability skip the expansion step.
-type SearchLister interface {
+	// SearchList returns the suffixes that LookupHost appends to short
+	// names. A nil or empty slice disables search-list expansion.
 	SearchList() []wire.Name
+
+	// Ndots returns the threshold of dots above which a short name is
+	// tried in absolute form before applying the search list. Zero is a
+	// valid "always try absolute first" value.
 	Ndots() int
 }
 
@@ -562,12 +563,11 @@ func matchAnswers(answers []wire.Record, qname wire.Name, qtype rrtype.Type) []w
 	return out
 }
 
-// SearchList satisfies SearchLister so package-level helpers (LookupHost,
-// future search-list-aware lookups) can expand short names against the
-// resolver's configured suffixes.
+// SearchList exposes the suffixes that package-level helpers (LookupHost,
+// future search-list-aware lookups) use to expand short names.
 func (r *resolver) SearchList() []wire.Name { return r.searchList }
 
-// Ndots satisfies SearchLister.
+// Ndots returns the dots-threshold used together with SearchList.
 func (r *resolver) Ndots() int { return r.ndots }
 
 func randomID() (uint16, error) {

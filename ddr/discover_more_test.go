@@ -24,6 +24,9 @@ func (e *errResolver) Resolve(_ context.Context, _ wire.Name, _ rrtype.Type) (*a
 	return nil, e.err
 }
 
+func (e *errResolver) SearchList() []wire.Name { return nil }
+func (e *errResolver) Ndots() int              { return 0 }
+
 
 func TestDiscover_ResolverError(t *testing.T) {
 	t.Parallel()
