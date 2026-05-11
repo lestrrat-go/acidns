@@ -149,21 +149,20 @@ func hasTSIG(m wire.Message) bool {
 }
 
 // Result captures one secondary's response from Broadcast.
-type Result interface {
-	Exchanger() acidns.Exchanger
-	Response() wire.Message
-	Err() error
-}
-
-type result struct {
+type Result struct {
 	ex   acidns.Exchanger
 	resp wire.Message
 	err  error
 }
 
-func (r result) Exchanger() acidns.Exchanger { return r.ex }
-func (r result) Response() wire.Message      { return r.resp }
-func (r result) Err() error                  { return r.err }
+// Exchanger reports the exchanger that produced this result.
+func (r Result) Exchanger() acidns.Exchanger { return r.ex }
+
+// Response returns the secondary's response message, if any.
+func (r Result) Response() wire.Message { return r.resp }
+
+// Err returns the error encountered for this exchanger, or nil on success.
+func (r Result) Err() error { return r.err }
 
 // Broadcast sends NOTIFY in parallel to many secondaries and returns one
 // Result per exchanger, in the order supplied. Errors on individual
@@ -184,7 +183,7 @@ func Broadcast(ctx context.Context, exs []acidns.Exchanger, zone wire.Name, opts
 	}
 	for range exs {
 		s := <-ch
-		out[s.idx] = result{ex: exs[s.idx], resp: s.resp, err: s.err}
+		out[s.idx] = Result{ex: exs[s.idx], resp: s.resp, err: s.err}
 	}
 	return out
 }
