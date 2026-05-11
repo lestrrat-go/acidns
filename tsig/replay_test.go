@@ -72,3 +72,79 @@ func TestReplayCacheSizeCap(t *testing.T) {
 	// At cap=2 the oldest entry is evicted to make room.
 	require.LessOrEqual(t, c.Len(), 2)
 }
+
+// TestReplayCacheReplayerDoesNotPinEntry guards against a regression
+// where a hit refreshed the cached timestamp. Under sustained replay
+// that behaviour kept the offender's entry "fresh" forever, so the
+// oldest-entry eviction preferentially threw out legitimate entries
+// while the replayer stayed pinned. The fix preserves the original
+// observation time so the replayer ages out normally.
+func TestReplayCacheReplayerDoesNotPinEntry(t *testing.T) {
+	t.Parallel()
+
+	clock := time.Unix(1_700_000_000, 0)
+	const cap = 4
+	c := tsig.NewMemoryReplayCache(
+		tsig.WithReplayCacheSize(cap),
+		// Large window so eviction is driven by the size cap, not
+		// by window expiry — this is the path that exercised the
+		// bug.
+		tsig.WithReplayWindow(time.Hour),
+		tsig.WithReplayClock(func() time.Time { return clock }),
+	)
+	keyName := wire.MustParseName("k.example.")
+
+	// 1) Inject the replayer first so it is the oldest entry.
+	replayerMAC := []byte{0xAA}
+	replayerSignedAt := clock
+	require.False(t, c.Seen(keyName, replayerSignedAt, replayerMAC),
+		"replayer's first observation must be fresh")
+
+	// 2) Fill the rest of the cache with legitimate entries, each
+	//    with a distinct (signedAt, MAC). Advance the clock between
+	//    each so their stored timestamps are monotonically newer
+	//    than the replayer's.
+	legitMACs := [][]byte{{0x01}, {0x02}, {0x03}}
+	legitSignedAts := make([]time.Time, len(legitMACs))
+	for i, mac := range legitMACs {
+		clock = clock.Add(time.Second)
+		legitSignedAts[i] = clock
+		require.False(t, c.Seen(keyName, legitSignedAts[i], mac),
+			"legitimate entry %d must be fresh", i)
+	}
+	require.Equal(t, cap, c.Len(), "cache should be full")
+
+	// 3) Replay the offender many times. Each call must be reported
+	//    as a replay; with the buggy refresh-on-hit behaviour the
+	//    replayer's stored timestamp would advance past every
+	//    legitimate entry's.
+	for i := 0; i < 20; i++ {
+		clock = clock.Add(time.Second)
+		require.True(t, c.Seen(keyName, replayerSignedAt, replayerMAC),
+			"replay #%d must be flagged", i)
+	}
+
+	// 4) Insert a brand new legitimate entry. This pushes the cache
+	//    over capacity, forcing evictOldestLocked to drop exactly
+	//    one entry.
+	clock = clock.Add(time.Second)
+	newMAC := []byte{0x04}
+	newSignedAt := clock
+	require.False(t, c.Seen(keyName, newSignedAt, newMAC),
+		"new legitimate entry must be admitted")
+
+	// 5) Verify the legitimate entries from step 2 are still
+	//    cached (i.e. they were NOT preferentially evicted while
+	//    the replayer was being repeatedly hit). Each Seen() call
+	//    on a still-cached tuple returns true (replay).
+	for i, mac := range legitMACs {
+		require.True(t, c.Seen(keyName, legitSignedAts[i], mac),
+			"legitimate entry %d must still be cached", i)
+	}
+
+	// 6) The replayer (oldest by original-observation time) must
+	//    have been the entry evicted in step 4. Re-observing its
+	//    tuple should be treated as fresh, not a replay.
+	require.False(t, c.Seen(keyName, replayerSignedAt, replayerMAC),
+		"replayer entry must have been evicted, not pinned")
+}

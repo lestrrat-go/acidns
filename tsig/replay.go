@@ -128,12 +128,14 @@ func (c *MemoryReplayCache) Seen(keyName wire.Name, signedAt time.Time, mac []by
 		c.lastSweep = now
 	}
 
-	if t, exists := c.seen[k]; exists {
-		// Refresh the timestamp so a steadily replayed signature
-		// continues to be flagged for the full window without
-		// expiring out from under the second observation.
-		_ = t
-		c.seen[k] = now
+	if _, exists := c.seen[k]; exists {
+		// Keep the original observation time. Refreshing on every
+		// hit would let a persistent replayer pin its entry as
+		// "fresh" forever while legitimate entries age out and get
+		// preferentially evicted by evictOldestLocked. The entry
+		// will age out on its own window — replays past that point
+		// re-enter as fresh, which is the intended semantic since
+		// the fudge window has already lapsed.
 		return true
 	}
 
