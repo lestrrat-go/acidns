@@ -67,19 +67,19 @@ func WithRateLimitDrop(v bool) RateLimitOption {
 	return rateLimitOption{option.New(identRateLimitDrop{}, v)}
 }
 
-// WithRateLimitV4Prefix coalesces IPv4 sources by the given CIDR mask
+// WithRateLimitIPv4Prefix coalesces IPv4 sources by the given CIDR mask
 // before keying the bucket — useful so a single misbehaving /24 isn't
 // permitted to multiply a budget by 256. The mask is clamped to [0, 32]
 // at construction; 0 (the default) disables prefix grouping for IPv4.
-func WithRateLimitV4Prefix(maskBits int) RateLimitOption {
+func WithRateLimitIPv4Prefix(maskBits int) RateLimitOption {
 	return rateLimitOption{option.New(identRateLimitV4Prefix{}, maskBits)}
 }
 
-// WithRateLimitV6Prefix coalesces IPv6 sources by the given CIDR mask
+// WithRateLimitIPv6Prefix coalesces IPv6 sources by the given CIDR mask
 // before keying the bucket. /48 or /64 are the typical aggregation
 // boundaries on the public internet. The mask is clamped to [0, 128]
 // at construction; 0 (the default) disables prefix grouping for IPv6.
-func WithRateLimitV6Prefix(maskBits int) RateLimitOption {
+func WithRateLimitIPv6Prefix(maskBits int) RateLimitOption {
 	return rateLimitOption{option.New(identRateLimitV6Prefix{}, maskBits)}
 }
 

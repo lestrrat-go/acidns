@@ -305,8 +305,8 @@ func buildServers(addr netip.AddrPort, handler acidns.Handler, allowPublic bool)
 	publicOpts := []acidns.PublicServerOption{
 		acidns.WithPublicACLOptions(acidns.WithACLAllow(allowAll...)),
 		acidns.WithPublicRateLimitOptions(
-			acidns.WithRateLimitV4Prefix(24),
-			acidns.WithRateLimitV6Prefix(56),
+			acidns.WithRateLimitIPv4Prefix(24),
+			acidns.WithRateLimitIPv6Prefix(56),
 			acidns.WithRateLimitDrop(true),
 		),
 	}

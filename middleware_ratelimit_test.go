@@ -108,7 +108,7 @@ func TestRateLimitGroupPrefix(t *testing.T) {
 	h := acidns.NewRateLimit(rateLimitMkInner(),
 		acidns.WithRateLimitQPS(0.0001),
 		acidns.WithRateLimitBurst(1),
-		acidns.WithRateLimitV4Prefix(24),
+		acidns.WithRateLimitIPv4Prefix(24),
 	)
 
 	w1 := &rlFakeWriter{src: netip.MustParseAddrPort("198.51.100.1:1")}
