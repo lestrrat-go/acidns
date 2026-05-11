@@ -2,6 +2,7 @@ package acidns_test
 
 import (
 	"context"
+	"fmt"
 	"net/netip"
 	"testing"
 	"time"
@@ -194,6 +195,69 @@ func TestRRLAggregatesByPrefix(t *testing.T) {
 	h.ServeDNS(context.Background(), w2, rrlQuery(t, "victim.example."))
 	require.False(t, w2.written,
 		"second source in same /24 should share the exhausted bucket")
+}
+
+// rrlNXDomainWithSOA models a real authoritative-server NXDOMAIN: empty
+// answer section, SOA of the enclosing zone in authority (RFC 2308).
+// Random-subdomain amplification attacks under example.com all produce
+// this shape with the SAME SOA owner (example.com.) — the bucket-key
+// signal that must collapse them onto one RRL bucket.
+func rrlNXDomainWithSOA(zone string) acidns.Handler {
+	return acidns.HandlerFunc(func(_ context.Context, w acidns.ResponseWriter, q wire.Message) {
+		soaRdata, _ := rdata.NewSOA(
+			wire.MustParseName("ns1."+zone),
+			wire.MustParseName("hostmaster."+zone),
+			1,
+			3600*time.Second,
+			600*time.Second,
+			86400*time.Second,
+			300*time.Second,
+		)
+		soa := wire.NewRecord(wire.MustParseName(zone), 300*time.Second, soaRdata)
+		resp, _ := wire.NewMessageBuilder().
+			ID(q.ID()).
+			Response(true).
+			Question(q.Questions()[0]).
+			RCODE(wire.RCODENXDomain).
+			Authority(soa).
+			Build()
+		_ = w.WriteMsg(resp)
+	})
+}
+
+// TestRRLBucketsRandomSubdomainAttackByZone is the regression test for the
+// random-subdomain amplification weakness: an attacker rotates qnames
+// (<rand>.victim.example.com / ANY) so per-qname keying never hits the
+// same bucket, yet every response carries a large referral/answer set
+// (or a SOA-bearing NXDOMAIN). RRL must key on the response *zone* —
+// here, the SOA owner in the authority section — so all 1000 unique
+// qnames share one bucket and the limiter trips.
+func TestRRLBucketsRandomSubdomainAttackByZone(t *testing.T) {
+	t.Parallel()
+	const burst = 5
+	h := acidns.NewRRL(rrlNXDomainWithSOA("example.com."),
+		acidns.WithRRLNXDOMAINQPS(0.0001), // effectively no refill
+		acidns.WithRRLBurst(burst),
+		acidns.WithRRLSlipRate(0), // drop on overage so we can count
+	)
+
+	src := netip.MustParseAddrPort("203.0.113.99:1")
+	passed := 0
+	const total = 1000
+	for i := range total {
+		w := &rrlCapturingWriter{src: src}
+		// Each qname is unique — classic random-subdomain attack.
+		qname := fmt.Sprintf("rand-%d.victim.example.com.", i)
+		h.ServeDNS(context.Background(), w, rrlQuery(t, qname))
+		if w.written {
+			passed++
+		}
+	}
+	require.Equal(t, burst, passed,
+		"random-subdomain attack must collapse to one zone-keyed bucket: "+
+			"%d unique qnames under example.com. produced %d passing responses; "+
+			"expected exactly the burst (%d). qname-keyed RRL would have let all %d through.",
+		total, passed, burst, total)
 }
 
 // TestRRLPassesThroughOnTCP exercises the fix that gates RRL to datagram

@@ -20,6 +20,7 @@ import (
 	"time"
 
 	"github.com/lestrrat-go/acidns/wire"
+	"github.com/lestrrat-go/acidns/wire/rrtype"
 	"github.com/lestrrat-go/option/v3"
 )
 
@@ -427,12 +428,54 @@ func (r *rrl) evictLocked(sh *rrlShard, now time.Time) {
 	delete(sh.buckets, oldestKey)
 }
 
-// responseKeyName is the canonical name to bucket a response by. We
-// prefer the name the client asked about (q.Questions()[0].Name())
-// over the first answer owner so referrals and CNAME-target answers
-// still bucket against the original qname — otherwise an attacker can
-// rotate the chase target to evade the limiter.
+// responseKeyName picks the name a response should be bucketed under.
+// The goal is amplification defence: under a random-subdomain attack
+// (rand.victim.example.com / ANY) every query has a unique qname, but
+// every *response* refers to the same zone — so we key on the response
+// zone, not the qname. Otherwise the attacker rotates qnames and never
+// hits the same bucket while every response still carries a large
+// referral or answer set.
+//
+// Classic RRL implementations (BIND, NSD) follow the same shape:
+//
+//   - Positive answer: prefer the SOA owner if the server happened to
+//     include one in the authority section; otherwise the longest
+//     common ancestor of the answer-section owners (the deepest name
+//     that is a suffix of every answer owner). This collapses
+//     <rand>.victim.example.com, foo.victim.example.com, etc. onto the
+//     same bucket while still letting genuinely unrelated zones
+//     bucket apart.
+//   - NXDOMAIN / NoData: the SOA owner from the authority section.
+//     That is the zone apex by construction (RFC 2308).
+//   - Referral (NoError + NS in authority, no answers): the NS owner.
+//     That is the delegation cut.
+//   - Last resort: the qname (preserves legacy behaviour when nothing
+//     else in the response identifies a zone).
 func responseKeyName(m wire.Message, q wire.Message) wire.Name {
+	switch classify(m) {
+	case rrlClassNegative:
+		if n, ok := authoritySectionName(m, rrtype.SOA); ok {
+			return n
+		}
+		// NoData with no SOA — fall through to ancestor logic on whatever
+		// authority records are present, then qname.
+		if n, ok := authoritySectionName(m, rrtype.NS); ok {
+			return n
+		}
+	case rrlClassPositive:
+		if n, ok := authoritySectionName(m, rrtype.SOA); ok {
+			return n
+		}
+		if len(m.Answers()) == 0 {
+			// Pure referral: NS owner is the delegation point.
+			if n, ok := authoritySectionName(m, rrtype.NS); ok {
+				return n
+			}
+		}
+		if n, ok := answerCommonAncestor(m); ok {
+			return n
+		}
+	}
 	if qs := q.Questions(); len(qs) > 0 {
 		return qs[0].Name()
 	}
@@ -440,6 +483,56 @@ func responseKeyName(m wire.Message, q wire.Message) wire.Name {
 		return ms[0].Name()
 	}
 	return wire.Name{}
+}
+
+// authoritySectionName returns the owner name of the first authority
+// record of the given rrtype, if any.
+func authoritySectionName(m wire.Message, t rrtype.Type) (wire.Name, bool) {
+	for _, rec := range m.Authorities() {
+		if rec.Type() == t {
+			return rec.Name(), true
+		}
+	}
+	return wire.Name{}, false
+}
+
+// answerCommonAncestor returns the deepest name that is an ancestor
+// (or equal) of every answer-section owner. With a single answer this
+// is just that owner; with multiple answers it walks the first owner
+// up until it is a suffix of every other owner. Returns ok=false on
+// an empty answer section.
+func answerCommonAncestor(m wire.Message) (wire.Name, bool) {
+	answers := m.Answers()
+	if len(answers) == 0 {
+		return wire.Name{}, false
+	}
+	lca := answers[0].Name()
+	for _, rec := range answers[1:] {
+		for !isAncestorOrEqual(lca, rec.Name()) {
+			parent, ok := lca.Parent()
+			if !ok {
+				return lca, true // root — can't go higher
+			}
+			lca = parent
+		}
+	}
+	return lca, true
+}
+
+// isAncestorOrEqual reports whether anc is an ancestor of (or equal
+// to) desc in the DNS tree. Implemented as a wire-format suffix check:
+// every name's wire encoding ends with the encodings of its
+// ancestors, so a label-aligned suffix match is sufficient.
+func isAncestorOrEqual(anc, desc wire.Name) bool {
+	if anc.Equal(desc) {
+		return true
+	}
+	for d, ok := desc.Parent(); ok; d, ok = d.Parent() {
+		if anc.Equal(d) {
+			return true
+		}
+	}
+	return false
 }
 
 // truncateForRRL builds a slip reply: copies ID, opcode, RD echo,
