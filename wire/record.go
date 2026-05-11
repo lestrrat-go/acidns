@@ -13,6 +13,19 @@ import (
 // ErrInvalidMessage is returned when a DNS message fails to encode or decode.
 var ErrInvalidMessage = errors.New("wire: invalid message")
 
+// ErrInvalidTTL is returned when a record TTL is outside the
+// RFC 2308 §8 valid range (0..2^31-1 seconds). Negative durations are
+// rejected because they would otherwise wrap to a huge uint32 on the
+// wire (claiming a ~136-year TTL); values exceeding maxRecordTTLSeconds
+// are rejected because RFC 2308 §8 caps TTLs at the signed 32-bit limit.
+var ErrInvalidTTL = errors.New("wire: invalid TTL")
+
+// maxRecordTTLSeconds is the RFC 2308 §8 ceiling on a TTL value
+// (signed 32-bit). Values strictly greater than this would either
+// overflow or be interpreted as "expired" by RFC 2308 §8 compliant
+// caches.
+const maxRecordTTLSeconds = 0x7fffffff
+
 // Record is a resource record: name, type/class, TTL, and a typed
 // rdata. Value type — copy-friendly, returned by value from the
 // section accessors on [Message]. The zero value's RData() is nil;
@@ -79,6 +92,18 @@ func RDataAs[T rdata.Typed](rec Record) (T, bool) {
 }
 
 func packRecord(p *wirebb.Packer, r Record) error {
+	// Validate TTL at the wire-encode boundary: a negative duration here
+	// would otherwise wrap to a huge uint32 (~136-year TTL); values above
+	// 2^31-1 seconds exceed the RFC 2308 §8 limit and would also wrap
+	// when divided into seconds for the 32-bit wire field. This is the
+	// belt-and-suspenders check that catches programmer-error TTLs even
+	// when NewRecord was not validated up front.
+	if r.ttl < 0 {
+		return fmt.Errorf("%w: negative TTL %s for type %s", ErrInvalidTTL, r.ttl, r.Type())
+	}
+	if r.ttl/time.Second > maxRecordTTLSeconds {
+		return fmt.Errorf("%w: TTL %s exceeds RFC 2308 §8 ceiling (2^31-1 seconds) for type %s", ErrInvalidTTL, r.ttl, r.Type())
+	}
 	p.Name(r.name)
 	p.Uint16(uint16(r.Type()))
 	p.Uint16(uint16(r.class))

@@ -1,12 +1,15 @@
 package wire_test
 
 import (
+	"errors"
+	"math"
 	"net/netip"
 	"testing"
 	"time"
 
 	"github.com/lestrrat-go/acidns/wire"
 	"github.com/lestrrat-go/acidns/wire/rdata"
+	"github.com/lestrrat-go/acidns/wire/rrtype"
 	"github.com/stretchr/testify/require"
 )
 
@@ -67,4 +70,78 @@ func TestRDataAs_TypeMismatch(t *testing.T) {
 	v, ok := wire.RDataAs[rdata.MX](rec)
 	require.False(t, ok)
 	require.Equal(t, rdata.MX{}, v)
+}
+
+// A negative TTL on a record must be rejected at the wire-encode boundary
+// rather than silently wrapping to a huge uint32 (~136-year TTL).
+// NewRecord itself is currently non-validating for legacy-call-site reasons
+// (see commit message); the wire-encode path is the load-bearing check.
+func TestRecord_PackRejectsNegativeTTL(t *testing.T) {
+	t.Parallel()
+	name := wire.MustParseName("example.com")
+	ar, err := rdata.NewA(netip.MustParseAddr("192.0.2.1"))
+	require.NoError(t, err)
+	rec := wire.NewRecord(name, -1*time.Second, ar)
+
+	msg, err := wire.NewMessageBuilder().
+		ID(1).
+		Question(wire.NewQuestion(name, rrtype.A)).
+		Answer(rec).
+		Build()
+	require.NoError(t, err, "builder accepts the record; rejection happens at Marshal")
+
+	_, err = wire.Marshal(msg)
+	require.Error(t, err)
+	require.ErrorIs(t, err, wire.ErrInvalidTTL,
+		"negative duration TTL must be rejected, not wrapped to a huge uint32 on the wire")
+}
+
+// A TTL above 2^31-1 seconds violates RFC 2308 §8 and would either
+// overflow when divided into seconds or be flagged as expired by
+// compliant caches; the wire-encode path must reject it.
+func TestRecord_PackRejectsTTLAboveRFC2308Ceiling(t *testing.T) {
+	t.Parallel()
+	name := wire.MustParseName("example.com")
+	ar, err := rdata.NewA(netip.MustParseAddr("192.0.2.1"))
+	require.NoError(t, err)
+	// One second above the RFC 2308 §8 limit.
+	rec := wire.NewRecord(name, time.Duration(math.MaxInt32+1)*time.Second, ar)
+
+	msg, err := wire.NewMessageBuilder().
+		ID(1).
+		Question(wire.NewQuestion(name, rrtype.A)).
+		Answer(rec).
+		Build()
+	require.NoError(t, err)
+
+	_, err = wire.Marshal(msg)
+	require.Error(t, err)
+	require.ErrorIs(t, err, wire.ErrInvalidTTL)
+}
+
+// A zero TTL is valid (RFC 1035 — "do not cache") and must continue to
+// pack without error after the new boundary check is added.
+func TestRecord_PackAcceptsZeroTTL(t *testing.T) {
+	t.Parallel()
+	name := wire.MustParseName("example.com")
+	ar, err := rdata.NewA(netip.MustParseAddr("192.0.2.1"))
+	require.NoError(t, err)
+	rec := wire.NewRecord(name, 0, ar)
+
+	msg, err := wire.NewMessageBuilder().
+		ID(1).
+		Question(wire.NewQuestion(name, rrtype.A)).
+		Answer(rec).
+		Build()
+	require.NoError(t, err)
+
+	_, err = wire.Marshal(msg)
+	require.NoError(t, err)
+}
+
+// Sanity check that the ErrInvalidTTL sentinel is the matchable error
+// surfaced via errors.Is even when wrapped in higher-level error chains.
+func TestErrInvalidTTL_SentinelMatches(t *testing.T) {
+	t.Parallel()
+	require.True(t, errors.Is(wire.ErrInvalidTTL, wire.ErrInvalidTTL))
 }

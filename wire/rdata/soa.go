@@ -40,6 +40,11 @@ func (s SOA) Pack(p *wirebb.Packer) {
 // NewSOA returns an SOA rdata. Returns [ErrInvalidRData] when mname
 // or rname is the zero name; both are required by RFC 1035 §3.3.13
 // and silently emitting "." would corrupt zone state in any consumer.
+//
+// Also returns [ErrInvalidRData] if any of refresh, retry, expire, or
+// minimum is negative or exceeds 2^31-1 seconds (RFC 2308 §8 ceiling).
+// Negative durations would otherwise wrap to a huge uint32 on the wire,
+// producing nonsensical timer values that confuse downstream resolvers.
 func NewSOA(mname, rname wirebb.Name, serial uint32, refresh, retry, expire, minimum time.Duration) (SOA, error) {
 	if !mname.IsValid() {
 		return SOA{}, fmt.Errorf("%w: SOA mname is invalid", ErrInvalidRData)
@@ -47,11 +52,32 @@ func NewSOA(mname, rname wirebb.Name, serial uint32, refresh, retry, expire, min
 	if !rname.IsValid() {
 		return SOA{}, fmt.Errorf("%w: SOA rname is invalid", ErrInvalidRData)
 	}
+	for _, t := range [...]struct {
+		name string
+		d    time.Duration
+	}{
+		{"refresh", refresh},
+		{"retry", retry},
+		{"expire", expire},
+		{"minimum", minimum},
+	} {
+		if t.d < 0 {
+			return SOA{}, fmt.Errorf("%w: SOA %s is negative (%s)", ErrInvalidRData, t.name, t.d)
+		}
+		if t.d/time.Second > maxSOATimerSeconds {
+			return SOA{}, fmt.Errorf("%w: SOA %s %s exceeds RFC 2308 §8 ceiling (2^31-1 seconds)", ErrInvalidRData, t.name, t.d)
+		}
+	}
 	return SOA{
 		mname: mname, rname: rname, serial: serial,
 		refresh: refresh, retry: retry, expire: expire, minimum: minimum,
 	}, nil
 }
+
+// maxSOATimerSeconds is the RFC 2308 §8 ceiling for SOA timer values
+// (signed 32-bit). The wire format is uint32, but values above this
+// limit are routinely rejected by RFC 2308 §8 compliant caches.
+const maxSOATimerSeconds = 0x7fffffff
 func unpackSOA(u *wirebb.Unpacker, rdlen int) (SOA, error) {
 	var zero SOA
 	end := u.Off() + rdlen
