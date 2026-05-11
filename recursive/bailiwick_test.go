@@ -174,6 +174,79 @@ func TestBailiwickFilterDropsForgedAnswerRecords(t *testing.T) {
 	}
 }
 
+// TestBailiwickFilterDropsRootOwnedAuthority verifies authority
+// records owned at the DNS root are rejected when qname is not the
+// root itself. A compromised upstream answering "bank.example." with
+// an SOA owned at "." plus crafted NSEC records covering the qname
+// would otherwise satisfy inBailiwick(., qname) (root is the ancestor
+// of every name) and reach the cache through the denial-record path.
+// The validator catches this for signed responses, but the
+// validator-off path needs the filter to reject it up front; mirrors
+// the same defence-in-depth rule applied in forward.filterBailiwick.
+func TestBailiwickFilterDropsRootOwnedAuthority(t *testing.T) {
+	t.Parallel()
+	qname := wire.MustParseName("bank.example.")
+	root := wire.MustParseName(".")
+
+	soa, err := rdata.NewSOA(
+		wire.MustParseName("ns.evil."),
+		wire.MustParseName("hostmaster.evil."),
+		1,
+		3600*time.Second,
+		600*time.Second,
+		86400*time.Second,
+		300*time.Second,
+	)
+	require.NoError(t, err)
+	// A crafted NSEC owned at the victim qname — the shape an
+	// attacker would use to manufacture an NXDOMAIN-like denial
+	// against the qname while pivoting off a root-owned SOA.
+	nsec := rdata.NewNSEC(
+		wire.MustParseName("nextdomain.evil."),
+		[]rrtype.Type{rrtype.A, rrtype.AAAA},
+	)
+
+	resp, err := wire.NewMessageBuilder().
+		ID(1).
+		Response(true).
+		Question(wire.NewQuestion(qname, rrtype.A)).
+		Authority(wire.NewRecord(root, time.Hour, soa)).
+		Authority(wire.NewRecord(qname, time.Hour, nsec)).
+		Build()
+	require.NoError(t, err)
+
+	_, authority, _ := bailiwickFilter(qname, resp)
+	for _, r := range authority {
+		require.False(t, r.Name().IsRoot(),
+			"root-owned authority record must be rejected for non-root qname")
+		require.NotEqual(t, rrtype.SOA, r.Type(),
+			"forged root-owned SOA must not reach the filtered output")
+	}
+}
+
+// TestBailiwickFilterKeepsRootOwnedAuthorityForRootQuery verifies the
+// root-owner rejection only applies when qname is below the root; a
+// genuine root query (e.g. "." NS) must still see root-owned authority
+// records pass through.
+func TestBailiwickFilterKeepsRootOwnedAuthorityForRootQuery(t *testing.T) {
+	t.Parallel()
+	root := wire.MustParseName(".")
+	nsrd, err := rdata.NewNS(wire.MustParseName("a.root-servers.net."))
+	require.NoError(t, err)
+
+	resp, err := wire.NewMessageBuilder().
+		ID(1).
+		Response(true).
+		Question(wire.NewQuestion(root, rrtype.NS)).
+		Authority(wire.NewRecord(root, time.Hour, nsrd)).
+		Build()
+	require.NoError(t, err)
+
+	_, authority, _ := bailiwickFilter(root, resp)
+	require.Len(t, authority, 1)
+	require.True(t, authority[0].Name().IsRoot())
+}
+
 func TestReferralZone(t *testing.T) {
 	t.Parallel()
 	nsrd3, err := rdata.NewNS(wire.MustParseName("ns1.example.com"))

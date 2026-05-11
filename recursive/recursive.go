@@ -1309,7 +1309,12 @@ func isDNSSECDenialType(t rrtype.Type) bool {
 //     "Kashpureff" injection) are dropped.
 //   - Authority: keep records whose owner is at-or-above qname (zone-level
 //     SOA/NS), since those are the only authority records relevant to a
-//     terminal answer for qname.
+//     terminal answer for qname. Records owned at the DNS root (".") are
+//     rejected when qname is not the root itself — a legitimate upstream
+//     never claims authority at the root for a non-root qname, and
+//     admitting one would let a hostile upstream gate forged NSEC records
+//     covering arbitrary names through the cache-poisoning filter via the
+//     root-owned SOA path.
 //   - Additional: keep OPT and records whose owner is referenced by a kept
 //     Answer-section CNAME target or Authority-section NS rdata, and whose
 //     owner is at-or-below the deepest ancestor we kept in Authority (the
@@ -1372,11 +1377,32 @@ func bailiwickFilter(qname wire.Name, resp wire.Message) (answers, authority, ad
 	// crafted denial records into the cached authority section.
 	// Validation downstream catches this when DNSSEC is on, but a
 	// validator-off path then surfaces the records to callers.
+	//
+	// Reject a root-owned SOA outright when qname is not the root: a
+	// legitimate upstream never answers "bank.example." with SOA
+	// owned at ".", but inBailiwick(., qname) returns true for any
+	// qname (root is the ancestor of everything), which would
+	// otherwise let a hostile upstream stuff root-owned NSECs
+	// covering arbitrary names into the authority section and pass
+	// the bailiwick check. The validator catches this for signed
+	// responses, but defence-in-depth — and the validator-off path
+	// — requires rejecting it here. Mirrors the same rule applied
+	// by forward.filterBailiwick.
 	if soaOwner.IsValid() && !inBailiwick(soaOwner, qname) {
+		soaOwner = wire.Name{}
+	}
+	if soaOwner.IsRoot() && !qname.IsRoot() {
 		soaOwner = wire.Name{}
 	}
 	authority = make([]wire.Record, 0, len(resp.Authorities()))
 	for _, r := range resp.Authorities() {
+		// Reject any authority record owned at the DNS root when
+		// qname is not the root itself (see SOA-owner rationale
+		// above). This drops the crafted root-owned SOA and any
+		// root-owned denial records before they can be cached.
+		if r.Name().IsRoot() && !qname.IsRoot() {
+			continue
+		}
 		if inBailiwick(r.Name(), qname) {
 			authority = append(authority, r)
 			continue
