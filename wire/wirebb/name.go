@@ -165,7 +165,15 @@ func Parse(s string) (Name, error) {
 		return Root(), nil
 	}
 
-	wire := make([]byte, 0, len(s)+2)
+	// Cap initial capacity so a pathological 1 GiB input doesn't allocate up
+	// front. The final wire form can never exceed maxNameLen+1 bytes
+	// (terminating root label), and per-byte checks below fail fast before
+	// either buffer can grow past its hard cap.
+	initCap := len(s) + 2
+	if initCap > maxNameLen+1 {
+		initCap = maxNameLen + 1
+	}
+	wire := make([]byte, 0, initCap)
 	label := make([]byte, 0, maxLabelLen)
 
 	flush := func() error {
@@ -177,7 +185,21 @@ func Parse(s string) (Name, error) {
 		}
 		wire = append(wire, byte(len(label)))
 		wire = append(wire, label...)
+		if len(wire) > maxNameLen {
+			return fmt.Errorf("%w: name exceeds %d bytes", ErrInvalidName, maxNameLen)
+		}
 		label = label[:0]
+		return nil
+	}
+
+	// appendLabel grows label by c and enforces the maxLabelLen cap inline,
+	// so a single label of bounded-but-huge input fails fast without
+	// allocating proportional to the input.
+	appendLabel := func(c byte) error {
+		if len(label) >= maxLabelLen {
+			return fmt.Errorf("%w: label exceeds %d bytes", ErrInvalidName, maxLabelLen)
+		}
+		label = append(label, c)
 		return nil
 	}
 
@@ -205,14 +227,20 @@ func Parse(s string) (Name, error) {
 				if v > 255 {
 					return Name{}, fmt.Errorf("%w: decimal escape > 255", ErrInvalidName)
 				}
-				label = append(label, byte(v))
+				if err := appendLabel(byte(v)); err != nil {
+					return Name{}, err
+				}
 				i += 3
 			} else {
-				label = append(label, foldByte(next))
+				if err := appendLabel(foldByte(next)); err != nil {
+					return Name{}, err
+				}
 				i++
 			}
 		default:
-			label = append(label, foldByte(c))
+			if err := appendLabel(foldByte(c)); err != nil {
+				return Name{}, err
+			}
 		}
 	}
 	if len(label) > 0 {

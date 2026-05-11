@@ -1,6 +1,7 @@
 package wirebb_test
 
 import (
+	"runtime"
 	"slices"
 	"strings"
 	"testing"
@@ -100,6 +101,36 @@ func TestParse(t *testing.T) {
 		}
 		_, err := wirebb.Parse(b.String())
 		require.Error(t, err)
+	})
+
+	// Regression: a 1 MiB single-label input with no dot must fail fast,
+	// without buffering proportional to the input. Before the inline
+	// length-cap check, Parse appended the entire string into the label
+	// buffer before flush() noticed the overflow at end-of-input,
+	// allocating O(input) bytes. We probe heap growth via
+	// runtime.ReadMemStats; testing.AllocsPerRun counts allocation
+	// events, not size, so it can't detect the regression.
+	t.Run("pathological long label fails fast", func(t *testing.T) {
+		t.Parallel()
+		const inputLen = 1 << 20 // 1 MiB
+		s := strings.Repeat("a", inputLen)
+
+		var before, after runtime.MemStats
+		runtime.GC()
+		runtime.ReadMemStats(&before)
+		_, err := wirebb.Parse(s)
+		runtime.ReadMemStats(&after)
+
+		require.Error(t, err)
+		// The label cap is 63 bytes; total heap growth attributable to
+		// Parse should be well under the input length. Use a generous
+		// margin (16 KiB) to absorb scheduler noise and the error value
+		// allocation itself, while still being orders of magnitude
+		// below the 1 MiB that the unbounded path would consume.
+		grew := after.TotalAlloc - before.TotalAlloc
+		require.Less(t, grew, uint64(16<<10),
+			"Parse allocated %d bytes for a %d-byte pathological input; "+
+				"expected O(maxLabelLen)", grew, inputLen)
 	})
 }
 
