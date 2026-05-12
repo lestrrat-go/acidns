@@ -86,21 +86,26 @@ func (a *Answer) Question() wire.Question { return a.q }
 // that does not call [SetExchangeServer]).
 func (a *Answer) Server() netip.AddrPort { return a.server }
 
-// Records returns a copy of the matched record list. The returned
-// slice is owned by the caller; mutating it does not affect the
-// Answer.
-func (a *Answer) Records() []wire.Record {
-	if len(a.records) == 0 {
-		return nil
-	}
-	out := make([]wire.Record, len(a.records))
-	copy(out, a.records)
-	return out
-}
-func (a *Answer) Raw() wire.Message   { return a.raw }
-func (a *Answer) RCODE() wire.RCODE   { return a.raw.Flags().RCODE() }
-func (a *Answer) Authoritative() bool { return a.raw.Flags().Authoritative() }
-func (a *Answer) Truncated() bool     { return a.raw.Flags().Truncated() }
+// Records returns the matched record list.
+//
+// The returned slice is SHARED with the Answer — callers MUST NOT
+// mutate it: no element reassignment (recs[i] = ...), no in-place
+// sort, no append (the slice's capacity equals its length so an
+// append that fits is a write into the Answer's backing array).
+// Read-only iteration (for-range, [slices.Contains], etc.) is fine.
+// If you need to modify or extend the list, copy first with
+// [slices.Clone] or build a fresh slice.
+//
+// wire.Record itself is immutable from outside this package (all
+// fields are unexported and accessed via methods), so the no-mutate
+// contract reduces to "don't replace or reorder elements." This
+// matches the convention used by [bytes.Buffer.Bytes] and similar
+// stdlib accessors that share their backing buffer with the caller.
+func (a *Answer) Records() []wire.Record { return a.records }
+func (a *Answer) Raw() wire.Message      { return a.raw }
+func (a *Answer) RCODE() wire.RCODE      { return a.raw.Flags().RCODE() }
+func (a *Answer) Authoritative() bool    { return a.raw.Flags().Authoritative() }
+func (a *Answer) Truncated() bool        { return a.raw.Flags().Truncated() }
 
 // ResolverOption configures a Resolver.
 type ResolverOption interface {
