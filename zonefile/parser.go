@@ -49,18 +49,24 @@ func b64Decode(s string) ([]byte, error) {
 }
 
 type parser struct {
-	lex        *lexer
-	origin     wire.Name
-	defaultTTL int64
-	prevName   wire.Name
-	records    []wire.Record
+	lex                   *lexer
+	origin                wire.Name
+	defaultTTL            int64
+	prevName              wire.Name
+	records               []wire.Record
+	maxGenerateIterations int
 }
 
 func newParser(r io.Reader, c config) *parser {
+	max := c.maxGenerateIterations
+	if max <= 0 {
+		max = DefaultGenerateMaxIterations
+	}
 	return &parser{
-		lex:        newLexer(r),
-		origin:     c.origin,
-		defaultTTL: c.defaultTTL,
+		lex:                   newLexer(r),
+		origin:                c.origin,
+		defaultTTL:            c.defaultTTL,
+		maxGenerateIterations: max,
 	}
 }
 
@@ -237,6 +243,8 @@ func (p *parser) handleDirective(fields []fieldTok) error {
 		}
 		p.defaultTTL = v
 		return nil
+	case "$GENERATE":
+		return p.handleGenerate(fields)
 	default:
 		return fmt.Errorf("line %d: unknown directive %s", fields[0].line, fields[0].text)
 	}

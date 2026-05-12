@@ -5,9 +5,11 @@
 // shortcuts, and presentation-format RDATA for A, AAAA, NS, CNAME, PTR,
 // MX, TXT, and SOA.
 //
-// $INCLUDE, escapes inside the SOA rname's @-encoded local part, and the
-// generic RFC 3597 \# form are intentionally out of scope for this first
-// version; they can be added without changing the surface API.
+// $GENERATE (BIND 9 extension) is supported with the d / o / x / X
+// formats and a per-directive iteration cap configured via
+// [WithGenerateMaxIterations]. $INCLUDE and the n / N nibble formats
+// are intentionally out of scope for this version and can be added
+// without changing the surface API.
 package zonefile
 
 import (
@@ -49,13 +51,15 @@ func (z *zone) SOA() (rdata.SOA, wire.Record, bool) {
 
 // Parse parses a master file from r.
 func Parse(r io.Reader, opts ...Option) (Zone, error) {
-	c := config{defaultTTL: -1}
+	c := config{defaultTTL: -1, maxGenerateIterations: DefaultGenerateMaxIterations}
 	for _, o := range opts {
 		switch o.Ident() {
 		case identOrigin{}:
 			c.origin = option.MustGet[wire.Name](o)
 		case identDefaultTTL{}:
 			c.defaultTTL = int64(option.MustGet[int](o))
+		case identGenerateMaxIterations{}:
+			c.maxGenerateIterations = option.MustGet[int](o)
 		}
 	}
 	p := newParser(r, c)
