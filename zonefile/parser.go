@@ -55,19 +55,41 @@ type parser struct {
 	prevName              wire.Name
 	records               []wire.Record
 	maxGenerateIterations int
+	source                string
+	includeResolver       IncludeResolver
+	includeDepth          int
+	maxIncludeDepth       int
 }
 
 func newParser(r io.Reader, c config) *parser {
-	max := c.maxGenerateIterations
-	if max <= 0 {
-		max = DefaultGenerateMaxIterations
+	maxGen := c.maxGenerateIterations
+	if maxGen <= 0 {
+		maxGen = DefaultGenerateMaxIterations
+	}
+	maxInc := c.maxIncludeDepth
+	if maxInc <= 0 {
+		maxInc = DefaultIncludeMaxDepth
 	}
 	return &parser{
 		lex:                   newLexer(r),
 		origin:                c.origin,
 		defaultTTL:            c.defaultTTL,
-		maxGenerateIterations: max,
+		maxGenerateIterations: maxGen,
+		source:                c.source,
+		includeResolver:       c.includeResolver,
+		maxIncludeDepth:       maxInc,
 	}
+}
+
+// lineErr formats a parse error tagged with the current source label.
+// Top-level files (no [WithSourceName]) keep the legacy "line N: ..."
+// prefix; sourced files get "source:N: ..." so the (included from
+// parent:M) chain reads consistently.
+func (p *parser) lineErr(line int, format string, args ...any) error {
+	if p.source != "" {
+		return fmt.Errorf("%s:%d: "+format, append([]any{p.source, line}, args...)...)
+	}
+	return fmt.Errorf("line %d: "+format, append([]any{line}, args...)...)
 }
 
 func (p *parser) run() error {
@@ -134,7 +156,7 @@ func (p *parser) handleLine(fields []fieldTok, leadingWS bool) error {
 	if leadingWS {
 		// blank owner: re-use previous name
 		if !p.prevName.IsValid() {
-			return fmt.Errorf("line %d: blank owner with no preceding RR", lineNum)
+			return p.lineErr(lineNum, "blank owner with no preceding RR")
 		}
 	} else {
 		ownerTok = &fields[0]
@@ -143,7 +165,7 @@ func (p *parser) handleLine(fields []fieldTok, leadingWS bool) error {
 
 	owner, err := p.resolveName(ownerOrPrev(ownerTok, p.prevName))
 	if err != nil {
-		return fmt.Errorf("line %d: %w", lineNum, err)
+		return p.lineErr(lineNum, "%w", err)
 	}
 
 	// [TTL] [CLASS] TYPE RDATA   — TTL and CLASS are interchangeable in any
@@ -157,7 +179,7 @@ func (p *parser) handleLine(fields []fieldTok, leadingWS bool) error {
 		}
 		if t, err := strconv.ParseInt(tok, 10, 64); err == nil {
 			if t < 0 || t > maxTTL {
-				return fmt.Errorf("line %d: TTL %d out of range (RFC 2308 §8: 0..%d)", fields[0].line, t, maxTTL)
+				return p.lineErr(fields[0].line, "TTL %d out of range (RFC 2308 §8: 0..%d)", t, maxTTL)
 			}
 			ttl = t
 			fields = fields[1:]
@@ -171,19 +193,19 @@ func (p *parser) handleLine(fields []fieldTok, leadingWS bool) error {
 		break
 	}
 	if len(fields) == 0 {
-		return fmt.Errorf("line %d: missing RR type", lineNum)
+		return p.lineErr(lineNum, "missing RR type")
 	}
 	t, ok := rrtype.Parse(fields[0].text)
 	if !ok {
-		return fmt.Errorf("line %d: unknown RR type %q", fields[0].line, fields[0].text)
+		return p.lineErr(fields[0].line, "unknown RR type %q", fields[0].text)
 	}
 	rest := fields[1:]
 	if ttl < 0 {
-		return fmt.Errorf("line %d: TTL not set (use $TTL)", fields[0].line)
+		return p.lineErr(fields[0].line, "TTL not set (use $TTL)")
 	}
 	rd, err := p.parseRData(t, rest)
 	if err != nil {
-		return fmt.Errorf("line %d: %w", fields[0].line, err)
+		return p.lineErr(fields[0].line, "%w", err)
 	}
 	rec := wire.NewRecordClass(owner, class, time.Duration(ttl)*time.Second, rd)
 	p.records = append(p.records, rec)
@@ -222,31 +244,33 @@ func (p *parser) handleDirective(fields []fieldTok) error {
 	switch strings.ToUpper(fields[0].text) {
 	case "$ORIGIN":
 		if len(fields) != 2 {
-			return fmt.Errorf("line %d: $ORIGIN needs one argument", fields[0].line)
+			return p.lineErr(fields[0].line, "$ORIGIN needs one argument")
 		}
 		n, err := wire.ParseName(fields[1].text)
 		if err != nil {
-			return fmt.Errorf("line %d: $ORIGIN: %w", fields[0].line, err)
+			return p.lineErr(fields[0].line, "$ORIGIN: %w", err)
 		}
 		p.origin = n
 		return nil
 	case "$TTL":
 		if len(fields) != 2 {
-			return fmt.Errorf("line %d: $TTL needs one argument", fields[0].line)
+			return p.lineErr(fields[0].line, "$TTL needs one argument")
 		}
 		v, err := strconv.ParseInt(fields[1].text, 10, 64)
 		if err != nil {
-			return fmt.Errorf("line %d: $TTL: %w", fields[0].line, err)
+			return p.lineErr(fields[0].line, "$TTL: %w", err)
 		}
 		if v < 0 || v > maxTTL {
-			return fmt.Errorf("line %d: $TTL %d out of range (RFC 2308 §8: 0..%d)", fields[0].line, v, maxTTL)
+			return p.lineErr(fields[0].line, "$TTL %d out of range (RFC 2308 §8: 0..%d)", v, maxTTL)
 		}
 		p.defaultTTL = v
 		return nil
 	case "$GENERATE":
 		return p.handleGenerate(fields)
+	case "$INCLUDE":
+		return p.handleInclude(fields)
 	default:
-		return fmt.Errorf("line %d: unknown directive %s", fields[0].line, fields[0].text)
+		return p.lineErr(fields[0].line, "unknown directive %s", fields[0].text)
 	}
 }
 

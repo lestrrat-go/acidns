@@ -39,15 +39,15 @@ const DefaultGenerateMaxIterations = 1 << 17 // 131_072
 func (p *parser) handleGenerate(fields []fieldTok) error {
 	line := fields[0].line
 	if len(fields) < 5 {
-		return fmt.Errorf("line %d: $GENERATE: expected at least 4 arguments, got %d", line, len(fields)-1)
+		return p.lineErr(line, "$GENERATE: expected at least 4 arguments, got %d", len(fields)-1)
 	}
 	rng, err := parseGenerateRange(fields[1].text)
 	if err != nil {
-		return fmt.Errorf("line %d: $GENERATE range: %w", line, err)
+		return p.lineErr(line, "$GENERATE range: %w", err)
 	}
 	iter := rng.iterations()
 	if iter > p.maxGenerateIterations {
-		return fmt.Errorf("line %d: $GENERATE: %d iterations exceeds cap %d (see WithGenerateMaxIterations)", line, iter, p.maxGenerateIterations)
+		return p.lineErr(line, "$GENERATE: %d iterations exceeds cap %d (see WithGenerateMaxIterations)", iter, p.maxGenerateIterations)
 	}
 
 	lhsTmpl := fields[2].text
@@ -62,7 +62,7 @@ func (p *parser) handleGenerate(fields []fieldTok) error {
 		}
 		if t, perr := strconv.ParseInt(tok, 10, 64); perr == nil {
 			if t < 0 || t > maxTTL {
-				return fmt.Errorf("line %d: $GENERATE TTL %d out of range (RFC 2308 §8: 0..%d)", rest[0].line, t, maxTTL)
+				return p.lineErr(rest[0].line, "$GENERATE TTL %d out of range (RFC 2308 §8: 0..%d)", t, maxTTL)
 			}
 			ttl = t
 			rest = rest[1:]
@@ -76,37 +76,37 @@ func (p *parser) handleGenerate(fields []fieldTok) error {
 		break
 	}
 	if len(rest) == 0 {
-		return fmt.Errorf("line %d: $GENERATE: missing RR type", line)
+		return p.lineErr(line, "$GENERATE: missing RR type")
 	}
 	t, ok := rrtype.Parse(rest[0].text)
 	if !ok {
-		return fmt.Errorf("line %d: $GENERATE: unknown RR type %q", rest[0].line, rest[0].text)
+		return p.lineErr(rest[0].line, "$GENERATE: unknown RR type %q", rest[0].text)
 	}
 	rhsTokens := rest[1:]
 	if ttl < 0 {
-		return fmt.Errorf("line %d: $GENERATE: TTL not set (use $TTL or supply explicit TTL)", line)
+		return p.lineErr(line, "$GENERATE: TTL not set (use $TTL or supply explicit TTL)")
 	}
 
 	subBuf := make([]fieldTok, len(rhsTokens))
 	for v := rng.start; ; v += rng.step {
 		ownerStr, err := substituteGenerate(lhsTmpl, v)
 		if err != nil {
-			return fmt.Errorf("line %d: $GENERATE lhs: %w", line, err)
+			return p.lineErr(line, "$GENERATE lhs: %w", err)
 		}
 		owner, err := p.resolveName(ownerStr)
 		if err != nil {
-			return fmt.Errorf("line %d: $GENERATE: %w", line, err)
+			return p.lineErr(line, "$GENERATE: %w", err)
 		}
 		for i, tok := range rhsTokens {
 			subbed, err := substituteGenerate(tok.text, v)
 			if err != nil {
-				return fmt.Errorf("line %d: $GENERATE rhs: %w", line, err)
+				return p.lineErr(line, "$GENERATE rhs: %w", err)
 			}
 			subBuf[i] = fieldTok{text: subbed, quoted: tok.quoted, line: tok.line}
 		}
 		rd, err := p.parseRData(t, subBuf)
 		if err != nil {
-			return fmt.Errorf("line %d: $GENERATE rdata (value=%d): %w", line, v, err)
+			return p.lineErr(line, "$GENERATE rdata (value=%d): %w", v, err)
 		}
 		rec := wire.NewRecordClass(owner, class, time.Duration(ttl)*time.Second, rd)
 		p.records = append(p.records, rec)

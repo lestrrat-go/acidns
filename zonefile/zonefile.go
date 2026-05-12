@@ -7,9 +7,11 @@
 //
 // $GENERATE (BIND 9 extension) is supported with the d / o / x / X
 // formats and a per-directive iteration cap configured via
-// [WithGenerateMaxIterations]. $INCLUDE and the n / N nibble formats
-// are intentionally out of scope for this version and can be added
-// without changing the surface API.
+// [WithGenerateMaxIterations]; the n / N nibble formats are out of
+// scope. $INCLUDE is supported when [WithIncludeResolver] is supplied;
+// see [NewFSIncludeResolver] for the standard [io/fs.FS]-backed
+// implementation. $ORIGIN and $TTL inside an included file do NOT
+// propagate back to the parent; the parent's values survive intact.
 package zonefile
 
 import (
@@ -51,7 +53,11 @@ func (z *zone) SOA() (rdata.SOA, wire.Record, bool) {
 
 // Parse parses a master file from r.
 func Parse(r io.Reader, opts ...Option) (Zone, error) {
-	c := config{defaultTTL: -1, maxGenerateIterations: DefaultGenerateMaxIterations}
+	c := config{
+		defaultTTL:            -1,
+		maxGenerateIterations: DefaultGenerateMaxIterations,
+		maxIncludeDepth:       DefaultIncludeMaxDepth,
+	}
 	for _, o := range opts {
 		switch o.Ident() {
 		case identOrigin{}:
@@ -60,6 +66,12 @@ func Parse(r io.Reader, opts ...Option) (Zone, error) {
 			c.defaultTTL = int64(option.MustGet[int](o))
 		case identGenerateMaxIterations{}:
 			c.maxGenerateIterations = option.MustGet[int](o)
+		case identSourceName{}:
+			c.source = option.MustGet[string](o)
+		case identIncludeResolver{}:
+			c.includeResolver = option.MustGet[IncludeResolver](o)
+		case identIncludeMaxDepth{}:
+			c.maxIncludeDepth = option.MustGet[int](o)
 		}
 	}
 	p := newParser(r, c)
