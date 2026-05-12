@@ -25,7 +25,9 @@
 //
 // # Composition
 //
-// recursive.Resolver satisfies acidns.Resolver. Drop it into any caller
-// that takes that interface — the LookupHost / ResolveAs[T] helpers in
-// the root acidns package, or as the upstream of a forward.Forwarder.
+// *Recursive satisfies acidns.Resolver via [Recursive.Resolve]. Drop
+// it into any caller that takes that interface — the LookupHost /
+// ResolveAs[T] helpers in the root acidns package, or as the upstream
+// of a forward.Forwarder. Use [Recursive.ResolveEntry] when the
+// authority/additional sections or the AD bit and TTL are needed.
 package recursive

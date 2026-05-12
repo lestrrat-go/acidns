@@ -552,11 +552,10 @@ var errBogusAnswer = errors.New("recursive: dnssec bogus")
 //
 // This signature deliberately differs from [acidns.Resolver.Resolve]:
 // the cached [Entry] carries fields (authority, additional, AD bit,
-// expiry) that an *acidns.Answer cannot represent. Callers that want
-// Resolver semantics should construct an [acidns.Resolver] over this
-// recursive instance via the resolver convenience layer; using
-// ResolveEntry for the rich, cache-aware view is the recommended path
-// for backend consumers.
+// expiry) that an *acidns.Answer cannot represent. Use ResolveEntry
+// when you need the rich, cache-aware view; use [Recursive.Resolve]
+// when you need [acidns.Resolver] semantics (matched record list +
+// RCodeError on non-NoError responses).
 func (r *Recursive) ResolveEntry(ctx context.Context, name wire.Name, t rrtype.Type) (Entry, error) {
 	if r.resolveBudget > 0 {
 		var cancel context.CancelFunc

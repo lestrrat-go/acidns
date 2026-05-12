@@ -473,7 +473,7 @@ func (r *resolver) resolve(ctx context.Context, name wire.Name, t rrtype.Type) (
 		question = q0[0]
 	}
 
-	matched := matchAnswers(resp.Answers(), name, t)
+	matched := MatchAnswers(resp.Answers(), name, t)
 	return wrapRCode(&Answer{q: question, records: matched, raw: resp})
 }
 
@@ -562,11 +562,14 @@ func synthMessage(name wire.Name, t rrtype.Type, records []wire.Record, rcode wi
 	return m
 }
 
-// matchAnswers walks any CNAME chain starting at qname, then collects every
+// MatchAnswers walks any CNAME chain starting at qname, then collects every
 // answer record of qtype whose owner is the final target. CNAMEs in the
 // chain are NOT included — Records() is the typed result, the raw
 // response (including CNAMEs) remains accessible via Answer.Raw().
-func matchAnswers(answers []wire.Record, qname wire.Name, qtype rrtype.Type) []wire.Record {
+//
+// Exposed for Resolver implementations that build their own Answer
+// (e.g. recursive.Recursive) and need the same matching semantics.
+func MatchAnswers(answers []wire.Record, qname wire.Name, qtype rrtype.Type) []wire.Record {
 	const maxHops = 8
 	target := qname
 	if qtype != rrtype.CNAME {
