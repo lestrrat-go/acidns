@@ -178,6 +178,53 @@ func applyPublicOptions(opts []PublicServerOption) publicServerConfig {
 	return cfg
 }
 
+// buildPublicStack validates the public-listener preconditions and
+// composes the middleware stack shared by [NewPublicUDPServer] and
+// [NewPublicTCPServer]. Extracted so the composition order — Cookies
+// (innermost) → RRL → RateLimit → ACL (outermost) — lives in exactly
+// one place; the BADCOOKIE-through-RRL invariant pinned by
+// TestRRLGatesBADCOOKIEReplies depends on cookies being inside RRL,
+// and a silent drift between the UDP and TCP constructors would weaken
+// one transport's security posture without failing tests.
+//
+// Validation sentinels ([ErrPublicACLRequired],
+// [ErrPublicCookiesServerRequired]) are returned unwrapped so callers
+// keep matching them with [errors.Is]; builder errors from
+// [NewCookies] / [NewACL] propagate unwrapped and the caller adds the
+// per-transport prefix via wrapPublicErr.
+func buildPublicStack(h Handler, cfg publicServerConfig) (Handler, error) {
+	if len(cfg.aclOpts) == 0 {
+		return nil, ErrPublicACLRequired
+	}
+	if cfg.cookiesSrv == nil {
+		return nil, ErrPublicCookiesServerRequired
+	}
+	stack, err := NewCookies(h, cfg.cookiesSrv, cfg.cookiesOpts...)
+	if err != nil {
+		return nil, err
+	}
+	stack = NewRRL(stack, cfg.rrlOpts...)
+	stack = NewRateLimit(stack, cfg.rateLimitOpts...)
+	aclOpts := append([]ACLOption{WithACLDropDenied(true)}, cfg.aclOpts...)
+	stack, err = NewACL(stack, aclOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return stack, nil
+}
+
+// wrapPublicErr applies the per-transport error prefix to errors from
+// buildPublicStack while leaving the two public validation sentinels
+// unwrapped — keeps the existing errors.Is(err, ErrPublicACLRequired)
+// /ErrPublicCookiesServerRequired call sites matching on the byte-
+// identical error string.
+func wrapPublicErr(transport string, err error) error {
+	if errors.Is(err, ErrPublicACLRequired) || errors.Is(err, ErrPublicCookiesServerRequired) {
+		return err
+	}
+	return fmt.Errorf("acidns: public %s server: %w", transport, err)
+}
+
 // NewPublicUDPServer constructs a UDP server pre-wrapped with the
 // recommended public-listener middleware stack: an ACL that drops
 // denied queries silently (outermost), per-source rate limiting,
@@ -200,27 +247,10 @@ func applyPublicOptions(opts []PublicServerOption) publicServerConfig {
 // when the option is missing.
 func NewPublicUDPServer(addr netip.AddrPort, h Handler, opts ...PublicServerOption) (*UDPServer, error) {
 	cfg := applyPublicOptions(opts)
-	if len(cfg.aclOpts) == 0 {
-		return nil, ErrPublicACLRequired
-	}
-	if cfg.cookiesSrv == nil {
-		return nil, ErrPublicCookiesServerRequired
-	}
-
-	// Build inside-out: cookies wraps the user handler, RRL wraps
-	// cookies, rate limit wraps RRL, ACL wraps everything.
-	stack, err := NewCookies(h, cfg.cookiesSrv, cfg.cookiesOpts...)
+	stack, err := buildPublicStack(h, cfg)
 	if err != nil {
-		return nil, fmt.Errorf("acidns: public udp server: %w", err)
+		return nil, wrapPublicErr("udp", err)
 	}
-	stack = NewRRL(stack, cfg.rrlOpts...)
-	stack = NewRateLimit(stack, cfg.rateLimitOpts...)
-	aclOpts := append([]ACLOption{WithACLDropDenied(true)}, cfg.aclOpts...)
-	stack, err = NewACL(stack, aclOpts...)
-	if err != nil {
-		return nil, fmt.Errorf("acidns: public udp server: %w", err)
-	}
-
 	srv, err := NewUDPServer(addr, stack, cfg.udpOpts...)
 	if err != nil {
 		return nil, fmt.Errorf("acidns: public udp server: %w", err)
@@ -242,25 +272,10 @@ func NewPublicUDPServer(addr netip.AddrPort, h Handler, opts ...PublicServerOpti
 // [ErrPublicCookiesServerRequired] is returned.
 func NewPublicTCPServer(addr netip.AddrPort, h Handler, opts ...PublicServerOption) (*TCPServer, error) {
 	cfg := applyPublicOptions(opts)
-	if len(cfg.aclOpts) == 0 {
-		return nil, ErrPublicACLRequired
-	}
-	if cfg.cookiesSrv == nil {
-		return nil, ErrPublicCookiesServerRequired
-	}
-
-	stack, err := NewCookies(h, cfg.cookiesSrv, cfg.cookiesOpts...)
+	stack, err := buildPublicStack(h, cfg)
 	if err != nil {
-		return nil, fmt.Errorf("acidns: public tcp server: %w", err)
+		return nil, wrapPublicErr("tcp", err)
 	}
-	stack = NewRRL(stack, cfg.rrlOpts...)
-	stack = NewRateLimit(stack, cfg.rateLimitOpts...)
-	aclOpts := append([]ACLOption{WithACLDropDenied(true)}, cfg.aclOpts...)
-	stack, err = NewACL(stack, aclOpts...)
-	if err != nil {
-		return nil, fmt.Errorf("acidns: public tcp server: %w", err)
-	}
-
 	srv, err := NewTCPServer(addr, stack, cfg.tcpOpts...)
 	if err != nil {
 		return nil, fmt.Errorf("acidns: public tcp server: %w", err)
