@@ -509,11 +509,19 @@ func (n NSEC3) Pack(p *wirebb.Packer) {
 
 // NewNSEC3 returns an NSEC3 rdata. Returns [ErrInvalidRData] when
 // salt or nextOwner exceeds 255 bytes (RFC 5155 §3.1: both lengths
-// are wire-encoded as uint8). The previous shape silently truncated
-// via uint8(len(...)) at Pack time, corrupting the rdata.
+// are wire-encoded as uint8) or when nextOwner is empty (RFC 5155
+// §3.1.7: the field carries a binary hash output, 0-byte is
+// structurally invalid).
 func NewNSEC3(hashAlg NSEC3HashAlgorithm, flags uint8, iterations uint16, salt, nextOwner []byte, types []rrtype.Type) (NSEC3, error) {
 	if len(salt) > 255 {
 		return NSEC3{}, fmt.Errorf("%w: NSEC3 salt %d bytes exceeds 255-byte limit", ErrInvalidRData, len(salt))
+	}
+	// A 0-byte next-hashed-owner can't be a real hash; passing it
+	// through to a validator's NSEC3-chain compare path would silently
+	// match any input. Reject at construction so downstream code can
+	// rely on len(nextOwner) > 0.
+	if len(nextOwner) == 0 {
+		return NSEC3{}, fmt.Errorf("%w: NSEC3 next-hashed-owner is empty", ErrInvalidRData)
 	}
 	if len(nextOwner) > 255 {
 		return NSEC3{}, fmt.Errorf("%w: NSEC3 next-hashed-owner %d bytes exceeds 255-byte limit", ErrInvalidRData, len(nextOwner))
@@ -555,6 +563,12 @@ func unpackNSEC3(u *wirebb.Unpacker, rdlen int) (NSEC3, error) {
 	hashLen, err := u.Uint8()
 	if err != nil {
 		return zero, err
+	}
+	// RFC 5155 §3.1.7: the next-hashed-owner field is a binary hash —
+	// 0 bytes is structurally invalid. Reject early so the validator
+	// never compares against a zero-length "hash".
+	if hashLen == 0 {
+		return zero, fmt.Errorf("%w: NSEC3 next-hashed-owner length 0", ErrInvalidRData)
 	}
 	if u.Off()+int(hashLen) > end {
 		return zero, fmt.Errorf("%w: NSEC3 hash length %d exceeds rdata window", ErrInvalidRData, hashLen)

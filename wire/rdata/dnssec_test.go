@@ -75,3 +75,37 @@ func TestNSEC3(t *testing.T) {
 	require.Equal(t, hash, got.NextHashedOwner())
 	require.ElementsMatch(t, types, got.Types())
 }
+
+// TestNSEC3RejectsEmptyNextOwner pins the RFC 5155 §3.1.7 structural
+// invariant: the next-hashed-owner field must be non-empty. A 0-byte
+// value is malformed (a real hash is the algorithm's output size, 20
+// bytes for SHA-1) and must be rejected at both constructor and wire-
+// unpack boundaries — otherwise a validator's hash-chain compare path
+// can silently match any input.
+func TestNSEC3RejectsEmptyNextOwner(t *testing.T) {
+	t.Parallel()
+	// Constructor path: nil nextOwner.
+	_, err := rdata.NewNSEC3(rdata.NSEC3HashSHA1, 0, 0, nil, nil, nil)
+	require.ErrorIs(t, err, rdata.ErrInvalidRData)
+
+	// Constructor path: empty (non-nil) slice.
+	_, err = rdata.NewNSEC3(rdata.NSEC3HashSHA1, 0, 0, nil, []byte{}, nil)
+	require.ErrorIs(t, err, rdata.ErrInvalidRData)
+
+	// Wire path: craft an NSEC3 rdata payload with hashLen=0 and
+	// confirm wire.Unpack via the rdata-window decoder surfaces
+	// ErrInvalidRData. Wire format (RFC 5155 §3.2):
+	//   alg(1) flags(1) iters(2) saltLen(1)=0 hashLen(1)=0 types(0)
+	rdataBytes := []byte{
+		1,    // alg = SHA-1
+		0,    // flags
+		0, 0, // iterations
+		0, // saltLen
+		0, // hashLen — the malformed field
+		// no type bitmap
+	}
+	u := wirebb.NewUnpacker(rdataBytes)
+	_, err = rdata.Unpack(rrtype.NSEC3, u, len(rdataBytes))
+	require.ErrorIs(t, err, rdata.ErrInvalidRData,
+		"wire-decoded NSEC3 with hashLen=0 must be rejected")
+}
