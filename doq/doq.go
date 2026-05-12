@@ -2,17 +2,21 @@
 
 // Package doq implements DNS over Dedicated QUIC connections (RFC 9250).
 //
-// Each Exchange opens a fresh QUIC connection, opens one bidirectional
-// stream, sends a length-prefixed query (RFC 9250 §4.2.1 — same msg
-// framing as TCP), reads a length-prefixed response, then closes the
-// stream and connection. Connection reuse and stream multiplexing are out
-// of scope for this primitive transport.
+// Two clients are provided:
+//
+//   - [NewClient] returns a *Client that opens a fresh QUIC connection
+//     per Exchange. Suitable for one-shot lookups and tests; expensive
+//     for sustained traffic because every query pays a full handshake.
+//   - [NewKeepAliveClient] returns a *KeepAliveClient that maintains a
+//     single persistent QUIC connection and multiplexes per-Exchange
+//     streams on top. QUIC's native stream concurrency lets multiple
+//     callers run in parallel without serialising.
 //
 // DoQ pulls quic-go (and its TLS / ECN / connection-migration code paths)
 // into the binary. Builds that do not need DoQ can pass the
 // `acidns_no_doq` build tag to compile a stub package that returns
-// ErrDoQDisabled from NewClient; this keeps the quic-go dependency out of
-// the final binary.
+// ErrDoQDisabled from NewClient and NewKeepAliveClient; this keeps the
+// quic-go dependency out of the final binary.
 package doq
 
 import (
