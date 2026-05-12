@@ -39,6 +39,12 @@ func (p *Packer) Raw(b []byte) { p.buf = append(p.buf, b...) }
 
 // CharString appends a length-prefixed character string. Returns an error if
 // s exceeds 255 bytes.
+//
+// rdata Pack methods that route through this helper validate the length
+// at their constructor (NewTXT / NewHINFO / NewNAPTR / ...) and store the
+// string in an unexported field — there is no public path to construct
+// a typed rdata carrying an oversized character string, so Pack-site
+// callers may safely discard the returned error.
 func (p *Packer) CharString(s []byte) error {
 	if len(s) > 255 {
 		return fmt.Errorf("wire: character string exceeds 255 bytes")

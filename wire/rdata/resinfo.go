@@ -16,6 +16,8 @@ func (RESINFO) typedRData()         {}
 func (r RESINFO) Strings() []string { return r.strs }
 func (r RESINFO) Pack(p *wirebb.Packer) {
 	for _, s := range r.strs {
+		// NewRESINFO rejects strings >255 bytes and `strs` is unexported,
+		// so the CharString error is structurally unreachable here.
 		_ = p.CharString([]byte(s))
 	}
 }

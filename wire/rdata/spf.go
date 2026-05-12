@@ -17,6 +17,8 @@ func (SPF) typedRData()         {}
 func (s SPF) Strings() []string { return s.strs }
 func (s SPF) Pack(p *wirebb.Packer) {
 	for _, str := range s.strs {
+		// NewSPF rejects strings >255 bytes and `strs` is unexported,
+		// so the CharString error is structurally unreachable here.
 		_ = p.CharString([]byte(str))
 	}
 }

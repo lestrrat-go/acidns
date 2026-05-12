@@ -19,6 +19,8 @@ func (HINFO) typedRData()       {}
 func (h HINFO) CPU() string     { return h.cpu }
 func (h HINFO) OS() string      { return h.os }
 func (h HINFO) Pack(p *wirebb.Packer) {
+	// NewHINFO rejects cpu/os >255 bytes and both fields are unexported,
+	// so the CharString errors are structurally unreachable here.
 	_ = p.CharString([]byte(h.cpu))
 	_ = p.CharString([]byte(h.os))
 }

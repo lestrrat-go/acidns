@@ -12,10 +12,10 @@ import (
 
 // DefaultGenerateMaxIterations caps how many records a single $GENERATE
 // directive may produce. Tunable via [WithGenerateMaxIterations]. The
-// cap prevents a single line from exhausting memory; legitimate large
-// zones (e.g. a full IPv4 /16 reverse-zone fan-out) need ~65K records,
-// well below this ceiling.
-const DefaultGenerateMaxIterations = 1 << 17 // 131_072
+// cap prevents a single line from exhausting memory; sized to fit a
+// full IPv4 /16 fan-out (2^16 = 65_536 records) exactly. Operators
+// needing a larger expansion can opt into a higher ceiling explicitly.
+const DefaultGenerateMaxIterations = 1 << 16 // 65_536
 
 // handleGenerate parses and expands a $GENERATE directive. BIND 9 grammar:
 //

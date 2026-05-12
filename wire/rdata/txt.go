@@ -16,7 +16,8 @@ func (TXT) typedRData()         {}
 func (t TXT) Strings() []string { return t.strs }
 func (t TXT) Pack(p *wirebb.Packer) {
 	for _, s := range t.strs {
-		// length already validated at construction
+		// NewTXT rejects strings >255 bytes and `strs` is unexported,
+		// so the CharString error is structurally unreachable here.
 		_ = p.CharString([]byte(s))
 	}
 }

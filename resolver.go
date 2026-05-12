@@ -367,7 +367,7 @@ func NewResolver(opts ...ResolverOption) (Resolver, error) {
 
 	ex := c.exchanger
 	if ex == nil {
-		built, err := buildFallover(c.servers, c.attempts, c.perAttempt, !c.disable0x20)
+		built, err := buildFallover(c.servers, c.attempts, c.perAttempt, !c.disable0x20, c.ednsUDP)
 		if err != nil {
 			return nil, err
 		}
@@ -549,6 +549,14 @@ func synthMessage(name wire.Name, t rrtype.Type, records []wire.Record, rcode wi
 	for _, rec := range records {
 		b = b.Answer(rec)
 	}
+	// Build is infallible here by construction: every input is
+	// package-internal — the qname comes from the caller already parsed,
+	// the Question is freshly built, and every Answer record was minted
+	// via rdata.NewA / NewAAAA from a validated specialuse.LoopbackForType
+	// addr. No path through MessageBuilder can fail on this shape
+	// (no oversized rdata, no malformed names, no section-count overflow).
+	// The discarded err stays a `_` rather than a panic so the wire-
+	// encode path remains panic-free per the project's no-recover policy.
 	m, _ := b.Build()
 	return m
 }
@@ -609,10 +617,20 @@ func randomID() (uint16, error) {
 	return binary.BigEndian.Uint16(b[:]), nil
 }
 
-func buildFallover(servers []netip.AddrPort, attempts int, perAttempt time.Duration, use0x20 bool) (Exchanger, error) {
+func buildFallover(servers []netip.AddrPort, attempts int, perAttempt time.Duration, use0x20 bool, ednsUDP uint16) (Exchanger, error) {
 	exs := make([]Exchanger, 0, len(servers))
+	// Size the UDP read buffer to fit the EDNS UDP payload advertised by
+	// this Resolver. A caller using WithEDNSUDPSize(N) where N > the
+	// default buffer would otherwise see the kernel truncate datagrams
+	// at the buffer boundary and wire.Unpack reject them; clamp at the
+	// existing 4096 default to avoid shrinking the buffer for callers
+	// who advertise a tiny EDNS size.
+	bufSize := max(int(ednsUDP), 4096)
 	for _, s := range servers {
-		uex, err := NewUDPClient(s, WithUDPClientCaseRandomization(use0x20))
+		uex, err := NewUDPClient(s,
+			WithUDPClientCaseRandomization(use0x20),
+			WithUDPClientBufferSize(bufSize),
+		)
 		if err != nil {
 			return nil, err
 		}

@@ -86,10 +86,14 @@ func unpackAFSDB(u *wirebb.Unpacker, rdlen int) (AFSDB, error) {
 // X25 is the X.25 PSDN address rdata (RFC 1183 §3.1).
 type X25 struct{ addr string }
 
-func (X25) Type() rrtype.Type       { return rrtype.X25 }
-func (X25) typedRData()             {}
-func (x X25) PSDNAddress() string   { return x.addr }
-func (x X25) Pack(p *wirebb.Packer) { _ = p.CharString([]byte(x.addr)) }
+func (X25) Type() rrtype.Type     { return rrtype.X25 }
+func (X25) typedRData()           {}
+func (x X25) PSDNAddress() string { return x.addr }
+func (x X25) Pack(p *wirebb.Packer) {
+	// NewX25 rejects addr >255 bytes and the field is unexported,
+	// so the CharString error is structurally unreachable here.
+	_ = p.CharString([]byte(x.addr))
+}
 
 // NewX25 returns an X25 rdata. The PSDN address must be ≤ 255 bytes.
 func NewX25(addr string) (X25, error) {
@@ -122,6 +126,8 @@ func (ISDN) typedRData()          {}
 func (i ISDN) Address() string    { return i.addr }
 func (i ISDN) Subaddress() string { return i.sub }
 func (i ISDN) Pack(p *wirebb.Packer) {
+	// NewISDN rejects addr/sub >255 bytes and both fields are unexported,
+	// so the CharString errors are structurally unreachable here.
 	_ = p.CharString([]byte(i.addr))
 	if i.hasSub {
 		_ = p.CharString([]byte(i.sub))

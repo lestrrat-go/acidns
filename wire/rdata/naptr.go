@@ -27,6 +27,9 @@ func (n NAPTR) Replacement() wirebb.Name { return n.replacement }
 func (n NAPTR) Pack(p *wirebb.Packer) {
 	p.Uint16(n.order)
 	p.Uint16(n.pref)
+	// NewNAPTR rejects flags/services/regexp >255 bytes and all three
+	// fields are unexported, so the CharString errors are structurally
+	// unreachable here.
 	_ = p.CharString([]byte(n.flags))
 	_ = p.CharString([]byte(n.services))
 	_ = p.CharString([]byte(n.regexp))
