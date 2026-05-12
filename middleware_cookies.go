@@ -172,6 +172,14 @@ func (m *cookiesMW) ServeDNS(ctx context.Context, w ResponseWriter, q wire.Messa
 				// Invalid server cookie → BADCOOKIE response. Mint a fresh
 				// one so the client can retry, and short-circuit the inner
 				// handler entirely.
+				//
+				// LOAD-BEARING: this WriteMsg goes through whatever writer
+				// the caller supplied, so when cookies is composed inside
+				// RRL (the default in NewPublicUDPServer) BADCOOKIE replies
+				// are counted against RRL's error-class budget. Do not
+				// substitute a freshly-minted ResponseWriter or move
+				// cookies outside RRL without re-establishing that path —
+				// TestRRLGatesBADCOOKIEReplies pins the invariant.
 				fresh := m.srv.Make(cc, addr, now)
 				_ = w.WriteMsg(buildBadCookieResponse(q, cc, fresh))
 				return
