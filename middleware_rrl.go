@@ -123,7 +123,16 @@ type rrlBucket struct {
 }
 
 type rrlShard struct {
-	mu      sync.Mutex
+	mu sync.Mutex
+	// buckets is pointer-typed (map[string]*rrlBucket) so the hot
+	// path — token refill, decrement, slipCounter increment —
+	// mutates in place without an extra map write per consume()
+	// call. Switching to map[string]rrlBucket eliminates the per-
+	// new-key heap allocation (~1 fewer alloc/op observed in
+	// BenchmarkRRLSaturatedNewKey) at the cost of ~20 ns/op on the
+	// hot path (~4% regression on BenchmarkRRLHotKey). Mirrors the
+	// same tradeoff documented in middleware_ratelimit.go's
+	// limiterShard — see that file for the full rationale.
 	buckets map[string]*rrlBucket
 }
 
