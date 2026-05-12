@@ -321,6 +321,16 @@ func (l *tcpLoop) run(ctx context.Context) error {
 	tempBackoff := time.Duration(0)
 
 	for {
+		// Slot is acquired BEFORE Accept on purpose: when the cap is
+		// reached, the loop blocks here instead of accepting, leaving
+		// excess connections queued in the kernel TCP backlog (see the
+		// WithTCPListenerMaxConnections doc). The well-known alternative
+		// — Accept first, then try to acquire and close on miss — gives
+		// the off-by-one back (effective cap N vs N-1 when the loop sits
+		// in Accept holding one slot) at the cost of completing 3-way
+		// handshakes only to RST them and losing kernel-backlog
+		// backpressure. With the default cap of 1024 the off-by-one is
+		// not worth that trade.
 		if l.sem != nil {
 			select {
 			case l.sem <- struct{}{}:
