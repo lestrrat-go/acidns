@@ -5,6 +5,7 @@ import (
 	"errors"
 	"net"
 	"strings"
+	"time"
 
 	"github.com/lestrrat-go/acidns/wire"
 )
@@ -35,23 +36,9 @@ func wrapLookupErr(ctx context.Context, host string, err error) error {
 	name := strings.TrimSuffix(host, ".")
 	server := serverFromErr(err)
 
-	// Context errors take precedence — an Exchange that was cancelled
-	// mid-flight may surface a wrapped transport error, so reach past it.
-	if cerr := ctx.Err(); cerr != nil {
-		out := &net.DNSError{Name: name, Server: server, UnwrapErr: cerr}
-		switch {
-		case errors.Is(cerr, context.DeadlineExceeded):
-			out.Err = "i/o timeout"
-			out.IsTimeout = true
-			out.IsTemporary = true
-		case errors.Is(cerr, context.Canceled):
-			out.Err = "operation was canceled"
-		default:
-			out.Err = cerr.Error()
-		}
-		return out
-	}
-
+	// Protocol-shaped errors (non-NoError RCODEs) are independent of
+	// the surrounding context state — check first so a transport
+	// timeout never masks an RCODE that arrived just in time.
 	var rcErr *RCodeError
 	if errors.As(err, &rcErr) {
 		switch rcErr.Code() {
@@ -72,14 +59,48 @@ func wrapLookupErr(ctx context.Context, host string, err error) error {
 		}
 	}
 
-	// Generic net.Error (dial / read timeouts, ICMP unreachable, etc.)
+	// Detect deadline / cancellation from three sources: the err chain
+	// (transport returned ctx.Err() directly), ctx.Err() at wrap time,
+	// or a transport timeout coinciding with a ctx deadline that has
+	// passed. The third case is the race we have to handle defensively:
+	// under load, conn.SetDeadline(ctx.Deadline()) can fire ~µs before
+	// ctx.Err() becomes observable across goroutines, so a chain check
+	// alone misses the "this WAS a ctx deadline" attribution.
+	isDeadline := errors.Is(err, context.DeadlineExceeded)
+	isCanceled := errors.Is(err, context.Canceled)
+	if cerr := ctx.Err(); !isDeadline && !isCanceled && cerr != nil {
+		isDeadline = errors.Is(cerr, context.DeadlineExceeded)
+		isCanceled = errors.Is(cerr, context.Canceled)
+	}
 	var nerr net.Error
-	if errors.As(err, &nerr) {
-		out := &net.DNSError{
+	isNetErr := errors.As(err, &nerr)
+	if !isDeadline && !isCanceled && isNetErr && nerr.Timeout() {
+		if d, ok := ctx.Deadline(); ok && !time.Now().Before(d) {
+			isDeadline = true
+		}
+	}
+
+	if isDeadline {
+		return &net.DNSError{
+			Err: "i/o timeout", Name: name, Server: server,
+			UnwrapErr:   errors.Join(err, context.DeadlineExceeded),
+			IsTimeout:   true,
+			IsTemporary: true,
+		}
+	}
+	if isCanceled {
+		return &net.DNSError{
+			Err: "operation was canceled", Name: name, Server: server,
+			UnwrapErr: errors.Join(err, context.Canceled),
+		}
+	}
+
+	// Generic net.Error (dial errors, ICMP unreachable, non-timeout I/O).
+	if isNetErr {
+		return &net.DNSError{
 			Err: err.Error(), Name: name, Server: server, UnwrapErr: err,
 			IsTimeout: nerr.Timeout(),
 		}
-		return out
 	}
 
 	return &net.DNSError{Err: err.Error(), Name: name, Server: server, UnwrapErr: err}
