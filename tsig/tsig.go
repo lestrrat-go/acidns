@@ -9,14 +9,14 @@
 // encoding (the additional count is incremented as the TSIG RR is
 // appended). The intended use is:
 //
-//	msg, _ := wire.Marshal(m)
+//	msg, _ := wire.Pack(m)
 //	signed, _ := tsig.Sign(msg, key, time.Now(), 5*time.Minute)
 //	// send signed
 //
 // On the receiver:
 //
 //	body, _, err := tsig.Verify(received, key)
-//	m, _ := wire.Unmarshal(body)
+//	m, _ := wire.Unpack(body)
 //
 // # Replay protection
 //
@@ -164,14 +164,14 @@ const (
 )
 
 // SignMessage marshals m and returns the TSIG-signed msg-format bytes.
-// Equivalent to Sign(wire.Marshal(m), key, now, fudge) — provided so
+// Equivalent to Sign(wire.Pack(m), key, now, fudge) — provided so
 // callers don't have to think about the marshal/sign ordering. Works for
 // any DNS message: queries, updates, NOTIFY, anything.
 //
 // fudge is the clock-skew window the receiver tolerates. Five minutes is
 // conventional.
 func SignMessage(m wire.Message, key Key, now time.Time, fudge time.Duration) ([]byte, error) {
-	msg, err := wire.Marshal(m)
+	msg, err := wire.Pack(m)
 	if err != nil {
 		return nil, err
 	}
@@ -581,7 +581,7 @@ func readUint48(b []byte) uint64 {
 
 // findLastRROffset returns the start offset of the last RR in msg by
 // walking the question and RR sections. It is intentionally a fresh
-// minimal walker rather than a re-parse via wire.Unmarshal — TSIG must
+// minimal walker rather than a re-parse via wire.Unpack — TSIG must
 // run on the exact msg bytes the peer produced, with no canonicalisation.
 //
 // RFC 8945 §5.1 mandates that the TSIG be the LAST record in the

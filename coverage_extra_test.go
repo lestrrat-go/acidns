@@ -212,7 +212,7 @@ func TestTCPWriteMsgTooLarge(t *testing.T) {
 		ID(0xff01).
 		Question(wire.NewQuestion(wire.MustParseName("example.com"), rrtype.TXT)).
 		Build()
-	raw, err := wire.Marshal(q)
+	raw, err := wire.Pack(q)
 	require.NoError(t, err)
 	var hdr [2]byte
 	binary.BigEndian.PutUint16(hdr[:], uint16(len(raw)))
@@ -362,7 +362,7 @@ func TestKeepAliveIDMismatch(t *testing.T) {
 		if _, err := io.ReadFull(c, body); err != nil {
 			return
 		}
-		req, err := wire.Unmarshal(body)
+		req, err := wire.Unpack(body)
 		if err != nil {
 			return
 		}
@@ -371,7 +371,7 @@ func TestKeepAliveIDMismatch(t *testing.T) {
 			Response(true).
 			Question(req.Questions()[0]).
 			Build()
-		raw, _ := wire.Marshal(bad)
+		raw, _ := wire.Pack(bad)
 		var lh [2]byte
 		binary.BigEndian.PutUint16(lh[:], uint16(len(raw)))
 		_, _ = c.Write(lh[:])
@@ -444,7 +444,7 @@ func TestUDPDropsMalformedThenDelivers(t *testing.T) {
 		if err != nil {
 			return
 		}
-		req, err := wire.Unmarshal(buf[:n])
+		req, err := wire.Unpack(buf[:n])
 		if err != nil {
 			return
 		}
@@ -460,7 +460,7 @@ func TestUDPDropsMalformedThenDelivers(t *testing.T) {
 			Answer(wire.NewRecord(req.Questions()[0].Name(), time.Minute,
 				ar)).
 			Build()
-		gw, _ := wire.Marshal(good)
+		gw, _ := wire.Pack(good)
 		_, _ = pc.WriteTo(gw, src)
 	}()
 
@@ -492,7 +492,7 @@ func TestTCFallbackOnTruncation(t *testing.T) {
 			if err != nil {
 				return
 			}
-			req, err := wire.Unmarshal(buf[:n])
+			req, err := wire.Unpack(buf[:n])
 			if err != nil {
 				continue
 			}
@@ -505,7 +505,7 @@ func TestTCFallbackOnTruncation(t *testing.T) {
 			if err != nil {
 				continue
 			}
-			raw, _ := wire.Marshal(resp)
+			raw, _ := wire.Pack(resp)
 			_, _ = pc.WriteTo(raw, src)
 		}
 	}()
@@ -533,7 +533,7 @@ func TestTCFallbackOnTruncation(t *testing.T) {
 				if _, err := io.ReadFull(conn, body); err != nil {
 					return
 				}
-				req, err := wire.Unmarshal(body)
+				req, err := wire.Unpack(body)
 				if err != nil {
 					return
 				}
@@ -546,7 +546,7 @@ func TestTCFallbackOnTruncation(t *testing.T) {
 					Answer(wire.NewRecord(req.Questions()[0].Name(), time.Minute,
 						ar2)).
 					Build()
-				raw, _ := wire.Marshal(resp)
+				raw, _ := wire.Pack(resp)
 				binary.BigEndian.PutUint16(hdr[:], uint16(len(raw)))
 				_, _ = conn.Write(hdr[:])
 				_, _ = conn.Write(raw)
@@ -603,7 +603,7 @@ func TestRetryEventuallySucceeds(t *testing.T) {
 				// drop first
 				continue
 			}
-			req, err := wire.Unmarshal(buf[:n])
+			req, err := wire.Unpack(buf[:n])
 			if err != nil {
 				continue
 			}
@@ -616,7 +616,7 @@ func TestRetryEventuallySucceeds(t *testing.T) {
 				Answer(wire.NewRecord(req.Questions()[0].Name(), time.Minute,
 					ar3)).
 				Build()
-			raw, _ := wire.Marshal(resp)
+			raw, _ := wire.Pack(resp)
 			_, _ = pc.WriteTo(raw, src)
 		}
 	}()

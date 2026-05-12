@@ -25,7 +25,7 @@ func Example_doh_exchange() {
 			http.Error(w, err.Error(), http.StatusBadRequest)
 			return
 		}
-		req, err := wire.Unmarshal(body)
+		req, err := wire.Unpack(body)
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusBadRequest)
 			return
@@ -41,7 +41,7 @@ func Example_doh_exchange() {
 			Answer(wire.NewRecord(req.Questions()[0].Name(), time.Minute,
 				ar)).
 			Build()
-		out, _ := wire.Marshal(resp)
+		out, _ := wire.Pack(resp)
 		w.Header().Set("Content-Type", "application/dns-message")
 		_, _ = w.Write(out)
 	}))

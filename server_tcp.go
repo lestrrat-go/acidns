@@ -525,7 +525,7 @@ func (l *tcpLoop) serveConn(ctx context.Context, conn net.Conn) {
 				connWg.Done()
 			}()
 			body := (*bufp)[:n]
-			q, err := wire.Unmarshal(body)
+			q, err := wire.Unpack(body)
 			if err != nil {
 				return
 			}
@@ -561,7 +561,7 @@ func (w *tcpResponseWriter) LocalAddr() netip.AddrPort  { return w.local }
 func (w *tcpResponseWriter) Network() string            { return "tcp" }
 
 func (w *tcpResponseWriter) WriteMsg(m wire.Message) error {
-	buf, err := wire.Marshal(m)
+	buf, err := wire.Pack(m)
 	if err != nil {
 		return err
 	}

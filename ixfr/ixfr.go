@@ -192,7 +192,7 @@ func Start(ctx context.Context, ex acidns.StreamExchanger, zone wire.Name, clien
 		if err != nil {
 			return nil, fmt.Errorf("ixfr: TSIG extract MAC: %w", err)
 		}
-		q, err = wire.Unmarshal(signed)
+		q, err = wire.Unpack(signed)
 		if err != nil {
 			return nil, fmt.Errorf("ixfr: re-parse signed query: %w", err)
 		}

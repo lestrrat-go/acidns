@@ -10,7 +10,7 @@ go test ./examples/...
 ## dnsmsg / wire format
 
 - [dnsmsg_build](dnsmsg_build_example_test.go) — build a query with the `Builder`.
-- [dnsmsg_marshal](dnsmsg_marshal_example_test.go) — Marshal / Unmarshal round-trip.
+- [dnsmsg_pack](dnsmsg_pack_example_test.go) — Pack / Unpack round-trip.
 - [edns_options](edns_options_example_test.go) — typed EDNS option helpers (cookies, ECS, EDE, ...).
 - [rrset_group](rrset_group_example_test.go) — partition records into RRsets per RFC 2181.
 - [svcb_build](svcb_build_example_test.go) — build SVCB / HTTPS records with typed SvcParams.

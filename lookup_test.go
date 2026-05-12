@@ -28,7 +28,7 @@ func startTypedServer(t *testing.T, answers map[rrtype.Type][]wire.Record) netip
 			if err != nil {
 				return
 			}
-			req, err := wire.Unmarshal(buf[:n])
+			req, err := wire.Unpack(buf[:n])
 			if err != nil || len(req.Questions()) == 0 {
 				continue
 			}
@@ -45,7 +45,7 @@ func startTypedServer(t *testing.T, answers map[rrtype.Type][]wire.Record) netip
 			if err != nil {
 				continue
 			}
-			out, err := wire.Marshal(resp)
+			out, err := wire.Pack(resp)
 			if err != nil {
 				continue
 			}

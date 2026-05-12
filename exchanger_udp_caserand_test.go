@@ -120,7 +120,7 @@ func startCaseEchoServer(t *testing.T, preserveCase bool) netip.AddrPort {
 				return
 			}
 			body := buf[:n]
-			req, err := wire.Unmarshal(body)
+			req, err := wire.Unpack(body)
 			if err != nil {
 				continue
 			}
@@ -142,7 +142,7 @@ func startCaseEchoServer(t *testing.T, preserveCase bool) netip.AddrPort {
 				Answer(wire.NewRecord(qq.Name(), time.Minute,
 					ar)).
 				Build()
-			respBytes, _ := wire.Marshal(respMsg)
+			respBytes, _ := wire.Pack(respMsg)
 			_, _ = pc.WriteTo(respBytes, src)
 		}
 	}()

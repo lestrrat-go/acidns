@@ -103,7 +103,7 @@ func startCustomDoQ(t *testing.T, hook serverHook) (netip.AddrPort, *tls.Config)
 				if _, err := io.ReadFull(stream, body); err != nil {
 					return
 				}
-				req, err := wire.Unmarshal(body)
+				req, err := wire.Unpack(body)
 				if err != nil {
 					return
 				}
@@ -201,7 +201,7 @@ func TestExchangeIDMismatch(t *testing.T) {
 	addr, cfg := startCustomDoQ(t, func(t *testing.T, req wire.Message, stream *quic.Stream) {
 		// Build a response with an ID that is neither the query's ID nor 0.
 		resp := buildAnswer(t, req.ID()^0xFFFF, req.Questions()[0])
-		out, err := wire.Marshal(resp)
+		out, err := wire.Pack(resp)
 		require.NoError(t, err)
 		writeFrame(stream, out)
 	})
@@ -226,7 +226,7 @@ func TestExchangeAcceptsZeroID(t *testing.T) {
 	t.Parallel()
 	addr, cfg := startCustomDoQ(t, func(t *testing.T, req wire.Message, stream *quic.Stream) {
 		resp := buildAnswer(t, 0, req.Questions()[0])
-		out, err := wire.Marshal(resp)
+		out, err := wire.Pack(resp)
 		require.NoError(t, err)
 		writeFrame(stream, out)
 	})
@@ -246,7 +246,7 @@ func TestExchangeAcceptsZeroID(t *testing.T) {
 // TestExchangeMalformedResponse covers the unmarshal-failure branch.
 // The bytes start with a valid wire ID=0 (passing the RFC 9250 §4.2.1
 // check) but the rest is too short to be a valid DNS header, so
-// wire.Unmarshal must fail.
+// wire.Unpack must fail.
 func TestExchangeMalformedResponse(t *testing.T) {
 	t.Parallel()
 	addr, cfg := startCustomDoQ(t, func(_ *testing.T, _ wire.Message, stream *quic.Stream) {
@@ -333,7 +333,7 @@ func TestStreamIDMismatch(t *testing.T) {
 	t.Parallel()
 	addr, cfg := startCustomDoQ(t, func(t *testing.T, req wire.Message, stream *quic.Stream) {
 		resp := buildAnswer(t, req.ID()^0xFFFF, req.Questions()[0])
-		out, err := wire.Marshal(resp)
+		out, err := wire.Pack(resp)
 		require.NoError(t, err)
 		writeFrame(stream, out)
 	})
@@ -362,7 +362,7 @@ func TestStreamMultipleResponses(t *testing.T) {
 	addr, cfg := startCustomDoQ(t, func(t *testing.T, req wire.Message, stream *quic.Stream) {
 		for range 3 {
 			resp := buildAnswer(t, req.ID(), req.Questions()[0])
-			out, err := wire.Marshal(resp)
+			out, err := wire.Pack(resp)
 			require.NoError(t, err)
 			writeFrame(stream, out)
 			sent.Add(1)
@@ -756,7 +756,7 @@ func TestStreamOpenStreamTimeout(t *testing.T) {
 	require.Contains(t, err.Error(), "open stream")
 }
 
-// TestExchangeMarshalError covers the wire.Marshal error branch in
+// TestExchangeMarshalError covers the wire.Pack error branch in
 // Exchange. Build an answer record whose rdata exceeds 64KiB so packRecord
 // fails before any network I/O happens.
 func TestExchangeMarshalError(t *testing.T) {

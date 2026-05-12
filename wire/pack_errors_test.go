@@ -9,13 +9,13 @@ import (
 
 func TestUnmarshalShortHeader(t *testing.T) {
 	t.Parallel()
-	_, err := wire.Unmarshal([]byte{0x01})
+	_, err := wire.Unpack([]byte{0x01})
 	require.Error(t, err)
 }
 
 func TestUnmarshalEmpty(t *testing.T) {
 	t.Parallel()
-	_, err := wire.Unmarshal(nil)
+	_, err := wire.Unpack(nil)
 	require.Error(t, err)
 }
 
@@ -28,7 +28,7 @@ func TestUnmarshalTruncatedQuestion(t *testing.T) {
 		0x00, 0x01, // qdcount = 1
 		0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
 	}
-	_, err := wire.Unmarshal(hdr)
+	_, err := wire.Unpack(hdr)
 	require.Error(t, err)
 }
 
@@ -41,7 +41,7 @@ func TestUnmarshalTruncatedAnswer(t *testing.T) {
 		0x00, 0x01, // ancount = 1
 		0x00, 0x00, 0x00, 0x00,
 	}
-	_, err := wire.Unmarshal(hdr)
+	_, err := wire.Unpack(hdr)
 	require.Error(t, err)
 }
 
@@ -55,6 +55,6 @@ func TestUnmarshalTruncatedAdditional(t *testing.T) {
 		0x00, 0x00,
 		0x00, 0x01, // arcount=1
 	}
-	_, err := wire.Unmarshal(hdr)
+	_, err := wire.Unpack(hdr)
 	require.Error(t, err)
 }

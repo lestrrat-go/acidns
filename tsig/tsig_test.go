@@ -27,7 +27,7 @@ func mkMessage(t *testing.T) []byte {
 		Question(wire.NewQuestion(wire.MustParseName("example.com"), rrtype.A)).
 		Build()
 	require.NoError(t, err)
-	msg, err := wire.Marshal(m)
+	msg, err := wire.Pack(m)
 	require.NoError(t, err)
 	return msg
 }
@@ -58,7 +58,7 @@ func TestSignVerifyRoundTrip(t *testing.T) {
 			require.NoError(t, err)
 			require.Equal(t, now.UTC(), signedAt)
 
-			m, err := wire.Unmarshal(body)
+			m, err := wire.Unpack(body)
 			require.NoError(t, err)
 			require.Equal(t, uint16(0xabcd), m.ID())
 			require.Equal(t, 1, len(m.Questions()))

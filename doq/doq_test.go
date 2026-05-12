@@ -95,7 +95,7 @@ func startDoQ(t *testing.T) (netip.AddrPort, *tls.Config) {
 				if _, err := io.ReadFull(stream, body); err != nil {
 					return
 				}
-				req, err := wire.Unmarshal(body)
+				req, err := wire.Unpack(body)
 				if err != nil {
 					return
 				}
@@ -108,7 +108,7 @@ func startDoQ(t *testing.T) (netip.AddrPort, *tls.Config) {
 					Answer(wire.NewRecord(req.Questions()[0].Name(), time.Minute,
 						ar)).
 					Build()
-				out, _ := wire.Marshal(resp)
+				out, _ := wire.Pack(resp)
 				binary.BigEndian.PutUint16(hdr[:], uint16(len(out)))
 				_, _ = stream.Write(hdr[:])
 				_, _ = stream.Write(out)

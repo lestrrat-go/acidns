@@ -111,7 +111,7 @@ func NewUDPClient(addr netip.AddrPort, opts ...UDPClientOption) (*UDPClient, err
 }
 
 func (e *UDPClient) Exchange(ctx context.Context, q wire.Message) (wire.Message, error) {
-	msg, err := wire.Marshal(q)
+	msg, err := wire.Pack(q)
 	if err != nil {
 		return wire.Message{}, fmt.Errorf("acidns: marshal query: %w", err)
 	}
@@ -211,7 +211,7 @@ func (e *UDPClient) Exchange(ctx context.Context, q wire.Message) (wire.Message,
 		if cerr := ctx.Err(); cerr != nil {
 			return wire.Message{}, cerr
 		}
-		resp, err := wire.Unmarshal(buf[:n])
+		resp, err := wire.Unpack(buf[:n])
 		if err != nil {
 			parseErr++
 			if parseErr >= maxParseErr {

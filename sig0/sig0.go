@@ -5,7 +5,7 @@
 // KEY) record at the signer's name.
 //
 // As with tsig, this package operates on raw msg bytes — call
-// wire.Marshal first, then Sign or Verify.
+// wire.Pack first, then Sign or Verify.
 package sig0
 
 import (

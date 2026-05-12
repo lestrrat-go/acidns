@@ -79,7 +79,7 @@ var ErrServerClosed = acidns.ErrServerClosed
 // read. RFC 8484 carries one DNS message, whose wire form is
 // bounded by the 16-bit length field plus a small slack for HTTP
 // framing variations. A hostile client could otherwise stream
-// gigabytes past wire.Unmarshal's rejection.
+// gigabytes past wire.Unpack's rejection.
 const MaxRequestBytes = 64 * 1024
 
 // NewHandler returns an http.Handler that serves DoH requests by
@@ -117,7 +117,7 @@ func (h *dohHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	q, err := wire.Unmarshal(body)
+	q, err := wire.Unpack(body)
 	if err != nil {
 		http.Error(w, "doh: malformed DNS message", http.StatusBadRequest)
 		return
@@ -225,7 +225,7 @@ func (w *dohResponseWriter) WriteMsg(m wire.Message) error {
 		return ErrDuplicateWrite
 	}
 	w.wrote = true
-	buf, err := wire.Marshal(m)
+	buf, err := wire.Pack(m)
 	if err != nil {
 		http.Error(w.http, "doh: marshal error", http.StatusInternalServerError)
 		return err

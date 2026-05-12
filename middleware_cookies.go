@@ -235,7 +235,7 @@ func (g *cookieSizeGate) WriteMsg(m wire.Message) error {
 		return g.ResponseWriter.WriteMsg(m)
 	}
 	g.wrote = true
-	buf, err := wire.Marshal(m)
+	buf, err := wire.Pack(m)
 	if err == nil && len(buf) <= g.maxBytes {
 		return g.ResponseWriter.WriteMsg(m)
 	}

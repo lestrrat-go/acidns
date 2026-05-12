@@ -67,7 +67,7 @@ func (s *keepAliveServer) handle(c net.Conn, stop <-chan struct{}) {
 		}
 		s.queries.Add(1)
 
-		q, err := wire.Unmarshal(body)
+		q, err := wire.Unpack(body)
 		if err != nil {
 			return
 		}
@@ -102,7 +102,7 @@ func (s *keepAliveServer) handle(c net.Conn, stop <-chan struct{}) {
 		if err != nil {
 			return
 		}
-		raw, err := wire.Marshal(respMsg)
+		raw, err := wire.Pack(respMsg)
 		if err != nil {
 			return
 		}

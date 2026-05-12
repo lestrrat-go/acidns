@@ -11,13 +11,13 @@ import (
 )
 
 // TestSignMessageMarshalError exercises the error path in SignMessage when
-// wire.Marshal fails. Building a Message with an invalid name via raw record
+// wire.Pack fails. Building a Message with an invalid name via raw record
 // construction is impractical; instead we directly exercise Sign with a too
 // short msg, which hits the same kind of guard.
 func TestSignMessageMarshalError(t *testing.T) {
 	t.Parallel()
 	// SignMessage on a default-constructed (zero) Message should work
-	// because wire.Marshal on an empty message succeeds. Use Sign directly
+	// because wire.Pack on an empty message succeeds. Use Sign directly
 	// to exercise its msg-length guard.
 	key, err := tsig.NewKey(wire.MustParseName("k.example."), tsig.HMACSHA256, []byte("secret"))
 	require.NoError(t, err)

@@ -24,7 +24,7 @@ func mkMessage(t *testing.T) []byte {
 		Question(wire.NewQuestion(wire.MustParseName("example.com"), rrtype.A)).
 		Build()
 	require.NoError(t, err)
-	msg, err := wire.Marshal(m)
+	msg, err := wire.Pack(m)
 	require.NoError(t, err)
 	return msg
 }
@@ -60,7 +60,7 @@ func TestSignVerifyECDSAP256(t *testing.T) {
 	body, err := sig0.Verify(signed, key, signer, now.Add(30*time.Minute))
 	require.NoError(t, err)
 
-	m, err := wire.Unmarshal(body)
+	m, err := wire.Unpack(body)
 	require.NoError(t, err)
 	require.Equal(t, uint16(0xbeef), m.ID())
 }

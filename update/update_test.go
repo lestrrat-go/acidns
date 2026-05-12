@@ -39,7 +39,7 @@ func TestSignedUpdate(t *testing.T) {
 	body, _, err := tsig.Verify(signed, key, now, 5*time.Minute)
 	require.NoError(t, err)
 
-	verified, err := wire.Unmarshal(body)
+	verified, err := wire.Unpack(body)
 	require.NoError(t, err)
 	require.Equal(t, wire.OpcodeUpdate, verified.Flags().Opcode())
 	require.Equal(t, 1, len(verified.Authorities())) // the add-RRset

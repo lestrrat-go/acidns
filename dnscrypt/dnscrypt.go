@@ -438,7 +438,7 @@ func (e *Client) Exchange(ctx context.Context, q wire.Message) (wire.Message, er
 			ErrCertExpired, now, e.cert.validFrom, e.cert.validUntil, e.clockSkew)
 	}
 
-	msg, err := wire.Marshal(q)
+	msg, err := wire.Pack(q)
 	if err != nil {
 		return wire.Message{}, fmt.Errorf("dnscrypt: marshal: %w", err)
 	}
@@ -505,7 +505,7 @@ func (e *Client) Exchange(ctx context.Context, q wire.Message) (wire.Message, er
 	if err != nil {
 		return wire.Message{}, err
 	}
-	resp, err := wire.Unmarshal(plain)
+	resp, err := wire.Unpack(plain)
 	if err != nil {
 		return wire.Message{}, err
 	}

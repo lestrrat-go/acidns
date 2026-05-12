@@ -29,7 +29,7 @@ func startEcho(t *testing.T) netip.AddrPort {
 			if err != nil {
 				return
 			}
-			req, err := wire.Unmarshal(buf[:n])
+			req, err := wire.Unpack(buf[:n])
 			if err != nil {
 				continue
 			}
@@ -48,7 +48,7 @@ func startEcho(t *testing.T) netip.AddrPort {
 			if err != nil {
 				continue
 			}
-			wire, err := wire.Marshal(resp)
+			wire, err := wire.Pack(resp)
 			if err != nil {
 				continue
 			}
@@ -124,7 +124,7 @@ func TestExchangeMismatchedID(t *testing.T) {
 		if err != nil {
 			return
 		}
-		req, err := wire.Unmarshal(buf[:n])
+		req, err := wire.Unpack(buf[:n])
 		if err != nil {
 			return
 		}
@@ -134,7 +134,7 @@ func TestExchangeMismatchedID(t *testing.T) {
 			Response(true).
 			Question(req.Questions()[0]).
 			Build()
-		bw, _ := wire.Marshal(bad)
+		bw, _ := wire.Pack(bad)
 		_, _ = pc.WriteTo(bw, src)
 
 		ar2, err := rdata.NewA(netip.MustParseAddr("203.0.113.2"))
@@ -146,7 +146,7 @@ func TestExchangeMismatchedID(t *testing.T) {
 			Answer(wire.NewRecord(req.Questions()[0].Name(), time.Minute,
 				ar2)).
 			Build()
-		gw, _ := wire.Marshal(good)
+		gw, _ := wire.Pack(good)
 		_, _ = pc.WriteTo(gw, src)
 	}()
 

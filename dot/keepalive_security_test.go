@@ -78,7 +78,7 @@ func startMultiDoTWithCert(t *testing.T) (netip.AddrPort, *tls.Config, *x509.Cer
 					if _, err := io.ReadFull(c, body); err != nil {
 						return
 					}
-					req, err := wire.Unmarshal(body)
+					req, err := wire.Unpack(body)
 					if err != nil {
 						return
 					}
@@ -92,7 +92,7 @@ func startMultiDoTWithCert(t *testing.T) (netip.AddrPort, *tls.Config, *x509.Cer
 						Question(req.Questions()[0]).
 						Answer(wire.NewRecord(req.Questions()[0].Name(), time.Minute, ar)).
 						Build()
-					out, _ := wire.Marshal(resp)
+					out, _ := wire.Pack(resp)
 					binary.BigEndian.PutUint16(lenBuf[:], uint16(len(out)))
 					_, _ = c.Write(lenBuf[:])
 					_, _ = c.Write(out)

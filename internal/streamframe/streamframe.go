@@ -17,7 +17,7 @@ import (
 
 // WriteFrame marshals m and writes it as a length-prefixed frame to w.
 func WriteFrame(w io.Writer, m wire.Message) error {
-	wire, err := wire.Marshal(m)
+	wire, err := wire.Pack(m)
 	if err != nil {
 		return fmt.Errorf("streamframe: marshal: %w", err)
 	}
@@ -52,7 +52,7 @@ func ReadFrame(r io.Reader) (wire.Message, error) {
 		}
 		return wire.Message{}, fmt.Errorf("streamframe: read body: %w", err)
 	}
-	m, err := wire.Unmarshal(body)
+	m, err := wire.Unpack(body)
 	if err != nil {
 		return wire.Message{}, fmt.Errorf("streamframe: unmarshal: %w", err)
 	}

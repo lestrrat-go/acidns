@@ -45,7 +45,7 @@ func TestPreflightDropsQRSetOnUDP(t *testing.T) {
 		Question(wire.NewQuestion(wire.MustParseName("a.test."), rrtype.A)).
 		Build()
 	require.NoError(t, err)
-	buf, err := wire.Marshal(resp)
+	buf, err := wire.Pack(resp)
 	require.NoError(t, err)
 
 	conn, err := net.DialUDP("udp", nil, net.UDPAddrFromAddrPort(ctrl.Addr()))

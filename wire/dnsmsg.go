@@ -7,7 +7,7 @@ import (
 )
 
 // Message is a DNS protocol message. Value type — copy-friendly,
-// returned by value from [Unmarshal] and [Builder.Build]. Construct
+// returned by value from [Unpack] and [Builder.Build]. Construct
 // via [NewMessageBuilder] so callers do not depend on field layout.
 //
 // # Section accessor semantics
@@ -77,9 +77,9 @@ func (m Message) Additionals() []Record { return m.additionals }
 // the message carried one.
 func (m Message) EDNS() (EDNS, bool) { return m.edns, m.hasEDNS }
 
-// Marshal encodes m to a single DNS wire-format datagram, using compression
+// Pack encodes m to a single DNS wire-format datagram, using compression
 // for repeated name suffixes.
-func Marshal(m Message) ([]byte, error) {
+func Pack(m Message) ([]byte, error) {
 	if len(m.questions) > 0xffff || len(m.answers) > 0xffff ||
 		len(m.authorities) > 0xffff || len(m.additionals) > 0xffff {
 		return nil, fmt.Errorf("%w: section count overflow", ErrInvalidMessage)
@@ -126,7 +126,7 @@ func Marshal(m Message) ([]byte, error) {
 	// 65535 bytes; UDP can carry less still. streamframe.WriteFrame
 	// catches the TCP case at send time, but raw-UDP / raw-buffer
 	// callers do not — enforce the hard wire limit here so an
-	// oversize Marshal fails loudly rather than producing bytes no
+	// oversize Pack fails loudly rather than producing bytes no
 	// transport can carry.
 	if len(out) > 0xffff {
 		return nil, fmt.Errorf("%w: message %d bytes exceeds wire limit (65535)", ErrInvalidMessage, len(out))
@@ -134,8 +134,8 @@ func Marshal(m Message) ([]byte, error) {
 	return out, nil
 }
 
-// Unmarshal decodes a wire-format DNS message.
-func Unmarshal(buf []byte) (Message, error) {
+// Unpack decodes a wire-format DNS message.
+func Unpack(buf []byte) (Message, error) {
 	if len(buf) < 12 {
 		return Message{}, NewMessageParseError(
 			SectionHeader, -1, len(buf),

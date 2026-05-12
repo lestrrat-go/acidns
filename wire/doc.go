@@ -6,8 +6,8 @@
 //
 // The Message interface represents a parsed DNS protocol message. It is
 // constructed by NewMessageBuilder().…Build() (immutable thereafter) or by
-// Unmarshal of a byte slice. Marshal serialises a Message back to wire
-// bytes; Unmarshal parses wire bytes into a Message.
+// Unpack of a byte slice. Pack serialises a Message back to wire
+// bytes; Unpack parses wire bytes into a Message.
 //
 // # Records
 //
@@ -33,7 +33,7 @@
 //
 // # Errors
 //
-// Parse failures from Unmarshal are returned as *MessageParseError,
+// Parse failures from Unpack are returned as *MessageParseError,
 // which carries the section, RR index, and byte offset where the
 // failure occurred. errors.Is(err, ErrInvalidMessage) continues to work
 // for callers that want sentinel matching.

@@ -161,7 +161,7 @@ func TestNewPublicUDPServer_DropsDeniedSilently(t *testing.T) {
 		Question(wire.NewQuestion(wire.MustParseName("example.com"), rrtype.A)).
 		Build()
 	require.NoError(t, err)
-	buf, err := wire.Marshal(q)
+	buf, err := wire.Pack(q)
 	require.NoError(t, err)
 	_, err = conn.Write(buf)
 	require.NoError(t, err)

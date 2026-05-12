@@ -21,7 +21,7 @@ type signingExchanger struct {
 
 func (s *signingExchanger) Exchange(_ context.Context, q wire.Message) (wire.Message, error) {
 	s.got = q
-	raw, err := wire.Marshal(q)
+	raw, err := wire.Pack(q)
 	if err != nil {
 		return wire.Message{}, err
 	}
@@ -38,7 +38,7 @@ func (s *signingExchanger) Exchange(_ context.Context, q wire.Message) (wire.Mes
 	if err != nil {
 		return wire.Message{}, err
 	}
-	respRaw, err := wire.Marshal(resp)
+	respRaw, err := wire.Pack(resp)
 	if err != nil {
 		return wire.Message{}, err
 	}
@@ -46,7 +46,7 @@ func (s *signingExchanger) Exchange(_ context.Context, q wire.Message) (wire.Mes
 	if err != nil {
 		return wire.Message{}, err
 	}
-	return wire.Unmarshal(signed)
+	return wire.Unpack(signed)
 }
 
 // unsignedExchanger ignores its input and returns a fixed unsigned response.
@@ -125,7 +125,7 @@ type captureSigningExchanger struct {
 }
 
 func (r *captureSigningExchanger) Exchange(ctx context.Context, q wire.Message) (wire.Message, error) {
-	raw, err := wire.Marshal(q)
+	raw, err := wire.Pack(q)
 	if err != nil {
 		return wire.Message{}, err
 	}

@@ -14,7 +14,7 @@ func TestPadEncrypted_AlignsTo128(t *testing.T) {
 	q, err := wiretest.Query(wire.MustParseName("example.com"), rrtype.A)
 	require.NoError(t, err)
 	padded := wire.PadEncrypted(q)
-	buf, err := wire.Marshal(padded)
+	buf, err := wire.Pack(padded)
 	require.NoError(t, err)
 	require.Equal(t, 0, len(buf)%128, "padded length %d is not a multiple of 128", len(buf))
 
@@ -51,8 +51,8 @@ func TestPadEncrypted_AlreadyPadded_NoChange(t *testing.T) {
 	// Message is a value type — comparing the byte-encoded form is
 	// the closest thing to "same instance" the new shape allows. A
 	// no-op PadEncrypted must round-trip to the same bytes.
-	a, _ := wire.Marshal(manual)
-	c, _ := wire.Marshal(got)
+	a, _ := wire.Pack(manual)
+	c, _ := wire.Pack(got)
 	require.Equal(t, a, c, "PadEncrypted must return an equivalent Message when a Padding option is already present")
 }
 
@@ -73,7 +73,7 @@ func TestPadEncrypted_NoEDNS_AddsOPT(t *testing.T) {
 	require.True(t, ok, "PadEncrypted must add an OPT pseudo-RR to a message without EDNS")
 	require.Equal(t, uint16(1232), e.UDPSize())
 
-	buf, err := wire.Marshal(padded)
+	buf, err := wire.Pack(padded)
 	require.NoError(t, err)
 	require.Equal(t, 0, len(buf)%128)
 }

@@ -16,7 +16,7 @@ jobs:
       fail-fast: false
       matrix:
         target:
-          - { pkg: ./wire, name: FuzzUnmarshal }
+          - { pkg: ./wire, name: FuzzUnpack }
           - { pkg: ./wire/wirebb, name: FuzzDecodeWire }
           - { pkg: ./wire/rdata, name: FuzzUnpackTyped }
           - { pkg: ./internal/streamframe, name: FuzzReadFrame }

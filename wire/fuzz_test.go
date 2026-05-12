@@ -8,25 +8,25 @@ import (
 	"github.com/lestrrat-go/acidns/internal/wiretest"
 )
 
-// FuzzUnmarshal feeds wire.Unmarshal arbitrary bytes. The contract: must
+// FuzzUnpack feeds wire.Unpack arbitrary bytes. The contract: must
 // not panic, and must return a typed *MessageParseError or nil. Anything
 // else (raw fmt.Errorf, plain sentinel, etc.) signals a regression in the
 // error-typing work.
-func FuzzUnmarshal(f *testing.F) {
+func FuzzUnpack(f *testing.F) {
 	// Seed corpus: a couple of valid messages so the fuzzer has a base to
 	// mutate, plus some pathologically-short inputs.
 	q, err := wiretest.Query(wire.MustParseName("example.com"), rrtype.A)
 	if err != nil {
 		f.Fatal(err)
 	}
-	if buf, err := wire.Marshal(q); err == nil {
+	if buf, err := wire.Pack(q); err == nil {
 		f.Add(buf)
 	}
 	resp, err := wiretest.NXDOMAIN(q)
 	if err != nil {
 		f.Fatal(err)
 	}
-	if buf, err := wire.Marshal(resp); err == nil {
+	if buf, err := wire.Pack(resp); err == nil {
 		f.Add(buf)
 	}
 	f.Add([]byte{})
@@ -34,16 +34,16 @@ func FuzzUnmarshal(f *testing.F) {
 	f.Add([]byte{0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff})
 
 	f.Fuzz(func(t *testing.T, buf []byte) {
-		m, err := wire.Unmarshal(buf)
+		m, err := wire.Unpack(buf)
 		if err == nil {
-			// Round-trip: a successful Unmarshal followed by Marshal must
+			// Round-trip: a successful Unpack followed by Pack must
 			// not panic. Output is allowed to differ from the input (we
 			// don't ship a canonicalisation guarantee).
-			if _, mErr := wire.Marshal(m); mErr != nil {
-				// Marshal failure on a successfully-Unmarshalled message
+			if _, mErr := wire.Pack(m); mErr != nil {
+				// Pack failure on a successfully-Unmarshalled message
 				// is a real bug — every parsed message must be
 				// re-encodable.
-				t.Fatalf("Marshal(Unmarshal(buf)) failed: %v", mErr)
+				t.Fatalf("Pack(Unpack(buf)) failed: %v", mErr)
 			}
 		}
 	})

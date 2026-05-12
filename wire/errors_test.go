@@ -12,7 +12,7 @@ func TestMessageParseError_IsCompat(t *testing.T) {
 	t.Parallel()
 	// Unmarshalling a too-short buffer must surface a typed
 	// MessageParseError that still satisfies errors.Is(err, ErrInvalidMessage).
-	_, err := wire.Unmarshal([]byte{1, 2, 3})
+	_, err := wire.Unpack([]byte{1, 2, 3})
 	require.Error(t, err)
 	require.True(t, errors.Is(err, wire.ErrInvalidMessage),
 		"errors.Is must continue to match ErrInvalidMessage for legacy callers")

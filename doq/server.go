@@ -274,7 +274,7 @@ func (l *serverLoop) serveStream(ctx context.Context, stream *quic.Stream, remot
 	if _, err := io.ReadFull(stream, body); err != nil {
 		return
 	}
-	q, err := wire.Unmarshal(body)
+	q, err := wire.Unpack(body)
 	if err != nil {
 		return
 	}
@@ -324,7 +324,7 @@ func (w *responseWriter) WriteMsg(m wire.Message) error {
 	}
 	w.wrote = true
 
-	buf, err := wire.Marshal(m)
+	buf, err := wire.Pack(m)
 	if err != nil {
 		return err
 	}

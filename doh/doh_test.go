@@ -42,7 +42,7 @@ func makeServer(t *testing.T, expectedMethod string) *httptest.Server {
 			}
 			msg = dec
 		}
-		req, err := wire.Unmarshal(msg)
+		req, err := wire.Unpack(msg)
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusBadRequest)
 			return
@@ -56,7 +56,7 @@ func makeServer(t *testing.T, expectedMethod string) *httptest.Server {
 			Answer(wire.NewRecord(req.Questions()[0].Name(), time.Minute,
 				ar)).
 			Build()
-		out, _ := wire.Marshal(resp)
+		out, _ := wire.Pack(resp)
 		w.Header().Set("Content-Type", "application/dns-message")
 		_, _ = w.Write(out)
 	}))

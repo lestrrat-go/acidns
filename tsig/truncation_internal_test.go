@@ -48,7 +48,7 @@ func TestVerifyAcceptsTruncatedMAC(t *testing.T) {
 		Question(wire.NewQuestion(wire.MustParseName("example.com"), rrtype.A)).
 		Build()
 	require.NoError(t, err)
-	msg, err := wire.Marshal(q)
+	msg, err := wire.Pack(q)
 	require.NoError(t, err)
 
 	// Truncate to the floor (16 octets for HMAC-SHA-256).
@@ -72,7 +72,7 @@ func TestVerifyRejectsBelowFloor(t *testing.T) {
 		Question(wire.NewQuestion(wire.MustParseName("example.com"), rrtype.A)).
 		Build()
 	require.NoError(t, err)
-	msg, err := wire.Marshal(q)
+	msg, err := wire.Pack(q)
 	require.NoError(t, err)
 
 	signed := signWithTruncatedMAC(t, msg, key, now, 5*time.Minute, 8) // below floor

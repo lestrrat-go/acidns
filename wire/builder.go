@@ -54,7 +54,7 @@ func (b *MessageBuilder) RCODE(r RCODE) *MessageBuilder       { b.flags = b.flag
 func (b *MessageBuilder) Question(q Question) *MessageBuilder { b.questions = append(b.questions, q); return b }
 
 // Answer appends a Record to the answer section. A zero-value Record
-// (no rdata attached) is rejected — Marshal would panic on the nil
+// (no rdata attached) is rejected — Pack would panic on the nil
 // rdata interface, so failing fast here surfaces the bug at the build
 // site instead of deep inside the encoder.
 func (b *MessageBuilder) Answer(r Record) *MessageBuilder {

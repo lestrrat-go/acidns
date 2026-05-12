@@ -415,7 +415,7 @@ func TestRDataAsMismatch(t *testing.T) {
 	require.Equal(t, "192.0.2.1", a.Addr().String())
 }
 
-// Unmarshal: corrupt additional that *peeks* a valid name+type but fails
+// Unpack: corrupt additional that *peeks* a valid name+type but fails
 // the full record unpack (e.g. truncated rdata after the type).
 func TestUnmarshalTruncatedAdditionalAfterPeek(t *testing.T) {
 	t.Parallel()
@@ -437,11 +437,11 @@ func TestUnmarshalTruncatedAdditionalAfterPeek(t *testing.T) {
 		0, 4, // rdlen
 		192, 0, // truncated rdata
 	}
-	_, err := wire.Unmarshal(buf)
+	_, err := wire.Unpack(buf)
 	require.ErrorIs(t, err, wire.ErrInvalidMessage)
 }
 
-// Unmarshal: two OPT pseudo-RRs is rejected.
+// Unpack: two OPT pseudo-RRs is rejected.
 func TestUnmarshalDoubleOPTRejected(t *testing.T) {
 	t.Parallel()
 
@@ -450,13 +450,13 @@ func TestUnmarshalDoubleOPTRejected(t *testing.T) {
 	m, err := wire.NewMessageBuilder().ID(1).Question(q).EDNS(e).Build()
 	require.NoError(t, err)
 
-	buf, err := wire.Marshal(m)
+	buf, err := wire.Pack(m)
 	require.NoError(t, err)
 
 	// Forge a second OPT by appending another packed OPT and bumping arcount.
 	m2, err := wire.NewMessageBuilder().ID(1).Question(q).EDNS(e).Build()
 	require.NoError(t, err)
-	buf2, err := wire.Marshal(m2)
+	buf2, err := wire.Pack(m2)
 	require.NoError(t, err)
 
 	// The OPT wire bytes are everything after the header+question portion.
@@ -476,7 +476,7 @@ func TestUnmarshalDoubleOPTRejected(t *testing.T) {
 	combined[10] = 0
 	combined[11] = 2
 
-	_, err = wire.Unmarshal(combined)
+	_, err = wire.Unpack(combined)
 	require.ErrorIs(t, err, wire.ErrInvalidMessage)
 }
 
@@ -495,7 +495,7 @@ func findOPTLen(_ []byte) int {
 	return 11
 }
 
-// Marshal: rdata too large for type — synthesised via a large TXT.
+// Pack: rdata too large for type — synthesised via a large TXT.
 func TestMarshalRDataTooLarge(t *testing.T) {
 	t.Parallel()
 
@@ -513,7 +513,7 @@ func TestMarshalRDataTooLarge(t *testing.T) {
 	m, err := wire.NewMessageBuilder().Answer(rec).Build()
 	require.NoError(t, err)
 
-	_, err = wire.Marshal(m)
+	_, err = wire.Pack(m)
 	require.ErrorIs(t, err, wire.ErrInvalidMessage)
 }
 
@@ -544,7 +544,7 @@ func TestNewRRsetFromRDatasErrors(t *testing.T) {
 	})
 }
 
-// Unmarshal: truncated authority.
+// Unpack: truncated authority.
 func TestUnmarshalTruncatedAuthority(t *testing.T) {
 	t.Parallel()
 	hdr := []byte{
@@ -555,11 +555,11 @@ func TestUnmarshalTruncatedAuthority(t *testing.T) {
 		0, 1, // nscount=1
 		0, 0,
 	}
-	_, err := wire.Unmarshal(hdr)
+	_, err := wire.Unpack(hdr)
 	require.ErrorIs(t, err, wire.ErrInvalidMessage)
 }
 
-// Unmarshal: additional whose name parses but type peek hits truncation.
+// Unpack: additional whose name parses but type peek hits truncation.
 func TestUnmarshalAdditionalNameOnly(t *testing.T) {
 	t.Parallel()
 
@@ -573,11 +573,11 @@ func TestUnmarshalAdditionalNameOnly(t *testing.T) {
 		0, 1, // arcount=1
 		0, // root name only
 	}
-	_, err := wire.Unmarshal(buf)
+	_, err := wire.Unpack(buf)
 	require.ErrorIs(t, err, wire.ErrInvalidMessage)
 }
 
-// Marshal: rdata oversize in Authority section.
+// Pack: rdata oversize in Authority section.
 func TestMarshalAuthorityOversize(t *testing.T) {
 	t.Parallel()
 
@@ -592,11 +592,11 @@ func TestMarshalAuthorityOversize(t *testing.T) {
 	m, err := wire.NewMessageBuilder().Authority(rec).Build()
 	require.NoError(t, err)
 
-	_, err = wire.Marshal(m)
+	_, err = wire.Pack(m)
 	require.ErrorIs(t, err, wire.ErrInvalidMessage)
 }
 
-// Marshal: rdata oversize in Additional section.
+// Pack: rdata oversize in Additional section.
 func TestMarshalAdditionalOversize(t *testing.T) {
 	t.Parallel()
 
@@ -611,11 +611,11 @@ func TestMarshalAdditionalOversize(t *testing.T) {
 	m, err := wire.NewMessageBuilder().Additional(rec).Build()
 	require.NoError(t, err)
 
-	_, err = wire.Marshal(m)
+	_, err = wire.Pack(m)
 	require.ErrorIs(t, err, wire.ErrInvalidMessage)
 }
 
-// Unmarshal: OPT pseudo-RR with truncated rdata (rdlen exceeds remaining).
+// Unpack: OPT pseudo-RR with truncated rdata (rdlen exceeds remaining).
 func TestUnmarshalOPTTruncatedRDLen(t *testing.T) {
 	t.Parallel()
 
@@ -634,11 +634,11 @@ func TestUnmarshalOPTTruncatedRDLen(t *testing.T) {
 		0, 0, 0, 0, // ttl
 		0, 10, // rdlen=10, no follow
 	}
-	_, err := wire.Unmarshal(buf)
+	_, err := wire.Unpack(buf)
 	require.ErrorIs(t, err, wire.ErrInvalidMessage)
 }
 
-// Unmarshal: OPT pseudo-RR with malformed inner option (data length exceeds
+// Unpack: OPT pseudo-RR with malformed inner option (data length exceeds
 // remaining rdata).
 func TestUnmarshalOPTMalformedOption(t *testing.T) {
 	t.Parallel()
@@ -659,7 +659,7 @@ func TestUnmarshalOPTMalformedOption(t *testing.T) {
 		0, 4, // rdlen=4 — exactly covers code(2)+len(2)
 		0, 99, 0, 99, // option code 99, declared len 99 but rdata stops here
 	}
-	_, err := wire.Unmarshal(buf)
+	_, err := wire.Unpack(buf)
 	require.ErrorIs(t, err, wire.ErrInvalidMessage)
 }
 
@@ -692,7 +692,7 @@ func TestBuildErrorReportSingleLabel(t *testing.T) {
 	require.True(t, strings.HasPrefix(n.String(), "_er.1.example.0._er.agent."))
 }
 
-// Unmarshal: additional whose name fails to parse.
+// Unpack: additional whose name fails to parse.
 func TestUnmarshalAdditionalBadName(t *testing.T) {
 	t.Parallel()
 
@@ -707,6 +707,6 @@ func TestUnmarshalAdditionalBadName(t *testing.T) {
 		0, 1, // arcount=1
 		0xff, // illegal label-length top bits 11 with a non-pointer follow
 	}
-	_, err := wire.Unmarshal(buf)
+	_, err := wire.Unpack(buf)
 	require.ErrorIs(t, err, wire.ErrInvalidMessage)
 }

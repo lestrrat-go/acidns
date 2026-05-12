@@ -76,7 +76,7 @@ func Send(ctx context.Context, ex acidns.Exchanger, zone wire.Name, opts ...Opti
 		if err != nil {
 			return wire.Message{}, fmt.Errorf("notify: TSIG sign: %w", err)
 		}
-		q, err = wire.Unmarshal(signed)
+		q, err = wire.Unpack(signed)
 		if err != nil {
 			return wire.Message{}, fmt.Errorf("notify: re-parse signed query: %w", err)
 		}
@@ -126,7 +126,7 @@ func verifyResponseTSIG(resp wire.Message, key tsig.Key, requestMAC []byte, now 
 	if !hasTSIG(resp) {
 		return ErrTSIGMissing
 	}
-	raw, err := wire.Marshal(resp)
+	raw, err := wire.Pack(resp)
 	if err != nil {
 		return fmt.Errorf("%w: marshal response: %w", ErrTSIGVerify, err)
 	}

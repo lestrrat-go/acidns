@@ -95,7 +95,7 @@ func TestHandlerPostRoundTrip(t *testing.T) {
 	t.Cleanup(ts.Close)
 
 	q := mkQuery(t, "a.test.")
-	body, err := wire.Marshal(q)
+	body, err := wire.Pack(q)
 	require.NoError(t, err)
 
 	req, err := http.NewRequestWithContext(t.Context(), http.MethodPost, ts.URL, strings.NewReader(string(body)))
@@ -110,7 +110,7 @@ func TestHandlerPostRoundTrip(t *testing.T) {
 
 	respBody, err := io.ReadAll(resp.Body)
 	require.NoError(t, err)
-	parsed, err := wire.Unmarshal(respBody)
+	parsed, err := wire.Unpack(respBody)
 	require.NoError(t, err)
 	require.True(t, parsed.Flags().Response())
 	require.Equal(t, 1, len(parsed.Answers()))
@@ -125,7 +125,7 @@ func TestHandlerGetRoundTrip(t *testing.T) {
 	t.Cleanup(ts.Close)
 
 	q := mkQuery(t, "g.test.")
-	body, err := wire.Marshal(q)
+	body, err := wire.Pack(q)
 	require.NoError(t, err)
 	dnsParam := base64.RawURLEncoding.EncodeToString(body)
 

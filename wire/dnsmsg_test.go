@@ -57,10 +57,10 @@ func TestRoundTripQuery(t *testing.T) {
 		Build()
 	require.NoError(t, err)
 
-	buf, err := wire.Marshal(m)
+	buf, err := wire.Pack(m)
 	require.NoError(t, err)
 
-	m2, err := wire.Unmarshal(buf)
+	m2, err := wire.Unpack(buf)
 	require.NoError(t, err)
 
 	require.Equal(t, m.ID(), m2.ID())
@@ -96,9 +96,9 @@ func TestRoundTripResponse(t *testing.T) {
 		Build()
 	require.NoError(t, err)
 
-	buf, err := wire.Marshal(m)
+	buf, err := wire.Pack(m)
 	require.NoError(t, err)
-	m2, err := wire.Unmarshal(buf)
+	m2, err := wire.Unpack(buf)
 	require.NoError(t, err)
 
 	require.Equal(t, 1, len(m2.Questions()))
@@ -141,10 +141,10 @@ func TestUnmarshalRealResponse(t *testing.T) {
 		Build()
 	require.NoError(t, err)
 
-	buf, err := wire.Marshal(out)
+	buf, err := wire.Pack(out)
 	require.NoError(t, err)
 
-	m, err := wire.Unmarshal(buf)
+	m, err := wire.Unpack(buf)
 	require.NoError(t, err)
 	require.Equal(t, wire.RCODENoError, m.Flags().RCODE())
 	require.True(t, m.Flags().Response())
@@ -156,14 +156,14 @@ func TestUnmarshalCorrupt(t *testing.T) {
 
 	t.Run("short header", func(t *testing.T) {
 		t.Parallel()
-		_, err := wire.Unmarshal([]byte{0, 0, 0, 0, 0, 0})
+		_, err := wire.Unpack([]byte{0, 0, 0, 0, 0, 0})
 		require.Error(t, err)
 	})
 
 	t.Run("truncated question", func(t *testing.T) {
 		t.Parallel()
 		buf := []byte{0, 1, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 7, 'e', 'x'}
-		_, err := wire.Unmarshal(buf)
+		_, err := wire.Unpack(buf)
 		require.Error(t, err)
 	})
 }

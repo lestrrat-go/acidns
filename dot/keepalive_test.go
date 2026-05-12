@@ -80,7 +80,7 @@ func startMultiDoT(t *testing.T, idleTimeout time.Duration) (netip.AddrPort, *tl
 					if _, err := io.ReadFull(c, body); err != nil {
 						return
 					}
-					req, err := wire.Unmarshal(body)
+					req, err := wire.Unpack(body)
 					if err != nil {
 						return
 					}
@@ -98,7 +98,7 @@ func startMultiDoT(t *testing.T, idleTimeout time.Duration) (netip.AddrPort, *tl
 							ar)).
 						EDNS(mustEDNS(t, eb)).
 						Build()
-					out, _ := wire.Marshal(resp)
+					out, _ := wire.Pack(resp)
 					binary.BigEndian.PutUint16(lenBuf[:], uint16(len(out)))
 					_, _ = c.Write(lenBuf[:])
 					_, _ = c.Write(out)

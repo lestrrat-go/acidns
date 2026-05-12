@@ -108,7 +108,7 @@ func Start(ctx context.Context, ex acidns.StreamExchanger, zone wire.Name, opts 
 		if err != nil {
 			return nil, fmt.Errorf("axfr: TSIG extract MAC: %w", err)
 		}
-		q, err = wire.Unmarshal(signed)
+		q, err = wire.Unpack(signed)
 		if err != nil {
 			return nil, fmt.Errorf("axfr: re-parse signed query: %w", err)
 		}

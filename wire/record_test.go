@@ -88,9 +88,9 @@ func TestRecord_PackRejectsNegativeTTL(t *testing.T) {
 		Question(wire.NewQuestion(name, rrtype.A)).
 		Answer(rec).
 		Build()
-	require.NoError(t, err, "builder accepts the record; rejection happens at Marshal")
+	require.NoError(t, err, "builder accepts the record; rejection happens at Pack")
 
-	_, err = wire.Marshal(msg)
+	_, err = wire.Pack(msg)
 	require.Error(t, err)
 	require.ErrorIs(t, err, wire.ErrInvalidTTL,
 		"negative duration TTL must be rejected, not wrapped to a huge uint32 on the wire")
@@ -114,7 +114,7 @@ func TestRecord_PackRejectsTTLAboveRFC2308Ceiling(t *testing.T) {
 		Build()
 	require.NoError(t, err)
 
-	_, err = wire.Marshal(msg)
+	_, err = wire.Pack(msg)
 	require.Error(t, err)
 	require.ErrorIs(t, err, wire.ErrInvalidTTL)
 }
@@ -135,7 +135,7 @@ func TestRecord_PackAcceptsZeroTTL(t *testing.T) {
 		Build()
 	require.NoError(t, err)
 
-	_, err = wire.Marshal(msg)
+	_, err = wire.Pack(msg)
 	require.NoError(t, err)
 }
 

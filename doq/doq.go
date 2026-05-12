@@ -180,7 +180,7 @@ func (e *Client) Exchange(ctx context.Context, q wire.Message) (wire.Message, er
 	if e.padding {
 		q = wire.PadEncrypted(q)
 	}
-	msg, err := wire.Marshal(q)
+	msg, err := wire.Pack(q)
 	if err != nil {
 		return wire.Message{}, fmt.Errorf("doq: marshal: %w", err)
 	}
@@ -254,7 +254,7 @@ func decodeDoQResponse(body []byte, q wire.Message) (wire.Message, error) {
 		return wire.Message{}, fmt.Errorf("doq: response ID must be 0 per RFC 9250 §4.2.1, got %#x", got)
 	}
 	binary.BigEndian.PutUint16(body[0:2], q.ID())
-	resp, err := wire.Unmarshal(body)
+	resp, err := wire.Unpack(body)
 	if err != nil {
 		return wire.Message{}, fmt.Errorf("doq: unmarshal: %w", err)
 	}
@@ -293,7 +293,7 @@ func (e *Client) Stream(ctx context.Context, q wire.Message) (acidns.MessageStre
 	// Force ID=0 per RFC 9250 §4.2.1 by re-marshalling and patching the
 	// header in place; we cannot use streamframe.WriteFrame because it
 	// would marshal q's original ID.
-	qBytes, err := wire.Marshal(q)
+	qBytes, err := wire.Pack(q)
 	if err != nil {
 		_ = conn.CloseWithError(doqInternalError, "")
 		return nil, fmt.Errorf("doq: marshal: %w", err)
@@ -354,7 +354,7 @@ func (s *doqStream) Next(ctx context.Context) (wire.Message, error) {
 
 // readDoQFrameBytes reads a length-prefixed DoQ response frame and
 // returns the raw body so [decodeDoQResponse] can validate the wire ID
-// before [wire.Unmarshal] runs. Sharing [streamframe.ReadFrame] would
+// before [wire.Unpack] runs. Sharing [streamframe.ReadFrame] would
 // give us a parsed Message that already carries the (zero) wire ID,
 // losing the chance to patch it back to the caller's value.
 func readDoQFrameBytes(r io.Reader) ([]byte, error) {

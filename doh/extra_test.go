@@ -99,7 +99,7 @@ func TestExchangeEmptyContentType(t *testing.T) {
 		"empty Content-Type from a DoH server must be rejected (RFC 8484 §6)")
 }
 
-// TestExchangeUnmarshalError covers the wire.Unmarshal error branch with a
+// TestExchangeUnmarshalError covers the wire.Unpack error branch with a
 // well-formed Content-Type but garbage body bytes.
 func TestExchangeUnmarshalError(t *testing.T) {
 	t.Parallel()
@@ -132,7 +132,7 @@ func TestExchangeIDMismatch(t *testing.T) {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
 		}
-		out, err := wire.Marshal(resp)
+		out, err := wire.Pack(resp)
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return

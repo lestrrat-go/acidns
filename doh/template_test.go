@@ -42,7 +42,7 @@ func templateProbeServer(t *testing.T) *httptest.Server {
 			http.Error(w, err.Error(), http.StatusBadRequest)
 			return
 		}
-		req, err := wire.Unmarshal(raw)
+		req, err := wire.Unpack(raw)
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusBadRequest)
 			return
@@ -56,7 +56,7 @@ func templateProbeServer(t *testing.T) *httptest.Server {
 			Answer(wire.NewRecord(req.Questions()[0].Name(), time.Minute,
 				ar)).
 			Build()
-		out, _ := wire.Marshal(resp)
+		out, _ := wire.Pack(resp)
 		w.Header().Set("Content-Type", "application/dns-message")
 		_, _ = w.Write(out)
 	}))
@@ -78,7 +78,7 @@ func pathProbeServer(t *testing.T) *httptest.Server {
 			http.Error(w, err.Error(), http.StatusBadRequest)
 			return
 		}
-		req, err := wire.Unmarshal(raw)
+		req, err := wire.Unpack(raw)
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusBadRequest)
 			return
@@ -94,7 +94,7 @@ func pathProbeServer(t *testing.T) *httptest.Server {
 			Answer(wire.NewRecord(req.Questions()[0].Name(), time.Minute,
 				ar2)).
 			Build()
-		out, _ := wire.Marshal(resp)
+		out, _ := wire.Pack(resp)
 		w.Header().Set("Content-Type", "application/dns-message")
 		_, _ = w.Write(out)
 	}))

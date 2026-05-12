@@ -109,7 +109,7 @@ func Example_doq_exchange() {
 				if _, err := io.ReadFull(stream, body); err != nil {
 					return
 				}
-				req, err := wire.Unmarshal(body)
+				req, err := wire.Unpack(body)
 				if err != nil {
 					return
 				}
@@ -123,7 +123,7 @@ func Example_doq_exchange() {
 					Answer(wire.NewRecord(req.Questions()[0].Name(), time.Minute,
 						ar)).
 					Build()
-				out, _ := wire.Marshal(resp)
+				out, _ := wire.Pack(resp)
 				binary.BigEndian.PutUint16(hdr[:], uint16(len(out)))
 				_, _ = stream.Write(hdr[:])
 				_, _ = stream.Write(out)

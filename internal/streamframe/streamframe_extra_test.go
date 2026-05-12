@@ -109,7 +109,7 @@ func TestWriteFrameOversized(t *testing.T) {
 	var buf bytes.Buffer
 	err := streamframe.WriteFrame(&buf, m)
 	require.Error(t, err)
-	// wire.Marshal now caps oversized output before streamframe sees
+	// wire.Pack now caps oversized output before streamframe sees
 	// it; the error wraps wire.ErrInvalidMessage rather than the
 	// streamframe-specific "too large" message.
 	require.Contains(t, err.Error(), "exceeds wire limit")
@@ -162,7 +162,7 @@ func TestReadFramePartialHeaderReturnsUnexpectedEOF(t *testing.T) {
 
 func TestReadFrameZeroLengthBodyTriggersUnmarshalError(t *testing.T) {
 	t.Parallel()
-	// Length 0 → empty body → wire.Unmarshal rejects header-too-short.
+	// Length 0 → empty body → wire.Unpack rejects header-too-short.
 	_, err := streamframe.ReadFrame(bytes.NewReader([]byte{0x00, 0x00}))
 	require.ErrorIs(t, err, wire.ErrInvalidMessage)
 }

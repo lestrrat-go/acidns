@@ -34,7 +34,7 @@ func startSearchServer(t *testing.T, wanted string) (netip.AddrPort, func() []st
 			if err != nil {
 				return
 			}
-			req, err := wire.Unmarshal(buf[:n])
+			req, err := wire.Unpack(buf[:n])
 			if err != nil || len(req.Questions()) == 0 {
 				continue
 			}
@@ -60,7 +60,7 @@ func startSearchServer(t *testing.T, wanted string) (netip.AddrPort, func() []st
 				b = b.RCODE(wire.RCODENXDomain)
 			}
 			resp, _ := b.Build()
-			wire, _ := wire.Marshal(resp)
+			wire, _ := wire.Pack(resp)
 			_, _ = pc.WriteTo(wire, src)
 		}
 	}()

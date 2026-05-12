@@ -321,7 +321,7 @@ func main() {
 	}
 
 	for _, f := range fixtures {
-		buf, err := wire.Marshal(f.msg)
+		buf, err := wire.Pack(f.msg)
 		if err != nil {
 			panic(fmt.Errorf("marshal %s: %w", f.name, err))
 		}

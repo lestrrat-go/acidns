@@ -43,7 +43,7 @@ func (s Section) String() string {
 }
 
 // MessageParseError carries structured context about a failure in
-// wire.Unmarshal. Tools that want to render a hex-dump pointer at the
+// wire.Unpack. Tools that want to render a hex-dump pointer at the
 // offending byte (acidig, fuzz harnesses) can read Offset; consumers
 // content with a sentinel still get errors.Is(err, ErrInvalidMessage)
 // because Is matches the sentinel.

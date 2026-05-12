@@ -28,7 +28,7 @@ func (p *programmableStreamEx) Exchange(_ context.Context, _ wire.Message) (wire
 
 func (p *programmableStreamEx) Stream(_ context.Context, q wire.Message) (acidns.MessageStream, error) {
 	p.gotQ = q
-	raw, err := wire.Marshal(q)
+	raw, err := wire.Pack(q)
 	if err != nil {
 		return nil, err
 	}
@@ -45,11 +45,11 @@ func (p *programmableStreamEx) Stream(_ context.Context, q wire.Message) (acidns
 
 func signResp(t *testing.T, m wire.Message, key tsig.Key, requestMAC []byte, now time.Time, fudge time.Duration) wire.Message {
 	t.Helper()
-	raw, err := wire.Marshal(m)
+	raw, err := wire.Pack(m)
 	require.NoError(t, err)
 	signed, err := tsig.SignResponse(raw, key, requestMAC, now, fudge)
 	require.NoError(t, err)
-	out, err := wire.Unmarshal(signed)
+	out, err := wire.Unpack(signed)
 	require.NoError(t, err)
 	return out
 }

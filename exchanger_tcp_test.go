@@ -39,7 +39,7 @@ func startTCPEcho(t *testing.T) netip.AddrPort {
 				if _, err := io.ReadFull(c, body); err != nil {
 					return
 				}
-				req, err := wire.Unmarshal(body)
+				req, err := wire.Unpack(body)
 				if err != nil {
 					return
 				}
@@ -56,7 +56,7 @@ func startTCPEcho(t *testing.T) netip.AddrPort {
 				if err != nil {
 					return
 				}
-				wire, err := wire.Marshal(resp)
+				wire, err := wire.Pack(resp)
 				if err != nil {
 					return
 				}

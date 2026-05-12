@@ -27,7 +27,7 @@ func TestUnmarshalSectionCountClamp(t *testing.T) {
 	runtime.GC()
 	runtime.ReadMemStats(&memBefore)
 
-	_, err := wire.Unmarshal(hdr[:])
+	_, err := wire.Unpack(hdr[:])
 	require.Error(t, err, "claimed-but-absent records must fail to parse")
 
 	var memAfter runtime.MemStats
@@ -109,7 +109,7 @@ func TestCompressedRdataNameRejected(t *testing.T) {
 			rec = append(rec, byte(len(tc.rdata)>>8), byte(len(tc.rdata)))
 			rec = append(rec, tc.rdata...)
 
-			_, err := wire.Unmarshal(append(hdr, rec...))
+			_, err := wire.Unpack(append(hdr, rec...))
 			require.Error(t, err,
 				"%s with compressed name in rdata must be rejected", tc.name)
 		})
@@ -143,7 +143,7 @@ func TestDNAMECompressedTargetRejected(t *testing.T) {
 		0x00, 0x02, // rdlen
 		0xc0, 0x0c, // pointer
 	}
-	_, err := wire.Unmarshal(append(hdr, rec...))
+	_, err := wire.Unpack(append(hdr, rec...))
 	require.Error(t, err, "DNAME with compressed target must be rejected")
 }
 
@@ -180,7 +180,7 @@ func TestEDNSOptionLengthBounded(t *testing.T) {
 	msg := append(buf, opt...)
 	msg = append(msg, tail...)
 
-	_, err := wire.Unmarshal(msg)
+	_, err := wire.Unpack(msg)
 	require.Error(t, err, "OPT option length must be bounded by rdata window")
 }
 
@@ -210,7 +210,7 @@ func TestEDNSDuplicateOptionRejected(t *testing.T) {
 		0x00, 0x0c, 0x00, 0x00, // padding, len 0
 		0x00, 0x0c, 0x00, 0x00, // padding, len 0 (duplicate)
 	}
-	_, err := wire.Unmarshal(append(hdr, opt...))
+	_, err := wire.Unpack(append(hdr, opt...))
 	require.Error(t, err, "duplicate EDNS option code must be rejected")
 }
 
@@ -237,6 +237,6 @@ func TestQuestionCompressionPointerRejected(t *testing.T) {
 		0x00, 0x01, // type A
 		0x00, 0x01, // class IN
 	}
-	_, err := wire.Unmarshal(msg)
+	_, err := wire.Unpack(msg)
 	require.Error(t, err, "compressed qname must be rejected")
 }

@@ -415,7 +415,7 @@ func (l *serverLoop) handlePacket(ctx context.Context, body []byte, src netip.Ad
 	if err != nil {
 		return
 	}
-	q, err := wire.Unmarshal(queryBytes)
+	q, err := wire.Unpack(queryBytes)
 	if err != nil {
 		return
 	}
@@ -465,7 +465,7 @@ func (w *responseWriter) WriteMsg(m wire.Message) error {
 	}
 	w.wrote = true
 
-	plain, err := wire.Marshal(m)
+	plain, err := wire.Pack(m)
 	if err != nil {
 		return err
 	}

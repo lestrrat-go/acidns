@@ -247,7 +247,7 @@ func Browse(ctx context.Context, service string, opts ...BrowseOption) ([]Servic
 	if err != nil {
 		return nil, err
 	}
-	msg, err := wire.Marshal(q)
+	msg, err := wire.Pack(q)
 	if err != nil {
 		return nil, err
 	}
@@ -309,7 +309,7 @@ func Browse(ctx context.Context, service string, opts ...BrowseOption) ([]Servic
 		if !linkLocalishSource(src) {
 			continue
 		}
-		resp, err := wire.Unmarshal(buf[:n])
+		resp, err := wire.Unpack(buf[:n])
 		if err != nil {
 			continue
 		}

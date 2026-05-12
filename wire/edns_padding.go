@@ -16,7 +16,7 @@ const paddingBlock = 128
 // SHOULD NOT pad — RFC 8467 §6 explicitly recommends against padding on
 // the unencrypted UDP/TCP path.
 //
-// On any internal failure (Build / Marshal error) the original m is
+// On any internal failure (Build / Pack error) the original m is
 // returned unchanged so callers do not have to handle a second error
 // path on the hot send path.
 func PadEncrypted(m Message) Message {
@@ -76,7 +76,7 @@ func PadEncrypted(m Message) Message {
 		if err != nil {
 			return Message{}, nil, err
 		}
-		buf, err := Marshal(msg)
+		buf, err := Pack(msg)
 		if err != nil {
 			return Message{}, nil, err
 		}

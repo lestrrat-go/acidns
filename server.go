@@ -140,7 +140,7 @@ type UDPController struct {
 }
 
 // PacketsDroppedParseError returns the cumulative count of inbound
-// UDP datagrams that failed [wire.Unmarshal]. Under attack a sudden
+// UDP datagrams that failed [wire.Unpack]. Under attack a sudden
 // rise here is the canonical "someone is throwing garbage at the
 // listener" signal; under normal operation the number stays at 0
 // modulo the occasional ICMP-driven mangled datagram.

@@ -172,7 +172,7 @@ func canonicalBrowseResponse(t *testing.T) []byte {
 		Additional(wire.NewRecord(host, time.Minute, a)).
 		Build()
 	require.NoError(t, err)
-	buf, err := wire.Marshal(resp)
+	buf, err := wire.Pack(resp)
 	require.NoError(t, err)
 	return buf
 }
@@ -199,7 +199,7 @@ func TestBrowseSuccess(t *testing.T) {
 	pc.mu.Lock()
 	require.Equal(t, 1, len(pc.writes))
 	pc.mu.Unlock()
-	q, err := wire.Unmarshal(pc.writes[0])
+	q, err := wire.Unpack(pc.writes[0])
 	require.NoError(t, err)
 	require.Equal(t, "_http._tcp.local.", q.Questions()[0].Name().String())
 }

@@ -56,7 +56,7 @@ const contentType = "application/dns-message"
 // DNS message, whose wire form is bounded by the 16-bit length field
 // plus a small slack for HTTP framing variations. A hostile (or
 // compromised) endpoint could otherwise stream gigabytes through
-// io.ReadAll before wire.Unmarshal rejects the result.
+// io.ReadAll before wire.Unpack rejects the result.
 const maxResponseBytes = 64 * 1024
 
 // defaultClient is used when the caller doesn't supply WithHTTPClient.
@@ -195,7 +195,7 @@ func (e *Client) Exchange(ctx context.Context, q wire.Message) (wire.Message, er
 	if e.padding {
 		q = wire.PadEncrypted(q)
 	}
-	msg, err := wire.Marshal(q)
+	msg, err := wire.Pack(q)
 	if err != nil {
 		return wire.Message{}, fmt.Errorf("doh: marshal: %w", err)
 	}
@@ -244,7 +244,7 @@ func (e *Client) Exchange(ctx context.Context, q wire.Message) (wire.Message, er
 	if len(body) > maxResponseBytes {
 		return wire.Message{}, fmt.Errorf("%w: body exceeds %d byte cap", ErrResponseTooLarge, maxResponseBytes)
 	}
-	m, err := wire.Unmarshal(body)
+	m, err := wire.Unpack(body)
 	if err != nil {
 		return wire.Message{}, fmt.Errorf("doh: unmarshal: %w", err)
 	}

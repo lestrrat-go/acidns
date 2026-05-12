@@ -75,7 +75,7 @@ func WithUDPListenerMaxInflight(n int) UDPListenerOption {
 }
 
 // WithUDPListenerPreParseFilter installs a per-datagram source-address gate
-// that runs BEFORE wire.Unmarshal. A return of false drops the
+// that runs BEFORE wire.Unpack. A return of false drops the
 // datagram immediately, skipping every Handler middleware (ACL,
 // ratelimit, RRL, cookies, observe). Use this when an operator
 // relies on a source-prefix denylist to defend against floods of
@@ -317,7 +317,7 @@ func (l *udpLoop) run(ctx context.Context) error {
 }
 
 func (l *udpLoop) handlePacket(ctx context.Context, body []byte, src netip.AddrPort) {
-	q, err := wire.Unmarshal(body)
+	q, err := wire.Unpack(body)
 	if err != nil {
 		if l.ctrl != nil {
 			l.ctrl.parseDrops.Add(1)
@@ -375,7 +375,7 @@ func (w *udpResponseWriter) WriteMsg(m wire.Message) error {
 	if w.wrote {
 		return fmt.Errorf("acidns: WriteMsg called twice on UDP response")
 	}
-	buf, err := wire.Marshal(m)
+	buf, err := wire.Pack(m)
 	if err != nil {
 		return err
 	}
@@ -405,7 +405,7 @@ func (w *udpResponseWriter) WriteMsg(m wire.Message) error {
 		if err != nil {
 			return err
 		}
-		buf, err = wire.Marshal(stripped)
+		buf, err = wire.Pack(stripped)
 		if err != nil {
 			return err
 		}

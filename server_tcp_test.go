@@ -132,7 +132,7 @@ func TestTCPServerCancelsHandlerOnShutdown(t *testing.T) {
 		ID(1).
 		Question(wire.NewQuestion(wire.MustParseName("example.com"), rrtype.A)).
 		Build()
-	body, err := wire.Marshal(q)
+	body, err := wire.Pack(q)
 	require.NoError(t, err)
 	var hdr [2]byte
 	binary.BigEndian.PutUint16(hdr[:], uint16(len(body)))

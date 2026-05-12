@@ -52,7 +52,7 @@ func (v *tsigVerifier) verify(m wire.Message) error {
 		if !signed {
 			return fmt.Errorf("%w: first envelope unsigned", ErrTSIGVerify)
 		}
-		raw, err := wire.Marshal(m)
+		raw, err := wire.Pack(m)
 		if err != nil {
 			return fmt.Errorf("%w: re-marshal: %w", ErrTSIGVerify, err)
 		}
@@ -72,7 +72,7 @@ func (v *tsigVerifier) verify(m wire.Message) error {
 		}
 		return nil
 	}
-	raw, err := wire.Marshal(m)
+	raw, err := wire.Pack(m)
 	if err != nil {
 		return fmt.Errorf("%w: re-marshal: %w", ErrTSIGVerify, err)
 	}

@@ -27,7 +27,7 @@ func Example_sig0_sign_verify() {
 		ID(0xdead).
 		Question(wire.NewQuestion(wire.MustParseName("example.com"), rrtype.A)).
 		Build()
-	msg, err := wire.Marshal(q)
+	msg, err := wire.Pack(q)
 	if err != nil {
 		fmt.Println("marshal:", err)
 		return
@@ -55,7 +55,7 @@ func Example_sig0_sign_verify() {
 		return
 	}
 
-	verified, _ := wire.Unmarshal(body)
+	verified, _ := wire.Unpack(body)
 	fmt.Printf("verified id: %#x\n", verified.ID())
 
 	// OUTPUT:

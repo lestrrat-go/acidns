@@ -108,7 +108,7 @@ func TestUpdatePolicyReceivesRawRequest(t *testing.T) {
 		Build()
 	require.NoError(t, err)
 
-	expectedBytes, err := wire.Marshal(msg)
+	expectedBytes, err := wire.Pack(msg)
 	require.NoError(t, err)
 
 	_, err = ex.Exchange(ctx, msg)

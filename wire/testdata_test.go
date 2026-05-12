@@ -65,7 +65,7 @@ var expectedFixture = map[string]struct {
 }
 
 // TestTestdataRoundtrip walks every wire/testdata/*.hex fixture, decodes
-// it via [wire.Unmarshal], re-marshals it (must not error), and asserts
+// it via [wire.Unpack], re-marshals it (must not error), and asserts
 // the basic invariant from expectedFixture. We deliberately do NOT
 // assert byte-for-byte equality because name compression is non-canonical
 // and the encoder may legitimately produce a different (still-valid)
@@ -91,12 +91,12 @@ func TestTestdataRoundtrip(t *testing.T) {
 			if err != nil {
 				t.Fatalf("decode hex: %v", err)
 			}
-			m, err := wire.Unmarshal(buf)
+			m, err := wire.Unpack(buf)
 			if err != nil {
-				t.Fatalf("Unmarshal: %v", err)
+				t.Fatalf("Unpack: %v", err)
 			}
-			if _, err := wire.Marshal(m); err != nil {
-				t.Fatalf("re-Marshal of decoded fixture failed: %v", err)
+			if _, err := wire.Pack(m); err != nil {
+				t.Fatalf("re-Pack of decoded fixture failed: %v", err)
 			}
 			exp, ok := expectedFixture[base]
 			if !ok {

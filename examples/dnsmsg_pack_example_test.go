@@ -7,7 +7,7 @@ import (
 	"github.com/lestrrat-go/acidns/wire/rrtype"
 )
 
-func Example_dnsmsg_marshal() {
+func Example_dnsmsg_pack() {
 	// Marshal serialises a Message to msg-format bytes; Unmarshal is the
 	// inverse. The pair is what every transport (UDP, TCP, DoT, DoH, DoQ)
 	// hands to the network.
@@ -16,13 +16,13 @@ func Example_dnsmsg_marshal() {
 		Question(wire.NewQuestion(wire.MustParseName("example.com"), rrtype.A)).
 		Build()
 
-	msg, err := wire.Marshal(original)
+	msg, err := wire.Pack(original)
 	if err != nil {
 		fmt.Println("marshal:", err)
 		return
 	}
 
-	parsed, err := wire.Unmarshal(msg)
+	parsed, err := wire.Unpack(msg)
 	if err != nil {
 		fmt.Println("unmarshal:", err)
 		return

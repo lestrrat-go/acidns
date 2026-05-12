@@ -24,14 +24,14 @@ func TestTSIGMarshalRoundtripIsStable(t *testing.T) {
 
 	soa := soaRec(t, 7)
 	resp := answerMsg(t, soa, soa)
-	raw, err := wire.Marshal(resp)
+	raw, err := wire.Pack(resp)
 	require.NoError(t, err)
 	signed, err := tsig.Sign(raw, key, now, 5*time.Minute)
 	require.NoError(t, err)
 
-	rt, err := wire.Unmarshal(signed)
+	rt, err := wire.Unpack(signed)
 	require.NoError(t, err)
-	rtMarshaled, err := wire.Marshal(rt)
+	rtMarshaled, err := wire.Pack(rt)
 	require.NoError(t, err)
 
 	if !bytes.Equal(signed, rtMarshaled) {
@@ -45,14 +45,14 @@ func TestTSIGMarshalRoundtripIsStable(t *testing.T) {
 		Question(wire.NewQuestion(wire.MustParseName("example.com"), rrtype.AXFR)).
 		Answer(soa).Answer(soa).Build()
 	require.NoError(t, err)
-	rawQ, err := wire.Marshal(respQ)
+	rawQ, err := wire.Pack(respQ)
 	require.NoError(t, err)
 	signedQ, err := tsig.Sign(rawQ, key, now, 5*time.Minute)
 	require.NoError(t, err)
 
-	rtQ, err := wire.Unmarshal(signedQ)
+	rtQ, err := wire.Unpack(signedQ)
 	require.NoError(t, err)
-	rtQMarshaled, err := wire.Marshal(rtQ)
+	rtQMarshaled, err := wire.Pack(rtQ)
 	require.NoError(t, err)
 
 	if !bytes.Equal(signedQ, rtQMarshaled) {

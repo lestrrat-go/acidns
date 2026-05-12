@@ -65,10 +65,10 @@ func TestEDNSRoundTrip(t *testing.T) {
 		Build()
 	require.NoError(t, err)
 
-	buf, err := wire.Marshal(m)
+	buf, err := wire.Pack(m)
 	require.NoError(t, err)
 
-	m2, err := wire.Unmarshal(buf)
+	m2, err := wire.Unpack(buf)
 	require.NoError(t, err)
 
 	got, ok := m2.EDNS()

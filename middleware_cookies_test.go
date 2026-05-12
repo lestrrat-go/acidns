@@ -228,7 +228,7 @@ func TestCookiesLargeResponseGateUDPTruncates(t *testing.T) {
 	h.ServeDNS(context.Background(), w, q)
 
 	require.True(t, w.captured.Flags().Truncated(), "cookieless UDP large response must be TC=1")
-	buf, err := wire.Marshal(w.captured)
+	buf, err := wire.Pack(w.captured)
 	require.NoError(t, err)
 	require.LessOrEqual(t, len(buf), 512)
 	require.Equal(t, 0, len(w.captured.Answers()),

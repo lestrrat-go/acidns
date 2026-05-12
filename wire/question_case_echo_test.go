@@ -9,7 +9,7 @@ import (
 
 // TestQuestionRawWireCaseEchoes locks in the rawName-based byte-exact
 // echo path: a query that arrived on the wire with a mixed-case QNAME
-// must round-trip through Unmarshal → builder.Question → Marshal with
+// must round-trip through Unpack → builder.Question → Pack with
 // the original case bytes intact. This is required by RFC 4343 (case
 // insensitivity in matching, case preservation in echoes) and is what
 // makes RFC 5452 §9.3 0x20 verification meaningful for clients.
@@ -24,7 +24,7 @@ func TestQuestionRawWireCaseEchoes(t *testing.T) {
 		0x00, 0x01,
 		0x00, 0x01,
 	}
-	got, err := wire.Unmarshal(q)
+	got, err := wire.Unpack(q)
 	require.NoError(t, err)
 
 	resp, err := wire.NewMessageBuilder().
@@ -33,7 +33,7 @@ func TestQuestionRawWireCaseEchoes(t *testing.T) {
 		Question(got.Questions()[0]).
 		Build()
 	require.NoError(t, err)
-	rb, err := wire.Marshal(resp)
+	rb, err := wire.Pack(resp)
 	require.NoError(t, err)
 
 	require.Contains(t, string(rb), "EXAMPLE", "response must echo qname case from the wire")

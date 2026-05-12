@@ -392,7 +392,7 @@ func TestExchangeBadResponse(t *testing.T) {
 	require.ErrorIs(t, err, dnscrypt.ErrResponseMagic)
 }
 
-// TestExchangeUnmarshalFailure covers the wire.Unmarshal failure branch:
+// TestExchangeUnmarshalFailure covers the wire.Unpack failure branch:
 // server returns a successfully-decryptable packet whose plaintext is not
 // a valid DNS message.
 func TestExchangeUnmarshalFailure(t *testing.T) {
@@ -449,7 +449,7 @@ func TestExchangeUnmarshalFailure(t *testing.T) {
 	ctx, cancel := context.WithTimeout(t.Context(), 2*time.Second)
 	defer cancel()
 	_, err = ex.Exchange(ctx, q)
-	// Server replies with junk plaintext (2 bytes) — wire.Unmarshal will
+	// Server replies with junk plaintext (2 bytes) — wire.Unpack will
 	// fail with ErrInvalidMessage. The dnscrypt layer wraps it.
 	require.ErrorContains(t, err, "header too short")
 }

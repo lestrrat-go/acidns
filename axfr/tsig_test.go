@@ -18,11 +18,11 @@ import (
 // returns the resulting wire.Message and its MAC.
 func signResponseMsg(t *testing.T, m wire.Message, key tsig.Key, requestMAC []byte, now time.Time, fudge time.Duration) (wire.Message, []byte) {
 	t.Helper()
-	raw, err := wire.Marshal(m)
+	raw, err := wire.Pack(m)
 	require.NoError(t, err)
 	signed, err := signResponseRaw(raw, key, requestMAC, now, fudge)
 	require.NoError(t, err)
-	out, err := wire.Unmarshal(signed)
+	out, err := wire.Unpack(signed)
 	require.NoError(t, err)
 	mac := extractMAC(t, signed, key, now, fudge, requestMAC)
 	return out, mac
@@ -52,7 +52,7 @@ type programmableStreamEx struct {
 
 func (p *programmableStreamEx) Stream(_ context.Context, q wire.Message) (acidns.MessageStream, error) {
 	p.gotQ = q
-	raw, err := wire.Marshal(q)
+	raw, err := wire.Pack(q)
 	if err != nil {
 		return nil, err
 	}

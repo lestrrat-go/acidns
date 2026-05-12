@@ -96,7 +96,7 @@ func buildFakeResponse(query []byte, _ *dnscrypt.Cert, resolverSK [32]byte) ([]b
 	if err != nil {
 		return nil, err
 	}
-	req, err := wire.Unmarshal(plain)
+	req, err := wire.Unpack(plain)
 	if err != nil {
 		return nil, err
 	}
@@ -114,7 +114,7 @@ func buildFakeResponse(query []byte, _ *dnscrypt.Cert, resolverSK [32]byte) ([]b
 	if err != nil {
 		return nil, err
 	}
-	respWire, err := wire.Marshal(resp)
+	respWire, err := wire.Pack(resp)
 	if err != nil {
 		return nil, err
 	}

@@ -37,7 +37,7 @@ func Example_tsig_sign_verify() {
 		return
 	}
 
-	verified, _ := wire.Unmarshal(body)
+	verified, _ := wire.Unpack(body)
 	fmt.Println("verified id:", verified.ID())
 	fmt.Println("verified question:", verified.Questions()[0].Name())
 

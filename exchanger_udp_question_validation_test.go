@@ -33,7 +33,7 @@ func TestUDPClientRejectsMismatchedQuestion(t *testing.T) {
 			if err != nil {
 				return
 			}
-			req, err := wire.Unmarshal(buf[:n])
+			req, err := wire.Unpack(buf[:n])
 			if err != nil {
 				continue
 			}
@@ -52,7 +52,7 @@ func TestUDPClientRejectsMismatchedQuestion(t *testing.T) {
 			if err != nil {
 				continue
 			}
-			b, _ := wire.Marshal(resp)
+			b, _ := wire.Pack(resp)
 			_, _ = pc.WriteTo(b, src)
 		}
 	}()

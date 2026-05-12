@@ -22,7 +22,7 @@ func TestWithPadding_DisablesPadding(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		body, _ := io.ReadAll(r.Body)
 		seenLen = len(body)
-		if m, err := wire.Unmarshal(body); err == nil {
+		if m, err := wire.Unpack(body); err == nil {
 			if e, ok := m.EDNS(); ok {
 				for _, opt := range e.Options() {
 					if opt.Code() == wire.EDNSOptionPadding {
@@ -31,7 +31,7 @@ func TestWithPadding_DisablesPadding(t *testing.T) {
 				}
 			}
 			resp, _ := wiretest.Response(m)
-			out, _ := wire.Marshal(resp)
+			out, _ := wire.Pack(resp)
 			w.Header().Set("Content-Type", "application/dns-message")
 			_, _ = w.Write(out)
 			return

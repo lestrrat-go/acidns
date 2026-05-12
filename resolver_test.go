@@ -29,7 +29,7 @@ func startServer(t *testing.T, v4 []netip.Addr, v6 []netip.Addr) netip.AddrPort 
 			if err != nil {
 				return
 			}
-			req, err := wire.Unmarshal(buf[:n])
+			req, err := wire.Unpack(buf[:n])
 			if err != nil || len(req.Questions()) == 0 {
 				continue
 			}
@@ -58,7 +58,7 @@ func startServer(t *testing.T, v4 []netip.Addr, v6 []netip.Addr) netip.AddrPort 
 			if err != nil {
 				continue
 			}
-			wire, err := wire.Marshal(resp)
+			wire, err := wire.Pack(resp)
 			if err != nil {
 				continue
 			}
