@@ -224,6 +224,7 @@ Status legend: **Implemented** = working code with tests; **Partial** = document
 - Length-prefixed reads: every reader checks bounds before advancing offset.
 - Compression pointer loops: detect via offset-set or hop counter; reject malformed input with typed error.
 - Test data: capture real `dig +qr` packets as hex fixtures under `testdata/`.
+- Record-level TTL validation is wire-encode-time, NOT construction-time. `wire.NewRecord` / `wire.NewRecordClass` accept any `time.Duration`; the negative / >2³¹-1-second rejection happens in `packRecord` and surfaces as `wire.ErrInvalidTTL` from `wire.Pack`. Intentional: an in-memory `Record` is a value carrier that may travel through caches and middleware without ever being serialised, and the ~400 `NewRecord` call sites (mostly tests) don't benefit enough from earlier rejection to justify the noise of `(Record, error)` returns. `rdata.NewSOA` validates its timer fields at construction because those values get re-stamped on every serialisation; the asymmetry is deliberate.
 
 ## Dispatching on rdata type
 
