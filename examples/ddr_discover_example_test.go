@@ -23,8 +23,6 @@ func (f *fakeResolver) Resolve(_ context.Context, _ wire.Name, _ rrtype.Type) (*
 	return acidns.NewAnswer(wire.Question{}, f.records, raw), nil
 }
 
-func (f *fakeResolver) SearchList() []wire.Name { return nil }
-func (f *fakeResolver) Ndots() int              { return 0 }
 
 func Example_ddr_discover() {
 	// Build a SVCB record advertising a DoH endpoint, exactly as a

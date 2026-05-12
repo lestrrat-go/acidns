@@ -83,7 +83,7 @@ func TestSearchListSuffixed(t *testing.T) {
 	)
 	require.NoError(t, err)
 
-	addrs, err := acidns.LookupHost(t.Context(), r, "host")
+	addrs, err := acidns.LookupHost(t.Context(), r, "host", acidns.SearchListDefaults(r))
 	require.NoError(t, err)
 	require.Equal(t, 1, len(addrs))
 	require.Equal(t, "192.0.2.1", addrs[0].String())
@@ -106,7 +106,7 @@ func TestSearchListAbsoluteSkipsSearch(t *testing.T) {
 	)
 	require.NoError(t, err)
 
-	addrs, err := acidns.LookupHost(t.Context(), r, "host.")
+	addrs, err := acidns.LookupHost(t.Context(), r, "host.", acidns.SearchListDefaults(r))
 	require.NoError(t, err)
 	require.Equal(t, 1, len(addrs))
 
@@ -129,7 +129,7 @@ func TestSearchListNdotsAbsoluteFirst(t *testing.T) {
 	)
 	require.NoError(t, err)
 
-	addrs, err := acidns.LookupHost(t.Context(), r, "a.b.c")
+	addrs, err := acidns.LookupHost(t.Context(), r, "a.b.c", acidns.SearchListDefaults(r))
 	require.NoError(t, err)
 	require.Equal(t, 1, len(addrs))
 
@@ -161,6 +161,6 @@ func TestSearchListUnused(t *testing.T) {
 	r, err := acidns.NewResolver(acidns.WithExchanger(ex))
 	require.NoError(t, err)
 
-	_, err = acidns.LookupHost(t.Context(), r, "host.")
+	_, err = acidns.LookupHost(t.Context(), r, "host.", acidns.SearchListDefaults(r))
 	require.NoError(t, err)
 }

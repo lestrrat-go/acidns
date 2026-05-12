@@ -223,11 +223,11 @@ func TestLookupPTRv6(t *testing.T) {
 	require.Equal(t, "host.example.com.", got[0].String())
 }
 
-// TestLookupHostSearchListDisabled confirms that WithSearchListExpansion(false)
-// suppresses suffix expansion even when a search list is configured. The
-// "wpad" disclosure scenario: the short name MUST NOT be appended with
-// "corp.example."; only the bare "wpad." is queried.
-func TestLookupHostSearchListDisabled(t *testing.T) {
+// TestLookupHostDefaultNoExpansion is the wpad-safe default: with no
+// LookupOption, LookupHost MUST NOT append any search-list suffix even
+// when the resolver carries a search list. Only the bare host (parsed
+// to absolute form) is queried.
+func TestLookupHostDefaultNoExpansion(t *testing.T) {
 	t.Parallel()
 	srvAddr, queries := startSearchServer(t, "unreachable.")
 	ex, err := acidns.NewUDPClient(srvAddr)
@@ -236,38 +236,60 @@ func TestLookupHostSearchListDisabled(t *testing.T) {
 		acidns.WithExchanger(ex),
 		acidns.WithSearchList(wire.MustParseName("corp.example")),
 		acidns.WithNdots(2),
-		acidns.WithSearchListExpansion(false),
 	)
 	require.NoError(t, err)
 
-	// Returns no addresses (server only knows "unreachable.") but the
-	// search-list suffix must not be tried.
 	_, _ = acidns.LookupHost(t.Context(), r, "wpad")
 
 	time.Sleep(20 * time.Millisecond)
 	q := queries()
 	for _, n := range q {
 		require.NotContains(t, n, "corp.example.",
-			"search-list expansion disabled but corp.example suffix queried")
+			"default LookupHost must not apply search-list expansion")
 	}
 }
 
-func TestLookupHostSearchListExpanderCapability(t *testing.T) {
+// TestSearchListDefaultsOptIn confirms that an explicit
+// SearchListDefaults(r) opts into the resolver's configured search list.
+func TestSearchListDefaultsOptIn(t *testing.T) {
+	t.Parallel()
+	srvAddr, queries := startSearchServer(t, "wpad.corp.example.")
+	ex, err := acidns.NewUDPClient(srvAddr)
+	require.NoError(t, err)
+	r, err := acidns.NewResolver(
+		acidns.WithExchanger(ex),
+		acidns.WithSearchList(wire.MustParseName("corp.example")),
+		acidns.WithNdots(2),
+	)
+	require.NoError(t, err)
+
+	_, _ = acidns.LookupHost(t.Context(), r, "wpad", acidns.SearchListDefaults(r))
+
+	time.Sleep(20 * time.Millisecond)
+	q := queries()
+	found := false
+	for _, n := range q {
+		if n == "wpad.corp.example." {
+			found = true
+		}
+	}
+	require.True(t, found, "SearchListDefaults must opt into expansion; expected wpad.corp.example. in %v", q)
+}
+
+// TestSearchListProviderCapability pins the *resolver's satisfaction
+// of [SearchListProvider]: callers can fetch the configured list off
+// the concrete resolver through a single type assertion.
+func TestSearchListProviderCapability(t *testing.T) {
 	t.Parallel()
 	r, err := acidns.NewResolver(
 		acidns.WithServers(netip.MustParseAddrPort("127.0.0.1:1")),
-		acidns.WithSearchListExpansion(false),
+		acidns.WithSearchList(wire.MustParseName("example.com")),
+		acidns.WithNdots(3),
 	)
 	require.NoError(t, err)
-	e, ok := r.(acidns.SearchListExpander)
+	p, ok := r.(acidns.SearchListProvider)
 	require.True(t, ok)
-	require.False(t, e.SearchListExpansionEnabled())
-
-	r2, err := acidns.NewResolver(
-		acidns.WithServers(netip.MustParseAddrPort("127.0.0.1:1")),
-	)
-	require.NoError(t, err)
-	e2, ok := r2.(acidns.SearchListExpander)
-	require.True(t, ok)
-	require.True(t, e2.SearchListExpansionEnabled())
+	require.Equal(t, 1, len(p.SearchList()))
+	require.Equal(t, "example.com.", p.SearchList()[0].String())
+	require.Equal(t, 3, p.Ndots())
 }

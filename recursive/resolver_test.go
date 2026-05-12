@@ -78,12 +78,13 @@ ns1 IN  A    192.0.2.10
 	require.True(t, rce.Answer().Raw().Flags().Response())
 }
 
-// TestRecursiveSearchListIsEmpty pins that Recursive does not carry a
-// search list — calling LookupHost against a Recursive resolves the
-// name as-given without suffix expansion.
-func TestRecursiveSearchListIsEmpty(t *testing.T) {
+// TestRecursiveIsNotSearchListProvider pins that Recursive does not
+// satisfy acidns.SearchListProvider — it has no notion of a stub
+// resolver's search list. Callers that want expansion wrap *Recursive
+// in [acidns.NewResolver] with [acidns.WithSearchList].
+func TestRecursiveIsNotSearchListProvider(t *testing.T) {
 	t.Parallel()
 	r := mustRecursive(t)
-	require.Nil(t, r.SearchList())
-	require.Equal(t, 0, r.Ndots())
+	_, ok := any(r).(acidns.SearchListProvider)
+	require.False(t, ok)
 }

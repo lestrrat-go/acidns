@@ -20,8 +20,6 @@ func (s *stubResolver) Resolve(_ context.Context, _ wire.Name, _ rrtype.Type) (*
 	return acidns.NewAnswer(wire.Question{}, s.records, raw), nil
 }
 
-func (s *stubResolver) SearchList() []wire.Name { return nil }
-func (s *stubResolver) Ndots() int              { return 0 }
 
 func Example_amt_discover() {
 	srv3, _ := rdata.NewSRV(10, 50, 2268, wire.MustParseName("relay-c.example.com"))

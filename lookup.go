@@ -10,7 +10,63 @@ import (
 	"github.com/lestrrat-go/acidns/wire"
 	"github.com/lestrrat-go/acidns/wire/rdata"
 	"github.com/lestrrat-go/acidns/wire/rrtype"
+	"github.com/lestrrat-go/option/v3"
 )
+
+// LookupOption configures a call to [LookupHost].
+type LookupOption interface {
+	option.Interface
+	lookupOption()
+}
+
+type lookupOption struct{ option.Interface }
+
+func (lookupOption) lookupOption() {}
+
+type identLookupSearchList struct{}
+
+type searchListSpec struct {
+	suffixes []wire.Name
+	ndots    int
+}
+
+// WithLookupSearchList enables short-name expansion in [LookupHost].
+// For each call, ndots controls when the bare host is tried first
+// versus last (matching standard stub-resolver behaviour). Without
+// this option [LookupHost] queries the host as given, with no
+// expansion — the safe default.
+//
+// SECURITY: see the doc comment on [LookupHost] for the wpad-leak
+// scenario; this option is the explicit opt-in that enables that
+// behaviour. Use [SearchListDefaults] for the common case of "expand
+// against this resolver's configured list".
+func WithLookupSearchList(suffixes []wire.Name, ndots int) LookupOption {
+	cp := append([]wire.Name(nil), suffixes...)
+	return lookupOption{option.New(identLookupSearchList{}, searchListSpec{suffixes: cp, ndots: ndots})}
+}
+
+// SearchListDefaults returns a [LookupOption] sourced from r if r
+// implements [SearchListProvider]. Equivalent to
+// `WithLookupSearchList(r.SearchList(), r.Ndots())`. A resolver that
+// does not satisfy [SearchListProvider] contributes a no-op option;
+// nothing is silently dropped because the caller already declared
+// intent by invoking this helper.
+func SearchListDefaults(r Resolver) LookupOption {
+	if p, ok := r.(SearchListProvider); ok {
+		return WithLookupSearchList(p.SearchList(), p.Ndots())
+	}
+	return lookupOption{option.New(identLookupSearchList{}, searchListSpec{})}
+}
+
+func applyLookupOptions(opts []LookupOption) searchListSpec {
+	var spec searchListSpec
+	for _, o := range opts {
+		if o.Ident() == (identLookupSearchList{}) {
+			spec = option.MustGet[searchListSpec](o)
+		}
+	}
+	return spec
+}
 
 // MXRecord is the projection of an rdata.MX answer returned by LookupMX.
 type MXRecord struct {
@@ -26,25 +82,28 @@ type SRVRecord struct {
 	Weight   uint16
 }
 
-// LookupHost dispatches A and AAAA queries for host concurrently and returns
-// every address either query produced. The host string is expanded against
-// the resolver's SearchList using its Ndots threshold; an empty search list
-// disables expansion. Trailing-dot names bypass expansion regardless. When r
-// satisfies SearchListExpander and reports expansion disabled (see
-// WithSearchListExpansion), expansion is also skipped.
+// LookupHost dispatches A and AAAA queries for host concurrently and
+// returns every address either query produced.
 //
-// SECURITY: search-list expansion sends queries for "host.<suffix>" to the
-// configured upstream BEFORE the unsuffixed name on short inputs. Calls with
-// untrusted host strings (e.g. "wpad") can therefore disclose intent to the
-// upstream and any on-path observer. When the caller does not control the
-// host value, prefer an absolute (trailing-dot) name, or build the Resolver
-// with WithSearchListExpansion(false) to disable expansion entirely.
+// By default LookupHost queries host as-given with NO search-list
+// expansion. To enable expansion, pass [WithLookupSearchList] (explicit
+// suffixes) or [SearchListDefaults](r) (use the resolver's configured
+// list). Trailing-dot names bypass expansion regardless.
 //
-// A non-NoError RCODE on any individual sub-query is treated as a soft fail:
-// LookupHost continues to the next candidate name. Only when no candidate
-// produces addresses does the most recent error surface to the caller.
-func LookupHost(ctx context.Context, r Resolver, host string) ([]netip.Addr, error) {
-	candidates, err := candidateNames(r, host)
+// SECURITY: search-list expansion sends queries for "host.<suffix>" to
+// the configured upstream BEFORE the unsuffixed name on short inputs.
+// Calls with untrusted host strings (e.g. "wpad") can disclose intent
+// to the upstream and any on-path observer. The safe default — no
+// expansion — addresses this; only opt in when you trust the host
+// argument and accept the leak surface.
+//
+// A non-NoError RCODE on any individual sub-query is treated as a
+// soft fail: LookupHost continues to the next candidate name. Only
+// when no candidate produces addresses does the most recent error
+// surface to the caller.
+func LookupHost(ctx context.Context, r Resolver, host string, opts ...LookupOption) ([]netip.Addr, error) {
+	spec := applyLookupOptions(opts)
+	candidates, err := candidateNames(host, spec)
 	if err != nil {
 		return nil, err
 	}
@@ -227,35 +286,28 @@ func reverseAddr(addr netip.Addr) (wire.Name, error) {
 	return wire.ParseName(sb.String())
 }
 
-// candidateNames builds the ordered list of FQDNs to attempt for a LookupHost
-// call. When the resolver's search list is empty or expansion has been
-// disabled (via SearchListExpander), only the parsed host is returned.
-func candidateNames(r Resolver, host string) ([]wire.Name, error) {
+// candidateNames builds the ordered list of FQDNs to attempt for a
+// LookupHost call given the caller-supplied search-list spec. An
+// empty spec or a trailing-dot host yields only the parsed host.
+func candidateNames(host string, spec searchListSpec) ([]wire.Name, error) {
 	absolute := strings.HasSuffix(host, ".")
 	base, err := wire.ParseName(host)
 	if err != nil {
 		return nil, err
 	}
-	if absolute {
-		return []wire.Name{base}, nil
-	}
-	if e, ok := r.(SearchListExpander); ok && !e.SearchListExpansionEnabled() {
-		return []wire.Name{base}, nil
-	}
-	list := r.SearchList()
-	if len(list) == 0 {
+	if absolute || len(spec.suffixes) == 0 {
 		return []wire.Name{base}, nil
 	}
 	dots := strings.Count(strings.TrimSuffix(host, "."), ".")
-	suffixed := make([]wire.Name, 0, len(list))
-	for _, s := range list {
+	suffixed := make([]wire.Name, 0, len(spec.suffixes))
+	for _, s := range spec.suffixes {
 		n, err := wire.ParseName(host + "." + s.String())
 		if err != nil {
 			continue
 		}
 		suffixed = append(suffixed, n)
 	}
-	if dots >= r.Ndots() {
+	if dots >= spec.ndots {
 		return append([]wire.Name{base}, suffixed...), nil
 	}
 	return append(suffixed, base), nil

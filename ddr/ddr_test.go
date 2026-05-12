@@ -22,8 +22,6 @@ func (f *fakeResolver) Resolve(_ context.Context, _ wire.Name, _ rrtype.Type) (*
 	return f.answer, nil
 }
 
-func (f *fakeResolver) SearchList() []wire.Name { return nil }
-func (f *fakeResolver) Ndots() int              { return 0 }
 
 func newFakeAnswer(q wire.Question, records []wire.Record) *acidns.Answer {
 	raw, _ := wire.NewMessageBuilder().Response(true).Build()

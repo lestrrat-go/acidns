@@ -39,15 +39,6 @@ func (r *Recursive) Resolve(ctx context.Context, name wire.Name, t rrtype.Type) 
 	return ans, nil
 }
 
-// SearchList returns nil — the recursive resolver operates on absolute
-// names and does not carry a stub-resolver-style search list. Callers
-// that want search-list expansion should wrap [Recursive] in
-// [acidns.NewResolver] with [acidns.WithSearchList].
-func (r *Recursive) SearchList() []wire.Name { return nil }
-
-// Ndots returns zero — see [Recursive.SearchList] for the rationale.
-func (r *Recursive) Ndots() int { return 0 }
-
 // buildSynthesisedResponse projects an [Entry] back to a [wire.Message]
 // so [acidns.Answer.Raw] returns something callers can inspect. The ID
 // is zero (no exchange happened); RA=1 because the resolver answered

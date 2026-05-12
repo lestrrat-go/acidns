@@ -29,45 +29,36 @@ import (
 // transport or server list was provided.
 var ErrNoResolver = errors.New("acidns: no exchanger or servers configured")
 
-// Resolver performs DNS queries on behalf of an application. Resolve is the
-// single primitive — typed convenience helpers (LookupHost, ResolveAs[T],
-// Extract[T], ...) live as package-level functions that wrap a Resolver.
-//
-// SearchList and Ndots feed the search-list expansion performed by
-// helpers like LookupHost. Implementations that don't carry a search list
-// should return a nil slice and zero — LookupHost treats both as "no
-// expansion, query the name as given".
+// Resolver performs DNS queries on behalf of an application. Resolve
+// is the single primitive — typed convenience helpers (LookupHost,
+// ResolveAs[T], Extract[T], ...) live as package-level functions that
+// wrap a Resolver.
 //
 // Resolver implementations MUST be safe for concurrent use by multiple
 // goroutines. The resolver returned by NewResolver and NewSystemResolver
 // satisfies this contract.
+//
+// Search-list state (the suffixes that LookupHost appends to short
+// names) is NOT part of this interface — it is caller-supplied policy.
+// The stock resolver exposes its configured list via the
+// [SearchListProvider] capability; pass [SearchListDefaults](r) to
+// LookupHost to opt into resolver-driven expansion. See
+// [WithLookupSearchList] for explicit control.
 type Resolver interface {
-	// Resolve performs a single query and returns the matched records along
-	// with the raw response. A non-NoError RCODE is returned as a typed
-	// *RCodeError carrying the response; the matched record list is empty
-	// in that case.
+	// Resolve performs a single query and returns the matched records
+	// along with the raw response. A non-NoError RCODE is returned as a
+	// typed *RCodeError carrying the response; the matched record list
+	// is empty in that case.
 	Resolve(ctx context.Context, name wire.Name, t rrtype.Type) (*Answer, error)
-
-	// SearchList returns the suffixes that LookupHost appends to short
-	// names. A nil or empty slice disables search-list expansion.
-	SearchList() []wire.Name
-
-	// Ndots returns the threshold of dots above which a short name is
-	// tried in absolute form before applying the search list. Zero is a
-	// valid "always try absolute first" value.
-	Ndots() int
 }
 
-// SearchListExpander is an optional capability that lets a Resolver
-// advertise whether LookupHost should expand short names against its
-// configured search list. Implementations that do NOT satisfy this
-// interface are treated as if expansion were enabled — preserving the
-// historical default. The default Resolver implementation reports the
-// value supplied to WithSearchListExpansion (default true).
-//
-// See WithSearchListExpansion for the security rationale.
-type SearchListExpander interface {
-	SearchListExpansionEnabled() bool
+// SearchListProvider is the optional capability implemented by
+// resolvers that carry a configured search list. The stock resolver
+// returned by [NewResolver] and [NewSystemResolver] satisfies it.
+// Callers wire it into LookupHost via [SearchListDefaults].
+type SearchListProvider interface {
+	SearchList() []wire.Name
+	Ndots() int
 }
 
 // Answer is the typed result of a Resolve call.
@@ -125,7 +116,6 @@ type resolverConfig struct {
 	searchList        []wire.Name
 	ndots             int
 	ndotsSet          bool
-	disableSearchExp  bool
 	disableSpecialUse bool
 	disable0x20       bool
 	disable0x20Set    bool
@@ -144,7 +134,6 @@ type identSystemResolvers struct{}
 type identCaseRandomization struct{}
 type identSpecialUse struct{}
 type identSearchList struct{}
-type identSearchListExpansion struct{}
 type identNdots struct{}
 type identLogger struct{}
 
@@ -262,25 +251,6 @@ func WithSearchList(suffixes ...wire.Name) ResolverOption {
 	return resolverOption{option.New(identSearchList{}, suffixes)}
 }
 
-// WithSearchListExpansion toggles whether LookupHost expands short names
-// against the configured search list. Default is true to match standard
-// stub-resolver behaviour.
-//
-// SECURITY: search-list expansion sends "host.<suffix>" to the upstream
-// for every configured suffix when host has fewer than Ndots dots. A call
-// with a sensitive or attacker-controlled host string therefore leaks the
-// query — and the corporate search domain — to the upstream and any
-// on-path observer. The classic example is "wpad": a call to
-// LookupHost(..., "wpad") with a corporate search list of
-// "corp.example." will fire wpad.corp.example. at the configured DNS
-// server. Pass WithSearchListExpansion(false) to suppress this entirely
-// and require callers to supply absolute names. The search list itself
-// (set via WithSearchList) is left intact for other consumers that may
-// inspect it.
-func WithSearchListExpansion(v bool) ResolverOption {
-	return resolverOption{option.New(identSearchListExpansion{}, v)}
-}
-
 // WithNdots sets the threshold of dots above which a name is tried in
 // absolute form before applying the search list. Defaults to 1.
 func WithNdots(n int) ResolverOption {
@@ -304,7 +274,6 @@ type resolver struct {
 	disableEDNS       bool
 	searchList        []wire.Name
 	ndots             int
-	disableSearchExp  bool
 	disableSpecialUse bool
 	logger            *slog.Logger
 }
@@ -352,8 +321,6 @@ func NewResolver(opts ...ResolverOption) (Resolver, error) {
 		case identNdots{}:
 			c.ndots = option.MustGet[int](o)
 			c.ndotsSet = true
-		case identSearchListExpansion{}:
-			c.disableSearchExp = !option.MustGet[bool](o)
 		case identLogger{}:
 			c.logger = option.MustGet[*slog.Logger](o)
 		}
@@ -406,7 +373,6 @@ func NewResolver(opts ...ResolverOption) (Resolver, error) {
 		disableEDNS:       c.disableEDNS,
 		searchList:        append([]wire.Name(nil), c.searchList...),
 		ndots:             ndots,
-		disableSearchExp:  c.disableSearchExp,
 		disableSpecialUse: c.disableSpecialUse,
 		logger:            logger,
 	}, nil
@@ -609,10 +575,6 @@ func (r *resolver) SearchList() []wire.Name { return r.searchList }
 
 // Ndots returns the dots-threshold used together with SearchList.
 func (r *resolver) Ndots() int { return r.ndots }
-
-// SearchListExpansionEnabled satisfies SearchListExpander. Reports the
-// value supplied to WithSearchListExpansion (default true).
-func (r *resolver) SearchListExpansionEnabled() bool { return !r.disableSearchExp }
 
 func randomID() (uint16, error) {
 	var b [2]byte
