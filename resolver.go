@@ -153,7 +153,13 @@ func WithExchanger(ex Exchanger) ResolverOption {
 }
 
 // WithServers configures the Resolver to talk UDP to the given servers in
-// order, falling over to the next on failure.
+// order, falling over to the next on transport failure (timeout, network
+// error) AND on the lame-server RCODEs SERVFAIL and REFUSED — those signal
+// "this upstream cannot help; ask another" in stub-resolver tradition.
+// NXDOMAIN and NoError are authoritative-definitive and returned as-is
+// from whichever server answers first; FORMERR / NotImp / NotAuth and the
+// UPDATE-related RCODEs (YXDomain, YXRRSet, NXRRSet, NotZone) are also
+// terminal because a peer would respond identically.
 func WithServers(servers ...netip.AddrPort) ResolverOption {
 	return resolverOption{option.New(identServers{}, servers)}
 }
@@ -673,6 +679,8 @@ type failover struct{ exs []Exchanger }
 
 func (f *failover) Exchange(ctx context.Context, q wire.Message) (wire.Message, error) {
 	var lastErr error
+	var lastResp wire.Message
+	var haveResp bool
 	for i, ex := range f.exs {
 		attempt := q
 		if i > 0 {
@@ -683,15 +691,53 @@ func (f *failover) Exchange(ctx context.Context, q wire.Message) (wire.Message, 
 			attempt = wire.WithID(q, id)
 		}
 		resp, err := ex.Exchange(ctx, attempt)
-		if err == nil {
-			return resp, nil
+		if err != nil {
+			lastErr = err
+			if ctx.Err() != nil {
+				return wire.Message{}, ctx.Err()
+			}
+			continue
 		}
-		lastErr = err
-		if ctx.Err() != nil {
-			return wire.Message{}, ctx.Err()
+		// SERVFAIL / REFUSED from a server is the stub-resolver
+		// equivalent of a lame upstream — try the next configured peer
+		// rather than surface the lame answer. The recursive resolver
+		// applies the same policy at recursive/recursive.go:852.
+		if isRetryableRCODE(resp.Flags().RCODE()) {
+			lastResp = resp
+			haveResp = true
+			continue
 		}
+		return resp, nil
+	}
+	if haveResp {
+		// All peers returned a lame RCODE. Surface the last response so
+		// the Resolver wraps it as a typed *RCodeError with the actual
+		// wire payload; callers can inspect Code() and Answer() rather
+		// than getting an opaque "all servers failed" string.
+		return lastResp, nil
 	}
 	return wire.Message{}, lastErr
+}
+
+// isRetryableRCODE reports whether an RCODE-bearing response should
+// trigger failover to the next configured server in a stub Resolver.
+// Mirrors the lame-server policy in recursive/recursive.go:852 so a
+// single Resolver shape applies whether the caller wired WithServers or
+// a recursive backend.
+//
+// Terminal RCODEs (NoError, NXDOMAIN) are authoritative-definitive and
+// short-circuit failover. FORMERR is terminal because the query is
+// byte-identical across peers — a different server would respond the
+// same way; NotImp / NotAuth and the UPDATE-class RCODEs (YXDomain,
+// YXRRSet, NXRRSet, NotZone) are terminal for the same reason or
+// because they describe a peer-specific state that would not differ on
+// another server.
+func isRetryableRCODE(rc wire.RCODE) bool {
+	switch rc {
+	case wire.RCODEServFail, wire.RCODERefused:
+		return true
+	}
+	return false
 }
 
 // tcFallback wraps a primary (typically UDP) exchanger with a fallback
