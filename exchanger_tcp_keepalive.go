@@ -153,6 +153,7 @@ func (e *TCPKeepAliveClient) Exchange(ctx context.Context, q wire.Message) (wire
 		e.deadline = time.Now().Add(idle)
 	}
 	e.dialMu.Unlock()
+	SetExchangeServer(ctx, e.addr)
 	return resp, nil
 }
 

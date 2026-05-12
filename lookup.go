@@ -3,6 +3,7 @@ package acidns
 import (
 	"context"
 	"fmt"
+	"net"
 	"net/netip"
 	"strings"
 	"sync"
@@ -97,43 +98,66 @@ type SRVRecord struct {
 // expansion — addresses this; only opt in when you trust the host
 // argument and accept the leak surface.
 //
-// A non-NoError RCODE on any individual sub-query is treated as a
-// soft fail: LookupHost continues to the next candidate name. Only
-// when no candidate produces addresses does the most recent error
-// surface to the caller.
+// Errors are returned as *[net.DNSError], matching the stdlib net.Lookup*
+// family: NXDOMAIN and "name exists, no A or AAAA records" both surface
+// with IsNotFound = true; context cancellation / network timeouts set
+// IsTimeout. The underlying *[RCodeError] (when applicable) is reachable
+// via [errors.As] / [errors.Is] on the wrapped error.
+//
+// A non-NoError RCODE on any individual sub-query is treated as a soft
+// fail: LookupHost continues to the next candidate name. Only when no
+// candidate produces addresses does the most recent error surface,
+// wrapped as a *[net.DNSError].
 func LookupHost(ctx context.Context, r Resolver, host string, opts ...LookupOption) ([]netip.Addr, error) {
 	spec := applyLookupOptions(opts)
 	candidates, err := candidateNames(host, spec)
 	if err != nil {
-		return nil, err
+		// Match net.LookupHost: unparseable input surfaces as
+		// IsNotFound rather than an opaque parse error.
+		return nil, &net.DNSError{Err: errNoSuchHost, Name: host, UnwrapErr: err, IsNotFound: true}
 	}
 	var firstErr error
+	var lastServer netip.AddrPort
 	for _, name := range candidates {
-		addrs, err := lookupHostAbsolute(ctx, r, name)
-		if err != nil {
+		addrs, srv, lerr := lookupHostAbsolute(ctx, r, name)
+		if lerr != nil {
 			if firstErr == nil {
-				firstErr = err
+				firstErr = lerr
 			}
 			continue
 		}
 		if len(addrs) > 0 {
 			return addrs, nil
 		}
+		if !lastServer.IsValid() && srv.IsValid() {
+			lastServer = srv
+		}
 	}
 	if firstErr != nil {
-		return nil, firstErr
+		return nil, wrapLookupErr(ctx, host, firstErr)
 	}
-	return nil, nil
+	server := ""
+	if lastServer.IsValid() {
+		server = lastServer.String()
+	}
+	return nil, notFoundErr(host, server)
 }
 
-// LookupA queries the A records for name and returns their IPv4 addresses.
-// name is expected to be an absolute DNS name; LookupA does NOT apply
-// search-list expansion (use LookupHost for that). A non-NoError RCODE is
-// surfaced as a typed *RCodeError.
+// LookupA queries the A records for name and returns their IPv4
+// addresses. name is expected to be an absolute DNS name; LookupA does
+// NOT apply search-list expansion (use [LookupHost] for that).
+//
+// Errors are returned as *[net.DNSError], matching net.Lookup*: NXDOMAIN
+// and "name exists, no A records" both surface with IsNotFound=true.
+// The underlying *[RCodeError] is reachable via errors.As / errors.Is.
 func LookupA(ctx context.Context, r Resolver, name wire.Name) ([]netip.Addr, error) {
-	rs, err := ResolveAs[rdata.A](ctx, r, name)
+	rs, ans, err := lookupTyped[rdata.A](ctx, r, name)
+	host := name.String()
 	if err != nil {
-		return nil, err
+		return nil, wrapLookupErr(ctx, host, err)
+	}
+	if len(rs) == 0 {
+		return nil, notFoundErr(host, serverString(ans))
 	}
 	out := make([]netip.Addr, 0, len(rs))
 	for _, v := range rs {
@@ -143,12 +167,17 @@ func LookupA(ctx context.Context, r Resolver, name wire.Name) ([]netip.Addr, err
 }
 
 // LookupAAAA queries the AAAA records for name and returns their IPv6
-// addresses. name is expected to be an absolute DNS name; LookupAAAA does NOT
-// apply search-list expansion (use LookupHost for that).
+// addresses. name is expected to be an absolute DNS name; LookupAAAA does
+// NOT apply search-list expansion (use [LookupHost] for that). Errors
+// follow the same *[net.DNSError] contract as [LookupA].
 func LookupAAAA(ctx context.Context, r Resolver, name wire.Name) ([]netip.Addr, error) {
-	rs, err := ResolveAs[rdata.AAAA](ctx, r, name)
+	rs, ans, err := lookupTyped[rdata.AAAA](ctx, r, name)
+	host := name.String()
 	if err != nil {
-		return nil, err
+		return nil, wrapLookupErr(ctx, host, err)
+	}
+	if len(rs) == 0 {
+		return nil, notFoundErr(host, serverString(ans))
 	}
 	out := make([]netip.Addr, 0, len(rs))
 	for _, v := range rs {
@@ -160,11 +189,16 @@ func LookupAAAA(ctx context.Context, r Resolver, name wire.Name) ([]netip.Addr, 
 // LookupMX queries the MX records for name and returns them with the
 // exchange host and preference fields surfaced. Records are returned in
 // the order they appear in the answer; callers that need RFC 2782-style
-// ranking should sort by Preference.
+// ranking should sort by Preference. Errors follow the *[net.DNSError]
+// contract documented on [LookupA].
 func LookupMX(ctx context.Context, r Resolver, name wire.Name) ([]MXRecord, error) {
-	rs, err := ResolveAs[rdata.MX](ctx, r, name)
+	rs, ans, err := lookupTyped[rdata.MX](ctx, r, name)
+	host := name.String()
 	if err != nil {
-		return nil, err
+		return nil, wrapLookupErr(ctx, host, err)
+	}
+	if len(rs) == 0 {
+		return nil, notFoundErr(host, serverString(ans))
 	}
 	out := make([]MXRecord, 0, len(rs))
 	for _, v := range rs {
@@ -177,11 +211,15 @@ func LookupMX(ctx context.Context, r Resolver, name wire.Name) ([]MXRecord, erro
 // concatenated character strings as a single string. Most TXT-based
 // protocols (SPF, DKIM, DMARC) expect concatenation of the per-record
 // character strings; callers that need the raw string slices should use
-// ResolveAs[rdata.TXT] directly.
+// [ResolveAs] directly. Errors follow [LookupA]'s contract.
 func LookupTXT(ctx context.Context, r Resolver, name wire.Name) ([]string, error) {
-	rs, err := ResolveAs[rdata.TXT](ctx, r, name)
+	rs, ans, err := lookupTyped[rdata.TXT](ctx, r, name)
+	host := name.String()
 	if err != nil {
-		return nil, err
+		return nil, wrapLookupErr(ctx, host, err)
+	}
+	if len(rs) == 0 {
+		return nil, notFoundErr(host, serverString(ans))
 	}
 	out := make([]string, 0, len(rs))
 	for _, v := range rs {
@@ -193,10 +231,15 @@ func LookupTXT(ctx context.Context, r Resolver, name wire.Name) ([]string, error
 // LookupSRV queries the SRV records for name and returns them with target,
 // port, priority and weight surfaced. Records are returned in answer order;
 // callers that need RFC 2782 priority/weight ranking should sort externally.
+// Errors follow [LookupA]'s contract.
 func LookupSRV(ctx context.Context, r Resolver, name wire.Name) ([]SRVRecord, error) {
-	rs, err := ResolveAs[rdata.SRV](ctx, r, name)
+	rs, ans, err := lookupTyped[rdata.SRV](ctx, r, name)
+	host := name.String()
 	if err != nil {
-		return nil, err
+		return nil, wrapLookupErr(ctx, host, err)
+	}
+	if len(rs) == 0 {
+		return nil, notFoundErr(host, serverString(ans))
 	}
 	out := make([]SRVRecord, 0, len(rs))
 	for _, v := range rs {
@@ -211,13 +254,18 @@ func LookupSRV(ctx context.Context, r Resolver, name wire.Name) ([]SRVRecord, er
 }
 
 // LookupCNAME queries the CNAME records for name and returns the target
-// names. Most callers will want LookupHost or LookupA/AAAA instead — the
-// Resolver follows CNAME chains transparently — but applications that need
-// the canonical name itself (e.g. DANE TLSA lookups) can use LookupCNAME.
+// names. Most callers will want [LookupHost] or [LookupA] / [LookupAAAA]
+// instead — the Resolver follows CNAME chains transparently — but
+// applications that need the canonical name itself (e.g. DANE TLSA
+// lookups) can use LookupCNAME. Errors follow [LookupA]'s contract.
 func LookupCNAME(ctx context.Context, r Resolver, name wire.Name) ([]wire.Name, error) {
-	rs, err := ResolveAs[rdata.CNAME](ctx, r, name)
+	rs, ans, err := lookupTyped[rdata.CNAME](ctx, r, name)
+	host := name.String()
 	if err != nil {
-		return nil, err
+		return nil, wrapLookupErr(ctx, host, err)
+	}
+	if len(rs) == 0 {
+		return nil, notFoundErr(host, serverString(ans))
 	}
 	out := make([]wire.Name, 0, len(rs))
 	for _, v := range rs {
@@ -227,11 +275,15 @@ func LookupCNAME(ctx context.Context, r Resolver, name wire.Name) ([]wire.Name, 
 }
 
 // LookupNS queries the NS records for name and returns the nameserver
-// target names.
+// target names. Errors follow [LookupA]'s contract.
 func LookupNS(ctx context.Context, r Resolver, name wire.Name) ([]wire.Name, error) {
-	rs, err := ResolveAs[rdata.NS](ctx, r, name)
+	rs, ans, err := lookupTyped[rdata.NS](ctx, r, name)
+	host := name.String()
 	if err != nil {
-		return nil, err
+		return nil, wrapLookupErr(ctx, host, err)
+	}
+	if len(rs) == 0 {
+		return nil, notFoundErr(host, serverString(ans))
 	}
 	out := make([]wire.Name, 0, len(rs))
 	for _, v := range rs {
@@ -243,15 +295,20 @@ func LookupNS(ctx context.Context, r Resolver, name wire.Name) ([]wire.Name, err
 // LookupPTR performs a reverse-DNS lookup for addr and returns the names
 // the address resolves to. addr is converted to its RFC 1035 / RFC 3596
 // reverse-form name (in-addr.arpa for IPv4, ip6.arpa for IPv6 nibble form)
-// before querying.
+// before querying. Errors follow [LookupA]'s contract; an invalid addr
+// surfaces as *[net.DNSError] with Err="invalid address".
 func LookupPTR(ctx context.Context, r Resolver, addr netip.Addr) ([]wire.Name, error) {
 	name, err := reverseAddr(addr)
 	if err != nil {
-		return nil, err
+		return nil, err // already *net.DNSError from reverseAddr
 	}
-	rs, err := ResolveAs[rdata.PTR](ctx, r, name)
+	rs, ans, err := lookupTyped[rdata.PTR](ctx, r, name)
+	host := name.String()
 	if err != nil {
-		return nil, err
+		return nil, wrapLookupErr(ctx, host, err)
+	}
+	if len(rs) == 0 {
+		return nil, notFoundErr(host, serverString(ans))
 	}
 	out := make([]wire.Name, 0, len(rs))
 	for _, v := range rs {
@@ -260,12 +317,42 @@ func LookupPTR(ctx context.Context, r Resolver, addr netip.Addr) ([]wire.Name, e
 	return out, nil
 }
 
+// lookupTyped is the private helper used by the typed LookupX family.
+// It returns the matched rdata, the underlying Answer (for Server()
+// extraction in the synthetic-empty-NoError path), and any error from
+// Resolve. Errors are returned RAW — callers wrap them with
+// wrapLookupErr at the public boundary.
+func lookupTyped[T rdata.Typed](ctx context.Context, r Resolver, name wire.Name) ([]T, *Answer, error) {
+	var zero T
+	ans, err := r.Resolve(ctx, name, zero.Type())
+	if err != nil {
+		return nil, nil, err
+	}
+	return Extract[T](ans.Records()), ans, nil
+}
+
+// serverString returns the immediate upstream addr from ans as a string
+// suitable for [net.DNSError.Server]. Empty when ans is nil or its
+// Server is unset (e.g. synthesised RFC 6761 special-use answers, or a
+// custom [Exchanger] that does not call [SetExchangeServer]).
+func serverString(ans *Answer) string {
+	if ans == nil {
+		return ""
+	}
+	if addr := ans.Server(); addr.IsValid() {
+		return addr.String()
+	}
+	return ""
+}
+
 // reverseAddr builds the in-addr.arpa (IPv4) or ip6.arpa (IPv6) reverse-DNS
 // name for addr. IPv4-mapped IPv6 addresses are unmapped to their IPv4
-// form per the net package convention.
+// form per the net package convention. An invalid addr surfaces as
+// *[net.DNSError] with Err="invalid address" so [LookupPTR]'s error
+// shape matches the rest of the family.
 func reverseAddr(addr netip.Addr) (wire.Name, error) {
 	if !addr.IsValid() {
-		return wire.Name{}, fmt.Errorf("acidns: reverseAddr: invalid address")
+		return wire.Name{}, &net.DNSError{Err: "invalid address", Name: addr.String()}
 	}
 	addr = addr.Unmap()
 	if addr.Is4() {
@@ -313,10 +400,16 @@ func candidateNames(host string, spec searchListSpec) ([]wire.Name, error) {
 	return append(suffixed, base), nil
 }
 
-func lookupHostAbsolute(ctx context.Context, r Resolver, name wire.Name) ([]netip.Addr, error) {
+// lookupHostAbsolute fans out A and AAAA queries in parallel. Returns
+// the combined address list, the immediate upstream addr seen on at
+// least one successful Resolve (zero if none — only relevant when the
+// addrs slice is empty so LookupHost can stamp Server on its synthetic
+// notFoundErr), and the first error encountered.
+func lookupHostAbsolute(ctx context.Context, r Resolver, name wire.Name) ([]netip.Addr, netip.AddrPort, error) {
 	type result struct {
-		addrs []netip.Addr
-		err   error
+		addrs  []netip.Addr
+		server netip.AddrPort
+		err    error
 	}
 	ch := make(chan result, 2)
 	var wg sync.WaitGroup
@@ -339,7 +432,7 @@ func lookupHostAbsolute(ctx context.Context, r Resolver, name wire.Name) ([]neti
 				out = append(out, aaaa.Addr())
 			}
 		}
-		ch <- result{addrs: out}
+		ch <- result{addrs: out, server: ans.Server()}
 	}
 	go dispatch(rrtype.A)
 	go dispatch(rrtype.AAAA)
@@ -348,15 +441,21 @@ func lookupHostAbsolute(ctx context.Context, r Resolver, name wire.Name) ([]neti
 
 	var addrs []netip.Addr
 	var firstErr error
+	var server netip.AddrPort
 	for got := range ch {
-		if got.err != nil && firstErr == nil {
-			firstErr = got.err
+		if got.err != nil {
+			if firstErr == nil {
+				firstErr = got.err
+			}
 			continue
 		}
 		addrs = append(addrs, got.addrs...)
+		if !server.IsValid() && got.server.IsValid() {
+			server = got.server
+		}
 	}
 	if len(addrs) == 0 && firstErr != nil {
-		return nil, firstErr
+		return nil, server, firstErr
 	}
-	return addrs, nil
+	return addrs, server, nil
 }

@@ -66,16 +66,25 @@ type Answer struct {
 	q       wire.Question
 	records []wire.Record
 	raw     wire.Message
+	server  netip.AddrPort
 }
 
 // NewAnswer wraps a question, the matched records, and the raw response into
 // an Answer. Intended for resolver implementations and test fakes that need
-// to synthesise an Answer outside the package.
+// to synthesise an Answer outside the package. The Server field is left zero;
+// implementations that know the immediate upstream they contacted can stamp
+// it via [SetExchangeServer] from within their Exchanger.
 func NewAnswer(q wire.Question, records []wire.Record, raw wire.Message) *Answer {
 	return &Answer{q: q, records: records, raw: raw}
 }
 
 func (a *Answer) Question() wire.Question { return a.q }
+
+// Server returns the immediate upstream that produced this Answer, or the
+// zero value if no exchanger in the chain reported one (e.g. a synthetic
+// answer from RFC 6761 special-use handling, or a user-supplied Exchanger
+// that does not call [SetExchangeServer]).
+func (a *Answer) Server() netip.AddrPort { return a.server }
 
 // Records returns a copy of the matched record list. The returned
 // slice is owned by the caller; mutating it does not affect the
@@ -429,8 +438,18 @@ func (r *resolver) resolve(ctx context.Context, name wire.Name, t rrtype.Type) (
 	if err != nil {
 		return nil, err
 	}
+	// Install a per-call server sink so the leaf Exchanger (UDP/TCP/DoT/...)
+	// can report which immediate upstream produced the response. Read back
+	// after Exchange so the addr surfaces on Answer.Server() (success path)
+	// or via *serverErr wrapping (network-error path) — the Lookup* family
+	// reads either chain to populate *net.DNSError.Server.
+	var server netip.AddrPort
+	ctx = withServerSink(ctx, &server)
 	resp, err := r.exchanger.Exchange(ctx, q)
 	if err != nil {
+		if server.IsValid() {
+			err = &serverErr{addr: server, err: err}
+		}
 		return nil, err
 	}
 	q0 := resp.Questions()
@@ -440,7 +459,7 @@ func (r *resolver) resolve(ctx context.Context, name wire.Name, t rrtype.Type) (
 	}
 
 	matched := MatchAnswers(resp.Answers(), name, t)
-	return wrapRCode(&Answer{q: question, records: matched, raw: resp})
+	return wrapRCode(&Answer{q: question, records: matched, raw: resp, server: server})
 }
 
 // logResolve emits one structured event per Resolve call. Successful

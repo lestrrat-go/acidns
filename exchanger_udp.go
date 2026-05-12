@@ -243,6 +243,7 @@ func (e *UDPClient) Exchange(ctx context.Context, q wire.Message) (wire.Message,
 				continue
 			}
 		}
+		SetExchangeServer(ctx, e.addr)
 		return resp, nil
 	}
 }

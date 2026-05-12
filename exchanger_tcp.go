@@ -76,7 +76,12 @@ func (e *TCPClient) Exchange(ctx context.Context, q wire.Message) (wire.Message,
 	if err != nil {
 		return wire.Message{}, fmt.Errorf("acidns: dial %s: %w", e.addr, err)
 	}
-	return streamframe.Exchange(ctx, conn, q, e.timeout)
+	resp, err := streamframe.Exchange(ctx, conn, q, e.timeout)
+	if err != nil {
+		return wire.Message{}, err
+	}
+	SetExchangeServer(ctx, e.addr)
+	return resp, nil
 }
 
 // Stream sends q over a fresh TCP connection and returns a MessageStream

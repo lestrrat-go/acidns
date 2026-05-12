@@ -193,7 +193,12 @@ func (e *Client) Exchange(ctx context.Context, q wire.Message) (wire.Message, er
 	if err != nil {
 		return wire.Message{}, fmt.Errorf("dot: dial %s: %w", e.addr, err)
 	}
-	return streamframe.Exchange(ctx, conn, q, e.timeout)
+	resp, err := streamframe.Exchange(ctx, conn, q, e.timeout)
+	if err != nil {
+		return wire.Message{}, err
+	}
+	acidns.SetExchangeServer(ctx, e.addr)
+	return resp, nil
 }
 
 // Stream sends q over a fresh TLS connection and returns a MessageStream

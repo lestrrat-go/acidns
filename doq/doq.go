@@ -241,7 +241,12 @@ func (e *Client) Exchange(ctx context.Context, q wire.Message) (wire.Message, er
 	if _, err := io.ReadFull(stream, body); err != nil {
 		return wire.Message{}, fmt.Errorf("doq: read body: %w", err)
 	}
-	return decodeDoQResponse(body, q)
+	resp, err := decodeDoQResponse(body, q)
+	if err != nil {
+		return wire.Message{}, err
+	}
+	acidns.SetExchangeServer(ctx, e.addr)
+	return resp, nil
 }
 
 // decodeDoQResponse validates RFC 9250 §4.2.1 (wire ID MUST be 0) and

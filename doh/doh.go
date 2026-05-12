@@ -254,6 +254,11 @@ func (e *Client) Exchange(ctx context.Context, q wire.Message) (wire.Message, er
 	if !wire.QuestionsMatch(q, m) {
 		return wire.Message{}, ErrQuestionMismatch
 	}
+	// We deliberately do NOT call acidns.SetExchangeServer here: the DoH
+	// "server" is an HTTPS URL, not a netip.AddrPort, and net/http hides
+	// the resolved peer. *net.DNSError.Server therefore stays empty for
+	// DoH lookups; surfacing the endpoint URL would require widening the
+	// sink to accept strings, which is its own design conversation.
 	return m, nil
 }
 

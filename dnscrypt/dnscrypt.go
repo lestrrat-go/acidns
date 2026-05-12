@@ -32,6 +32,7 @@ import (
 	"golang.org/x/crypto/chacha20poly1305"
 	"golang.org/x/crypto/curve25519"
 
+	"github.com/lestrrat-go/acidns"
 	"github.com/lestrrat-go/acidns/wire"
 	"github.com/lestrrat-go/option/v3"
 )
@@ -519,5 +520,6 @@ func (e *Client) Exchange(ctx context.Context, q wire.Message) (wire.Message, er
 	if !wire.QuestionsMatch(q, resp) {
 		return wire.Message{}, fmt.Errorf("dnscrypt: response question does not match request")
 	}
+	acidns.SetExchangeServer(ctx, e.addr)
 	return resp, nil
 }
