@@ -33,6 +33,12 @@ package acidns
 //     list is almost certainly a misconfiguration (open resolver / open
 //     authoritative). NewPublicUDPServer / NewPublicTCPServer return
 //     [ErrPublicACLRequired] when the caller supplies no ACL options.
+//     [WithACLDropDenied] true is pinned by the wrapper — a caller
+//     passing WithACLDropDenied(false) via [WithPublicACLOptions] has
+//     it silently overridden, because a REFUSED reply on a public UDP
+//     listener is itself a ~1.4× amplification primitive. Callers that
+//     need REFUSED (e.g. on an authenticated TCP listener where
+//     amplification is moot) must build the stack manually.
 //   - The cookies middleware is required and the caller MUST supply a
 //     [cookies.Server] via [WithPublicCookiesServer]. An in-process
 //     [cookies.MemorySecretPool] with no rotation is not a safe
@@ -205,7 +211,14 @@ func buildPublicStack(h Handler, cfg publicServerConfig) (Handler, error) {
 	}
 	stack = NewRRL(stack, cfg.rrlOpts...)
 	stack = NewRateLimit(stack, cfg.rateLimitOpts...)
-	aclOpts := append([]ACLOption{WithACLDropDenied(true)}, cfg.aclOpts...)
+	// WithACLDropDenied(true) is pinned: it appears AFTER the caller's
+	// opts so any caller-supplied WithACLDropDenied(false) is last-wins-
+	// overridden. The whole point of the public-server wrapper is "the
+	// safe stack, no thinking required"; a caller that needs REFUSED
+	// replies (e.g. for an authenticated TCP/DoT/DoH/DoQ listener where
+	// amplification is moot) should build the stack manually via
+	// [NewUDPServer] / [NewTCPServer] + middleware composition.
+	aclOpts := append(append([]ACLOption(nil), cfg.aclOpts...), WithACLDropDenied(true))
 	stack, err = NewACL(stack, aclOpts...)
 	if err != nil {
 		return nil, err
@@ -234,10 +247,13 @@ func wrapPublicErr(transport string, err error) error {
 //
 // At least one ACL option (typically [WithACLAllow]) MUST be supplied
 // via [WithPublicACLOptions]; otherwise [ErrPublicACLRequired] is
-// returned. The ACL is configured to drop denied queries silently
+// returned. The ACL is pinned to drop denied queries silently
 // ([WithACLDropDenied] true) — appropriate for an internet-exposed
 // UDP listener where REFUSED replies would themselves be a small
-// amplification primitive against spoofed sources.
+// amplification primitive against spoofed sources. A
+// caller-supplied [WithACLDropDenied](false) routed through
+// [WithPublicACLOptions] is ignored; build the stack manually via
+// [NewUDPServer] + middleware composition if REFUSED is required.
 //
 // The cookies layer requires a [cookies.Server]; the caller MUST
 // supply one via [WithPublicCookiesServer]. The wrapper deliberately
@@ -270,6 +286,9 @@ func NewPublicUDPServer(addr netip.AddrPort, h Handler, opts ...PublicServerOpti
 // [ErrPublicACLRequired] is returned. A [cookies.Server] MUST be
 // supplied via [WithPublicCookiesServer]; otherwise
 // [ErrPublicCookiesServerRequired] is returned.
+// [WithACLDropDenied] true is pinned (same as the UDP wrapper) so the
+// two transports remain behaviourally identical; build the stack
+// manually via [NewTCPServer] if REFUSED replies are needed.
 func NewPublicTCPServer(addr netip.AddrPort, h Handler, opts ...PublicServerOption) (*TCPServer, error) {
 	cfg := applyPublicOptions(opts)
 	stack, err := buildPublicStack(h, cfg)

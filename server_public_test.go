@@ -171,3 +171,53 @@ func TestNewPublicUDPServer_DropsDeniedSilently(t *testing.T) {
 	_, err = conn.Read(rbuf)
 	require.Error(t, err, "denied source must receive no reply")
 }
+
+// TestNewPublicUDPServer_IgnoresCallerDropDeniedFalse pins the security
+// invariant that the public-UDP wrapper silently overrides any
+// caller-supplied [acidns.WithACLDropDenied](false) routed through
+// [acidns.WithPublicACLOptions]. A REFUSED reply on a public UDP
+// listener is a ~1.4× amplification primitive against spoofed sources,
+// so the wrapper enforces drop=true regardless of what the caller asked
+// for. Callers that genuinely need REFUSED must build the stack
+// manually via [acidns.NewUDPServer] + middleware composition.
+func TestNewPublicUDPServer_IgnoresCallerDropDeniedFalse(t *testing.T) {
+	t.Parallel()
+
+	srv, err := acidns.NewPublicUDPServer(
+		netip.MustParseAddrPort("127.0.0.1:0"),
+		publicMkInner(),
+		acidns.WithPublicACLOptions(
+			acidns.WithACLAllow(netip.MustParsePrefix("198.51.100.0/24")),
+			// Caller asks to flip drop to false — wrapper must ignore.
+			acidns.WithACLDropDenied(false),
+		),
+		acidns.WithPublicCookiesServer(publicMkCookiesServer(t)),
+	)
+	require.NoError(t, err)
+
+	ctx, cancel := context.WithCancel(t.Context())
+	t.Cleanup(cancel)
+	ctrl, err := srv.Run(ctx)
+	require.NoError(t, err)
+
+	conn, err := net.Dial("udp", ctrl.Addr().String())
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = conn.Close() })
+
+	q, err := wire.NewMessageBuilder().
+		ID(0xa1a1).
+		Question(wire.NewQuestion(wire.MustParseName("example.com"), rrtype.A)).
+		Build()
+	require.NoError(t, err)
+	buf, err := wire.Pack(q)
+	require.NoError(t, err)
+	_, err = conn.Write(buf)
+	require.NoError(t, err)
+
+	require.NoError(t, conn.SetReadDeadline(time.Now().Add(250*time.Millisecond)))
+	rbuf := make([]byte, 4096)
+	_, err = conn.Read(rbuf)
+	require.Error(t, err,
+		"caller-supplied WithACLDropDenied(false) must be overridden — "+
+			"denied source must still receive no reply (no REFUSED amplification)")
+}
