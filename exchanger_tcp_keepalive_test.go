@@ -197,6 +197,53 @@ func TestKeepAliveLocalIdleFallback(t *testing.T) {
 	require.GreaterOrEqual(t, srv.conns.Load(), int64(2))
 }
 
+// TestKeepAliveClientCapsAdvertisedIdle verifies the client clamps a
+// server-advertised edns-tcp-keepalive timeout via [WithTCPKeepAliveMaxIdle].
+// Server advertises 1 h, client cap is 50 ms — after the cap elapses the
+// next Exchange must re-dial (observable as conns == 2).
+func TestKeepAliveClientCapsAdvertisedIdle(t *testing.T) {
+	t.Parallel()
+	srv := &keepAliveServer{advertise: time.Hour}
+	addr, stop := startKeepAliveServer(t, srv)
+	defer stop()
+
+	ex, err := acidns.NewTCPKeepAliveClient(addr,
+		acidns.WithTCPKeepAliveMaxIdle(50*time.Millisecond))
+	require.NoError(t, err)
+
+	_, err = ex.Exchange(t.Context(), newQuery(t, "example.com"))
+	require.NoError(t, err)
+	require.Equal(t, int64(1), srv.conns.Load())
+
+	// Wait past the cap so the cached deadline elapses.
+	time.Sleep(120 * time.Millisecond)
+
+	_, err = ex.Exchange(t.Context(), newQuery(t, "example.com"))
+	require.NoError(t, err)
+	require.Equal(t, int64(2), srv.conns.Load(),
+		"second Exchange after cap-elapsed must re-dial; if conns == 1 the cap was not applied")
+}
+
+// TestKeepAliveClientCapDisabled confirms [WithTCPKeepAliveMaxIdle](0)
+// opts out of the cap — the server's full advertised value is used.
+func TestKeepAliveClientCapDisabled(t *testing.T) {
+	t.Parallel()
+	srv := &keepAliveServer{advertise: 10 * time.Second}
+	addr, stop := startKeepAliveServer(t, srv)
+	defer stop()
+
+	ex, err := acidns.NewTCPKeepAliveClient(addr,
+		acidns.WithTCPKeepAliveMaxIdle(0))
+	require.NoError(t, err)
+
+	for range 3 {
+		_, err := ex.Exchange(t.Context(), newQuery(t, "example.com"))
+		require.NoError(t, err)
+	}
+	require.Equal(t, int64(1), srv.conns.Load(),
+		"cap disabled: 10 s advertised idle must persist the connection across 3 exchanges")
+}
+
 func TestKeepAliveRespectsCancel(t *testing.T) {
 	t.Parallel()
 	srv := &keepAliveServer{advertise: 5 * time.Second}

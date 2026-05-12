@@ -26,11 +26,13 @@ func (tcpKeepAliveOption) tcpKeepAliveOption() {}
 type tcpKAConfig struct {
 	timeout      time.Duration
 	idleFallback time.Duration
+	maxIdle      time.Duration
 	advertise    bool
 }
 
 type identTCPKeepAliveTimeout struct{}
 type identTCPKeepAliveIdle struct{}
+type identTCPKeepAliveMaxIdle struct{}
 type identTCPKeepAliveAdvertise struct{}
 
 // WithTCPKeepAliveTimeout sets the per-exchange I/O timeout used when the
@@ -56,6 +58,25 @@ func WithTCPKeepAliveAdvertise(v bool) TCPKeepAliveOption {
 	return tcpKeepAliveOption{option.New(identTCPKeepAliveAdvertise{}, v)}
 }
 
+// WithTCPKeepAliveMaxIdle caps the server-advertised edns-tcp-keepalive
+// idle timeout (RFC 7828 §3.1). The wire encoding is uint16 × 100 ms,
+// so a hostile or buggy upstream can otherwise pin the persistent
+// connection for up to ~109 minutes. RFC 7828 §3.4 explicitly permits
+// the client to use a value smaller than that advertised by the server.
+//
+// Defaults to 5 minutes — long enough to amortise the handshake across
+// many sequential queries, short enough that operator-side changes
+// (cert rotation, route flap, upstream IP change) are observed within
+// one cap cycle. Pass 0 to disable the cap and use the server's value
+// as-is (up to the RFC 7828 maximum).
+//
+// The cap does NOT apply to the local fallback ([WithTCPKeepAliveIdle])
+// — that value is already caller-controlled. It also does NOT alter
+// the server's idle=0 "close immediately" signal.
+func WithTCPKeepAliveMaxIdle(d time.Duration) TCPKeepAliveOption {
+	return tcpKeepAliveOption{option.New(identTCPKeepAliveMaxIdle{}, d)}
+}
+
 // NewTCPKeepAliveClient returns a TCPKeepAliveClient that
 // maintains a single persistent TCP connection per addr, advertising
 // edns-tcp-keepalive on outgoing queries and honoring the timeout
@@ -75,6 +96,7 @@ func NewTCPKeepAliveClient(addr netip.AddrPort, opts ...TCPKeepAliveOption) (*TC
 	c := tcpKAConfig{
 		timeout:      5 * time.Second,
 		idleFallback: 30 * time.Second,
+		maxIdle:      5 * time.Minute,
 		advertise:    true,
 	}
 	for _, o := range opts {
@@ -83,6 +105,8 @@ func NewTCPKeepAliveClient(addr netip.AddrPort, opts ...TCPKeepAliveOption) (*TC
 			c.timeout = option.MustGet[time.Duration](o)
 		case identTCPKeepAliveIdle{}:
 			c.idleFallback = option.MustGet[time.Duration](o)
+		case identTCPKeepAliveMaxIdle{}:
+			c.maxIdle = option.MustGet[time.Duration](o)
 		case identTCPKeepAliveAdvertise{}:
 			c.advertise = option.MustGet[bool](o)
 		}
@@ -132,13 +156,24 @@ func (e *TCPKeepAliveClient) Exchange(ctx context.Context, q wire.Message) (wire
 	}
 
 	idle := e.cfg.idleFallback
+	advertised := false
 	if ed, ok := resp.EDNS(); ok {
 		for _, o := range ed.Options() {
 			if d, ok := wire.TCPKeepaliveTimeout(o); ok {
 				idle = d
+				advertised = true
 				break
 			}
 		}
+	}
+	// Clamp the server-advertised value per RFC 7828 §3.4 (clients MAY
+	// use a value smaller than the server's). idle == 0 is the explicit
+	// "close immediately" signal — preserve it. maxIdle == 0 disables
+	// the cap entirely. The fallback path (server did not advertise) is
+	// already caller-controlled via WithTCPKeepAliveIdle and is not
+	// clamped here.
+	if advertised && idle > 0 && e.cfg.maxIdle > 0 && idle > e.cfg.maxIdle {
+		idle = e.cfg.maxIdle
 	}
 	e.dialMu.Lock()
 	if idle == 0 {
