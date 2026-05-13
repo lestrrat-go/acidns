@@ -223,6 +223,19 @@ func (l *limiter) shardFor(key string) *limiterShard {
 //     entry so a new key can be inserted.
 //
 // Caller holds sh.mu.
+//
+// The two passes are O(per-shard cap) per cache miss once the cap is
+// hit. That's tolerable because NewRateLimit standalone is not the
+// designed defence against spoofed-source floods — [NewRRL] is, and
+// RRL defaults to /24 + /56 prefix grouping ([NewRRL] line 172-173)
+// which keeps its bucket map far below the cap in realistic traffic.
+// The documented composition contract is at [NewRRL]'s package
+// comment: "NewRRL alone is sufficient against amplification;
+// NewRateLimit alone is not, because spoofed sources defeat
+// per-source query budgets." Operators who run NewRateLimit on an
+// internet-exposed listener without also running NewRRL (or without
+// WithRateLimitIPv4Prefix / WithRateLimitIPv6Prefix to bound the
+// keyspace) have a deeper defence gap than the eviction cost.
 func (l *limiter) evictLocked(sh *limiterShard, now time.Time) {
 	if l.qps > 0 {
 		idleFor := time.Duration(l.burst/l.qps*float64(time.Second)) + time.Second

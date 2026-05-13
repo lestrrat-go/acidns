@@ -404,6 +404,16 @@ func (r *rrl) shardFor(key string) *rrlShard {
 // evictLocked drops idle (refilled) buckets first within a shard; if
 // still at the cap, drops the shard's oldest-updated entry.
 // Caller holds sh.mu.
+//
+// Per-miss work is O(per-shard cap) once the cap is hit. RRL's
+// default prefix grouping (v4Prefix=24 / v6Prefix=56; see [NewRRL]
+// defaults around line 172) bounds the realistic keyspace to far
+// below the cap, so this cost is not exercised under intended
+// deployment. The threat-model rationale lives in [NewRRL]'s
+// package comment: RRL is the amplification defence; NewRateLimit
+// alone isn't enough because spoofed sources defeat per-source
+// budgets. Operators removing the default prefix grouping should
+// also lower [WithRRLMaxKeys] to keep the per-shard cap small.
 func (r *rrl) evictLocked(sh *rrlShard, now time.Time) {
 	largestRate := r.respPerSecond
 	if r.nxdomainsPerS > largestRate {
