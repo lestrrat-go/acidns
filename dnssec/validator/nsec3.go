@@ -268,16 +268,28 @@ func nsec3ProveDenial(qname wire.Name, qtype rrtype.Type, zone wire.Name, record
 	if !ok {
 		return nsec3DenialResult{kind: nsec3DenialNone}
 	}
-	// Need NSEC3 covering "next closer name".
+	// Need NSEC3 covering "next closer name". RFC 5155 §6 / §8.6: a
+	// covering NSEC3 with the Opt-Out flag set does NOT prove
+	// non-existence of an arbitrary name — at most it proves no signed
+	// delegation exists in the hash interval. Surface that as the
+	// Insecure outcome rather than NXDOMAIN.
 	nextCloser := validatorbb.NextCloserName(qname, encloser)
-	if _, found := nsec3Cover(nextCloser, params, records); !found {
+	nc, found := nsec3Cover(nextCloser, params, records)
+	if !found {
 		return nsec3DenialResult{kind: nsec3DenialNone}
 	}
+	if nc.Flags()&NSEC3FlagOptOut != 0 {
+		return nsec3DenialResult{kind: nsec3DenialOptOut, closestEncloser: encloser}
+	}
 	// Need NSEC3 covering *.<encloser> OR a matching wildcard NSEC3 with
-	// !qtype in bitmap (§8.7).
+	// !qtype in bitmap (§8.7). An opt-out covering NSEC3 cannot prove
+	// non-existence of the wildcard either — same Insecure downgrade.
 	wildcard, err := validatorbb.WildcardOf(encloser)
 	if err == nil {
-		if _, found := nsec3Cover(wildcard, params, records); found {
+		if n3, found := nsec3Cover(wildcard, params, records); found {
+			if n3.Flags()&NSEC3FlagOptOut != 0 {
+				return nsec3DenialResult{kind: nsec3DenialOptOut, closestEncloser: encloser}
+			}
 			return nsec3DenialResult{kind: nsec3DenialNXDomain, closestEncloser: encloser}
 		}
 		if n3, found := nsec3Match(wildcard, params, records); found {

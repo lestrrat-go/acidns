@@ -3,6 +3,7 @@ package validator
 import (
 	"context"
 	"net/netip"
+	"slices"
 	"testing"
 	"time"
 
@@ -407,6 +408,83 @@ func TestNSEC3ProveDenialNXDomainProof(t *testing.T) {
 
 	res := nsec3ProveDenial(qname, rrtype.A, zone, []wire.Record{encRec, ncRec, wcRec})
 	require.Equal(t, nsec3DenialNXDomain, res.kind)
+	require.True(t, res.closestEncloser.Equal(zone))
+}
+
+// nxdomainNSEC3Proof builds the three NSEC3 records needed for an
+// NXDOMAIN closest-encloser proof of `qname` in zone `example.`:
+// encloser-match at zone apex, next-closer cover, wildcard cover.
+// Each record's flags can be set independently to drive the opt-out
+// branches.
+func nxdomainNSEC3Proof(t *testing.T, qname wire.Name, ncFlags, wcFlags uint8) []wire.Record {
+	t.Helper()
+	params := nsec3Params{alg: 1, iterations: 0, salt: nil}
+	zone := wire.MustParseName("example.")
+	encHash := nsec3Hash(zone, params.salt, params.iterations)
+	// next != owner so the encloser record doesn't degenerate into a
+	// universal cover via the RFC 5155 §6.2 wrap rule (owner==next ⇒
+	// covers every hash). Without this, nsec3Cover would always return
+	// encRec first and shadow the opt-out flag on ncRec / wcRec.
+	encRec := makeNSEC3RecordAt(t, encHash, bracketHi(encHash), []rrtype.Type{rrtype.SOA}, 0, "example")
+	ncRec := makeNSEC3RecordAt(t, bracketLo(nsec3Hash(qname, params.salt, params.iterations)),
+		bracketHi(nsec3Hash(qname, params.salt, params.iterations)), nil, ncFlags, "example")
+	wc, err := validatorbb.WildcardOf(zone)
+	require.NoError(t, err)
+	wcHash := nsec3Hash(wc, params.salt, params.iterations)
+	wcRec := makeNSEC3RecordAt(t, bracketLo(wcHash), bracketHi(wcHash), nil, wcFlags, "example")
+	return []wire.Record{encRec, ncRec, wcRec}
+}
+
+// bracketLo / bracketHi compute the (just-below, just-above) sentinels
+// around hash so an NSEC3 with those owner / next-hashed-owner values
+// covers H(name) strictly.
+func bracketLo(hash []byte) []byte {
+	lo := append([]byte(nil), hash...)
+	for i, v := range slices.Backward(lo) {
+		if v > 0 {
+			lo[i]--
+			return lo
+		}
+		lo[i] = 0xff
+	}
+	return lo
+}
+
+func bracketHi(hash []byte) []byte {
+	hi := append([]byte(nil), hash...)
+	for i, v := range slices.Backward(hi) {
+		if v < 0xff {
+			hi[i]++
+			return hi
+		}
+		hi[i] = 0
+	}
+	return hi
+}
+
+// TestNSEC3ProveDenialOptOutNextCloser exercises the RFC 5155 §6 / §8.6
+// rule: a covering NSEC3 with Opt-Out set on the next-closer name cannot
+// prove NXDOMAIN — the proof must downgrade to Insecure (OptOut).
+func TestNSEC3ProveDenialOptOutNextCloser(t *testing.T) {
+	t.Parallel()
+	zone := wire.MustParseName("example.")
+	qname := wire.MustParseName("missing.example.")
+	records := nxdomainNSEC3Proof(t, qname, NSEC3FlagOptOut, 0)
+	res := nsec3ProveDenial(qname, rrtype.A, zone, records)
+	require.Equal(t, nsec3DenialOptOut, res.kind)
+	require.True(t, res.closestEncloser.Equal(zone))
+}
+
+// TestNSEC3ProveDenialOptOutWildcardCover exercises the wildcard-cover
+// half of the NXDOMAIN proof: an Opt-Out NSEC3 covering *.<encloser>
+// cannot complete the proof; the result is Insecure (OptOut).
+func TestNSEC3ProveDenialOptOutWildcardCover(t *testing.T) {
+	t.Parallel()
+	zone := wire.MustParseName("example.")
+	qname := wire.MustParseName("missing.example.")
+	records := nxdomainNSEC3Proof(t, qname, 0, NSEC3FlagOptOut)
+	res := nsec3ProveDenial(qname, rrtype.A, zone, records)
+	require.Equal(t, nsec3DenialOptOut, res.kind)
 	require.True(t, res.closestEncloser.Equal(zone))
 }
 

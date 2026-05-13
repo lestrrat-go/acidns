@@ -43,6 +43,13 @@ var errNXDomainAtCandidate = errors.New("validator: nxdomain at candidate")
 // an Insecure (not Bogus) answer.
 var errInsecureNSEC3Iterations = errors.New("validator: NSEC3 iterations exceed limit (RFC 9276 §3.2)")
 
+// errInsecureNSEC3OptOut is an internal sentinel indicating an NSEC3
+// authenticated-denial proof relies on a covering NSEC3 with the Opt-Out
+// flag set. Per RFC 5155 §6 such a record cannot prove non-existence of
+// an arbitrary name; callers map this to an Insecure (not Bogus, not
+// Secure) answer.
+var errInsecureNSEC3OptOut = errors.New("validator: NSEC3 proof relies on opt-out cover (RFC 5155 §6)")
+
 // Walker walks the DNSSEC chain of trust from a configured Anchor down to
 // a queried (name, type), validating every link. Implementations are safe
 // for concurrent use by multiple goroutines; the underlying Source is
@@ -270,6 +277,15 @@ func (w *walker) Resolve(ctx context.Context, qname wire.Name, qtype rrtype.Type
 		// authenticates the synthesised owner.
 		if encloserLabels, wildcard := wildcardSynthLabels(qname, sigs); wildcard {
 			if err := w.validateWildcardNextCloser(qname, encloserLabels, parentKeys, msg); err != nil {
+				if errors.Is(err, errInsecureNSEC3OptOut) {
+					return Answer{
+						result:  Insecure,
+						records: matching,
+						rcode:   rcode,
+						chain:   chain,
+						reason:  err,
+					}, nil
+				}
 				return w.bogus(qname, qtype, chain, fmt.Errorf("validator: wildcard next-closer: %w", err))
 			}
 		}
@@ -647,7 +663,10 @@ func (w *walker) validateNSEC3NXDomain(qname, parentZone wire.Name, parentKeys [
 	case nsec3DenialNXDomain:
 		return nil
 	case nsec3DenialOptOut:
-		return nil
+		// RFC 5155 §6 / §8.6: a covering opt-out NSEC3 does not prove
+		// non-existence — downgrade to Insecure rather than accepting it
+		// as a full NXDOMAIN proof.
+		return errInsecureNSEC3OptOut
 	case nsec3DenialIterationsExceeded:
 		return errInsecureNSEC3Iterations
 	}
@@ -842,8 +861,16 @@ func (w *walker) validateWildcardNextCloser(qname wire.Name, encloserLabels int,
 		return fmt.Errorf("encloser deeper than qname (%d > %d)", encloserLabels, qname.NumLabels())
 	}
 	nextCloser := validatorbb.TruncateNameTo(qname, nextCloserLabels)
-	if _, covered := nsec3Cover(nextCloser, params, nsec3RRs); !covered {
+	nc, covered := nsec3Cover(nextCloser, params, nsec3RRs)
+	if !covered {
 		return fmt.Errorf("no NSEC3 covers next-closer %s", nextCloser)
+	}
+	// RFC 5155 §6: an opt-out covering NSEC3 cannot authenticate
+	// non-existence of qname at the zone, so it can't justify wildcard
+	// synthesis either. Surface as Insecure rather than Bogus — the
+	// wildcard RRSIG itself was valid, only the denial half is missing.
+	if nc.Flags()&NSEC3FlagOptOut != 0 {
+		return errInsecureNSEC3OptOut
 	}
 	return nil
 }
@@ -1009,7 +1036,7 @@ func (w *walker) validateNegative(qname wire.Name, qtype rrtype.Type, parentKeys
 		return w.bogus(qname, qtype, chain, fmt.Errorf("validator: NXDOMAIN signer %s not in chain (deepest secure zone %s)", respSigner, zone))
 	}
 	if err := w.validateNXDomain(qname, zone, parentKeys, msg); err != nil {
-		if errors.Is(err, errInsecureNSEC3Iterations) {
+		if errors.Is(err, errInsecureNSEC3Iterations) || errors.Is(err, errInsecureNSEC3OptOut) {
 			return Answer{
 				result:  Insecure,
 				records: nil,
