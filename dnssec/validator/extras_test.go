@@ -243,6 +243,37 @@ func TestWalkerNoDataNSEC3(t *testing.T) {
 	require.Empty(t, ans.Records())
 }
 
+// TestWalkerNoDataNSECRejectsCNAMEInBitmap exercises RFC 4035 §5.4: a
+// NoData proof must show CNAME absent from the type bitmap. With a
+// real CNAME placed at the queried name, the authoritative fixture's
+// auto-generated NSEC includes CNAME in its bitmap; the validator must
+// reject the resulting NoData response as Bogus rather than accept it
+// as Secure (otherwise a forged NoData could suppress a real CNAME
+// chain the resolver should have followed).
+func TestWalkerNoDataNSECRejectsCNAMEInBitmap(t *testing.T) {
+	t.Parallel()
+	now := time.Now().UTC().Truncate(time.Second)
+	src, _, anchor := buildChain(t, rdata.AlgECDSAP256SHA256, now)
+	leaf := findLeafZone(src, wire.MustParseName("sub.example."))
+	require.NotNil(t, leaf)
+	// Add a CNAME at alias.sub.example. so the NSEC at that owner
+	// includes CNAME in its bitmap.
+	cname, err := rdata.NewCNAME(wire.MustParseName("www.sub.example."))
+	require.NoError(t, err)
+	leaf.addRR(wire.NewRecord(wire.MustParseName("alias.sub.example."), time.Hour, cname))
+
+	w, err := validator.NewWalker(src,
+		validator.WithWalkerAnchors(anchor),
+		validator.WithWalkerClock(func() time.Time { return now }),
+		validator.WithWalkerBogusPolicy(validator.BogusReturnAnswer),
+	)
+	require.NoError(t, err)
+	ans, err := w.Resolve(t.Context(), wire.MustParseName("alias.sub.example."), rrtype.AAAA)
+	require.NoError(t, err)
+	require.Equal(t, validator.Bogus, ans.Result(),
+		"NoData with CNAME in bitmap must validate as Bogus (reason: %v)", ans.Reason())
+}
+
 func TestWalkerClockSkewAcceptsBoundarySigs(t *testing.T) {
 	t.Parallel()
 	now := time.Now().UTC().Truncate(time.Second)

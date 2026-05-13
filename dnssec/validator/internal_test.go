@@ -297,6 +297,22 @@ func TestNSEC3ProveDenialNoDataAAAA(t *testing.T) {
 	require.Equal(t, nsec3DenialNoData, res.kind)
 }
 
+// TestNSEC3ProveDenialNoDataRejectsCNAMEInBitmap exercises the
+// RFC 5155 §8.5 requirement that a NoData proof show BOTH QTYPE and
+// CNAME absent from the bitmap. A forged NoData with CNAME in the
+// bitmap must not validate — it would suppress a real CNAME chain
+// the resolver should have followed.
+func TestNSEC3ProveDenialNoDataRejectsCNAMEInBitmap(t *testing.T) {
+	t.Parallel()
+	params := nsec3Params{alg: 1, iterations: 0, salt: nil}
+	target := wire.MustParseName("plain.example.")
+	hash := nsec3Hash(target, params.salt, params.iterations)
+	rec := makeNSEC3Record(t, hash, hash, []rrtype.Type{rrtype.A, rrtype.CNAME}, 0)
+	res := nsec3ProveDenial(target, rrtype.AAAA, wire.MustParseName("example."), []wire.Record{rec})
+	require.NotEqual(t, nsec3DenialNoData, res.kind,
+		"NoData proof must not validate when CNAME is in the bitmap")
+}
+
 func TestExchangerSourceLookupBuildErrorPathUnreachable(t *testing.T) {
 	t.Parallel()
 	// The build-error path inside Lookup is effectively unreachable with
