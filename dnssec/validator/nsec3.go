@@ -257,8 +257,11 @@ func nsec3ProveDenial(qname wire.Name, qtype rrtype.Type, zone wire.Name, record
 	}
 
 	// 2. NoData at qname (matching NSEC3 says qtype absent).
+	// RFC 5155 §8.5: both QTYPE and CNAME must be absent — otherwise a
+	// hostile responder could forge NoData and suppress a real CNAME
+	// chain that would have redirected the resolver.
 	if n3, found := nsec3Match(qname, params, records); found {
-		if !bitmapHas(n3.Types(), qtype) {
+		if !bitmapHas(n3.Types(), qtype) && !bitmapHas(n3.Types(), rrtype.CNAME) {
 			return nsec3DenialResult{kind: nsec3DenialNoData}
 		}
 	}
@@ -292,8 +295,10 @@ func nsec3ProveDenial(qname wire.Name, qtype rrtype.Type, zone wire.Name, record
 			}
 			return nsec3DenialResult{kind: nsec3DenialNXDomain, closestEncloser: encloser}
 		}
+		// Wildcard NoData (§8.7): same QTYPE+CNAME absence requirement as
+		// the §8.5 NoData at qname.
 		if n3, found := nsec3Match(wildcard, params, records); found {
-			if !bitmapHas(n3.Types(), qtype) {
+			if !bitmapHas(n3.Types(), qtype) && !bitmapHas(n3.Types(), rrtype.CNAME) {
 				return nsec3DenialResult{kind: nsec3DenialNoData, closestEncloser: encloser}
 			}
 		}

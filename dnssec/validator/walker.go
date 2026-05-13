@@ -910,8 +910,10 @@ func (w *walker) validateNoDataNSEC(qname wire.Name, qtype rrtype.Type, parentKe
 		}
 	}
 
-	// Case 1 (RFC 4035 §3.1.3.1): NSEC at owner==qname proves qtype absence
-	// via its type bitmap.
+	// Case 1 (RFC 4035 §3.1.3.1 / §5.4): NSEC at owner==qname proves
+	// qtype absence via its type bitmap. Both QTYPE and CNAME must be
+	// clear — a NoData proof that allows CNAME in the bitmap would let
+	// a forged response suppress a real CNAME chain.
 	for _, r := range allNSECs {
 		if !r.Name().Equal(qname) {
 			continue
@@ -920,7 +922,7 @@ func (w *walker) validateNoDataNSEC(qname wire.Name, qtype rrtype.Type, parentKe
 		if !ok {
 			continue
 		}
-		if !bitmapHas(nsec.Types(), qtype) {
+		if !bitmapHas(nsec.Types(), qtype) && !bitmapHas(nsec.Types(), rrtype.CNAME) {
 			return Answer{
 				result:  Secure,
 				records: nil,
