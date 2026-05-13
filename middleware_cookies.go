@@ -205,6 +205,32 @@ func (m *cookiesMW) ServeDNS(ctx context.Context, w ResponseWriter, q wire.Messa
 	}
 
 	// No cookie option at all. Optionally apply the amplification gate.
+	//
+	// The inner handler IS invoked even for cookieless UDP — only the
+	// wire response is truncated to TC=1 when it would exceed
+	// maxBytes. That is RFC 7873 §5.2.3 ("server MAY truncate the
+	// response… to force TCP"); the alternative — short-circuiting
+	// cookieless UDP unconditionally to a TC=1 stub without ever
+	// invoking inner — would force EVERY cookieless client to TCP for
+	// EVERY answer regardless of size, which is a real regression for
+	// the still-common population of clients that don't send cookies
+	// (Windows resolver, many embedded stacks). That trade-off is
+	// addressed in the package-level comment ("Many clients still
+	// don't send cookies; rejecting them universally would be a
+	// regression").
+	//
+	// CPU amplification — a spoofed flood causing the inner handler
+	// (recursive walk / authoritative lookup) to run for replies that
+	// then get truncated — is the operator's job to bound at an
+	// earlier layer. NewPublicUDPServer composes
+	// ACL → RateLimit → RRL → Cookies → inner for that reason: per-
+	// source rate-limit and (source-prefix, response-name) RRL clip
+	// the request budget before this middleware ever sees the query.
+	// Operators wrapping NewCookies standalone on a public listener
+	// should stack [NewRateLimit] in front (see the package-level
+	// "Spoofed BADCOOKIE amplification" note). Adding cookieless-
+	// short-circuit at this layer would duplicate that defence while
+	// breaking legitimate cookieless clients.
 	if m.requireForLarge && isUDPNetwork(w.Network()) {
 		gw := &cookieSizeGate{ResponseWriter: w, q: q, maxBytes: m.largeRespMaxSize}
 		m.inner.ServeDNS(ctx, gw, q)
