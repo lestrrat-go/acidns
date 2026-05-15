@@ -151,7 +151,7 @@ func unpackLP(u *wirebb.Unpacker, rdlen int) (LP, error) {
 	if err != nil {
 		return zero, err
 	}
-	n, err := u.UncompressedNameInRange(end)
+	n, err := u.UncompressedName(end - u.Off())
 	if err != nil {
 		return zero, err
 	}

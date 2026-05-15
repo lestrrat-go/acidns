@@ -188,28 +188,6 @@ func (u *Unpacker) Name() (Name, error) {
 	return n, nil
 }
 
-// UncompressedName decodes a domain name like [Unpacker.Name], but rejects
-// compression pointers anywhere in the name. RFC 3597 §4 and several
-// per-RR-type specs (RFC 6672 DNAME, RFC 9460 SVCB target, RFC 4025 IPSECKEY
-// gateway-name, etc.) require names embedded in their rdata to be
-// uncompressed; accepting compressed names there would let receivers
-// re-emit different wire bytes than the originator, breaking RRSIG
-// canonicalisation roundtrips.
-//
-// UncompressedName scans the entire remainder of the message; for
-// names embedded in an RDLENGTH-bounded rdata window prefer
-// [Unpacker.UncompressedNameInRange] so a malformed peer cannot
-// trick the decoder into walking past the rdata into the next
-// record's bytes.
-func (u *Unpacker) UncompressedName() (Name, error) {
-	n, next, err := DecodeWireUncompressed(u.msg, u.off)
-	if err != nil {
-		return Name{}, err
-	}
-	u.off = next
-	return n, nil
-}
-
 // NameInRange is [Unpacker.Name] with an explicit upper bound on
 // the on-the-wire encoding (the inline portion at u.off, including
 // any trailing compression pointer). Pointer destinations are NOT
@@ -241,16 +219,23 @@ func (u *Unpacker) NameInRange(end int) (Name, error) {
 	return n, nil
 }
 
-// UncompressedNameInRange is [Unpacker.UncompressedName] with an
-// explicit upper bound. Useful for names embedded in an
-// RDLENGTH-bounded rdata window (IPSECKEY gateway-name, AMTRELAY
-// relay-name, SVCB target, DNAME target, RRSIG signer, etc.) where
-// scanning past the window would silently read the next record's
-// bytes. The end parameter is the exclusive upper offset; if a
-// name extends past end the function returns ErrTruncated. The
-// caller passes len(msg) for the un-bounded form.
-func (u *Unpacker) UncompressedNameInRange(end int) (Name, error) {
-	if end < 0 || end > len(u.msg) {
+// UncompressedName decodes a domain name like [Unpacker.NameInRange]
+// but rejects compression pointers anywhere in the name. RFC 3597 §4 and
+// several per-RR-type specs (RFC 6672 DNAME, RFC 9460 SVCB target, RFC 4025
+// IPSECKEY gateway-name, RRSIG signer, etc.) require names embedded in their
+// rdata to be uncompressed; accepting compressed names there would let
+// receivers re-emit different wire bytes than the originator, breaking RRSIG
+// canonicalisation roundtrips.
+//
+// rdlength caps the maximum bytes the name may consume from the current
+// offset — typically the bytes remaining in the enclosing RDLENGTH-bounded
+// rdata window. If the name's on-the-wire encoding extends past
+// u.Off()+rdlength the function returns [ErrTruncated]. Pass a value at or
+// past the buffer end (e.g. len(msg)-u.Off(), or any negative value) for
+// the un-bounded form.
+func (u *Unpacker) UncompressedName(rdlength int) (Name, error) {
+	end := u.off + rdlength
+	if rdlength < 0 || end > len(u.msg) || end < u.off {
 		end = len(u.msg)
 	}
 	if u.off > end {

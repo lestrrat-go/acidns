@@ -55,7 +55,7 @@ func unpackSRV(u *wirebb.Unpacker, rdlen int) (SRV, error) {
 	if err != nil {
 		return zero, err
 	}
-	target, err := u.UncompressedNameInRange(end)
+	target, err := u.UncompressedName(end - u.Off())
 	if err != nil {
 		return zero, err
 	}

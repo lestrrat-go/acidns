@@ -113,7 +113,8 @@ func TestConfigBuilderSingleShot(t *testing.T) {
 		Ndots(3).
 		Timeout(7 * time.Second).
 		Attempts(5).
-		Search(wire.MustParseName("example.com"))
+		Search(wire.MustParseName("example.com")).
+		Verbatim("options use-vc")
 
 	first, err := b.Build()
 	require.NoError(t, err)
@@ -121,6 +122,7 @@ func TestConfigBuilderSingleShot(t *testing.T) {
 	require.Equal(t, 7*time.Second, first.Timeout())
 	require.Equal(t, 5, first.Attempts())
 	require.Len(t, first.Nameservers(), 1)
+	require.Equal(t, []string{"options use-vc"}, first.Verbatim())
 
 	// Builder reset: defaults are re-seeded, slices cleared.
 	second, err := b.Build()

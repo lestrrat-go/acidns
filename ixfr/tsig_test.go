@@ -83,6 +83,7 @@ func TestIXFRTSIGSignedQueryAndVerifiedResponse(t *testing.T) {
 	xfer, err := ixfr.Start(t.Context(), ex, wire.MustParseName("example.com"), mkSOA(100),
 		ixfr.WithTSIGKey(&key),
 		ixfr.WithTSIGClock(func() time.Time { return now }),
+		ixfr.WithTSIGFudge(5*time.Minute),
 	)
 	require.NoError(t, err)
 	defer func() { _ = xfer.Close() }()

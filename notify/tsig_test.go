@@ -75,6 +75,7 @@ func TestNotifySignedQueryHasTSIG(t *testing.T) {
 	_, err = notify.Send(t.Context(), ex, wire.MustParseName("example.com"),
 		notify.WithTSIGKey(&key),
 		notify.WithTSIGClock(func() time.Time { return now }),
+		notify.WithTSIGFudge(5*time.Minute),
 	)
 	require.NoError(t, err)
 

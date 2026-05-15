@@ -48,6 +48,7 @@ func buildChain(t *testing.T, alg rdata.DNSSECAlgorithm, now time.Time) (*fixtur
 	w, err := validator.NewWalker(src,
 		validator.WithWalkerAnchors(anchor),
 		validator.WithWalkerClock(func() time.Time { return now }),
+		validator.WithWalkerMaxKeysPerZone(16),
 	)
 	require.NoError(t, err)
 	return src, w, anchor

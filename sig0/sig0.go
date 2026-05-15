@@ -161,7 +161,7 @@ func verifyExtractSIG(msg []byte, key rdata.DNSKEY, expectedSigner wire.Name, no
 	return body, sig, nil
 }
 
-// VerifyWithReplay performs Verify and, on success, consults cache to
+// VerifyWithReplay performs [Verify] and, on success, consults cache to
 // reject re-played messages. RFC 2931 leaves replay defence to the
 // application; UPDATE / NOTIFY / any other side-effecting opcode that
 // flows over a SIG(0)-protected channel SHOULD use this variant.
@@ -171,6 +171,10 @@ func verifyExtractSIG(msg []byte, key rdata.DNSKEY, expectedSigner wire.Name, no
 // Cache.Seen is consulted only after the cryptographic verification
 // passes, so an attacker cannot pollute the cache by replaying random
 // junk.
+//
+// cache may be nil — in that case VerifyWithReplay degrades to a plain
+// Verify. Production callers handling side-effecting opcodes should
+// supply a real cache.
 func VerifyWithReplay(msg []byte, key rdata.DNSKEY, expectedSigner wire.Name, now time.Time, cache ReplayCache) ([]byte, error) {
 	body, sig, err := verifyExtractSIG(msg, key, expectedSigner, now)
 	if err != nil {

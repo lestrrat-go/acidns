@@ -169,7 +169,7 @@ func TestValidateRRsetDefaultBogusPolicy(t *testing.T) {
 }
 
 // TestValidateRRsetSameAlgDifferentKeyTag covers the algorithm-matches but
-// KeyTag-mismatches continue branch in findMatchingKey.
+// KeyTag-mismatches continue branch inside ValidateRRset's key-loop.
 func TestValidateRRsetSameAlgDifferentKeyTag(t *testing.T) {
 	t.Parallel()
 	priv, key := makeECDSAP256Key(t)

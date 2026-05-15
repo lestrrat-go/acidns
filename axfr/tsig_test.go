@@ -99,6 +99,7 @@ func TestAXFRTSIGSignedQueryAndVerifiedResponse(t *testing.T) {
 	xfer, err := axfr.Start(t.Context(), ex, wire.MustParseName("example.com"),
 		axfr.WithTSIGKey(&key),
 		axfr.WithTSIGClock(func() time.Time { return now }),
+		axfr.WithTSIGFudge(5*time.Minute),
 	)
 	require.NoError(t, err)
 	defer func() { _ = xfer.Close() }()

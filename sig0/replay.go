@@ -11,23 +11,38 @@ import (
 
 // ReplayCache deduplicates verified SIG(0)-signed messages so a
 // captured envelope cannot be re-played within the validity window.
-// RFC 2931 leaves replay defence to the application; callers handling
-// UPDATE, NOTIFY, or any other side-effecting opcode that arrives over
-// a SIG(0)-protected channel are expected to consult one before
-// treating a verified message as fresh.
+// RFC 2931 §3.3 leaves replay defence to the application; callers
+// handling UPDATE, NOTIFY, or any other side-effecting opcode that
+// arrives over a SIG(0)-protected channel are expected to consult
+// one before treating a verified message as fresh. Read-only opcodes
+// (QUERY of static records, etc.) usually don't need one — a replayed
+// QUERY produces the same answer.
 //
 // The recommended usage is to plug a cache into [VerifyWithReplay]:
 //
-//	cache := sig0.NewMemoryReplayCache()
+//	cache := sig0.NewMemoryReplayCache(
+//	    sig0.WithReplayWindow(5*time.Minute),
+//	)
 //	body, err := sig0.VerifyWithReplay(msg, key, signer, time.Now(), cache)
-//	if errors.Is(err, sig0.ErrReplay) { ... }
+//	if errors.Is(err, sig0.ErrReplay) {
+//	    // duplicate within the window — refuse
+//	}
 //
-// Implementations MUST be safe for concurrent use.
+// Sizing: the window should match the SIG(0) validity-window your
+// signers use (a smaller cache window relative to validity creates a
+// gap where replays succeed; a larger one wastes memory). The default
+// 5-minute window matches the typical signer configuration and the
+// tsig fudge default.
+//
+// Concurrency: implementations MUST be safe for concurrent use — the
+// verifier is typically called from per-request handler goroutines.
 type ReplayCache interface {
 	// Seen records the (signer, inception, signature) tuple and
 	// reports whether the tuple was already present. A true return
 	// means the message is a replay of one already verified within
-	// the cache's retention window and SHOULD be rejected.
+	// the cache's retention window and SHOULD be rejected. A false
+	// return inserts the tuple — subsequent calls within the window
+	// return true.
 	Seen(signer wire.Name, inception time.Time, signature []byte) bool
 }
 
@@ -78,7 +93,10 @@ type MemoryReplayCache struct {
 }
 
 // Seen reports whether (signer, inception, signature) was already
-// present inside the retention window; if not, records it.
+// present inside the retention window; if not, records it and returns
+// false. Expired entries are swept opportunistically on each call so
+// the cache size tracks live signers rather than total lifetime
+// signatures.
 func (c *MemoryReplayCache) Seen(signer wire.Name, inception time.Time, signature []byte) bool {
 	key := replayKey(signer, inception, signature)
 	now := c.now()

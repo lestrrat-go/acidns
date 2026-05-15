@@ -30,10 +30,6 @@ func (o EDNSOption) Data() []byte { return o.data }
 // IsZero reports whether o is the zero value.
 func (o EDNSOption) IsZero() bool { return o.code == 0 && o.data == nil }
 
-// rawData returns the un-cloned payload for use within the wire
-// package only. External callers must use [EDNSOption.Data].
-func (o EDNSOption) rawData() []byte { return o.data }
-
 // EDNS option codes (IANA registry, partial — most-commonly used here).
 const (
 	EDNSOptionLLQ          uint16 = 1  // RFC 8764
