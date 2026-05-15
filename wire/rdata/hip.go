@@ -102,7 +102,7 @@ func unpackHIP(u *wirebb.Unpacker, rdlen int) (HIP, error) {
 	copy(pcp, pk)
 	var rvs []wirebb.Name
 	for u.Off() < end {
-		n, err := u.UncompressedNameInRange(end)
+		n, err := u.UncompressedName(end - u.Off())
 		if err != nil {
 			return zero, err
 		}

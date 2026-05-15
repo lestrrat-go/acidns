@@ -92,6 +92,8 @@ func TestEntryBuilderSingleShot(t *testing.T) {
 
 	b := recursive.NewEntryBuilder().
 		Answer([]wire.Record{rec}).
+		Authority([]wire.Record{rec}).
+		Additional([]wire.Record{rec}).
 		RCODE(wire.RCODENoError).
 		AA(true).
 		AD(true).
@@ -100,6 +102,8 @@ func TestEntryBuilderSingleShot(t *testing.T) {
 	first, err := b.Build()
 	require.NoError(t, err)
 	require.Len(t, first.Answer(), 1)
+	require.Len(t, first.Authority(), 1)
+	require.Len(t, first.Additional(), 1)
 	require.True(t, first.AA())
 	require.True(t, first.AD())
 

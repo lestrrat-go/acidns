@@ -74,7 +74,7 @@ func unpackNAPTR(u *wirebb.Unpacker, rdlen int) (NAPTR, error) {
 	if err != nil {
 		return zero, err
 	}
-	replacement, err := u.UncompressedNameInRange(end)
+	replacement, err := u.UncompressedName(end - u.Off())
 	if err != nil {
 		return zero, err
 	}

@@ -29,7 +29,7 @@ func unpackDNAME(u *wirebb.Unpacker, rdlen int) (DNAME, error) {
 	// Bound the name decode to the rdata window so a malformed peer
 	// cannot make the decoder walk into the next record before the
 	// outer off==end guard fires.
-	n, err := u.UncompressedNameInRange(end)
+	n, err := u.UncompressedName(end - u.Off())
 	if err != nil {
 		return zero, err
 	}

@@ -202,20 +202,3 @@ func (v *Validator) VerifyDelegation(owner wire.Name, dsRecords []rdata.DS, keys
 	}
 	return Bogus, fmt.Errorf("validator: no DS matched any DNSKEY for %s", owner)
 }
-
-// findMatchingKey returns the first DNSKEY whose (alg, keytag) matches
-// sig. Retained for callers that want to peek at "any matching key";
-// verification paths use the loop in ValidateRRset / verifyRRsetWithKeys
-// directly so collisions are exhausted instead of breaking on first match.
-func findMatchingKey(keys []rdata.DNSKEY, sig rdata.RRSIG) (rdata.DNSKEY, bool) {
-	for _, k := range keys {
-		if k.Algorithm() != sig.Algorithm() {
-			continue
-		}
-		if dnssec.KeyTag(k) != sig.KeyTag() {
-			continue
-		}
-		return k, true
-	}
-	return rdata.DNSKEY{}, false
-}

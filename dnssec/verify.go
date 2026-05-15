@@ -109,18 +109,26 @@ func Verify(set []wire.Record, rrsig rdata.RRSIG, key rdata.DNSKEY) error {
 // VerifyDS checks that ds matches the digest of (canonical owner ||
 // dnskey rdata) for the supplied DNSKEY.
 //
-// SHA-1 (digest type 1) is rejected by default — SHA-1 collisions are
-// within reach of motivated attackers and an attacker who can publish
-// a forged DNSKEY whose SHA-1 DS digest collides with a legitimate
-// one would otherwise pass this check. Callers that must still talk
-// to legacy zones should use [VerifyDSWithSHA1].
+// SHA-1 (digest type 1) is rejected by default — RFC 8624 §3.3 marks
+// SHA-1 DS digests as NOT RECOMMENDED, and SHA-1 collisions are within
+// reach of motivated attackers; an attacker who can publish a forged
+// DNSKEY whose SHA-1 DS digest collides with a legitimate one would
+// otherwise pass this check. Callers that must still talk to legacy
+// zones still publishing SHA-1 DS only — and accept the resulting
+// security degradation — can opt in via [VerifyDSWithSHA1].
 func VerifyDS(owner wire.Name, ds rdata.DS, key rdata.DNSKEY) error {
 	return verifyDS(owner, ds, key, false)
 }
 
-// VerifyDSWithSHA1 is the same as [VerifyDS] but accepts SHA-1
-// (digest type 1) digests. Use only when interoperating with legacy
-// zones that have not yet rolled to SHA-256 or SHA-384.
+// VerifyDSWithSHA1 is the same check as [VerifyDS] but accepts SHA-1
+// (digest type 1) digests. RFC 8624 §3.3 marks SHA-1 DS as NOT
+// RECOMMENDED and operators should retire SHA-1 DS records; this entry
+// point exists solely so a validator can still authenticate a legacy
+// zone during the rollover window from SHA-1 to SHA-256 or SHA-384 DS.
+//
+// Prefer [VerifyDS] for any new code. Pinning a chain through this
+// function means accepting that a SHA-1 collision attack against the
+// DS would let an attacker substitute a forged DNSKEY undetected.
 func VerifyDSWithSHA1(owner wire.Name, ds rdata.DS, key rdata.DNSKEY) error {
 	return verifyDS(owner, ds, key, true)
 }
@@ -130,7 +138,7 @@ func verifyDS(owner wire.Name, ds rdata.DS, key rdata.DNSKEY, allowSHA1 bool) er
 		return err
 	}
 	if !allowSHA1 && ds.DigestType() == rdata.DigestSHA1 {
-		return fmt.Errorf("%w: SHA-1 DS digest refused by default", ErrUnsupportedAlgorithm)
+		return fmt.Errorf("%w: SHA-1 DS digest refused by default (RFC 8624 §3.3) — use VerifyDSWithSHA1 to opt in", ErrUnsupportedAlgorithm)
 	}
 	if ds.KeyTag() != KeyTag(key) {
 		return fmt.Errorf("%w: DS key tag mismatch", ErrSignatureMismatch)

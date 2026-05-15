@@ -16,21 +16,25 @@ import (
 // leaves replay defence to the application; callers handling UPDATE,
 // NOTIFY, or any other side-effecting opcode that arrives over a
 // TSIG-protected channel are expected to consult one before treating a
-// verified message as fresh.
+// verified message as fresh. Read-only opcodes (QUERY of static
+// records, etc.) usually don't need one — a replayed QUERY produces
+// the same answer.
 //
-// The recommended usage is to call Seen inside an authoritative
-// server's [authoritative.UpdatePolicy] after VerifyMAC succeeds:
+// The package offers two integration points:
 //
-//	cache := tsig.NewMemoryReplayCache()
-//	policy := func(ctx context.Context, w acidns.ResponseWriter, q wire.Message) bool {
-//	    raw := acidns.RawRequest(ctx)
-//	    _, mac, signedAt, err := tsig.VerifyMAC(raw, key, time.Now(), 5*time.Minute)
-//	    if err != nil { return false }
-//	    if cache.Seen(key.Name(), signedAt, mac) { return false } // replay
-//	    return true
-//	}
+//   - [VerifyWithReplay] — the convenience wrapper for callers who
+//     hold the raw envelope and want "verify then check replay" in one
+//     call. Returns [ErrReplay] on duplicate.
 //
-// Implementations MUST be safe for concurrent use.
+//   - Direct [ReplayCache.Seen] — for handlers that already have a
+//     verified MAC + signedAt in hand (e.g. an authoritative-server
+//     [authoritative.UpdatePolicy] that called VerifyMAC itself).
+//
+// Either path uses the same (keyName, signedAt, mac) tuple as the
+// replay key.
+//
+// Concurrency: implementations MUST be safe for concurrent use — the
+// verifier is typically called from per-request handler goroutines.
 type ReplayCache interface {
 	// Seen records the (keyName, signedAt, mac) tuple and reports
 	// whether the tuple was already present. A true return means the
@@ -89,16 +93,25 @@ type MemoryReplayCache struct {
 }
 
 // ErrReplay is returned by [VerifyWithReplay] when the message's MAC
-// has already been observed within the cache window.
+// has already been observed within the cache window. Callers match
+// with errors.Is so a replay can be distinguished from generic
+// verification failures (bad MAC, expired fudge, key mismatch).
 var ErrReplay = errors.New("tsig: replay detected")
 
 // VerifyWithReplay is the canonical "verify then check replay" wrapper.
-// It first calls [VerifyMAC]; if that returns nil it consults cache for
-// the (keyName, signedAt, mac) triple. A replay returns [ErrReplay].
+// It calls [VerifyMAC] on msg with key, fudge-window now ± fudge; on
+// success the (keyName, signedAt, mac) tuple is checked against cache.
+// A duplicate within the cache's retention window returns [ErrReplay];
+// otherwise the tuple is inserted and the unwrapped body, MAC, and
+// signing timestamp are returned.
 //
-// Using this wrapper instead of calling Verify and Seen separately
-// avoids the easy-to-forget two-step pattern that leaves the receiver
-// open to fudge-window replays. cache must be safe for concurrent use.
+// cache may be nil — in that case VerifyWithReplay degrades to a plain
+// VerifyMAC. Production callers handling side-effecting opcodes should
+// supply a real cache.
+//
+// Using this wrapper rather than calling VerifyMAC and Seen separately
+// closes the easy-to-forget two-step pattern that leaves a receiver
+// open to fudge-window replays.
 func VerifyWithReplay(msg []byte, key Key, cache ReplayCache, now time.Time, fudge time.Duration) ([]byte, []byte, time.Time, error) {
 	body, mac, signed, err := VerifyMAC(msg, key, now, fudge)
 	if err != nil {

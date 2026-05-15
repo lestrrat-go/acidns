@@ -106,6 +106,10 @@ func TestNewPublicUDPServer_HappyPath(t *testing.T) {
 			acidns.WithACLAllow(netip.MustParsePrefix("127.0.0.0/8")),
 		),
 		acidns.WithPublicCookiesServer(publicMkCookiesServer(t)),
+		acidns.WithPublicRRLOptions(acidns.WithRRLQPS(100)),
+		acidns.WithPublicCookiesOptions(acidns.WithRequireCookieForLargeResponse(true)),
+		acidns.WithPublicUDPOptions(acidns.WithUDPListenerBufferSize(4096)),
+		acidns.WithPublicTCPOptions(acidns.WithTCPListenerIdleTimeout(20*time.Second)),
 	)
 	require.NoError(t, err)
 

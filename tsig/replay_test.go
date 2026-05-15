@@ -1,11 +1,13 @@
 package tsig_test
 
 import (
+	"crypto/rand"
 	"testing"
 	"time"
 
 	"github.com/lestrrat-go/acidns/tsig"
 	"github.com/lestrrat-go/acidns/wire"
+	"github.com/lestrrat-go/acidns/wire/rrtype"
 	"github.com/stretchr/testify/require"
 )
 
@@ -73,6 +75,88 @@ func TestReplayCacheSizeCap(t *testing.T) {
 	require.LessOrEqual(t, c.Len(), 2)
 }
 
+// verifyReplayErr runs tsig.VerifyWithReplay and discards everything
+// except the error. Lets the call sites that only care about the error
+// path avoid the 4-return dogsled warning.
+func verifyReplayErr(msg []byte, key tsig.Key, cache tsig.ReplayCache, now time.Time, fudge time.Duration) error {
+	_, _, _, err := tsig.VerifyWithReplay(msg, key, cache, now, fudge) //nolint:dogsled // only error is needed here
+	return err
+}
+
+// signedTSIGEnvelope builds a TSIG-signed wire envelope using a freshly
+// generated HMAC-SHA256 key. Used by the VerifyWithReplay tests.
+func signedTSIGEnvelope(t *testing.T, now time.Time) ([]byte, tsig.Key) {
+	t.Helper()
+	secret := make([]byte, 32)
+	_, err := rand.Read(secret)
+	require.NoError(t, err)
+	key, err := tsig.NewKey(wire.MustParseName("k.example."), tsig.HMACSHA256, secret)
+	require.NoError(t, err)
+	q, err := wire.NewMessageBuilder().
+		ID(0x1234).
+		Question(wire.NewQuestion(wire.MustParseName("example.com"), rrtype.A)).
+		Build()
+	require.NoError(t, err)
+	signed, err := tsig.SignMessage(q, key, now, 5*time.Minute)
+	require.NoError(t, err)
+	return signed, key
+}
+
+// TestVerifyWithReplayDetectsDuplicate is the canonical happy path: a
+// second VerifyWithReplay call on the same wire envelope returns
+// ErrReplay.
+func TestVerifyWithReplayDetectsDuplicate(t *testing.T) {
+	t.Parallel()
+	now := time.Now().Truncate(time.Second)
+	signed, key := signedTSIGEnvelope(t, now)
+	cache := tsig.NewMemoryReplayCache()
+
+	body, mac, signedAt, err := tsig.VerifyWithReplay(signed, key, cache, now, 5*time.Minute)
+	require.NoError(t, err)
+	require.NotEmpty(t, body)
+	require.NotEmpty(t, mac)
+	// VerifyMAC returns signedAt parsed from the wire (UTC). The
+	// caller's now may be in a different zone but the instants must
+	// coincide.
+	require.True(t, now.Equal(signedAt), "signedAt %v should equal now %v", signedAt, now)
+
+	require.ErrorIs(t, verifyReplayErr(signed, key, cache, now, 5*time.Minute), tsig.ErrReplay)
+}
+
+// TestVerifyWithReplayDoesNotPolluteOnBadMAC pins the security posture:
+// a tampered envelope must fail verification BEFORE its MAC is inserted
+// into the cache. Otherwise an attacker flooding bad MACs could lock
+// the cache out for legitimate signers (or, with a clever choice of
+// fake MAC bytes, pre-poison a legitimate MAC's slot).
+func TestVerifyWithReplayDoesNotPolluteOnBadMAC(t *testing.T) {
+	t.Parallel()
+	now := time.Now().Truncate(time.Second)
+	signed, key := signedTSIGEnvelope(t, now)
+	tampered := append([]byte(nil), signed...)
+	tampered[len(tampered)-1] ^= 0xff
+	cache := tsig.NewMemoryReplayCache()
+
+	err := verifyReplayErr(tampered, key, cache, now, 5*time.Minute)
+	require.Error(t, err)
+	require.NotErrorIs(t, err, tsig.ErrReplay)
+
+	// The legitimate envelope must still be admitted — the bad attempt
+	// did not pollute the cache.
+	require.NoError(t, verifyReplayErr(signed, key, cache, now, 5*time.Minute))
+}
+
+// TestVerifyWithReplayNilCachePassesThrough documents the
+// nil-cache-as-pass-through contract.
+func TestVerifyWithReplayNilCachePassesThrough(t *testing.T) {
+	t.Parallel()
+	now := time.Now().Truncate(time.Second)
+	signed, key := signedTSIGEnvelope(t, now)
+
+	require.NoError(t, verifyReplayErr(signed, key, nil, now, 5*time.Minute))
+	require.NoError(t, verifyReplayErr(signed, key, nil, now, 5*time.Minute),
+		"without a cache, two identical envelopes both verify")
+}
+
 // TestReplayCacheReplayerDoesNotPinEntry guards against a regression
 // where a hit refreshed the cached timestamp. Under sustained replay
 // that behaviour kept the offender's entry "fresh" forever, so the
@@ -83,9 +167,9 @@ func TestReplayCacheReplayerDoesNotPinEntry(t *testing.T) {
 	t.Parallel()
 
 	clock := time.Unix(1_700_000_000, 0)
-	const cap = 4
+	const maxSize = 4
 	c := tsig.NewMemoryReplayCache(
-		tsig.WithReplayCacheSize(cap),
+		tsig.WithReplayCacheSize(maxSize),
 		// Large window so eviction is driven by the size cap, not
 		// by window expiry — this is the path that exercised the
 		// bug.
@@ -112,7 +196,7 @@ func TestReplayCacheReplayerDoesNotPinEntry(t *testing.T) {
 		require.False(t, c.Seen(keyName, legitSignedAts[i], mac),
 			"legitimate entry %d must be fresh", i)
 	}
-	require.Equal(t, cap, c.Len(), "cache should be full")
+	require.Equal(t, maxSize, c.Len(), "cache should be full")
 
 	// 3) Replay the offender many times. Each call must be reported
 	//    as a replay; with the buggy refresh-on-hit behaviour the

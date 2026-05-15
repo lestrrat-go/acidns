@@ -76,7 +76,7 @@ func unpackAFSDB(u *wirebb.Unpacker, rdlen int) (AFSDB, error) {
 	if err != nil {
 		return zero, err
 	}
-	n, err := u.UncompressedNameInRange(end)
+	n, err := u.UncompressedName(end - u.Off())
 	if err != nil {
 		return zero, err
 	}
@@ -194,7 +194,7 @@ func unpackRT(u *wirebb.Unpacker, rdlen int) (RT, error) {
 	if err != nil {
 		return zero, err
 	}
-	n, err := u.UncompressedNameInRange(end)
+	n, err := u.UncompressedName(end - u.Off())
 	if err != nil {
 		return zero, err
 	}

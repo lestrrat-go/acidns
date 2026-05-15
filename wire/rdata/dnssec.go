@@ -305,7 +305,7 @@ func unpackRRSIG(u *wirebb.Unpacker, rdlen int) (RRSIG, error) {
 	if err != nil {
 		return zero, err
 	}
-	signer, err := u.UncompressedNameInRange(end)
+	signer, err := u.UncompressedName(end - u.Off())
 	if err != nil {
 		return zero, err
 	}
@@ -352,7 +352,7 @@ func NewNSEC(next wirebb.Name, types []rrtype.Type) NSEC {
 func unpackNSEC(u *wirebb.Unpacker, rdlen int) (NSEC, error) {
 	var zero NSEC
 	end := u.Off() + rdlen
-	next, err := u.UncompressedNameInRange(end)
+	next, err := u.UncompressedName(end - u.Off())
 	if err != nil {
 		return zero, err
 	}
