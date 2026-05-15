@@ -23,7 +23,18 @@ type tsigVerifier struct {
 	now      func() time.Time
 	fudge    time.Duration
 	first    bool
+	// unsignedRun counts envelopes received since the last signed one.
+	// RFC 8945 §5.3.2: "the sender MUST sign at least every 100th
+	// message"; a verifier MUST therefore reject a stream that exceeds
+	// 99 unsigned envelopes between signatures, otherwise an on-path
+	// attacker can inject unlimited forged envelopes after the first
+	// signed one and have them accepted as zone content.
+	unsignedRun int
 }
+
+// maxUnsignedIXFREnvelopes is the cap on consecutive unsigned envelopes
+// between two signed envelopes per RFC 8945 §5.3.2.
+const maxUnsignedIXFREnvelopes = 99
 
 func newTSIGVerifier(key tsig.Key, requestMAC []byte, now func() time.Time, fudge time.Duration) *tsigVerifier {
 	return &tsigVerifier{key: key, priorMAC: requestMAC, now: now, fudge: fudge, first: true}
@@ -48,6 +59,11 @@ func (v *tsigVerifier) verify(m wire.Message) error {
 		return nil
 	}
 	if !signed {
+		v.unsignedRun++
+		if v.unsignedRun > maxUnsignedIXFREnvelopes {
+			return fmt.Errorf("%w: %d consecutive unsigned envelopes (RFC 8945 §5.3.2 cap is 99)",
+				ErrTSIGVerify, v.unsignedRun)
+		}
 		return nil
 	}
 	raw, err := wire.Pack(m)
@@ -59,6 +75,7 @@ func (v *tsigVerifier) verify(m wire.Message) error {
 		return fmt.Errorf("%w: %w", ErrTSIGVerify, err)
 	}
 	v.priorMAC = mac
+	v.unsignedRun = 0
 	return nil
 }
 
