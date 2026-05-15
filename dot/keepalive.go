@@ -9,6 +9,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/lestrrat-go/acidns/internal/keepalive"
 	"github.com/lestrrat-go/acidns/internal/spki"
 	"github.com/lestrrat-go/acidns/internal/streamframe"
 	"github.com/lestrrat-go/acidns/wire"
@@ -246,7 +247,7 @@ func (e *KeepAliveClient) Exchange(ctx context.Context, q wire.Message) (wire.Me
 		q = wire.PadEncrypted(q)
 	}
 	if e.cfg.advertise {
-		q = ensureKeepAliveOption(q)
+		q = keepalive.EnsureOption(q)
 	}
 
 	conn, err := e.acquireConn(ctx)
@@ -370,54 +371,3 @@ func (e *KeepAliveClient) Close() error {
 	return nil
 }
 
-// ensureKeepAliveOption mirrors the helper of the same name in the
-// root acidns package. Duplicated rather than exported to keep the
-// dot package self-sufficient and the API surface small.
-func ensureKeepAliveOption(q wire.Message) wire.Message {
-	if existing, ok := q.EDNS(); ok {
-		for _, o := range existing.Options() {
-			if o.Code() == wire.EDNSOptionTCPKeepalive {
-				return q
-			}
-		}
-	}
-
-	b := wire.NewMessageBuilder().
-		ID(q.ID()).
-		Flags(q.Flags())
-	for _, qq := range q.Questions() {
-		b = b.Question(qq)
-	}
-	for _, r := range q.Answers() {
-		b = b.Answer(r)
-	}
-	for _, r := range q.Authorities() {
-		b = b.Authority(r)
-	}
-	for _, r := range q.Additionals() {
-		b = b.Additional(r)
-	}
-
-	eb := wire.NewEDNSBuilder()
-	if existing, ok := q.EDNS(); ok {
-		eb = eb.UDPSize(existing.UDPSize()).
-			ExtendedRCODE(existing.ExtendedRCODE()).
-			Version(existing.Version()).
-			DO(existing.DO())
-		for _, o := range existing.Options() {
-			eb = eb.Option(o)
-		}
-	}
-	eb = eb.Option(wire.NewTCPKeepalive(0))
-	ed, err := eb.Build()
-	if err != nil {
-		return q
-	}
-	b = b.EDNS(ed)
-
-	m, err := b.Build()
-	if err != nil {
-		return q
-	}
-	return m
-}
