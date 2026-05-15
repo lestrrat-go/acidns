@@ -33,7 +33,7 @@ type tcpListenerConfig struct {
 	maxMessageSize     int
 	maxQueriesPerConn  int
 	maxConnLifetime    time.Duration
-	maxInflightPer     int
+	maxInflightPerConn     int
 }
 
 type identTCPListenerIdleTimeout struct{}
@@ -169,7 +169,7 @@ func NewTCPServer(addr netip.AddrPort, h Handler, opts ...TCPListenerOption) (*T
 		maxConnections:     1024,
 		maxConnsPerSource:  32,
 		maxMessageSize:     16 * 1024,
-		maxInflightPer:     32,
+		maxInflightPerConn:     32,
 		maxQueriesPerConn:  10000,
 		maxConnLifetime:    time.Hour,
 	}
@@ -192,7 +192,7 @@ func NewTCPServer(addr netip.AddrPort, h Handler, opts ...TCPListenerOption) (*T
 		case identTCPListenerMessageReadTimeout{}:
 			cfg.messageReadTimeout = option.MustGet[time.Duration](o)
 		case identTCPListenerMaxInflightPerConn{}:
-			cfg.maxInflightPer = option.MustGet[int](o)
+			cfg.maxInflightPerConn = option.MustGet[int](o)
 		}
 	}
 	return &TCPServer{addr: addr, handler: h, cfg: cfg}, nil
@@ -243,7 +243,7 @@ func (s *TCPServer) Run(ctx context.Context) (*TCPController, error) {
 		MaxLifetime:        s.cfg.maxConnLifetime,
 		MaxQueriesPerConn:  s.cfg.maxQueriesPerConn,
 		MaxMessageSize:     s.cfg.maxMessageSize,
-		MaxInflightPerConn: s.cfg.maxInflightPer,
+		MaxInflightPerConn: s.cfg.maxInflightPerConn,
 		AcceptErrorWrap:    "acidns: tcp accept",
 	}
 
