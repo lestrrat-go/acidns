@@ -206,9 +206,7 @@ func (h *Forwarder) ServeDNS(ctx context.Context, w acidns.ResponseWriter, q wir
 	start := time.Now()
 	if h.closed.Load() {
 		_ = w.WriteMsg(buildErrorResponse(q, wire.RCODEServFail))
-		h.cfg.logger.LogAttrs(ctx, slog.LevelDebug, "forward.serve",
-			slog.String("decision", "closed"),
-			slog.Duration("elapsed", time.Since(start)))
+		h.logDecision(ctx, slog.LevelDebug, start, "closed")
 		return
 	}
 	// Framework-level ingress filters: drop QR=1 datagrams, FORMERR
@@ -219,22 +217,16 @@ func (h *Forwarder) ServeDNS(ctx context.Context, w acidns.ResponseWriter, q wir
 	// embed without re-implementing it.
 	switch verdict, reply := acidns.PreflightRequest(q); verdict {
 	case acidns.PreflightDrop:
-		h.cfg.logger.LogAttrs(ctx, slog.LevelDebug, "forward.serve",
-			slog.String("decision", "drop_qr_set"),
-			slog.Duration("elapsed", time.Since(start)))
+		h.logDecision(ctx, slog.LevelDebug, start, "drop_qr_set")
 		return
 	case acidns.PreflightReply:
 		_ = w.WriteMsg(reply)
-		h.cfg.logger.LogAttrs(ctx, slog.LevelDebug, "forward.serve",
-			slog.String("decision", "preflight_reply"),
-			slog.Duration("elapsed", time.Since(start)))
+		h.logDecision(ctx, slog.LevelDebug, start, "preflight_reply")
 		return
 	}
 	if q.Flags().Opcode() != wire.OpcodeQuery {
 		_ = w.WriteMsg(buildErrorResponse(q, wire.RCODENotImp))
-		h.cfg.logger.LogAttrs(ctx, slog.LevelDebug, "forward.serve",
-			slog.String("decision", "notimp"),
-			slog.Duration("elapsed", time.Since(start)))
+		h.logDecision(ctx, slog.LevelDebug, start, "notimp")
 		return
 	}
 	// The forwarder only handles class IN. Non-IN queries (CHAOS,
@@ -245,10 +237,8 @@ func (h *Forwarder) ServeDNS(ctx context.Context, w acidns.ResponseWriter, q wir
 	// CHAOS should compose chaos.New ahead of this forwarder.
 	if first := q.Questions()[0]; first.Class() != rrtype.ClassIN {
 		_ = w.WriteMsg(buildErrorResponse(q, wire.RCODENotImp))
-		h.cfg.logger.LogAttrs(ctx, slog.LevelDebug, "forward.serve",
-			slog.String("decision", "non_in_class"),
-			slog.String("class", first.Class().String()),
-			slog.Duration("elapsed", time.Since(start)))
+		h.logDecision(ctx, slog.LevelDebug, start, "non_in_class",
+			slog.String("class", first.Class().String()))
 		return
 	}
 	// A caching forwarder that answers RD=0 is an amplification
@@ -258,9 +248,7 @@ func (h *Forwarder) ServeDNS(ctx context.Context, w acidns.ResponseWriter, q wir
 	// peers can opt in via WithAllowNoRD.
 	if !q.Flags().RecursionDesired() && !h.cfg.allowNoRD {
 		_ = w.WriteMsg(buildErrorResponse(q, wire.RCODERefused))
-		h.cfg.logger.LogAttrs(ctx, slog.LevelDebug, "forward.serve",
-			slog.String("decision", "rd_required"),
-			slog.Duration("elapsed", time.Since(start)))
+		h.logDecision(ctx, slog.LevelDebug, start, "rd_required")
 		return
 	}
 
@@ -270,25 +258,21 @@ func (h *Forwarder) ServeDNS(ctx context.Context, w acidns.ResponseWriter, q wir
 
 	if e, ok := h.cache.get(qq.Name(), qq.Type(), qq.Class(), do, now); ok {
 		_ = w.WriteMsg(buildFromCache(q, e, now))
-		h.cfg.logger.LogAttrs(ctx, slog.LevelDebug, "forward.serve",
-			slog.String("decision", "cache_hit"),
+		h.logDecision(ctx, slog.LevelDebug, start, "cache_hit",
 			slog.String("name", qq.Name().String()),
 			slog.String("type", qq.Type().String()),
-			slog.String("rcode", e.rcode.String()),
-			slog.Duration("elapsed", time.Since(start)))
+			slog.String("rcode", e.rcode.String()))
 		return
 	}
 
 	resp, err := h.exchangeSingleflight(ctx, q, qq)
 	if err != nil {
 		_ = w.WriteMsg(buildErrorResponse(q, wire.RCODEServFail))
-		h.cfg.logger.LogAttrs(ctx, slog.LevelError, "forward.serve",
-			slog.String("decision", "upstream_error"),
+		h.logDecision(ctx, slog.LevelError, start, "upstream_error",
 			slog.String("name", qq.Name().String()),
 			slog.String("type", qq.Type().String()),
 			slog.String("upstream", h.cfg.upstreamName),
-			slog.String("error", err.Error()),
-			slog.Duration("elapsed", time.Since(start)))
+			slog.String("error", err.Error()))
 		return
 	}
 
@@ -298,13 +282,22 @@ func (h *Forwarder) ServeDNS(ctx context.Context, w acidns.ResponseWriter, q wir
 	}
 
 	_ = w.WriteMsg(rebuildForClient(q, resp))
-	h.cfg.logger.LogAttrs(ctx, slog.LevelDebug, "forward.serve",
-		slog.String("decision", "forwarded"),
+	h.logDecision(ctx, slog.LevelDebug, start, "forwarded",
 		slog.String("name", qq.Name().String()),
 		slog.String("type", qq.Type().String()),
 		slog.String("upstream", h.cfg.upstreamName),
-		slog.String("rcode", resp.Flags().RCODE().String()),
+		slog.String("rcode", resp.Flags().RCODE().String()))
+}
+
+// logDecision emits the structured "forward.serve" event with the
+// decision tag, elapsed time, and any decision-specific attrs.
+func (h *Forwarder) logDecision(ctx context.Context, level slog.Level, start time.Time, decision string, extra ...slog.Attr) {
+	attrs := make([]slog.Attr, 0, 2+len(extra))
+	attrs = append(attrs,
+		slog.String("decision", decision),
 		slog.Duration("elapsed", time.Since(start)))
+	attrs = append(attrs, extra...)
+	h.cfg.logger.LogAttrs(ctx, level, "forward.serve", attrs...)
 }
 
 // exchangeSingleflight wraps the upstream Exchange call with
