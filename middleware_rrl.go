@@ -14,19 +14,14 @@ package acidns
 
 import (
 	"context"
-	"hash/maphash"
 	"net/netip"
-	"sync"
 	"time"
 
+	"github.com/lestrrat-go/acidns/internal/shardbucket"
 	"github.com/lestrrat-go/acidns/wire"
 	"github.com/lestrrat-go/acidns/wire/rrtype"
 	"github.com/lestrrat-go/option/v3"
 )
-
-// numRRLShards stripes the bucket map so high-rate RRL traffic isn't
-// serialized through one mutex. Power of two for mask-based modulo.
-const numRRLShards = 64
 
 // RRLOption configures the limiter.
 type RRLOption interface {
@@ -122,20 +117,6 @@ type rrlBucket struct {
 	slipCounter int
 }
 
-type rrlShard struct {
-	mu sync.Mutex
-	// buckets is pointer-typed (map[string]*rrlBucket) so the hot
-	// path — token refill, decrement, slipCounter increment —
-	// mutates in place without an extra map write per consume()
-	// call. Switching to map[string]rrlBucket eliminates the per-
-	// new-key heap allocation (~1 fewer alloc/op observed in
-	// BenchmarkRRLSaturatedNewKey) at the cost of ~20 ns/op on the
-	// hot path (~4% regression on BenchmarkRRLHotKey). Mirrors the
-	// same tradeoff documented in middleware_ratelimit.go's
-	// limiterShard — see that file for the full rationale.
-	buckets map[string]*rrlBucket
-}
-
 type rrl struct {
 	inner           Handler
 	respPerSecond   float64
@@ -145,9 +126,8 @@ type rrl struct {
 	slip            int
 	v4Prefix        int
 	v6Prefix        int
-	maxKeys         int // per-shard cap (config / numRRLShards)
-	seed            maphash.Seed
-	shards          [numRRLShards]*rrlShard
+	maxKeys         int // per-shard cap derived from total cap
+	pool            *shardbucket.Pool[rrlBucket]
 }
 
 // NewRRL returns a Handler that wraps inner with RFC-style Response
@@ -217,13 +197,8 @@ func NewRRL(inner Handler, opts ...RRLOption) Handler {
 		slip:            c.slip,
 		v4Prefix:        c.v4Prefix,
 		v6Prefix:        c.v6Prefix,
-		seed:            maphash.MakeSeed(),
-	}
-	if c.maxKeys > 0 {
-		r.maxKeys = (c.maxKeys + numRRLShards - 1) / numRRLShards
-	}
-	for i := range r.shards {
-		r.shards[i] = &rrlShard{buckets: make(map[string]*rrlBucket)}
+		maxKeys:         shardbucket.PerShardCap(c.maxKeys),
+		pool:            shardbucket.New[rrlBucket](),
 	}
 	return r
 }
@@ -363,16 +338,16 @@ func classString(c rrlClass) string {
 // slipped through as a truncated answer.
 func (r *rrl) consume(key string, rate float64) (bool, bool) {
 	now := time.Now()
-	sh := r.shardFor(key)
-	sh.mu.Lock()
-	defer sh.mu.Unlock()
-	b, ok := sh.buckets[key]
+	sh := r.pool.ShardFor(key)
+	sh.Mu.Lock()
+	defer sh.Mu.Unlock()
+	b, ok := sh.Buckets[key]
 	if !ok {
-		if r.maxKeys > 0 && len(sh.buckets) >= r.maxKeys {
+		if r.maxKeys > 0 && len(sh.Buckets) >= r.maxKeys {
 			r.evictLocked(sh, now)
 		}
 		b = &rrlBucket{tokens: r.burst, updated: now}
-		sh.buckets[key] = b
+		sh.Buckets[key] = b
 	}
 	elapsed := now.Sub(b.updated).Seconds()
 	b.tokens += elapsed * rate
@@ -396,11 +371,6 @@ func (r *rrl) consume(key string, rate float64) (bool, bool) {
 	return false, false
 }
 
-func (r *rrl) shardFor(key string) *rrlShard {
-	h := maphash.String(r.seed, key)
-	return r.shards[h&(numRRLShards-1)]
-}
-
 // evictLocked drops idle (refilled) buckets first within a shard; if
 // still at the cap, drops the shard's oldest-updated entry.
 // Caller holds sh.mu.
@@ -414,7 +384,7 @@ func (r *rrl) shardFor(key string) *rrlShard {
 // alone isn't enough because spoofed sources defeat per-source
 // budgets. Operators removing the default prefix grouping should
 // also lower [WithRRLMaxKeys] to keep the per-shard cap small.
-func (r *rrl) evictLocked(sh *rrlShard, now time.Time) {
+func (r *rrl) evictLocked(sh *shardbucket.Shard[rrlBucket], now time.Time) {
 	largestRate := r.respPerSecond
 	if r.nxdomainsPerS > largestRate {
 		largestRate = r.nxdomainsPerS
@@ -425,26 +395,26 @@ func (r *rrl) evictLocked(sh *rrlShard, now time.Time) {
 	if largestRate > 0 {
 		idleFor := time.Duration(r.burst/largestRate*float64(time.Second)) + time.Second
 		threshold := now.Add(-idleFor)
-		for k, b := range sh.buckets {
+		for k, b := range sh.Buckets {
 			if b.updated.Before(threshold) {
-				delete(sh.buckets, k)
+				delete(sh.Buckets, k)
 			}
 		}
 	}
-	if r.maxKeys <= 0 || len(sh.buckets) < r.maxKeys {
+	if r.maxKeys <= 0 || len(sh.Buckets) < r.maxKeys {
 		return
 	}
 	var oldestKey string
 	var oldestTime time.Time
 	first := true
-	for k, b := range sh.buckets {
+	for k, b := range sh.Buckets {
 		if first || b.updated.Before(oldestTime) {
 			oldestKey = k
 			oldestTime = b.updated
 			first = false
 		}
 	}
-	delete(sh.buckets, oldestKey)
+	delete(sh.Buckets, oldestKey)
 }
 
 // responseKeyName picks the name a response should be bucketed under.

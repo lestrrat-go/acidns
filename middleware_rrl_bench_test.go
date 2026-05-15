@@ -18,7 +18,7 @@ package acidns_test
 // more inherent work (classify, qname extraction, source key build).
 // The HotKey regression of ~20 ns/op is small in absolute terms but is
 // paid by every legitimate response forever. Pointer-typed kept; see
-// the rrlShard comment in middleware_rrl.go.
+// the Shard struct comment in internal/shardbucket/shardbucket.go.
 
 import (
 	"context"

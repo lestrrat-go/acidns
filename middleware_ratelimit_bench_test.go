@@ -5,7 +5,7 @@ package acidns_test
 // These pin a documented tradeoff: the per-source limiter uses a
 // map[string]*bucket (pointer-typed). A value-typed map[string]bucket
 // alternative was prototyped and benchmarked; the result is recorded on
-// the limiterShard struct comment in middleware_ratelimit.go.
+// the Shard struct comment in internal/shardbucket/shardbucket.go.
 //
 // Summary of the prior comparison (AMD Ryzen 9 7900X3D, Go default GC):
 //

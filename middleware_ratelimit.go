@@ -9,19 +9,13 @@ package acidns
 
 import (
 	"context"
-	"hash/maphash"
 	"net/netip"
-	"sync"
 	"time"
 
+	"github.com/lestrrat-go/acidns/internal/shardbucket"
 	"github.com/lestrrat-go/acidns/wire"
 	"github.com/lestrrat-go/option/v3"
 )
-
-// numLimiterShards stripes the bucket map so a flood of distinct
-// sources doesn't serialize through one mutex. 64 is a power of two
-// to make the modulo a mask.
-const numLimiterShards = 64
 
 // RateLimitOption configures the limiter.
 type RateLimitOption interface {
@@ -100,23 +94,6 @@ type bucket struct {
 	updated time.Time
 }
 
-type limiterShard struct {
-	mu sync.Mutex
-	// buckets is pointer-typed (map[string]*bucket) so mutations on
-	// the hot path — token refill, decrement — happen in place
-	// without an extra map write per allow() call. The cost is one
-	// heap allocation per new key. Switching to map[string]bucket
-	// eliminates that allocation under spoofed-source flood (~1 fewer
-	// alloc/op observed in BenchmarkRateLimitSaturatedNewKey) at the
-	// cost of ~12 ns/op on the hot path (~13% regression on
-	// BenchmarkRateLimitHotKey). The hot path dominates legitimate
-	// traffic, so the current pointer-typed shape is intentional. If
-	// a production deployment ever profiles GC pressure under
-	// sustained spoofed flood, the value-typed alternative is a
-	// two-line change; the benchmarks pin the tradeoff.
-	buckets map[string]*bucket
-}
-
 type limiter struct {
 	inner    Handler
 	qps      float64
@@ -124,9 +101,8 @@ type limiter struct {
 	drop     bool
 	v4Prefix int
 	v6Prefix int
-	maxKeys  int // per-shard cap (config / numLimiterShards)
-	seed     maphash.Seed
-	shards   [numLimiterShards]*limiterShard
+	maxKeys  int // per-shard cap derived from total cap
+	pool     *shardbucket.Pool[bucket]
 }
 
 // NewRateLimit returns a Handler that applies the configured rate limit before
@@ -156,13 +132,8 @@ func NewRateLimit(inner Handler, opts ...RateLimitOption) Handler {
 		drop:     c.drop,
 		v4Prefix: clampPrefix(c.v4Prefix, 32),
 		v6Prefix: clampPrefix(c.v6Prefix, 128),
-		seed:     maphash.MakeSeed(),
-	}
-	if c.maxKeys > 0 {
-		l.maxKeys = (c.maxKeys + numLimiterShards - 1) / numLimiterShards
-	}
-	for i := range l.shards {
-		l.shards[i] = &limiterShard{buckets: make(map[string]*bucket)}
+		maxKeys:  shardbucket.PerShardCap(c.maxKeys),
+		pool:     shardbucket.New[bucket](),
 	}
 	return l
 }
@@ -184,17 +155,17 @@ func (l *limiter) ServeDNS(ctx context.Context, w ResponseWriter, q wire.Message
 func (l *limiter) allow(src netip.Addr) bool {
 	key := l.key(src)
 	now := time.Now()
-	sh := l.shardFor(key)
+	sh := l.pool.ShardFor(key)
 
-	sh.mu.Lock()
-	defer sh.mu.Unlock()
-	b, ok := sh.buckets[key]
+	sh.Mu.Lock()
+	defer sh.Mu.Unlock()
+	b, ok := sh.Buckets[key]
 	if !ok {
-		if l.maxKeys > 0 && len(sh.buckets) >= l.maxKeys {
+		if l.maxKeys > 0 && len(sh.Buckets) >= l.maxKeys {
 			l.evictLocked(sh, now)
 		}
 		b = &bucket{tokens: l.burst, updated: now}
-		sh.buckets[key] = b
+		sh.Buckets[key] = b
 	}
 	elapsed := now.Sub(b.updated).Seconds()
 	b.tokens += elapsed * l.qps
@@ -207,11 +178,6 @@ func (l *limiter) allow(src netip.Addr) bool {
 	}
 	b.tokens--
 	return true
-}
-
-func (l *limiter) shardFor(key string) *limiterShard {
-	h := maphash.String(l.seed, key)
-	return l.shards[h&(numLimiterShards-1)]
 }
 
 // evictLocked makes room in a single shard's bucket map. Two passes:
@@ -236,30 +202,30 @@ func (l *limiter) shardFor(key string) *limiterShard {
 // internet-exposed listener without also running NewRRL (or without
 // WithRateLimitIPv4Prefix / WithRateLimitIPv6Prefix to bound the
 // keyspace) have a deeper defence gap than the eviction cost.
-func (l *limiter) evictLocked(sh *limiterShard, now time.Time) {
+func (l *limiter) evictLocked(sh *shardbucket.Shard[bucket], now time.Time) {
 	if l.qps > 0 {
 		idleFor := time.Duration(l.burst/l.qps*float64(time.Second)) + time.Second
 		threshold := now.Add(-idleFor)
-		for k, b := range sh.buckets {
+		for k, b := range sh.Buckets {
 			if b.updated.Before(threshold) {
-				delete(sh.buckets, k)
+				delete(sh.Buckets, k)
 			}
 		}
 	}
-	if l.maxKeys <= 0 || len(sh.buckets) < l.maxKeys {
+	if l.maxKeys <= 0 || len(sh.Buckets) < l.maxKeys {
 		return
 	}
 	var oldestKey string
 	var oldestTime time.Time
 	first := true
-	for k, b := range sh.buckets {
+	for k, b := range sh.Buckets {
 		if first || b.updated.Before(oldestTime) {
 			oldestKey = k
 			oldestTime = b.updated
 			first = false
 		}
 	}
-	delete(sh.buckets, oldestKey)
+	delete(sh.Buckets, oldestKey)
 }
 
 func (l *limiter) key(src netip.Addr) string {
