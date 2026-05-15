@@ -13,13 +13,7 @@ func RateLimitDebugLen(h Handler) int {
 	if !ok {
 		return -1
 	}
-	total := 0
-	for _, sh := range l.shards {
-		sh.mu.Lock()
-		total += len(sh.buckets)
-		sh.mu.Unlock()
-	}
-	return total
+	return l.pool.Len()
 }
 
 // SystemResolverConfigFromFile loads path via resolvconf, then runs
