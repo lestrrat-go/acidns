@@ -76,7 +76,7 @@ func NewServer(addr netip.AddrPort, h acidns.Handler, opts ...ServerOption) (*Se
 		maxConnections:     1024,
 		maxConnsPerSource:  32,
 		maxMessageSize:     16 * 1024,
-		maxInflightPer:     32,
+		maxInflightPerConn:     32,
 		// Match TCP defaults — DoT amortises TLS state across many
 		// queries on a long-lived connection, so an unbounded
 		// per-connection budget is at least as risky here as on TCP.
@@ -106,7 +106,7 @@ func NewServer(addr netip.AddrPort, h acidns.Handler, opts ...ServerOption) (*Se
 		case identServerMaxConnLifetime{}:
 			cfg.maxConnLifetime = option.MustGet[time.Duration](o)
 		case identServerMaxInflightPerConn{}:
-			cfg.maxInflightPer = option.MustGet[int](o)
+			cfg.maxInflightPerConn = option.MustGet[int](o)
 		}
 	}
 	if cfg.tlsConfig == nil {
@@ -179,7 +179,7 @@ func (s *Server) Run(ctx context.Context) (*Controller, error) {
 		MaxLifetime:        s.cfg.maxConnLifetime,
 		MaxQueriesPerConn:  s.cfg.maxQueriesPerConn,
 		MaxMessageSize:     s.cfg.maxMessageSize,
-		MaxInflightPerConn: s.cfg.maxInflightPer,
+		MaxInflightPerConn: s.cfg.maxInflightPerConn,
 		AcceptErrorWrap:    "dot: accept",
 	}
 
