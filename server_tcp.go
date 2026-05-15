@@ -2,17 +2,14 @@ package acidns
 
 import (
 	"context"
-	"encoding/binary"
 	"errors"
 	"fmt"
-	"io"
 	"net"
 	"net/netip"
-	"sync"
-	"syscall"
 	"time"
 
 	"github.com/lestrrat-go/acidns/internal/serverctl"
+	"github.com/lestrrat-go/acidns/internal/streamframe"
 	"github.com/lestrrat-go/acidns/wire"
 	"github.com/lestrrat-go/option/v3"
 )
@@ -221,374 +218,43 @@ func (s *TCPServer) Run(ctx context.Context) (*TCPController, error) {
 	}
 	bound := netip.AddrPortFrom(la.AddrPort().Addr(), uint16(la.Port))
 
-	bufSize := s.cfg.maxMessageSize
-	if bufSize <= 0 {
-		bufSize = 65535
-	}
-	loop := &tcpLoop{
-		ln:      ln,
-		addr:    bound,
-		handler: s.handler,
-		cfg:     s.cfg,
-	}
-	if s.cfg.maxConnections > 0 {
-		loop.sem = make(chan struct{}, s.cfg.maxConnections)
-	}
-	loop.bodyPool.New = func() any {
-		b := make([]byte, bufSize)
-		return &b
+	handler := s.handler
+	dispatch := streamframe.DispatcherFunc(func(ctx context.Context, w *streamframe.ResponseWriter, q wire.Message, raw []byte) {
+		switch verdict, reply := PreflightRequest(q); verdict {
+		case PreflightDrop:
+			return
+		case PreflightReply:
+			_ = w.WriteMsg(reply)
+			return
+		}
+		handler.ServeDNS(contextWithRawRequest(ctx, raw), w, q)
+	})
+
+	loopCfg := streamframe.LoopConfig{
+		Listener:           ln,
+		LocalAddr:          bound,
+		Network:            "tcp",
+		Dispatcher:         dispatch,
+		MaxConnections:     s.cfg.maxConnections,
+		MaxConnsPerSource:  s.cfg.maxConnsPerSource,
+		IdleTimeout:        s.cfg.idleTimeout,
+		MessageReadTimeout: s.cfg.messageReadTimeout,
+		WriteTimeout:       s.cfg.writeTimeout,
+		MaxLifetime:        s.cfg.maxConnLifetime,
+		MaxQueriesPerConn:  s.cfg.maxQueriesPerConn,
+		MaxMessageSize:     s.cfg.maxMessageSize,
+		MaxInflightPerConn: s.cfg.maxInflightPer,
+		AcceptErrorWrap:    "acidns: tcp accept",
 	}
 
 	ctrl := &TCPController{Core: serverctl.New(bound)}
 	go func() {
 		defer ctrl.CloseDone()
-		err := loop.run(ctx)
-		if err != nil && !errors.Is(err, ErrServerClosed) {
-			ctrl.SetErr(err)
+		err := streamframe.Run(ctx, loopCfg)
+		if err == nil || errors.Is(err, streamframe.ErrServerClosed) {
+			return
 		}
+		ctrl.SetErr(err)
 	}()
 	return ctrl, nil
-}
-
-// tcpLoop owns the runtime state of a serving TCP listener.
-type tcpLoop struct {
-	ln       net.Listener
-	addr     netip.AddrPort
-	handler  Handler
-	cfg      tcpListenerConfig
-	sem      chan struct{}
-	wg       sync.WaitGroup
-	bodyPool sync.Pool
-
-	// perSourceMu guards perSource. Keyed on netip.Addr.Unmap so a
-	// v4-mapped v6 client shares a bucket with its v4 form.
-	perSourceMu sync.Mutex
-	perSource   map[netip.Addr]int
-}
-
-// reservePerSource increments the per-source counter if the cap permits
-// and returns true. When the cap would be exceeded it returns false and
-// the caller must close the connection without spawning a goroutine.
-func (l *tcpLoop) reservePerSource(addr netip.Addr) bool {
-	if l.cfg.maxConnsPerSource <= 0 {
-		return true
-	}
-	addr = addr.Unmap()
-	l.perSourceMu.Lock()
-	defer l.perSourceMu.Unlock()
-	if l.perSource[addr] >= l.cfg.maxConnsPerSource {
-		return false
-	}
-	if l.perSource == nil {
-		l.perSource = make(map[netip.Addr]int)
-	}
-	l.perSource[addr]++
-	return true
-}
-
-// releasePerSource decrements the counter for addr; the entry is
-// removed when the count reaches zero so the map does not grow without
-// bound across the lifetime of the listener.
-func (l *tcpLoop) releasePerSource(addr netip.Addr) {
-	if l.cfg.maxConnsPerSource <= 0 {
-		return
-	}
-	addr = addr.Unmap()
-	l.perSourceMu.Lock()
-	defer l.perSourceMu.Unlock()
-	if l.perSource[addr] <= 1 {
-		delete(l.perSource, addr)
-		return
-	}
-	l.perSource[addr]--
-}
-
-func (l *tcpLoop) run(ctx context.Context) error {
-	stop := make(chan struct{})
-	defer close(stop)
-	go func() {
-		select {
-		case <-ctx.Done():
-			_ = l.ln.Close()
-		case <-stop:
-		}
-	}()
-
-	defer l.wg.Wait()
-
-	const acceptBackoffStart = 5 * time.Millisecond
-	const acceptBackoffCap = time.Second
-	tempBackoff := time.Duration(0)
-
-	for {
-		// Slot is acquired BEFORE Accept on purpose: when the cap is
-		// reached, the loop blocks here instead of accepting, leaving
-		// excess connections queued in the kernel TCP backlog (see the
-		// WithTCPListenerMaxConnections doc). The well-known alternative
-		// — Accept first, then try to acquire and close on miss — gives
-		// the off-by-one back (effective cap N vs N-1 when the loop sits
-		// in Accept holding one slot) at the cost of completing 3-way
-		// handshakes only to RST them and losing kernel-backlog
-		// backpressure. With the default cap of 1024 the off-by-one is
-		// not worth that trade.
-		if l.sem != nil {
-			select {
-			case l.sem <- struct{}{}:
-			case <-ctx.Done():
-				_ = l.ln.Close()
-				return ErrServerClosed
-			}
-		}
-		conn, err := l.ln.Accept()
-		if err != nil {
-			if l.sem != nil {
-				<-l.sem
-			}
-			if ctx.Err() != nil || errors.Is(err, net.ErrClosed) {
-				return ErrServerClosed
-			}
-			if isAcceptTransient(err) {
-				if tempBackoff == 0 {
-					tempBackoff = acceptBackoffStart
-				} else {
-					tempBackoff *= 2
-					if tempBackoff > acceptBackoffCap {
-						tempBackoff = acceptBackoffCap
-					}
-				}
-				timer := time.NewTimer(tempBackoff)
-				select {
-				case <-timer.C:
-				case <-ctx.Done():
-					timer.Stop()
-					_ = l.ln.Close()
-					return ErrServerClosed
-				}
-				continue
-			}
-			return fmt.Errorf("acidns: tcp accept: %w", err)
-		}
-		tempBackoff = 0
-		remote := remoteAddrFromConn(conn)
-		if !l.reservePerSource(remote.Addr()) {
-			_ = conn.Close()
-			if l.sem != nil {
-				<-l.sem
-			}
-			continue
-		}
-		l.wg.Add(1)
-		go func(c net.Conn, src netip.Addr) {
-			defer func() {
-				l.releasePerSource(src)
-				if l.sem != nil {
-					<-l.sem
-				}
-				l.wg.Done()
-			}()
-			l.serveConn(ctx, c)
-		}(conn, remote.Addr())
-	}
-}
-
-// isAcceptTransient reports whether err is a transient Accept failure
-// that should not terminate the Serve loop. Uses errors.Is on the
-// kernel-resource exhaustion modes so we don't rely on locale-
-// dependent error string substrings.
-func isAcceptTransient(err error) bool {
-	if err == nil {
-		return false
-	}
-	for _, target := range []syscall.Errno{
-		syscall.EMFILE,
-		syscall.ENFILE,
-		syscall.EAGAIN,
-		syscall.ENOBUFS,
-		syscall.ENOMEM,
-	} {
-		if errors.Is(err, target) {
-			return true
-		}
-	}
-	return false
-}
-
-// remoteAddrFromConn returns the connection's remote address as a
-// netip.AddrPort. We prefer net.TCPAddr.AddrPort() over re-parsing the
-// String() form because the latter silently returns the zero AddrPort
-// on unexpected formats, which would let per-source policies (ACL,
-// rate limit) bucket all such peers together.
-func remoteAddrFromConn(c net.Conn) netip.AddrPort {
-	if ta, ok := c.RemoteAddr().(*net.TCPAddr); ok {
-		return ta.AddrPort()
-	}
-	ap, _ := netip.ParseAddrPort(c.RemoteAddr().String())
-	return ap
-}
-
-func (l *tcpLoop) serveConn(ctx context.Context, conn net.Conn) {
-	// LIFO-load-bearing: this defer must come BEFORE the connWg.Wait
-	// defer below. defers run LIFO so connWg.Wait runs first (handler
-	// goroutines drain), THEN conn.Close. Reordering would let
-	// pipelined handler writes hit a closed conn.
-	defer func() { _ = conn.Close() }()
-
-	connCtx, connCancel := context.WithCancel(ctx)
-	defer connCancel()
-	stop := make(chan struct{})
-	defer close(stop)
-	go func() {
-		select {
-		case <-ctx.Done():
-			_ = conn.SetDeadline(time.Now())
-		case <-stop:
-		}
-	}()
-
-	var lifetimeDeadline time.Time
-	if l.cfg.maxConnLifetime > 0 {
-		lifetimeDeadline = time.Now().Add(l.cfg.maxConnLifetime)
-	}
-
-	remote := remoteAddrFromConn(conn)
-
-	// Writer mutex serialises framed responses across pipelined handler
-	// goroutines so two concurrent writes can't interleave length
-	// prefixes and bodies.
-	var writeMu sync.Mutex
-
-	var perConnSem chan struct{}
-	if l.cfg.maxInflightPer > 0 {
-		perConnSem = make(chan struct{}, l.cfg.maxInflightPer)
-	}
-	var connWg sync.WaitGroup
-	defer connWg.Wait()
-
-	queries := 0
-	for {
-		if !lifetimeDeadline.IsZero() && time.Now().After(lifetimeDeadline) {
-			return
-		}
-		if l.cfg.maxQueriesPerConn > 0 && queries >= l.cfg.maxQueriesPerConn {
-			return
-		}
-
-		readDeadline := time.Time{}
-		if l.cfg.idleTimeout > 0 {
-			readDeadline = time.Now().Add(l.cfg.idleTimeout)
-		}
-		if !lifetimeDeadline.IsZero() && (readDeadline.IsZero() || lifetimeDeadline.Before(readDeadline)) {
-			readDeadline = lifetimeDeadline
-		}
-		if !readDeadline.IsZero() {
-			_ = conn.SetReadDeadline(readDeadline)
-		}
-
-		var hdr [2]byte
-		if _, err := io.ReadFull(conn, hdr[:]); err != nil {
-			return // EOF or idle timeout — close the connection
-		}
-		n := int(binary.BigEndian.Uint16(hdr[:]))
-		if l.cfg.maxMessageSize > 0 && n > l.cfg.maxMessageSize {
-			return
-		}
-
-		// Once the length prefix has arrived, the peer is committed to
-		// delivering the body promptly. Tighten the read deadline to
-		// messageReadTimeout so a peer cannot drip body bytes at the
-		// idle-interval cadence and pin a slot for hours. Still respect
-		// the lifetime cap.
-		bodyDeadline := time.Time{}
-		if l.cfg.messageReadTimeout > 0 {
-			bodyDeadline = time.Now().Add(l.cfg.messageReadTimeout)
-		}
-		if !lifetimeDeadline.IsZero() && (bodyDeadline.IsZero() || lifetimeDeadline.Before(bodyDeadline)) {
-			bodyDeadline = lifetimeDeadline
-		}
-		if !bodyDeadline.IsZero() {
-			_ = conn.SetReadDeadline(bodyDeadline)
-		}
-
-		bufp, _ := l.bodyPool.Get().(*[]byte)
-		body := (*bufp)[:n]
-		if _, err := io.ReadFull(conn, body); err != nil {
-			l.bodyPool.Put(bufp)
-			return
-		}
-		queries++
-
-		if perConnSem != nil {
-			select {
-			case perConnSem <- struct{}{}:
-			case <-connCtx.Done():
-				l.bodyPool.Put(bufp)
-				return
-			}
-		}
-		connWg.Add(1)
-		go func(bufp *[]byte, n int) {
-			defer func() {
-				l.bodyPool.Put(bufp)
-				if perConnSem != nil {
-					<-perConnSem
-				}
-				connWg.Done()
-			}()
-			body := (*bufp)[:n]
-			q, err := wire.Unpack(body)
-			if err != nil {
-				return
-			}
-			w := &tcpResponseWriter{
-				conn:         conn,
-				remote:       remote,
-				local:        l.addr,
-				writeTimeout: l.cfg.writeTimeout,
-				writeMu:      &writeMu,
-			}
-			switch verdict, reply := PreflightRequest(q); verdict {
-			case PreflightDrop:
-				return
-			case PreflightReply:
-				_ = w.WriteMsg(reply)
-				return
-			}
-			l.handler.ServeDNS(contextWithRawRequest(connCtx, body), w, q)
-		}(bufp, n)
-	}
-}
-
-type tcpResponseWriter struct {
-	conn         net.Conn
-	remote       netip.AddrPort
-	local        netip.AddrPort
-	writeTimeout time.Duration
-	writeMu      *sync.Mutex
-}
-
-func (w *tcpResponseWriter) RemoteAddr() netip.AddrPort { return w.remote }
-func (w *tcpResponseWriter) LocalAddr() netip.AddrPort  { return w.local }
-func (w *tcpResponseWriter) Network() string            { return "tcp" }
-
-func (w *tcpResponseWriter) WriteMsg(m wire.Message) error {
-	buf, err := wire.Pack(m)
-	if err != nil {
-		return err
-	}
-	if len(buf) > 0xffff {
-		return fmt.Errorf("acidns: tcp response exceeds 65535 bytes")
-	}
-	w.writeMu.Lock()
-	defer w.writeMu.Unlock()
-	if w.writeTimeout > 0 {
-		_ = w.conn.SetWriteDeadline(time.Now().Add(w.writeTimeout))
-		defer func() { _ = w.conn.SetWriteDeadline(time.Time{}) }()
-	}
-	var hdr [2]byte
-	binary.BigEndian.PutUint16(hdr[:], uint16(len(buf)))
-	if _, err := w.conn.Write(hdr[:]); err != nil {
-		return err
-	}
-	_, err = w.conn.Write(buf)
-	return err
 }

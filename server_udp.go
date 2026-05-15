@@ -9,6 +9,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/lestrrat-go/acidns/internal/netutil"
 	"github.com/lestrrat-go/acidns/internal/serverctl"
 	"github.com/lestrrat-go/acidns/wire"
 	"github.com/lestrrat-go/option/v3"
@@ -257,7 +258,7 @@ func (l *udpLoop) run(ctx context.Context) error {
 			// EAGAIN, etc.) on ReadFrom under load must NOT terminate
 			// the listener. Mirror the TCP accept-loop's exponential
 			// backoff and continue.
-			if isAcceptTransient(err) {
+			if netutil.IsAcceptTransient(err) {
 				if tempBackoff == 0 {
 					tempBackoff = readBackoffStart
 				} else {
