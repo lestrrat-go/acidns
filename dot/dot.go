@@ -127,7 +127,7 @@ func NewClient(addr netip.AddrPort, opts ...Option) (*Client, error) {
 	// any cert that happens to include the IP — typically not what the
 	// caller wants. Refuse this combination so a misuse is loud, not
 	// silent. Use WithServerName or pre-configure the *tls.Config.
-	if tcfg.ServerName == "" && !isHostnameAddr(addr) && !c.insecure {
+	if tcfg.ServerName == "" && !c.insecure {
 		return nil, fmt.Errorf("%w (or *tls.Config.ServerName)", ErrServerNameRequired)
 	}
 	if c.insecure {
@@ -169,15 +169,6 @@ func verifySPKIPin(cs tls.ConnectionState, pins [][]byte) error {
 		}
 	}
 	return ErrSPKIPinMismatch
-}
-
-// isHostnameAddr reports whether addr is a hostname:port form rather
-// than an ip:port form. netip.AddrPort always represents a parsed IP,
-// so this currently returns false for any valid AddrPort — the helper
-// is here for symmetry with future hostname-aware constructors.
-func isHostnameAddr(addr netip.AddrPort) bool {
-	_ = addr
-	return false
 }
 
 func containsALPN(list []string, p string) bool {
