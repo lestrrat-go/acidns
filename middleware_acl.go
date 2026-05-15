@@ -121,7 +121,7 @@ func (a *acl) ServeDNS(ctx context.Context, w ResponseWriter, q wire.Message) {
 		if a.dropDenied {
 			return
 		}
-		a.refuse(w, q)
+		writeRefused(w, q)
 		return
 	}
 	a.inner.ServeDNS(ctx, w, q)
@@ -142,28 +142,4 @@ func (a *acl) permit(src netip.Addr) bool {
 		}
 	}
 	return false
-}
-
-func (a *acl) refuse(w ResponseWriter, q wire.Message) {
-	b := wire.NewMessageBuilder().
-		ID(q.ID()).
-		Response(true).
-		RecursionDesired(q.Flags().RecursionDesired()).
-		RCODE(wire.RCODERefused)
-	if len(q.Questions()) > 0 {
-		b = b.Question(q.Questions()[0])
-	}
-	b = echoOPT(b, q)
-	resp, err := b.Build()
-	if err != nil {
-		// Builder failure is implausible for a fixed-shape REFUSED;
-		// fall back to a header-only SERVFAIL so the peer at least
-		// sees something rather than a silent drop.
-		fb, ferr := wire.NewMessageBuilder().ID(q.ID()).Response(true).RCODE(wire.RCODEServFail).Build()
-		if ferr == nil {
-			_ = w.WriteMsg(fb)
-		}
-		return
-	}
-	_ = w.WriteMsg(resp)
 }
