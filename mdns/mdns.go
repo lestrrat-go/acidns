@@ -164,24 +164,16 @@ func ParseBrowseResponse(m wire.Message) []Service {
 
 	scanner := func(rec wire.Record) {
 		key := rec.Name().String()
-		switch rec.Type() {
-		case rrtype.SRV:
-			if s, ok := rec.RData().(rdata.SRV); ok {
-				srvByOwner[key] = s
-				srvTTLs[key] = rec.TTL()
-			}
-		case rrtype.TXT:
-			if t, ok := rec.RData().(rdata.TXT); ok {
-				txtByOwner[key] = append(txtByOwner[key], t.Strings()...)
-			}
-		case rrtype.A:
-			if a, ok := rec.RData().(rdata.A); ok {
-				addrsByHost[key] = append(addrsByHost[key], a.Addr())
-			}
-		case rrtype.AAAA:
-			if a, ok := rec.RData().(rdata.AAAA); ok {
-				addrsByHost[key] = append(addrsByHost[key], a.Addr())
-			}
+		switch v := rec.RData().(type) {
+		case rdata.SRV:
+			srvByOwner[key] = v
+			srvTTLs[key] = rec.TTL()
+		case rdata.TXT:
+			txtByOwner[key] = append(txtByOwner[key], v.Strings()...)
+		case rdata.A:
+			addrsByHost[key] = append(addrsByHost[key], v.Addr())
+		case rdata.AAAA:
+			addrsByHost[key] = append(addrsByHost[key], v.Addr())
 		}
 	}
 	for _, rec := range m.Answers() {
@@ -193,10 +185,7 @@ func ParseBrowseResponse(m wire.Message) []Service {
 
 	var out []Service
 	for _, rec := range m.Answers() {
-		if rec.Type() != rrtype.PTR {
-			continue
-		}
-		ptr, ok := rec.RData().(rdata.PTR)
+		ptr, ok := wire.RDataAs[rdata.PTR](rec)
 		if !ok {
 			continue
 		}
