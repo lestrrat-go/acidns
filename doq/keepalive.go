@@ -167,44 +167,21 @@ func NewKeepAliveClient(addr netip.AddrPort, opts ...KeepAliveOption) (*KeepAliv
 		c.maxResponseBytes = DefaultMaxResponseBytes
 	}
 
-	var tcfg *tls.Config
-	if c.tlsConfig != nil {
-		// Refuse a caller-supplied tls.Config that already disables cert
-		// verification unless WithKeepAliveInsecure(true) was also
-		// passed. Same posture as [NewClient].
-		if c.tlsConfig.InsecureSkipVerify && !c.insecure {
-			return nil, ErrInsecureTLSConfig
-		}
-		tcfg = c.tlsConfig.Clone()
-	} else {
-		tcfg = &tls.Config{MinVersion: tls.VersionTLS13}
-	}
-	if tcfg.MinVersion < tls.VersionTLS13 {
-		tcfg.MinVersion = tls.VersionTLS13
-	}
-	if !containsALPN(tcfg.NextProtos, alpn) {
-		tcfg.NextProtos = append(tcfg.NextProtos, alpn)
-	}
-	if c.serverName != "" {
-		tcfg.ServerName = c.serverName
-	}
-	if tcfg.ServerName == "" && !c.insecure {
-		return nil, fmt.Errorf("%w (or *tls.Config.ServerName)", ErrServerNameRequired)
-	}
-	if c.insecure {
-		tcfg.InsecureSkipVerify = true
-	}
-	if len(c.spkiPins) > 0 {
-		prev := tcfg.VerifyConnection
-		pins := c.spkiPins
-		tcfg.VerifyConnection = func(cs tls.ConnectionState) error {
-			if prev != nil {
-				if err := prev(cs); err != nil {
-					return err
-				}
-			}
-			return verifySPKIPin(cs, pins)
-		}
+	// Same posture as [NewClient]: TLS 1.3 floor, ALPN doq,
+	// optional SPKI pinning.
+	tcfg, err := spki.PrepareClient(spki.PrepareConfig{
+		Base:              c.tlsConfig,
+		ServerName:        c.serverName,
+		ALPN:              alpn,
+		Insecure:          c.insecure,
+		SPKIPins:          c.spkiPins,
+		ErrInsecureConfig: ErrInsecureTLSConfig,
+		ErrServerNameReq:  fmt.Errorf("%w (or *tls.Config.ServerName)", ErrServerNameRequired),
+		ErrNoPeerCert:     ErrNoPeerCertificate,
+		ErrSPKIMismatch:   ErrSPKIPinMismatch,
+	})
+	if err != nil {
+		return nil, err
 	}
 
 	return &KeepAliveClient{
