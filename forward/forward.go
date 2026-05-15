@@ -615,10 +615,7 @@ func makeEntry(resp wire.Message, cfg config, now time.Time) (entry, bool) {
 // Returns false if the authority section has no SOA.
 func negativeTTLFromSOA(authority []wire.Record, maxNeg time.Duration) (time.Duration, bool) {
 	for _, r := range authority {
-		if r.Type() != rrtype.SOA {
-			continue
-		}
-		soa, ok := r.RData().(rdata.SOA)
+		soa, ok := wire.RDataAs[rdata.SOA](r)
 		if !ok {
 			continue
 		}
