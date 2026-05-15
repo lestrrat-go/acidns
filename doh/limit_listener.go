@@ -4,6 +4,8 @@ import (
 	"net"
 	"net/netip"
 	"sync"
+
+	"github.com/lestrrat-go/acidns/internal/netutil"
 )
 
 // limitListener wraps a net.Listener and bounds the number of
@@ -20,21 +22,18 @@ import (
 type limitListener struct {
 	net.Listener
 
-	sem          chan struct{}
-	once         sync.Once
-	done         chan struct{}
-	maxPerSource int
-
-	perSourceMu sync.Mutex
-	perSource   map[netip.Addr]int
+	sem  chan struct{}
+	once sync.Once
+	done chan struct{}
+	src  *netutil.SourceLimiter
 }
 
 func newLimitListener(l net.Listener, n, perSource int) *limitListener {
 	return &limitListener{
-		Listener:     l,
-		sem:          make(chan struct{}, n),
-		done:         make(chan struct{}),
-		maxPerSource: perSource,
+		Listener: l,
+		sem:      make(chan struct{}, n),
+		done:     make(chan struct{}),
+		src:      netutil.NewSourceLimiter(perSource),
 	}
 }
 
@@ -49,37 +48,6 @@ func (l *limitListener) acquire() bool {
 
 func (l *limitListener) release() { <-l.sem }
 
-// reservePerSource increments the per-source counter if the cap
-// permits and returns true. addr is the unmapped remote address.
-func (l *limitListener) reservePerSource(addr netip.Addr) bool {
-	if l.maxPerSource <= 0 {
-		return true
-	}
-	l.perSourceMu.Lock()
-	defer l.perSourceMu.Unlock()
-	if l.perSource[addr] >= l.maxPerSource {
-		return false
-	}
-	if l.perSource == nil {
-		l.perSource = make(map[netip.Addr]int)
-	}
-	l.perSource[addr]++
-	return true
-}
-
-func (l *limitListener) releasePerSource(addr netip.Addr) {
-	if l.maxPerSource <= 0 {
-		return
-	}
-	l.perSourceMu.Lock()
-	defer l.perSourceMu.Unlock()
-	if l.perSource[addr] <= 1 {
-		delete(l.perSource, addr)
-		return
-	}
-	l.perSource[addr]--
-}
-
 func (l *limitListener) Accept() (net.Conn, error) {
 	for {
 		if !l.acquire() {
@@ -90,16 +58,15 @@ func (l *limitListener) Accept() (net.Conn, error) {
 			l.release()
 			return nil, err
 		}
-		if l.maxPerSource <= 0 {
-			return &limitConn{Conn: c, release: l.release}, nil
-		}
 		addr, ok := remoteUnmappedAddr(c)
 		if !ok {
 			// Cannot identify source — admit the connection and
-			// rely solely on the global cap.
+			// rely solely on the global cap. (Skips per-source
+			// bookkeeping; the SourceLimiter would otherwise key on
+			// the zero Addr.)
 			return &limitConn{Conn: c, release: l.release}, nil
 		}
-		if !l.reservePerSource(addr) {
+		if !l.src.Reserve(addr) {
 			// Silent drop: returning an error here would stop the
 			// http.Server's accept loop. Free the global slot and
 			// continue accepting.
@@ -111,7 +78,7 @@ func (l *limitListener) Accept() (net.Conn, error) {
 			Conn:    c,
 			release: l.release,
 			srcAddr: addr,
-			srcDec:  l.releasePerSource,
+			srcDec:  l.src.Release,
 		}, nil
 	}
 }
