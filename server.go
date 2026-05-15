@@ -125,6 +125,32 @@ func echoOPT(b *wire.MessageBuilder, q wire.Message) *wire.MessageBuilder {
 	return b.EDNS(ed)
 }
 
+// writeRefused sends a RCODE=Refused response to w that echoes q's ID,
+// first question, and OPT (per RFC 6891 §6.1.1). On the implausible
+// case that the fixed-shape builder fails, falls back to a header-only
+// SERVFAIL so the peer still sees a reply rather than a silent drop.
+// Used by the refuse paths of the ACL and rate-limit middlewares.
+func writeRefused(w ResponseWriter, q wire.Message) {
+	b := wire.NewMessageBuilder().
+		ID(q.ID()).
+		Response(true).
+		RecursionDesired(q.Flags().RecursionDesired()).
+		RCODE(wire.RCODERefused)
+	if len(q.Questions()) > 0 {
+		b = b.Question(q.Questions()[0])
+	}
+	b = echoOPT(b, q)
+	resp, err := b.Build()
+	if err != nil {
+		fb, ferr := wire.NewMessageBuilder().ID(q.ID()).Response(true).RCODE(wire.RCODEServFail).Build()
+		if ferr == nil {
+			_ = w.WriteMsg(fb)
+		}
+		return
+	}
+	_ = w.WriteMsg(resp)
+}
+
 // UDPController is the runtime handle returned by [UDPServer.Run].
 // It is the only path to the running UDP server instance: cancelling
 // the ctx passed to Run is the only way to stop the instance, and

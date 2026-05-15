@@ -146,7 +146,7 @@ func (l *limiter) ServeDNS(ctx context.Context, w ResponseWriter, q wire.Message
 		if l.drop {
 			return
 		}
-		l.refuse(w, q)
+		writeRefused(w, q)
 		return
 	}
 	l.inner.ServeDNS(ctx, w, q)
@@ -260,19 +260,3 @@ func clampPrefix(maskBits, max int) int {
 	return maskBits
 }
 
-func (l *limiter) refuse(w ResponseWriter, q wire.Message) {
-	b := wire.NewMessageBuilder().
-		ID(q.ID()).
-		Response(true).
-		RecursionDesired(q.Flags().RecursionDesired()).
-		RCODE(wire.RCODERefused)
-	if len(q.Questions()) > 0 {
-		b = b.Question(q.Questions()[0])
-	}
-	b = echoOPT(b, q)
-	resp, err := b.Build()
-	if err != nil {
-		return
-	}
-	_ = w.WriteMsg(resp)
-}
