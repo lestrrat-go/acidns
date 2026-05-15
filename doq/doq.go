@@ -21,13 +21,11 @@ package doq
 
 import (
 	"context"
-	"crypto/subtle"
 	"crypto/tls"
 	"encoding/binary"
 	"fmt"
 	"io"
 	"net/netip"
-	"slices"
 	"sync"
 	"time"
 
@@ -99,57 +97,22 @@ func NewClient(addr netip.AddrPort, opts ...Option) (*Client, error) {
 		}
 	}
 
-	var tcfg *tls.Config
-	if c.tlsConfig != nil {
-		// Refuse a caller-supplied tls.Config that already disables
-		// cert verification unless WithInsecure(true) was also passed.
-		// Mirrors the DoH and DoT posture so the rule is uniform across
-		// encrypted transports.
-		if c.tlsConfig.InsecureSkipVerify && !c.insecure {
-			return nil, ErrInsecureTLSConfig
-		}
-		tcfg = c.tlsConfig.Clone()
-	} else {
-		tcfg = &tls.Config{MinVersion: tls.VersionTLS13}
-	}
-	// RFC 9250 §3: DoQ is TLS 1.3 only. A caller-supplied tls.Config
-	// could otherwise lower MinVersion and silently negotiate
-	// something the spec forbids — quic-go itself rejects sub-1.3
-	// handshakes, but the explicit floor makes the intent loud.
-	if tcfg.MinVersion < tls.VersionTLS13 {
-		tcfg.MinVersion = tls.VersionTLS13
-	}
-	if !containsALPN(tcfg.NextProtos, alpn) {
-		tcfg.NextProtos = append(tcfg.NextProtos, alpn)
-	}
-	if c.serverName != "" {
-		tcfg.ServerName = c.serverName
-	}
-	// IP-literal address with no ServerName: refuse, mirroring [dot.NewClient].
-	// Authenticating a TLS handshake against an IP-as-SNI is a footgun.
-	// WithInsecure callers opt out of cert verification entirely so
-	// the SNI requirement no longer protects anything.
-	if tcfg.ServerName == "" && !c.insecure {
-		return nil, fmt.Errorf("%w (or *tls.Config.ServerName)", ErrServerNameRequired)
-	}
-	if c.insecure {
-		tcfg.InsecureSkipVerify = true
-	}
-	// SPKI pin enforcement runs after PKIX validation (which fires
-	// first inside crypto/tls). When the caller supplied their own
-	// VerifyConnection via WithTLSConfig, run theirs first so any
-	// custom check they configured still gates the handshake.
-	if len(c.spkiPins) > 0 {
-		prev := tcfg.VerifyConnection
-		pins := c.spkiPins
-		tcfg.VerifyConnection = func(cs tls.ConnectionState) error {
-			if prev != nil {
-				if err := prev(cs); err != nil {
-					return err
-				}
-			}
-			return verifySPKIPin(cs, pins)
-		}
+	// RFC 9250 §3 mandates TLS 1.3; §4.1 mandates the "doq" ALPN.
+	// quic-go itself rejects sub-1.3 handshakes, but the explicit
+	// floor here makes the intent loud and matches the DoT posture.
+	tcfg, err := spki.PrepareClient(spki.PrepareConfig{
+		Base:              c.tlsConfig,
+		ServerName:        c.serverName,
+		ALPN:              alpn,
+		Insecure:          c.insecure,
+		SPKIPins:          c.spkiPins,
+		ErrInsecureConfig: ErrInsecureTLSConfig,
+		ErrServerNameReq:  fmt.Errorf("%w (or *tls.Config.ServerName)", ErrServerNameRequired),
+		ErrNoPeerCert:     ErrNoPeerCertificate,
+		ErrSPKIMismatch:   ErrSPKIPinMismatch,
+	})
+	if err != nil {
+		return nil, err
 	}
 
 	mr := c.maxResponseBytes
@@ -157,27 +120,6 @@ func NewClient(addr netip.AddrPort, opts ...Option) (*Client, error) {
 		mr = DefaultMaxResponseBytes
 	}
 	return &Client{addr: addr, timeout: c.timeout, tlsConfig: tcfg, padding: c.padding, maxResponseBytes: mr}, nil
-}
-
-func containsALPN(list []string, want string) bool {
-	return slices.Contains(list, want)
-}
-
-// verifySPKIPin checks the leaf certificate's SubjectPublicKeyInfo
-// SHA-256 hash against the registered pins. At least one pin must
-// match. Constant-time comparison mirrors the rest of the codebase's
-// crypto pattern.
-func verifySPKIPin(cs tls.ConnectionState, pins [][]byte) error {
-	if len(cs.PeerCertificates) == 0 {
-		return ErrNoPeerCertificate
-	}
-	got := spki.Hash(cs.PeerCertificates[0])
-	for _, pin := range pins {
-		if subtle.ConstantTimeCompare(got[:], pin) == 1 {
-			return nil
-		}
-	}
-	return ErrSPKIPinMismatch
 }
 
 func (e *Client) Exchange(ctx context.Context, q wire.Message) (wire.Message, error) {

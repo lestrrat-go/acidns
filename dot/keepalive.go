@@ -164,53 +164,21 @@ func NewKeepAliveClient(addr netip.AddrPort, opts ...KeepAliveOption) (*KeepAliv
 		}
 	}
 
-	var tcfg *tls.Config
-	if c.tlsConfig != nil {
-		// Refuse a caller-supplied tls.Config that already disables cert
-		// verification unless WithKeepAliveInsecure(true) was also passed.
-		// Mirrors the rule in [New] so the security posture is uniform
-		// across single-shot and keep-alive DoT clients.
-		if c.tlsConfig.InsecureSkipVerify && !c.insecure {
-			return nil, ErrInsecureTLSConfig
-		}
-		tcfg = c.tlsConfig.Clone()
-	} else {
-		tcfg = &tls.Config{MinVersion: tls.VersionTLS13}
-	}
-	// Match the floor in [New]: any caller-supplied MinVersion below
-	// TLS 1.3 is silently raised. RFC 7858 §9 SHOULD use TLS 1.3 and
-	// the keep-alive client must not be a back-door for TLS 1.2.
-	if tcfg.MinVersion < tls.VersionTLS13 {
-		tcfg.MinVersion = tls.VersionTLS13
-	}
-	if c.serverName != "" {
-		tcfg.ServerName = c.serverName
-	}
-	if tcfg.ServerName == "" && !c.insecure {
-		return nil, fmt.Errorf("dot-keepalive: WithKeepAliveServerName (or *tls.Config.ServerName) required when addr is an IP literal")
-	}
-	if c.insecure {
-		tcfg.InsecureSkipVerify = true
-	}
-	// RFC 7858 §3.2 ALPN identifier.
-	if !containsALPN(tcfg.NextProtos, "dot") {
-		tcfg.NextProtos = append(tcfg.NextProtos, "dot")
-	}
-	// SPKI pin enforcement runs AFTER PKIX validation (which fires
-	// first inside crypto/tls). When the caller supplied their own
-	// VerifyConnection via WithKeepAliveTLSConfig, run theirs first so
-	// any custom check they configured still gates the handshake.
-	if len(c.spkiPins) > 0 {
-		prev := tcfg.VerifyConnection
-		pins := c.spkiPins
-		tcfg.VerifyConnection = func(cs tls.ConnectionState) error {
-			if prev != nil {
-				if err := prev(cs); err != nil {
-					return err
-				}
-			}
-			return verifySPKIPin(cs, pins)
-		}
+	// Match the floor / ALPN / pin posture from [NewClient]; the
+	// keep-alive client must not be a back-door for TLS 1.2.
+	tcfg, err := spki.PrepareClient(spki.PrepareConfig{
+		Base:              c.tlsConfig,
+		ServerName:        c.serverName,
+		ALPN:              "dot",
+		Insecure:          c.insecure,
+		SPKIPins:          c.spkiPins,
+		ErrInsecureConfig: ErrInsecureTLSConfig,
+		ErrServerNameReq:  fmt.Errorf("dot-keepalive: WithKeepAliveServerName (or *tls.Config.ServerName) required when addr is an IP literal"),
+		ErrNoPeerCert:     ErrNoPeerCertificate,
+		ErrSPKIMismatch:   ErrSPKIPinMismatch,
+	})
+	if err != nil {
+		return nil, err
 	}
 
 	return &KeepAliveClient{addr: addr, cfg: c, tlsConfig: tcfg}, nil
