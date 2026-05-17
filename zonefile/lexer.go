@@ -194,11 +194,22 @@ func (l *lexer) readQuoted() (string, error) {
 		case '"':
 			return sb.String(), nil
 		case '\\':
+			// RFC 1035 §5.1: `\DDD` is a three-digit decimal escape
+			// that encodes one byte; `\X` for any non-digit X is X
+			// taken literally.
 			c, err := l.r.ReadByte()
 			if err != nil {
 				return "", fmt.Errorf("line %d: dangling backslash in quoted string", l.line)
 			}
-			sb.WriteByte(c)
+			if c >= '0' && c <= '9' {
+				v, err := l.readDecimalEscapeTail(c, "quoted string")
+				if err != nil {
+					return "", err
+				}
+				sb.WriteByte(v)
+			} else {
+				sb.WriteByte(c)
+			}
 		case '\n':
 			l.line++
 			sb.WriteByte(b)
@@ -209,4 +220,25 @@ func (l *lexer) readQuoted() (string, error) {
 			return "", fmt.Errorf("line %d: quoted string exceeds %d bytes", l.line, maxLexerTokenSize)
 		}
 	}
+}
+
+// readDecimalEscapeTail completes a `\DDD` escape after the lexer has
+// already consumed the backslash and the first digit. Returns the
+// decoded byte or an error if the next two bytes aren't digits or the
+// resulting value exceeds 255. where names the surrounding context for
+// error messages (e.g. "quoted string").
+func (l *lexer) readDecimalEscapeTail(first byte, where string) (byte, error) {
+	d2, err := l.r.ReadByte()
+	if err != nil || d2 < '0' || d2 > '9' {
+		return 0, fmt.Errorf("line %d: bad decimal escape in %s", l.line, where)
+	}
+	d3, err := l.r.ReadByte()
+	if err != nil || d3 < '0' || d3 > '9' {
+		return 0, fmt.Errorf("line %d: bad decimal escape in %s", l.line, where)
+	}
+	v := int(first-'0')*100 + int(d2-'0')*10 + int(d3-'0')
+	if v > 255 {
+		return 0, fmt.Errorf("line %d: decimal escape > 255 in %s", l.line, where)
+	}
+	return byte(v), nil
 }
