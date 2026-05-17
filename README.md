@@ -1,6 +1,7 @@
 # acidns
 
-A full-fledged DNS toolkit for Go.
+A re-imagining of a DNS toolkit for Go, in the style of
+[`lestrrat-go/jwx`](https://github.com/lestrrat-go/jwx).
 
 ```
 go get github.com/lestrrat-go/acidns
