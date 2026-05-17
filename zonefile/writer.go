@@ -143,10 +143,15 @@ func quoteCharString(s string) string {
 	b.WriteByte('"')
 	for i := range len(s) {
 		c := s[i]
-		switch c {
-		case '"', '\\':
+		switch {
+		case c == '"' || c == '\\':
 			b.WriteByte('\\')
 			b.WriteByte(c)
+		case c < 0x20 || c > 0x7e:
+			// RFC 1035 §5.1 \DDD: emit bytes outside printable ASCII
+			// as three-digit decimal so the file stays text-safe and
+			// round-trips through the lexer's \DDD decoder.
+			fmt.Fprintf(&b, `\%03d`, c)
 		default:
 			b.WriteByte(c)
 		}
