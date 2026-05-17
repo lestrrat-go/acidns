@@ -43,11 +43,40 @@ func (z ZONEMD) Pack(p *wirebb.Packer) {
 	p.Raw(z.digest)
 }
 
-// NewZONEMD returns a ZONEMD rdata.
-func NewZONEMD(serial uint32, scheme ZONEMDScheme, hash ZONEMDHashAlgorithm, digest []byte) ZONEMD {
+// NewZONEMD returns a ZONEMD rdata. For known hash algorithms the
+// digest length is validated against RFC 8976 §4 (SHA-384 → 48 bytes,
+// SHA-512 → 64 bytes). Unknown algorithms pass through unvalidated:
+// RFC 8976 §3 directs validators to ignore unknown algorithms rather
+// than reject the record outright, and acidns preserves that
+// information for inspection.
+func NewZONEMD(serial uint32, scheme ZONEMDScheme, hash ZONEMDHashAlgorithm, digest []byte) (ZONEMD, error) {
+	if err := validateZONEMDDigestLength(hash, len(digest)); err != nil {
+		return ZONEMD{}, err
+	}
 	cp := make([]byte, len(digest))
 	copy(cp, digest)
-	return ZONEMD{serial: serial, scheme: scheme, hash: hash, digest: cp}
+	return ZONEMD{serial: serial, scheme: scheme, hash: hash, digest: cp}, nil
+}
+
+// validateZONEMDDigestLength enforces RFC 8976 §4 fixed digest lengths
+// for the registered hash algorithms. Returns nil for unknown
+// algorithms (RFC 8976 §3 "ignore unknown") so that wire-decoded
+// records with unfamiliar Hash values survive the parse step and can
+// be inspected by callers.
+func validateZONEMDDigestLength(hash ZONEMDHashAlgorithm, n int) error {
+	want := 0
+	switch hash {
+	case ZONEMDHashSHA384:
+		want = 48
+	case ZONEMDHashSHA512:
+		want = 64
+	default:
+		return nil
+	}
+	if n != want {
+		return fmt.Errorf("%w: ZONEMD hash %d digest len=%d, RFC 8976 §4 mandates %d", ErrInvalidRData, hash, n, want)
+	}
+	return nil
 }
 
 func unpackZONEMD(u *wirebb.Unpacker, rdlen int) (ZONEMD, error) {
@@ -69,6 +98,9 @@ func unpackZONEMD(u *wirebb.Unpacker, rdlen int) (ZONEMD, error) {
 	}
 	digest, err := u.Bytes(rdlen - 6)
 	if err != nil {
+		return zero, err
+	}
+	if err := validateZONEMDDigestLength(ZONEMDHashAlgorithm(hash), len(digest)); err != nil {
 		return zero, err
 	}
 	cp := make([]byte, len(digest))

@@ -89,7 +89,8 @@ func TestIPSECKEYAccessors(t *testing.T) {
 
 func TestLOCAccessors(t *testing.T) {
 	t.Parallel()
-	l := rdata.NewLOC(0, 0x12, 0x16, 0x13, 1, 2, 3)
+	l, err := rdata.NewLOC(0, 0x12, 0x16, 0x13, 1, 2, 3)
+	require.NoError(t, err)
 	require.Equal(t, uint8(0x16), l.HorizPre())
 	require.Equal(t, uint8(0x13), l.VertPre())
 }
@@ -104,7 +105,8 @@ func TestNAPTRAccessors(t *testing.T) {
 
 func TestZONEMDAccessors(t *testing.T) {
 	t.Parallel()
-	z := rdata.NewZONEMD(1, rdata.ZONEMDSchemeSimple, rdata.ZONEMDHashSHA384, []byte{0xff})
+	z, err := rdata.NewZONEMD(1, rdata.ZONEMDSchemeSimple, rdata.ZONEMDHashSHA384, make([]byte, 48))
+	require.NoError(t, err)
 	require.Equal(t, rdata.ZONEMDHashSHA384, z.HashAlgorithm())
 }
 
