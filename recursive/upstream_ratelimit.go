@@ -76,9 +76,17 @@ func (l *upstreamLimiter) Take(addr netip.AddrPort) bool {
 		b = &tokenBucket{tokens: l.burst, lastRefill: now}
 		l.buckets[addr] = b
 	}
-	// Refill since last access.
+	// Refill since last access. A bucket can never hold more than
+	// burst tokens, so anything beyond burst/qps seconds of elapsed
+	// adds tokens the post-clamp at line 83 would discard anyway —
+	// but doing the cap here bounds the multiplication and stops a
+	// pathological elapsed (NTP step, injected non-monotonic now)
+	// from feeding +Inf / NaN into the bucket arithmetic.
 	elapsed := now.Sub(b.lastRefill).Seconds()
 	if elapsed > 0 {
+		if maxElapsed := l.burst / l.qps; elapsed > maxElapsed {
+			elapsed = maxElapsed
+		}
 		b.tokens += elapsed * l.qps
 		if b.tokens > l.burst {
 			b.tokens = l.burst

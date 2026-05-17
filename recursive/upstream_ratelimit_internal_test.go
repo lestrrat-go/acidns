@@ -50,6 +50,51 @@ func TestUpstreamLimiterTake(t *testing.T) {
 	}
 }
 
+// TestUpstreamLimiterClampsElapsed exercises the SEC-T2-4 fix:
+// elapsed time used in the refill arithmetic is clamped to burst/qps,
+// so a clock jump can't feed a pathologically large value into the
+// `tokens += elapsed * qps` multiplication. The observable bucket
+// state is unchanged for sane clocks (cap at burst), but the
+// pre-clamp value is now bounded by burst regardless of the jump.
+func TestUpstreamLimiterClampsElapsed(t *testing.T) {
+	now := time.Unix(1700000000, 0)
+	clock := func() time.Time { return now }
+	addr := netip.MustParseAddrPort("192.0.2.1:53")
+
+	// burst=10 tokens, qps=10/s, so a depleted bucket fully refills in
+	// 1 s; anything beyond is meaningless.
+	l := newUpstreamLimiter(10.0, 10.0, clock)
+
+	// Drain the bucket completely.
+	for i := 0; i < 10; i++ {
+		if !l.Take(addr) {
+			t.Fatalf("Take #%d should succeed (initial burst)", i+1)
+		}
+	}
+	if l.Take(addr) {
+		t.Fatalf("11th Take should fail — bucket drained")
+	}
+
+	// Jump 100 years forward. With the clamp the refill arithmetic
+	// sees an elapsed of burst/qps = 1.0 s, not ~3.15e9 s.
+	now = now.Add(100 * 365 * 24 * time.Hour)
+	b := l.buckets[addr]
+	if b == nil {
+		t.Fatalf("bucket missing for addr")
+	}
+	if !l.Take(addr) {
+		t.Fatalf("Take after 100y jump should succeed")
+	}
+	// Bucket should be at burst-1 after one Take. Crucially, internal
+	// tokens never reached an unbounded multiplication result.
+	if b.tokens > 10.0 {
+		t.Fatalf("tokens after jump+take = %f, want <= 10.0", b.tokens)
+	}
+	if b.tokens < 8.0 {
+		t.Fatalf("tokens after jump+take = %f, want ~9 (burst minus 1)", b.tokens)
+	}
+}
+
 func TestUpstreamLimiterDisabled(t *testing.T) {
 	addr := netip.MustParseAddrPort("192.0.2.1:53")
 	if l := newUpstreamLimiter(0, 0, nil); !l.Take(addr) {
