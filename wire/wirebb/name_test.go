@@ -75,6 +75,15 @@ func TestParse(t *testing.T) {
 		require.Equal(t, " space", string(labels[0]))
 	})
 
+	// SEC-ZO-3: 0x00 is the wire-format root-label terminator; a label
+	// containing it produces non-portable wire bytes. Reject every
+	// path that could otherwise introduce one.
+	t.Run("nul via decimal escape rejected", func(t *testing.T) {
+		t.Parallel()
+		_, err := wirebb.Parse(`a\000b.example.com`)
+		require.ErrorIs(t, err, wirebb.ErrInvalidName)
+	})
+
 	t.Run("empty", func(t *testing.T) {
 		t.Parallel()
 		_, err := wirebb.Parse("")

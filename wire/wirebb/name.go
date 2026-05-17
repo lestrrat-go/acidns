@@ -195,7 +195,17 @@ func Parse(s string) (Name, error) {
 	// appendLabel grows label by c and enforces the maxLabelLen cap inline,
 	// so a single label of bounded-but-huge input fails fast without
 	// allocating proportional to the input.
+	//
+	// 0x00 is the wire-format root-label terminator (RFC 1035 §3.1); a
+	// label containing it would either re-encode to bytes a conforming
+	// decoder is entitled to truncate at, or be rejected outright by
+	// stricter peers. Either way the wire bytes are not safely portable,
+	// so we refuse to accept 0x00 from any escape form (`\000` decimal,
+	// `\\0` literal, or otherwise).
 	appendLabel := func(c byte) error {
+		if c == 0x00 {
+			return fmt.Errorf("%w: 0x00 not allowed inside a label (RFC 1035 §3.1)", ErrInvalidName)
+		}
 		if len(label) >= maxLabelLen {
 			return fmt.Errorf("%w: label exceeds %d bytes", ErrInvalidName, maxLabelLen)
 		}
