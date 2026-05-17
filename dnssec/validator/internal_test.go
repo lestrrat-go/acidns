@@ -2,11 +2,17 @@ package validator
 
 import (
 	"context"
+	"crypto/ecdsa"
+	"crypto/ed25519"
+	"crypto/elliptic"
+	"crypto/rand"
+	"crypto/sha256"
 	"net/netip"
 	"slices"
 	"testing"
 	"time"
 
+	"github.com/lestrrat-go/acidns/dnssec"
 	"github.com/lestrrat-go/acidns/dnssec/validator/validatorbb"
 	"github.com/lestrrat-go/acidns/wire"
 	"github.com/lestrrat-go/acidns/wire/rdata"
@@ -67,6 +73,134 @@ func TestVerifyRRsetAllAlgsRejectsMissingAlgorithm(t *testing.T) {
 		ar)
 	err = w.verifyRRsetAllAlgs([]wire.Record{rec}, nil, nil, required)
 	require.ErrorIs(t, err, ErrAlgorithmIncomplete)
+}
+
+// TestVerifyRRsetAllAlgsPerAlgorithmBudget exercises the per-algorithm
+// tries budget added to fix SEC-DV-2 / SEC-DV-4 (RFC 6840 §5.11
+// algorithm-completeness reordering). Scenario: requiredAlgs has two
+// algorithms; sigs are [forged ECDSAP256, real ECDSAP256, real ED25519]
+// and the budget is 2.
+//
+// With a single global tries counter (pre-fix), the inner loop for the
+// ED25519 sig would push tries past the cap and ED25519 would be
+// reported as uncovered → ErrAlgorithmIncomplete. With a per-algorithm
+// counter, each algorithm gets its own budget of 2 and both verify.
+func TestVerifyRRsetAllAlgsPerAlgorithmBudget(t *testing.T) {
+	t.Parallel()
+	now := time.Now().UTC().Truncate(time.Second)
+	apex := wire.MustParseName("example.")
+
+	ecP := genECDSAP256(t)
+	edP := genEd25519(t)
+	ecDNSKEY := mustDNSKEY(t, rdata.AlgECDSAP256SHA256, secEncodeECDSAP256(t, ecP))
+	edDNSKEY := mustDNSKEY(t, rdata.AlgED25519, edP.Public().(ed25519.PublicKey))
+
+	ar, err := rdata.NewA(netip.MustParseAddr("192.0.2.1"))
+	require.NoError(t, err)
+	rec := wire.NewRecord(apex, time.Hour, ar)
+	set := []wire.Record{rec}
+
+	ecSig := signWithECDSAP256(t, set, ecDNSKEY, ecP, apex, now)
+	edSig := signWithEd25519(t, set, edDNSKEY, edP, apex, now)
+	forgedEC := forgedRRSIG(ecSig)
+
+	sigs := []rdata.RRSIG{forgedEC, ecSig, edSig}
+	keys := []rdata.DNSKEY{ecDNSKEY, edDNSKEY}
+	required := map[rdata.DNSSECAlgorithm]struct{}{
+		rdata.AlgECDSAP256SHA256: {},
+		rdata.AlgED25519:         {},
+	}
+
+	w := &walker{maxRRSIGsTry: 2, now: func() time.Time { return now }}
+	err = w.verifyRRsetAllAlgs(set, sigs, keys, required)
+	require.NoError(t, err, "per-algorithm budget should cover both algs")
+
+	// Sanity: with budget 1, ECDSAP256 burns its budget on the forged
+	// sig and stays uncovered; ED25519 (independent budget) is fine, but
+	// the function returns the ECDSAP256 failure first.
+	w = &walker{maxRRSIGsTry: 1, now: func() time.Time { return now }}
+	err = w.verifyRRsetAllAlgs(set, sigs, keys, required)
+	require.ErrorIs(t, err, ErrAlgorithmIncomplete)
+}
+
+func genECDSAP256(t *testing.T) *ecdsa.PrivateKey {
+	t.Helper()
+	k, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+	require.NoError(t, err)
+	return k
+}
+
+func genEd25519(t *testing.T) ed25519.PrivateKey {
+	t.Helper()
+	_, k, err := ed25519.GenerateKey(rand.Reader)
+	require.NoError(t, err)
+	return k
+}
+
+// secEncodeECDSAP256 returns X||Y (no 0x04 prefix), matching DNSSEC wire form.
+func secEncodeECDSAP256(t *testing.T, k *ecdsa.PrivateKey) []byte {
+	t.Helper()
+	enc, err := k.PublicKey.Bytes()
+	require.NoError(t, err)
+	return enc[1:]
+}
+
+func mustDNSKEY(t *testing.T, alg rdata.DNSSECAlgorithm, pub []byte) rdata.DNSKEY {
+	t.Helper()
+	dk, err := rdata.NewDNSKEY(rdata.DNSKEYFlagZone|rdata.DNSKEYFlagSEP, 3, alg, pub)
+	require.NoError(t, err)
+	return dk
+}
+
+func signWithECDSAP256(t *testing.T, set []wire.Record, dk rdata.DNSKEY, priv *ecdsa.PrivateKey, signer wire.Name, now time.Time) rdata.RRSIG {
+	t.Helper()
+	skeleton := rdata.NewRRSIG(set[0].Type(), rdata.AlgECDSAP256SHA256,
+		uint8(set[0].Name().NumLabels()), set[0].TTL(),
+		now.Add(time.Hour), now.Add(-time.Hour),
+		dnssec.KeyTag(dk), signer, nil)
+	payload, err := dnssec.SignedData(set, skeleton)
+	require.NoError(t, err)
+	h := sha256.Sum256(payload)
+	r, s, err := ecdsa.Sign(rand.Reader, priv, h[:])
+	require.NoError(t, err)
+	sig := make([]byte, 64)
+	r.FillBytes(sig[:32])
+	s.FillBytes(sig[32:])
+	return rdata.NewRRSIG(set[0].Type(), rdata.AlgECDSAP256SHA256,
+		uint8(set[0].Name().NumLabels()), set[0].TTL(),
+		now.Add(time.Hour), now.Add(-time.Hour),
+		dnssec.KeyTag(dk), signer, sig)
+}
+
+func signWithEd25519(t *testing.T, set []wire.Record, dk rdata.DNSKEY, priv ed25519.PrivateKey, signer wire.Name, now time.Time) rdata.RRSIG {
+	t.Helper()
+	skeleton := rdata.NewRRSIG(set[0].Type(), rdata.AlgED25519,
+		uint8(set[0].Name().NumLabels()), set[0].TTL(),
+		now.Add(time.Hour), now.Add(-time.Hour),
+		dnssec.KeyTag(dk), signer, nil)
+	payload, err := dnssec.SignedData(set, skeleton)
+	require.NoError(t, err)
+	sig := ed25519.Sign(priv, payload)
+	return rdata.NewRRSIG(set[0].Type(), rdata.AlgED25519,
+		uint8(set[0].Name().NumLabels()), set[0].TTL(),
+		now.Add(time.Hour), now.Add(-time.Hour),
+		dnssec.KeyTag(dk), signer, sig)
+}
+
+// forgedRRSIG returns a copy of sig with the signature bytes replaced
+// by garbage so dnssec.Verify fails. KeyTag, algorithm, and the rest of
+// the header are preserved so the verifier's keytag+alg filter matches
+// and a Verify call is attempted (the very condition this test
+// exercises).
+func forgedRRSIG(sig rdata.RRSIG) rdata.RRSIG {
+	bad := make([]byte, len(sig.Signature()))
+	for i := range bad {
+		bad[i] = 0xff
+	}
+	return rdata.NewRRSIG(sig.TypeCovered(), sig.Algorithm(),
+		sig.Labels(), sig.OriginalTTL(),
+		sig.SignatureExpiration(), sig.SignatureInception(),
+		sig.KeyTag(), sig.SignerName(), bad)
 }
 
 func TestNSEC3OwnerHashErrors(t *testing.T) {

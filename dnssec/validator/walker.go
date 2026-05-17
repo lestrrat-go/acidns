@@ -482,37 +482,8 @@ func (w *walker) fetchAndVerifyDNSKEY(ctx context.Context, zone wire.Name, dss [
 	// keytag-only match was insufficient — a forged RRSIG with the right
 	// keytag but invalid signature would falsely satisfy completeness.
 	now := w.now()
-	signingAlgs := map[rdata.DNSSECAlgorithm]struct{}{}
-	tries := 0
-	for _, sig := range sigs {
-		if _, need := parentAlgs[sig.Algorithm()]; !need {
-			continue
-		}
-		if _, done := signingAlgs[sig.Algorithm()]; done {
-			continue
-		}
-		if !validatorbb.RRSIGValidNowWithSkew(sig, now, w.skew) {
-			continue
-		}
-		for _, key := range keys {
-			if dnssec.KeyTag(key) != sig.KeyTag() || key.Algorithm() != sig.Algorithm() {
-				continue
-			}
-			tries++
-			if tries > w.maxRRSIGsTry {
-				break
-			}
-			if err := dnssec.Verify(dnskeyRRs, sig, key); err == nil {
-				signingAlgs[sig.Algorithm()] = struct{}{}
-				break
-			}
-		}
-		if tries > w.maxRRSIGsTry {
-			break
-		}
-	}
 	for alg := range parentAlgs {
-		if _, ok := signingAlgs[alg]; !ok {
+		if !w.tryAlgorithm(dnskeyRRs, sigs, keys, alg, now) {
 			return nil, fmt.Errorf("%w: alg %d not signed at %s", ErrAlgorithmIncomplete, alg, zone)
 		}
 	}
@@ -1106,45 +1077,51 @@ func (w *walker) verifyRRsetAllAlgs(set []wire.Record, sigs []rdata.RRSIG, keys 
 		return fmt.Errorf("validator: empty rrset")
 	}
 	now := w.now()
-	covered := map[rdata.DNSSECAlgorithm]struct{}{}
-	// Walk every sig (do NOT pre-truncate to maxRRSIGsTry — that would
-	// silently drop the only valid signature of a strong algorithm if
-	// many weak-algorithm sigs sort before it). Cap the actual
-	// dnssec.Verify calls instead.
+	for alg := range requiredAlgs {
+		if !w.tryAlgorithm(set, sigs, keys, alg, now) {
+			return fmt.Errorf("%w: alg %d not signed over answer", ErrAlgorithmIncomplete, alg)
+		}
+	}
+	return nil
+}
+
+// tryAlgorithm reports whether at least one sig in sigs validly covers
+// set under one of keys for the given algorithm. The number of actual
+// dnssec.Verify calls is capped at maxRRSIGsTry per call — so an outer
+// algorithm-completeness check over N required algorithms has a worst
+// case of N × maxRRSIGsTry Verify calls.
+//
+// Per-algorithm budgeting (rather than one global budget shared across
+// algorithms) prevents an attacker who reorders RRSIGs from exhausting
+// the budget with invalid sigs of one algorithm and thereby skipping
+// verification of another required algorithm. The KeyTrap (CVE-2023-
+// 50387) defence remains intact: each algorithm's cost is still bounded
+// by maxRRSIGsTry, and maxAlgs bounds N.
+//
+// sigs may contain RRSIGs of other algorithms; they are skipped here.
+func (w *walker) tryAlgorithm(set []wire.Record, sigs []rdata.RRSIG, keys []rdata.DNSKEY, alg rdata.DNSSECAlgorithm, now time.Time) bool {
 	tries := 0
 	for _, sig := range sigs {
-		if _, need := requiredAlgs[sig.Algorithm()]; !need {
-			continue
-		}
-		if _, done := covered[sig.Algorithm()]; done {
+		if sig.Algorithm() != alg {
 			continue
 		}
 		if !validatorbb.RRSIGValidNowWithSkew(sig, now, w.skew) {
 			continue
 		}
 		for _, key := range keys {
-			if dnssec.KeyTag(key) != sig.KeyTag() || key.Algorithm() != sig.Algorithm() {
+			if dnssec.KeyTag(key) != sig.KeyTag() || key.Algorithm() != alg {
 				continue
 			}
 			tries++
 			if tries > w.maxRRSIGsTry {
-				break
+				return false
 			}
 			if err := dnssec.Verify(set, sig, key); err == nil {
-				covered[sig.Algorithm()] = struct{}{}
-				break
+				return true
 			}
 		}
-		if tries > w.maxRRSIGsTry {
-			break
-		}
 	}
-	for alg := range requiredAlgs {
-		if _, ok := covered[alg]; !ok {
-			return fmt.Errorf("%w: alg %d not signed over answer", ErrAlgorithmIncomplete, alg)
-		}
-	}
-	return nil
+	return false
 }
 
 // verifyRRsetWithKeys verifies set against any of sigs using any of keys.
