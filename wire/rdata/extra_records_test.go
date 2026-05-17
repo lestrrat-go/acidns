@@ -142,7 +142,8 @@ func TestZONEMD(t *testing.T) {
 	for i := range digest {
 		digest[i] = byte(i)
 	}
-	r := rdata.NewZONEMD(2024010100, rdata.ZONEMDSchemeSimple, rdata.ZONEMDHashSHA384, digest)
+	r, err := rdata.NewZONEMD(2024010100, rdata.ZONEMDSchemeSimple, rdata.ZONEMDHashSHA384, digest)
+	require.NoError(t, err)
 	got := packUnpack(t, r).(rdata.ZONEMD)
 	require.Equal(t, uint32(2024010100), got.Serial())
 	require.Equal(t, rdata.ZONEMDSchemeSimple, got.Scheme())

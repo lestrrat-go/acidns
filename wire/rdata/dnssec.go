@@ -106,6 +106,9 @@ func unpackDNSKEY(u *wirebb.Unpacker, rdlen int) (DNSKEY, error) {
 	if err != nil {
 		return zero, err
 	}
+	if proto != 3 {
+		return zero, fmt.Errorf("%w: DNSKEY protocol %d, RFC 4034 §2.1.2 mandates 3", ErrInvalidRData, proto)
+	}
 	alg, err := u.Uint8()
 	if err != nil {
 		return zero, err

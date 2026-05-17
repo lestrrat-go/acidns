@@ -46,12 +46,40 @@ func (l LOC) Pack(p *wirebb.Packer) {
 	p.Uint32(l.alt)
 }
 
-// NewLOC returns a LOC rdata. Version is 0 per RFC 1876.
-func NewLOC(version, size, horizPre, vertPre uint8, latitude, longitude, altitude uint32) LOC {
+// NewLOC returns a LOC rdata. Version is 0 per RFC 1876. The size,
+// horizPre, and vertPre arguments are validated per RFC 1876 §3: high
+// nibble is the mantissa (0..9, with 0 reserved for "unknown"), low
+// nibble is the power-of-ten exponent (0..9).
+func NewLOC(version, size, horizPre, vertPre uint8, latitude, longitude, altitude uint32) (LOC, error) {
+	if err := validateLOCSizeByte("size", size); err != nil {
+		return LOC{}, err
+	}
+	if err := validateLOCSizeByte("horizPre", horizPre); err != nil {
+		return LOC{}, err
+	}
+	if err := validateLOCSizeByte("vertPre", vertPre); err != nil {
+		return LOC{}, err
+	}
 	return LOC{
 		version: version, size: size, horizPre: horizPre, vertPre: vertPre,
 		lat: latitude, lon: longitude, alt: altitude,
+	}, nil
+}
+
+// validateLOCSizeByte enforces the RFC 1876 §3 base-10 mantissa/exponent
+// encoding shared by the size, horizPre, and vertPre fields: the high
+// nibble must be 0..9 (mantissa) and the low nibble must be 0..9
+// (power-of-ten exponent). Out-of-range nibbles produce a wire form
+// that downstream tools reject; rejecting at the rdata boundary keeps
+// the in-memory value canonical.
+func validateLOCSizeByte(name string, b uint8) error {
+	if mantissa := b >> 4; mantissa > 9 {
+		return fmt.Errorf("%w: LOC %s mantissa nibble %d > 9, RFC 1876 §3", ErrInvalidRData, name, mantissa)
 	}
+	if exponent := b & 0x0f; exponent > 9 {
+		return fmt.Errorf("%w: LOC %s exponent nibble %d > 9, RFC 1876 §3", ErrInvalidRData, name, exponent)
+	}
+	return nil
 }
 
 func unpackLOC(u *wirebb.Unpacker, rdlen int) (LOC, error) {
@@ -67,12 +95,21 @@ func unpackLOC(u *wirebb.Unpacker, rdlen int) (LOC, error) {
 	if err != nil {
 		return zero, err
 	}
+	if err := validateLOCSizeByte("size", sz); err != nil {
+		return zero, err
+	}
 	hp, err := u.Uint8()
 	if err != nil {
 		return zero, err
 	}
+	if err := validateLOCSizeByte("horizPre", hp); err != nil {
+		return zero, err
+	}
 	vp, err := u.Uint8()
 	if err != nil {
+		return zero, err
+	}
+	if err := validateLOCSizeByte("vertPre", vp); err != nil {
 		return zero, err
 	}
 	lat, err := u.Uint32()

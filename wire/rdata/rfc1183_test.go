@@ -108,7 +108,8 @@ func TestISDNUnpackSubaddressOverrun(t *testing.T) {
 func TestLOC(t *testing.T) {
 	t.Parallel()
 	// arbitrary fixture
-	r := rdata.NewLOC(0, 0x12, 0x16, 0x13, 0x8b0d2178, 0x7f560d2c, 0x00989cdc)
+	r, err := rdata.NewLOC(0, 0x12, 0x16, 0x13, 0x8b0d2178, 0x7f560d2c, 0x00989cdc)
+	require.NoError(t, err)
 	require.Equal(t, rrtype.LOC, r.Type())
 
 	got := packUnpack(t, r).(rdata.LOC)
