@@ -118,6 +118,69 @@ master-file zone; `recursive/` is an iterative resolver. They all satisfy
 the same `Handler` interface and compose with the ACL and rate-limit
 middleware in the root package.
 
+## Web UI (`acidig --web`)
+
+`acidig` ships an embedded web UI for inspecting DNS exchanges.
+
+![](./acidig-webui.png)
+
+
+Run it without arguments and it binds `127.0.0.1:8053` and seeds the upstream
+dropdown with public resolvers that speak every transport (Cloudflare,
+Google, Quad9):
+
+```
+acidig --web
+```
+
+The page renders a form (name, type, upstream, transport, EDNS DO bit)
+and a side-by-side **Request / Response** panel that shows the actual
+wire exchange in dig-style format: header, flags, ARCOUNT, EDNS OPT
+PSEUDOSECTION (with NSID / ECS / cookies / padding / extended-error
+decoded), question, answer, authority, additional. Tick **Show raw
+bytes (hex)** to add the on-the-wire bytes underneath each side. For
+DoH the panel also shows the HTTP envelope (method, URL, status,
+headers) so you can see the layer-7 wrapper around the DNS payload.
+
+Transports work zero-config:
+
+- **UDP / TCP** on port 53.
+- **DoT** auto-bumps the port to 853 and resolves the TLS server name
+  from a well-known map (1.1.1.1 → `cloudflare-dns.com`, etc.); falls
+  back to encrypted-but-unverified TLS when the IP isn't a known DoT
+  endpoint.
+- **DoH** auto-derives `https://<ip>/dns-query` from the selected
+  upstream IP (works for resolvers whose certs have the IP in SAN).
+
+### Basic vs advanced mode
+
+`--web` runs the basic mode: curated query types (A, AAAA, MX, TXT, NS,
+SOA, CNAME, PTR, SRV, CAA, HTTPS, SVCB), upstreams limited to the
+configured allow-list, no AXFR / ANY / UPDATE, no free-form DoH URL.
+
+```
+acidig --web-advanced
+```
+
+Implies `--web` and unlocks: any RR type including ANY / AXFR / IXFR /
+`TYPEnnn`, free-form upstream entry, transport selector with editable
+DoH URL, custom EDNS options, and the raw wire dump enabled by default
+without the toggle.
+
+### Flags
+
+| Flag | Description |
+|------|-------------|
+| `--web` | start the UI in basic mode |
+| `--web-advanced` | implies `--web`, unlock dangerous features |
+| `--web-listen ADDR` | override default `127.0.0.1:8053` |
+| `--web-upstream HOST:PORT` | append to the dropdown (repeatable); also approved for basic-mode queries |
+| `--web-no-defaults` | suppress the always-on public-resolver seed (1.1.1.1, 8.8.8.8, 9.9.9.9) |
+
+The server binds 127.0.0.1 only — basic mode is a guard against
+operator footguns (zone enumeration, accidental UPDATE, free-form
+upstreams), not a remote-attacker boundary.
+
 ## Supported RFCs
 
 See [CLAUDE.md](./CLAUDE.md#supported-rfcs) for the full status matrix
