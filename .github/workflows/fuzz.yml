@@ -47,10 +47,36 @@ jobs:
             -run '^$' -fuzz '^${{ matrix.target.name }}$' \
             -fuzztime 60s
 
-      - name: Upload corpus on crash
+      # Stage every corpus we can reach so a fuzz failure (assertion or
+      # timeout) leaves an actionable artifact. Two paths matter:
+      #   - $pkg/testdata/fuzz/$name — Go writes a file here only on
+      #     assertion-style failures, so it's empty after a timeout.
+      #   - $GOCACHE/fuzz/<import>/$name — the live runtime corpus,
+      #     including the slow input the worker was still chewing when
+      #     the deadline hit.
+      - name: Stage fuzz corpus
+        if: failure()
+        run: |
+          module=$(go list -m)
+          pkg="${{ matrix.target.pkg }}"
+          import="${module}/${pkg#./}"
+          import="${import%/}"
+          name="${{ matrix.target.name }}"
+          gocache=$(go env GOCACHE)
+          staging="$RUNNER_TEMP/fuzz-corpus"
+          mkdir -p "$staging/testdata" "$staging/runtime"
+          if [ -d "$pkg/testdata/fuzz/$name" ]; then
+            cp -a "$pkg/testdata/fuzz/$name/." "$staging/testdata/" || true
+          fi
+          if [ -d "$gocache/fuzz/$import/$name" ]; then
+            cp -a "$gocache/fuzz/$import/$name/." "$staging/runtime/" || true
+          fi
+          ls -laR "$staging" || true
+
+      - name: Upload fuzz corpus
         if: failure()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: fuzz-corpus-${{ matrix.target.name }}
-          path: ${{ matrix.target.pkg }}/testdata/fuzz/${{ matrix.target.name }}/
+          path: ${{ runner.temp }}/fuzz-corpus/
           if-no-files-found: ignore
