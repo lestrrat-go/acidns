@@ -4,7 +4,7 @@ go 1.26
 
 require (
 	github.com/lestrrat-go/option/v3 v3.0.0-alpha1
-	github.com/quic-go/quic-go v0.59.0
+	github.com/quic-go/quic-go v0.59.1
 	github.com/stretchr/testify v1.11.1
 	golang.org/x/crypto v0.51.0
 	golang.org/x/net v0.54.0
