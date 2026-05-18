@@ -1,7 +1,6 @@
 package rdata
 
 import (
-
 	"github.com/lestrrat-go/acidns/wire/rrtype"
 	"github.com/lestrrat-go/acidns/wire/wirebb"
 )

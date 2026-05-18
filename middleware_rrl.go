@@ -230,7 +230,7 @@ func (g *rrlWriter) WriteMsg(m wire.Message) error {
 	// source. Slipping a TC=1 stub here is also actively wrong: RFC 7766
 	// forbids TC over TCP, and AXFR/IXFR multi-envelope streams break
 	// outright. Pass through unconditionally on non-datagram networks.
-	switch g.ResponseWriter.Network() {
+	switch g.Network() {
 	case "udp", "dnscrypt":
 		// fall through to RRL
 	default:

@@ -26,10 +26,10 @@ func TestSignedDataAcrossRDataTypes(t *testing.T) {
 	mx2, err := rdata.NewMX(10, wire.MustParseName("mx.example.com"))
 	require.NoError(t, err)
 	soa, err := rdata.NewSOA(
-						wire.MustParseName("ns.example.com"),
-						wire.MustParseName("hm.example.com"),
-						1, time.Hour, time.Hour, time.Hour, time.Hour,
-					)
+		wire.MustParseName("ns.example.com"),
+		wire.MustParseName("hm.example.com"),
+		1, time.Hour, time.Hour, time.Hour, time.Hour,
+	)
 	require.NoError(t, err)
 	ptr, err := rdata.NewPTR(wire.MustParseName("host.example.com"))
 	require.NoError(t, err)

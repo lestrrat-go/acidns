@@ -6,6 +6,7 @@ import (
 	"encoding/binary"
 	"errors"
 	"fmt"
+	"maps"
 	"net/netip"
 	"slices"
 	"sort"
@@ -110,9 +111,7 @@ func (b *PublicationBuilder) TextMap(m map[string]string) *PublicationBuilder {
 	if b.p.text == nil {
 		b.p.text = make(map[string]string, len(m))
 	}
-	for k, v := range m {
-		b.p.text[k] = v
-	}
+	maps.Copy(b.p.text, m)
 	return b
 }
 
@@ -368,10 +367,11 @@ func canonicalSetBytes(records []wire.Record) []byte {
 	}
 	parts := make([][]byte, 0, len(records))
 	for _, r := range records {
-		buf := make([]byte, 4)
+		rd := rdata.Pack(r.RData())
+		buf := make([]byte, 4, 4+len(rd))
 		binary.BigEndian.PutUint16(buf[0:], uint16(r.Class())&0x7fff)
 		binary.BigEndian.PutUint16(buf[2:], uint16(r.Type()))
-		buf = append(buf, rdata.Pack(r.RData())...)
+		buf = append(buf, rd...)
 		parts = append(parts, buf)
 	}
 	sort.Slice(parts, func(i, j int) bool { return bytes.Compare(parts[i], parts[j]) < 0 })

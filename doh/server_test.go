@@ -172,7 +172,7 @@ func TestHandlerNilHandlerDegradesTo500(t *testing.T) {
 	t.Parallel()
 	ts := httptest.NewServer(doh.NewHandler(nil))
 	t.Cleanup(ts.Close)
-	resp, err := http.Get(ts.URL) //nolint:noctx,bodyclose
+	resp, err := http.Get(ts.URL)
 	require.NoError(t, err)
 	defer func() { _ = resp.Body.Close() }()
 	require.Equal(t, http.StatusInternalServerError, resp.StatusCode)

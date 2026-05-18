@@ -216,6 +216,7 @@ type keyMaterial struct {
 // type.
 type Controller struct {
 	serverctl.Core
+
 	loop *serverLoop
 }
 
@@ -434,7 +435,7 @@ func (l *serverLoop) handlePacket(ctx context.Context, body []byte, src netip.Ad
 	case acidns.PreflightDrop:
 		return
 	case acidns.PreflightReply:
-			_ = w.WriteMsg(reply)
+		_ = w.WriteMsg(reply)
 		return
 	}
 	l.handler.ServeDNS(ctx, w, q)

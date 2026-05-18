@@ -384,10 +384,10 @@ type coverageWriter struct {
 	src netip.AddrPort
 }
 
-func (coverageWriter) WriteMsg(wire.Message) error    { return nil }
-func (coverageWriter) Network() string                { return "udp" }
-func (coverageWriter) LocalAddr() netip.AddrPort      { return netip.AddrPort{} }
-func (c coverageWriter) RemoteAddr() netip.AddrPort   { return c.src }
+func (coverageWriter) WriteMsg(wire.Message) error  { return nil }
+func (coverageWriter) Network() string              { return "udp" }
+func (coverageWriter) LocalAddr() netip.AddrPort    { return netip.AddrPort{} }
+func (c coverageWriter) RemoteAddr() netip.AddrPort { return c.src }
 
 // atomicCounter is a tiny sync wrapper around an int — sufficient for
 // the test's "did the injected clock callback fire?" question.

@@ -46,3 +46,11 @@ jobs:
           go test ${{ matrix.target.pkg }} \
             -run '^$' -fuzz '^${{ matrix.target.name }}$' \
             -fuzztime 60s
+
+      - name: Upload corpus on crash
+        if: failure()
+        uses: actions/upload-artifact@b4b15b8c7c6ac21ea08fcf65892d2ee8f75cf882 # v4.4.3
+        with:
+          name: fuzz-corpus-${{ matrix.target.name }}
+          path: ${{ matrix.target.pkg }}/testdata/fuzz/${{ matrix.target.name }}/
+          if-no-files-found: ignore

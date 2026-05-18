@@ -297,7 +297,7 @@ func (l *serverLoop) serveStream(ctx context.Context, stream *quic.Stream, remot
 	case acidns.PreflightDrop:
 		return
 	case acidns.PreflightReply:
-			_ = w.WriteMsg(reply)
+		_ = w.WriteMsg(reply)
 		return
 	}
 	l.handler.ServeDNS(ctx, w, q)

@@ -27,6 +27,7 @@ import (
 	"fmt"
 	"net"
 	"net/netip"
+	"slices"
 	"time"
 
 	"golang.org/x/crypto/chacha20poly1305"
@@ -371,8 +372,8 @@ func pad(query []byte) []byte {
 
 // unpad reverses pad: strip trailing NULs back to the 0x80 sentinel.
 func unpad(b []byte) ([]byte, error) {
-	for i := len(b) - 1; i >= 0; i-- {
-		switch b[i] {
+	for i, v := range slices.Backward(b) {
+		switch v {
 		case 0x00:
 			continue
 		case 0x80:

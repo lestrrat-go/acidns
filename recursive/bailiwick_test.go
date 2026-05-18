@@ -92,11 +92,11 @@ func TestEntryFromResponseCapsNegativeTTL(t *testing.T) {
 	r := &Recursive{maxNegTTL: time.Hour}
 
 	soa2, err := rdata.NewSOA(
-			wire.MustParseName("ns.evil.example."),
-			wire.MustParseName("hm.evil.example."),
-			1, 7200, 3600, 1209600,
-			365*24*time.Hour, // SOA MINIMUM = 1 year
-		)
+		wire.MustParseName("ns.evil.example."),
+		wire.MustParseName("hm.evil.example."),
+		1, 7200, 3600, 1209600,
+		365*24*time.Hour, // SOA MINIMUM = 1 year
+	)
 	require.NoError(t, err)
 	soa := wire.NewRecord(wire.MustParseName("evil.example."), 365*24*time.Hour,
 		soa2)

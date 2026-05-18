@@ -338,4 +338,3 @@ func (e *KeepAliveClient) Close() error {
 	}
 	return nil
 }
-

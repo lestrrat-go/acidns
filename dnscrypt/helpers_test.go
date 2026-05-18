@@ -3,6 +3,7 @@ package dnscrypt_test
 import (
 	"bytes"
 	"fmt"
+	"slices"
 
 	"golang.org/x/crypto/chacha20poly1305"
 )
@@ -46,8 +47,8 @@ func pad(b []byte) []byte {
 }
 
 func stripPad(b []byte) ([]byte, error) {
-	for i := len(b) - 1; i >= 0; i-- {
-		switch b[i] {
+	for i, v := range slices.Backward(b) {
+		switch v {
 		case 0x00:
 			continue
 		case 0x80:

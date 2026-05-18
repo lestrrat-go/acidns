@@ -223,11 +223,11 @@ func endpointMatchesBootstrap(e Endpoint, bootstrap netip.Addr) bool {
 	return false
 }
 
-var errInvalidBootstrap = errInvalid("ddr: bootstrap address is invalid")
+var errInvalidBootstrap = invalidError("ddr: bootstrap address is invalid")
 
-type errInvalid string
+type invalidError string
 
-func (e errInvalid) Error() string { return string(e) }
+func (e invalidError) Error() string { return string(e) }
 
 func endpointFromSVCB(s rdata.SVCB) Endpoint {
 	b := NewEndpointBuilder().

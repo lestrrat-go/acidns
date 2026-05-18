@@ -484,7 +484,7 @@ func TestVerifyNonRootOwner(t *testing.T) {
 	hdr := make([]byte, 12)
 	binary.BigEndian.PutUint16(hdr[10:12], 1) // arcount = 1
 	// owner = "x." (one label), then rest of an otherwise plausible SIG RR
-	rr := []byte{1, 'x', 0}                  // x.
+	rr := []byte{1, 'x', 0}                     // x.
 	rr = binary.BigEndian.AppendUint16(rr, 24)  // SIG
 	rr = binary.BigEndian.AppendUint16(rr, 255) // class ANY
 	rr = binary.BigEndian.AppendUint32(rr, 0)   // TTL

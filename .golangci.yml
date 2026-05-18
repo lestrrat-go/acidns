@@ -10,6 +10,7 @@ linters:
     - exhaustive
     - funcorder
     - funlen
+    - goconst
     - gochecknoglobals
     - gochecknoinits
     - gocognit

@@ -78,6 +78,7 @@ func NewSOA(mname, rname wirebb.Name, serial uint32, refresh, retry, expire, min
 // (signed 32-bit). The wire format is uint32, but values above this
 // limit are routinely rejected by RFC 2308 §8 compliant caches.
 const maxSOATimerSeconds = 0x7fffffff
+
 func unpackSOA(u *wirebb.Unpacker, rdlen int) (SOA, error) {
 	var zero SOA
 	end := u.Off() + rdlen

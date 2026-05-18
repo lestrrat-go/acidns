@@ -16,12 +16,12 @@ type NSEC3PARAM struct {
 	salt  []byte
 }
 
-func (NSEC3PARAM) Type() rrtype.Type                    { return rrtype.NSEC3PARAM }
-func (NSEC3PARAM) typedRData()                          {}
-func (n NSEC3PARAM) HashAlgorithm() NSEC3HashAlgorithm  { return n.alg }
-func (n NSEC3PARAM) Flags() uint8                       { return n.flags }
-func (n NSEC3PARAM) Iterations() uint16                 { return n.iter }
-func (n NSEC3PARAM) Salt() []byte                       { return n.salt }
+func (NSEC3PARAM) Type() rrtype.Type                   { return rrtype.NSEC3PARAM }
+func (NSEC3PARAM) typedRData()                         {}
+func (n NSEC3PARAM) HashAlgorithm() NSEC3HashAlgorithm { return n.alg }
+func (n NSEC3PARAM) Flags() uint8                      { return n.flags }
+func (n NSEC3PARAM) Iterations() uint16                { return n.iter }
+func (n NSEC3PARAM) Salt() []byte                      { return n.salt }
 func (n NSEC3PARAM) Pack(p *wirebb.Packer) {
 	p.Uint8(uint8(n.alg))
 	p.Uint8(n.flags)
