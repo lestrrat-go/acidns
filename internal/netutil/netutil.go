@@ -19,14 +19,14 @@ import (
 	"time"
 )
 
-// AcceptBackoffMin and AcceptBackoffMax bound the exponential backoff
+// AcceptBackoffInitial and AcceptBackoffCap bound the exponential backoff
 // applied between transient Accept failures (EMFILE/ENFILE/EAGAIN/...).
-// The first failure waits AcceptBackoffMin; each subsequent consecutive
-// failure doubles the wait, capped at AcceptBackoffMax. The window is
+// The first failure waits AcceptBackoffInitial; each subsequent consecutive
+// failure doubles the wait, capped at AcceptBackoffCap. The window is
 // reset to zero on the first success.
 const (
-	AcceptBackoffMin = 5 * time.Millisecond //nolint:revive // "Min"/"Max" are bound names, not the minutes/maximum-time unit time-naming flags.
-	AcceptBackoffMax = time.Second
+	AcceptBackoffInitial = 5 * time.Millisecond
+	AcceptBackoffCap     = time.Second
 )
 
 // IsAcceptTransient reports whether err is a transient Accept failure
