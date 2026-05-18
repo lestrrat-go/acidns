@@ -142,6 +142,13 @@ func unpackRecord(u *wirebb.Unpacker) (Record, error) {
 	if err != nil {
 		return Record{}, err
 	}
+	// RFC 2181 §8: receivers must treat TTLs with the high bit set
+	// (i.e., values >= 2^31 when read as unsigned) as zero. Without
+	// this clamp, Unpack would carry a Duration that Pack later
+	// refuses to re-emit per the RFC 2308 §8 ceiling.
+	if ttl >= 1<<31 {
+		ttl = 0
+	}
 	rdlen, err := u.Uint16()
 	if err != nil {
 		return Record{}, err
