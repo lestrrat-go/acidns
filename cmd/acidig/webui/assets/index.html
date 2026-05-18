@@ -1,0 +1,121 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>acidig</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <link rel="stylesheet" href="/style.css">
+</head>
+<body>
+  <header>
+    <h1>acidig</h1>
+    <span id="mode-badge" class="badge"></span>
+  </header>
+
+  <main>
+    <form id="query-form">
+      <div class="row">
+        <label for="qname">Name</label>
+        <input id="qname" name="qname" type="text" placeholder="example.com" required autofocus>
+      </div>
+
+      <div class="row">
+        <label for="qtype">Type</label>
+        <select id="qtype" name="qtype"></select>
+
+        <label for="qtype-raw" class="advanced-only">Type (raw)</label>
+        <input id="qtype-raw" name="qtype-raw" type="text" class="advanced-only" placeholder="TYPE65534">
+      </div>
+
+      <div class="row">
+        <label for="upstream">Upstream</label>
+        <select id="upstream" name="upstream"></select>
+
+        <label for="upstream-raw" class="advanced-only">Upstream (raw)</label>
+        <input id="upstream-raw" name="upstream-raw" type="text" class="advanced-only" placeholder="1.1.1.1:53">
+
+        <label for="transport">Transport</label>
+        <select id="transport" name="transport">
+          <option value="udp">UDP</option>
+          <option value="tcp">TCP</option>
+          <option value="dot">DoT</option>
+          <option value="doh">DoH</option>
+        </select>
+      </div>
+
+      <div class="row" id="tls-name-row" hidden>
+        <label for="tls-name"><span id="tls-name-label">TLS server name</span></label>
+        <input id="tls-name" name="tls-name" type="text" placeholder="cloudflare-dns.com">
+      </div>
+      <div class="hint" id="dot-hint" hidden></div>
+
+      <div class="row" id="doh-url-row" hidden>
+        <label for="doh-url"><span id="doh-url-label">DoH URL</span></label>
+        <input id="doh-url" name="doh-url" type="text" placeholder="https://1.1.1.1/dns-query">
+      </div>
+      <div class="hint" id="doh-hint" hidden></div>
+
+      <fieldset>
+        <legend>Flags</legend>
+        <div class="row">
+          <label><input id="flag-do" type="checkbox"> DO (DNSSEC OK)</label>
+          <label class="advanced-only"><input id="flag-cd" type="checkbox"> CD (checking disabled)</label>
+          <label class="advanced-only"><input id="flag-rd" type="checkbox" checked> RD (recursion desired)</label>
+          <label class="advanced-only"><input id="flag-edns" type="checkbox" checked> EDNS(0)</label>
+          <label><input id="flag-raw" type="checkbox"> Show raw bytes (hex)</label>
+        </div>
+      </fieldset>
+
+      <div class="row">
+        <button type="submit">Query</button>
+        <span id="status"></span>
+      </div>
+    </form>
+
+    <section id="result" hidden>
+      <div class="meta">
+        <span>RCODE: <code id="r-rcode"></code></span>
+        <span>Server: <code id="r-server"></code></span>
+        <span>Elapsed: <code id="r-elapsed"></code></span>
+      </div>
+
+      <div class="messages">
+        <article class="msg" id="req-panel">
+          <h2>Request</h2>
+          <div class="http" hidden>
+            <h3>HTTP</h3>
+            <pre id="r-http-request"></pre>
+          </div>
+          <h3>DNS message</h3>
+          <pre id="r-request"></pre>
+          <div class="raw" hidden>
+            <h3>DNS raw (hex)</h3>
+            <pre id="r-request-hex"></pre>
+          </div>
+        </article>
+
+        <article class="msg" id="resp-panel">
+          <h2>Response</h2>
+          <div class="http" hidden>
+            <h3>HTTP</h3>
+            <pre id="r-http-response"></pre>
+          </div>
+          <h3>DNS message</h3>
+          <pre id="r-response"></pre>
+          <div class="raw" hidden>
+            <h3>DNS raw (hex)</h3>
+            <pre id="r-response-hex"></pre>
+          </div>
+        </article>
+      </div>
+    </section>
+
+    <section id="error" hidden>
+      <h3>Error</h3>
+      <pre id="r-error"></pre>
+    </section>
+  </main>
+
+  <script src="/app.js"></script>
+</body>
+</html>

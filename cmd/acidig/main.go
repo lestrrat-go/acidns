@@ -9,10 +9,13 @@ import (
 	"fmt"
 	"net/netip"
 	"os"
+	"os/signal"
 	"strings"
+	"syscall"
 	"time"
 
 	"github.com/lestrrat-go/acidns"
+	"github.com/lestrrat-go/acidns/cmd/acidig/webui"
 	"github.com/lestrrat-go/acidns/doh"
 	"github.com/lestrrat-go/acidns/dot"
 	"github.com/lestrrat-go/acidns/wire"
@@ -28,17 +31,29 @@ func main() {
 }
 
 type opts struct {
-	server  string
-	port    int
-	rrType  string
-	useTCP  bool
-	useDoT  bool
-	dohURL  string
-	short   bool
-	timeout time.Duration
-	tlsName string
-	useSys  bool
+	server        string
+	port          int
+	rrType        string
+	useTCP        bool
+	useDoT        bool
+	dohURL        string
+	short         bool
+	timeout       time.Duration
+	tlsName       string
+	useSys        bool
+	web           bool
+	webAdvanced   bool
+	webListen     string
+	webUpstreams  stringList
+	webNoDefaults bool
 }
+
+// stringList is a flag.Value backing a repeatable string flag (one
+// entry per --web-upstream occurrence).
+type stringList []string
+
+func (s *stringList) String() string     { return strings.Join(*s, ",") }
+func (s *stringList) Set(v string) error { *s = append(*s, v); return nil }
 
 func run(argv []string) error {
 	var o opts
@@ -53,14 +68,25 @@ func run(argv []string) error {
 	fs.DurationVar(&o.timeout, "timeout", 5*time.Second, "overall timeout")
 	fs.StringVar(&o.tlsName, "tls-name", "", "TLS server name (for --tls when server is an IP)")
 	fs.BoolVar(&o.useSys, "system", false, "use /etc/resolv.conf for servers and search list")
+	fs.BoolVar(&o.web, "web", false, "run the web UI instead of a one-shot query")
+	fs.BoolVar(&o.webAdvanced, "web-advanced", false, "enable advanced web UI features (implies --web; unlocks raw rrtypes, free-form upstream, alternate transports, wire dump)")
+	fs.StringVar(&o.webListen, "web-listen", "127.0.0.1:8053", "listen address for --web")
+	fs.Var(&o.webUpstreams, "web-upstream", "additional upstream candidate for the web UI dropdown (repeatable, e.g. -web-upstream 1.1.1.1:53)")
+	fs.BoolVar(&o.webNoDefaults, "web-no-defaults", false, "suppress the always-on public-resolver seed (1.1.1.1, 8.8.8.8, 9.9.9.9) in the web UI dropdown")
 	fs.Usage = func() {
-		_, _ = fmt.Fprintf(os.Stderr, "usage: acidig [options] [@server] <name> [type]\n\noptions:\n")
+		_, _ = fmt.Fprintf(os.Stderr, "usage: acidig [options] [@server] <name> [type]\n       acidig --web [--web-advanced] [--web-listen ADDR] [--web-upstream HOST:PORT]\n\noptions:\n")
 		fs.PrintDefaults()
 	}
 
 	args := splitAtServerArg(argv, &o.server)
 	if err := fs.Parse(args); err != nil {
 		return err
+	}
+	if o.webAdvanced {
+		o.web = true
+	}
+	if o.web {
+		return runWeb(o)
 	}
 	rest := fs.Args()
 	if len(rest) == 0 {
@@ -101,6 +127,39 @@ func run(argv []string) error {
 	}
 	render(os.Stdout, name, rt, ans, elapsed, o)
 	return nil
+}
+
+// runWeb starts the embedded web UI server. It blocks until SIGINT /
+// SIGTERM or the HTTP server fails. The query name/type positional
+// arguments are ignored in this mode — the UI is the input surface.
+func runWeb(o opts) error {
+	mode := webui.ModeBasic
+	if o.webAdvanced {
+		mode = webui.ModeAdvanced
+	}
+
+	extras := make([]netip.AddrPort, 0, len(o.webUpstreams))
+	for _, s := range o.webUpstreams {
+		ap, err := netip.ParseAddrPort(s)
+		if err != nil {
+			addr, perr := netip.ParseAddr(s)
+			if perr != nil {
+				return fmt.Errorf("--web-upstream %q: %w", s, err)
+			}
+			ap = netip.AddrPortFrom(addr, 53)
+		}
+		extras = append(extras, ap)
+	}
+
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer stop()
+
+	return webui.Run(ctx, webui.Config{
+		Listen:             o.webListen,
+		Mode:               mode,
+		ExtraUpstreams:     extras,
+		NoDefaultUpstreams: o.webNoDefaults,
+	})
 }
 
 // splitAtServerArg extracts a leading @server token from argv, populating
