@@ -1,4 +1,4 @@
-# acidns
+# github.com/lestrrat-go/acidns [![CI](https://github.com/lestrrat-go/acidns/actions/workflows/ci.yml/badge.svg)](https://github.com/lestrrat-go/acidns/actions/workflows/ci.yml) [![Go Reference](https://pkg.go.dev/badge/github.com/lestrrat-go/acidns.svg)](https://pkg.go.dev/github.com/lestrrat-go/acidns) [![Ask DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/lestrrat-go/acidns)
 
 A re-imagining of a DNS toolkit for Go, in the style of
 [`lestrrat-go/jwx`](https://github.com/lestrrat-go/jwx).
