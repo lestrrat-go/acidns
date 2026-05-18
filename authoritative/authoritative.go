@@ -43,11 +43,11 @@ const maxCNAMEChain = 8
 // implements [acidns.Handler] and exposes zone management methods.
 // Construct via [New].
 type Authoritative struct {
-	mu            sync.RWMutex
-	zones         map[string]*zoneIndex
-	notifyHandler NotifyHandler
-	notifyPolicy  NotifyPolicy
-	notifySem     chan struct{} // counting semaphore; nil disables the cap
+	mu               sync.RWMutex
+	zones            map[string]*zoneIndex
+	notifyHandler    NotifyHandler
+	notifyPolicy     NotifyPolicy
+	notifySem        chan struct{} // counting semaphore; nil disables the cap
 	axfrPolicy       AXFRPolicy
 	updatePolicy     UpdatePolicy
 	onUpdate         OnUpdate
@@ -408,7 +408,7 @@ func (a *Authoritative) answer(q wire.Message) wire.Message {
 	// authority), not a synthetic HINFO with AA=1 that would falsely
 	// claim authority over delegated namespace.
 	if a.minimalANY && question.Type() == rrtype.ANY && question.Class() == rrtype.ClassIN {
-		if _, nsRecs := zone.findDelegation(question.Name()); len(nsRecs) == 0 {
+		if nsRecs := zone.findDelegation(question.Name()); len(nsRecs) == 0 {
 			hinfo := buildRFC8482HINFO(question.Name(), zone)
 			b = b.Authoritative(true).Answer(hinfo)
 			return mustBuild(setRCODE(b, q, wire.RCODENoError), q)
@@ -545,8 +545,7 @@ type lookupResult struct {
 // wildcard synthesis and downward delegation detection) for a single QNAME
 // and QTYPE within this zone.
 func (z *zoneIndex) lookup(qname wire.Name, qtype rrtype.Type) lookupResult {
-	if dp, nsRecs := z.findDelegation(qname); len(nsRecs) > 0 {
-		_ = dp
+	if nsRecs := z.findDelegation(qname); len(nsRecs) > 0 {
 		return lookupResult{
 			authority:  nsRecs,
 			additional: z.collectGlue(nsRecs),
@@ -714,14 +713,14 @@ func rewriteOwners(recs []wire.Record, owner wire.Name) []wire.Record {
 }
 
 // findDelegation walks from qname up toward the zone apex, returning the
-// deepest ancestor (excluding the zone origin) that has NS records — the
-// delegation point. Returns the empty name and nil if QNAME does not
-// cross a delegation.
-func (z *zoneIndex) findDelegation(qname wire.Name) (wire.Name, []wire.Record) {
+// NS records of the deepest ancestor (excluding the zone origin) that has
+// any — the delegation point. Returns nil if QNAME does not cross a
+// delegation.
+func (z *zoneIndex) findDelegation(qname wire.Name) []wire.Record {
 	cur := qname
 	for {
 		if cur.Equal(z.origin) {
-			return wire.Name{}, nil
+			return nil
 		}
 		if recs, ok := z.byName[nameKey(cur)]; ok {
 			var ns []wire.Record
@@ -731,12 +730,12 @@ func (z *zoneIndex) findDelegation(qname wire.Name) (wire.Name, []wire.Record) {
 				}
 			}
 			if len(ns) > 0 {
-				return cur, ns
+				return ns
 			}
 		}
 		parent, ok := cur.Parent()
 		if !ok {
-			return wire.Name{}, nil
+			return nil
 		}
 		cur = parent
 	}

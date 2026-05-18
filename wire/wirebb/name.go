@@ -169,10 +169,7 @@ func Parse(s string) (Name, error) {
 	// front. The final wire form can never exceed maxNameLen+1 bytes
 	// (terminating root label), and per-byte checks below fail fast before
 	// either buffer can grow past its hard cap.
-	initCap := len(s) + 2
-	if initCap > maxNameLen+1 {
-		initCap = maxNameLen + 1
-	}
+	initCap := min(len(s)+2, maxNameLen+1)
 	wire := make([]byte, 0, initCap)
 	label := make([]byte, 0, maxLabelLen)
 

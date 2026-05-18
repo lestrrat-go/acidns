@@ -14,7 +14,7 @@ func TestUpstreamLimiterTake(t *testing.T) {
 	l := newUpstreamLimiter(2.0, 3.0, clock)
 
 	// Bucket starts full at burst=3 — three immediate takes succeed.
-	for i := 0; i < 3; i++ {
+	for i := range 3 {
 		if !l.Take(addr) {
 			t.Fatalf("Take #%d should succeed (bucket full)", i+1)
 		}
@@ -34,7 +34,7 @@ func TestUpstreamLimiterTake(t *testing.T) {
 
 	// Bucket cap is `burst` — long elapsed time can't exceed it.
 	now = now.Add(time.Hour)
-	for i := 0; i < 3; i++ {
+	for i := range 3 {
 		if !l.Take(addr) {
 			t.Fatalf("post-cap Take #%d should succeed (bucket capped at burst)", i+1)
 		}
@@ -66,7 +66,7 @@ func TestUpstreamLimiterClampsElapsed(t *testing.T) {
 	l := newUpstreamLimiter(10.0, 10.0, clock)
 
 	// Drain the bucket completely.
-	for i := 0; i < 10; i++ {
+	for i := range 10 {
 		if !l.Take(addr) {
 			t.Fatalf("Take #%d should succeed (initial burst)", i+1)
 		}
@@ -115,7 +115,7 @@ func TestUpstreamLimiterEvictsAtCap(t *testing.T) {
 
 	// Fill the cap with four buckets, each consumed once so they
 	// aren't fully refilled (and thus survive the idle-pass evict).
-	for i := 0; i < 4; i++ {
+	for i := range 4 {
 		now = now.Add(10 * time.Millisecond)
 		addr := netip.AddrPortFrom(netip.MustParseAddr("192.0.2.1"), uint16(1000+i))
 		if !l.Take(addr) {
@@ -146,7 +146,7 @@ func TestUpstreamLimiterEvictsIdleFirst(t *testing.T) {
 	// Three idle buckets — full burst, untouched since creation. The
 	// idle-eviction pass should clear all of them when a fourth
 	// arrives.
-	for i := 0; i < 3; i++ {
+	for i := range 3 {
 		_ = l.Take(netip.AddrPortFrom(netip.MustParseAddr("192.0.2.1"), uint16(2000+i)))
 	}
 	// Force them all into the "fully refilled / idle" state by

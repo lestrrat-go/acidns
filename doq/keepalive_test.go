@@ -177,7 +177,7 @@ func TestKeepAliveReusesConnection(t *testing.T) {
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = c.Close() })
 
-	for i := 0; i < 3; i++ {
+	for i := range 3 {
 		resp, err := c.Exchange(t.Context(), mkKAQuery(t, uint16(0x1000+i)))
 		require.NoError(t, err)
 		require.Equal(t, uint16(0x1000+i), resp.ID())
@@ -202,7 +202,7 @@ func TestKeepAliveConcurrentExchanges(t *testing.T) {
 	const n = 16
 	var wg sync.WaitGroup
 	errs := make(chan error, n)
-	for i := 0; i < n; i++ {
+	for i := range n {
 		wg.Add(1)
 		go func(id uint16) {
 			defer wg.Done()

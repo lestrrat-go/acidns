@@ -33,7 +33,7 @@ type tcpListenerConfig struct {
 	maxMessageSize     int
 	maxQueriesPerConn  int
 	maxConnLifetime    time.Duration
-	maxInflightPerConn     int
+	maxInflightPerConn int
 }
 
 type identTCPListenerIdleTimeout struct{}
@@ -169,7 +169,7 @@ func NewTCPServer(addr netip.AddrPort, h Handler, opts ...TCPListenerOption) (*T
 		maxConnections:     1024,
 		maxConnsPerSource:  32,
 		maxMessageSize:     16 * 1024,
-		maxInflightPerConn:     32,
+		maxInflightPerConn: 32,
 		maxQueriesPerConn:  10000,
 		maxConnLifetime:    time.Hour,
 	}

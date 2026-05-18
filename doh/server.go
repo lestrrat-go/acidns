@@ -88,7 +88,7 @@ func NewHandler(h acidns.Handler, opts ...HandlerOption) http.Handler {
 	if h == nil {
 		// Degrade to a 500 handler so a misuse is loud rather than
 		// silent. Returning nil would NPE inside ServeMux.
-		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		return http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 			http.Error(w, "doh: handler is nil", http.StatusInternalServerError)
 		})
 	}
@@ -136,7 +136,7 @@ func (h *dohHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "doh: response in request slot", http.StatusBadRequest)
 		return
 	case acidns.PreflightReply:
-			_ = rw.WriteMsg(reply)
+		_ = rw.WriteMsg(reply)
 		return
 	}
 	h.h.ServeDNS(r.Context(), rw, q)
@@ -157,18 +157,18 @@ func (h *dohHandler) readRequest(r *http.Request) ([]byte, error) {
 		// compare against the canonical form would 415 those.
 		mt, _, err := mime.ParseMediaType(r.Header.Get("Content-Type"))
 		if err != nil || mt != contentType {
-			return nil, &httpProblem{status: http.StatusUnsupportedMediaType, msg: "doh: Content-Type must be " + contentType}
+			return nil, &httpProblemError{status: http.StatusUnsupportedMediaType, msg: "doh: Content-Type must be " + contentType}
 		}
 		// Refuse oversized advertised bodies before reading.
 		if cl := r.ContentLength; cl > int64(h.cfg.maxRequestBytes) {
-			return nil, &httpProblem{status: http.StatusRequestEntityTooLarge, msg: "doh: request body exceeds size cap"}
+			return nil, &httpProblemError{status: http.StatusRequestEntityTooLarge, msg: "doh: request body exceeds size cap"}
 		}
 		body, err := io.ReadAll(io.LimitReader(r.Body, int64(h.cfg.maxRequestBytes)+1))
 		if err != nil {
 			return nil, err
 		}
 		if len(body) > h.cfg.maxRequestBytes {
-			return nil, &httpProblem{status: http.StatusRequestEntityTooLarge, msg: "doh: request body exceeds size cap"}
+			return nil, &httpProblemError{status: http.StatusRequestEntityTooLarge, msg: "doh: request body exceeds size cap"}
 		}
 		return body, nil
 	case http.MethodGet:
@@ -177,26 +177,26 @@ func (h *dohHandler) readRequest(r *http.Request) ([]byte, error) {
 		// padding by default — use it as the canonical decoder.
 		dnsParam := r.URL.Query().Get("dns")
 		if dnsParam == "" {
-			return nil, &httpProblem{status: http.StatusBadRequest, msg: "doh: missing dns query parameter"}
+			return nil, &httpProblemError{status: http.StatusBadRequest, msg: "doh: missing dns query parameter"}
 		}
 		if len(dnsParam) > base64.RawURLEncoding.EncodedLen(h.cfg.maxRequestBytes) {
-			return nil, &httpProblem{status: http.StatusRequestEntityTooLarge, msg: "doh: dns parameter exceeds size cap"}
+			return nil, &httpProblemError{status: http.StatusRequestEntityTooLarge, msg: "doh: dns parameter exceeds size cap"}
 		}
 		return base64.RawURLEncoding.DecodeString(dnsParam)
 	default:
-		return nil, &httpProblem{status: http.StatusMethodNotAllowed, msg: "doh: method not allowed"}
+		return nil, &httpProblemError{status: http.StatusMethodNotAllowed, msg: "doh: method not allowed"}
 	}
 }
 
-type httpProblem struct {
+type httpProblemError struct {
 	status int
 	msg    string
 }
 
-func (p *httpProblem) Error() string { return p.msg }
+func (p *httpProblemError) Error() string { return p.msg }
 
 func writeHTTPError(w http.ResponseWriter, err error) {
-	var p *httpProblem
+	var p *httpProblemError
 	if errors.As(err, &p) {
 		http.Error(w, p.msg, p.status)
 		return

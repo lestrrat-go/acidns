@@ -53,10 +53,10 @@ func TestAggressiveNSECSynthesisesNXDOMAIN(t *testing.T) {
 			// requires the wildcard-denying NSEC to be present
 			// before it will synthesize for other names.
 			soa2, err := rdata.NewSOA(
-					wire.MustParseName("ns.example."),
-					wire.MustParseName("hm.example."),
-					1, 7200, 3600, 1209600, 60,
-				)
+				wire.MustParseName("ns.example."),
+				wire.MustParseName("hm.example."),
+				1, 7200, 3600, 1209600, 60,
+			)
 			require.NoError(t, err)
 			soa := wire.NewRecord(wire.MustParseName("example."), 5*time.Minute,
 				soa2)
@@ -124,10 +124,10 @@ func TestAggressiveNSECDisabledByDefault(t *testing.T) {
 		fn: func(_ context.Context, _ netip.AddrPort, q wire.Message) (wire.Message, error) {
 			upstreamCalls.Add(1)
 			soa3, err := rdata.NewSOA(
-					wire.MustParseName("ns.example."),
-					wire.MustParseName("hm.example."),
-					1, 7200, 3600, 1209600, 60,
-				)
+				wire.MustParseName("ns.example."),
+				wire.MustParseName("hm.example."),
+				1, 7200, 3600, 1209600, 60,
+			)
 			require.NoError(t, err)
 			soa := wire.NewRecord(wire.MustParseName("example."), 5*time.Minute,
 				soa3)

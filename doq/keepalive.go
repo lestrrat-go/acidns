@@ -228,7 +228,7 @@ func (e *KeepAliveClient) Exchange(ctx context.Context, q wire.Message) (wire.Me
 	// Two-attempt loop: if OpenStreamSync fails because the cached
 	// connection died between acquireConn and OpenStreamSync, drop and
 	// re-dial once.
-	for attempt := 0; attempt < 2; attempt++ {
+	for attempt := range 2 {
 		conn, err := e.acquireConn(ctx)
 		if err != nil {
 			return wire.Message{}, err

@@ -343,13 +343,13 @@ func TestClientCacheEvictsAtMaxEntries(t *testing.T) {
 	// Touch the second server so it's the most-recently-used; the
 	// oldest is now addrs[0].
 	now = now.Add(time.Second)
-	_, _, _ = findCookie(mustEDNS(t, c.Apply(addrs[1], wire.NewEDNSBuilder())))
+	findCookie(mustEDNS(t, c.Apply(addrs[1], wire.NewEDNSBuilder())))
 
 	// Insert a fifth server: addrs[0] (the oldest by touch time) must
 	// be evicted to make room.
 	now = now.Add(time.Second)
 	fifth := netip.MustParseAddrPort("192.0.2.5:53")
-	_, _, _ = findCookie(mustEDNS(t, c.Apply(fifth, wire.NewEDNSBuilder())))
+	findCookie(mustEDNS(t, c.Apply(fifth, wire.NewEDNSBuilder())))
 
 	// addrs[1] was the most-recently-touched survivor — its client
 	// cookie must be the same one that was minted on its first Apply.

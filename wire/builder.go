@@ -22,18 +22,24 @@ type MessageBuilder struct {
 	err         error
 }
 
-// NewMessageMessageBuilder returns a fresh MessageBuilder.
+// NewMessageBuilder returns a fresh MessageBuilder.
 func NewMessageBuilder() *MessageBuilder { return &MessageBuilder{} }
 
-func (b *MessageBuilder) ID(v uint16) *MessageBuilder     { b.id = v; return b }
-func (b *MessageBuilder) Flags(f Flags) *MessageBuilder   { b.flags = f; return b }
-func (b *MessageBuilder) Response(v bool) *MessageBuilder { b.flags = b.flags.WithResponse(v); return b }
+func (b *MessageBuilder) ID(v uint16) *MessageBuilder   { b.id = v; return b }
+func (b *MessageBuilder) Flags(f Flags) *MessageBuilder { b.flags = f; return b }
+func (b *MessageBuilder) Response(v bool) *MessageBuilder {
+	b.flags = b.flags.WithResponse(v)
+	return b
+}
 func (b *MessageBuilder) Opcode(o Opcode) *MessageBuilder { b.flags = b.flags.WithOpcode(o); return b }
 func (b *MessageBuilder) Authoritative(v bool) *MessageBuilder {
 	b.flags = b.flags.WithAuthoritative(v)
 	return b
 }
-func (b *MessageBuilder) Truncated(v bool) *MessageBuilder { b.flags = b.flags.WithTruncated(v); return b }
+func (b *MessageBuilder) Truncated(v bool) *MessageBuilder {
+	b.flags = b.flags.WithTruncated(v)
+	return b
+}
 func (b *MessageBuilder) RecursionDesired(v bool) *MessageBuilder {
 	b.flags = b.flags.WithRecursionDesired(v)
 	return b
@@ -50,8 +56,11 @@ func (b *MessageBuilder) CheckingDisabled(v bool) *MessageBuilder {
 	b.flags = b.flags.WithCheckingDisabled(v)
 	return b
 }
-func (b *MessageBuilder) RCODE(r RCODE) *MessageBuilder       { b.flags = b.flags.WithRCODE(r); return b }
-func (b *MessageBuilder) Question(q Question) *MessageBuilder { b.questions = append(b.questions, q); return b }
+func (b *MessageBuilder) RCODE(r RCODE) *MessageBuilder { b.flags = b.flags.WithRCODE(r); return b }
+func (b *MessageBuilder) Question(q Question) *MessageBuilder {
+	b.questions = append(b.questions, q)
+	return b
+}
 
 // Answer appends a Record to the answer section. A zero-value Record
 // (no rdata attached) is rejected — Pack would panic on the nil

@@ -23,7 +23,6 @@ func (f *fakeResolver) Resolve(_ context.Context, _ wire.Name, _ rrtype.Type) (*
 	return acidns.NewAnswer(wire.Question{}, f.records, raw), nil
 }
 
-
 func Example_ddr_discover() {
 	// Build a SVCB record advertising a DoH endpoint, exactly as a
 	// production resolver would emit it from _dns.resolver.arpa.
