@@ -203,7 +203,7 @@ func largeAnswerInner() acidns.Handler {
 			filler[i] = 'a'
 		}
 		txt, _ := rdata.NewTXT(string(filler))
-		for i := 0; i < 16; i++ {
+		for range 16 {
 			bldr = bldr.Answer(wire.NewRecord(qq.Name(), 60*time.Second, txt))
 		}
 		resp, _ := bldr.Build()

@@ -103,9 +103,9 @@ inside IN A 192.0.2.10
 		owners[i] = r.Name().String()
 	}
 	require.Equal(t, []string{
-		"example.com.",                  // SOA
-		"inside.child.example.com.",     // inside the include, child origin
-		"after.example.com.",            // parent origin restored
+		"example.com.",              // SOA
+		"inside.child.example.com.", // inside the include, child origin
+		"after.example.com.",        // parent origin restored
 	}, owners)
 }
 
@@ -265,7 +265,7 @@ func TestIncludeResolverFuncAdapter(t *testing.T) {
 	t.Parallel()
 	// User-supplied resolver via the function adapter; opens hard-coded
 	// content rather than touching a filesystem.
-	resolver := zonefile.IncludeResolverFunc(func(includer, name string) (io.ReadCloser, string, error) {
+	resolver := zonefile.IncludeResolverFunc(func(_, name string) (io.ReadCloser, string, error) {
 		if name != "memory.zone" {
 			return nil, "", io.EOF
 		}

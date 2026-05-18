@@ -235,9 +235,9 @@ func (r RRSIG) SignatureExpirationRaw() uint32 { return r.sigExp }
 // [RRSIG.SignatureExpirationRaw] for why callers should prefer this
 // over the time.Time form.
 func (r RRSIG) SignatureInceptionRaw() uint32 { return r.sigInc }
-func (r RRSIG) KeyTag() uint16                 { return r.keyTag }
-func (r RRSIG) SignerName() wirebb.Name        { return r.signerName }
-func (r RRSIG) Signature() []byte              { return r.signature }
+func (r RRSIG) KeyTag() uint16                { return r.keyTag }
+func (r RRSIG) SignerName() wirebb.Name       { return r.signerName }
+func (r RRSIG) Signature() []byte             { return r.signature }
 func (r RRSIG) Pack(p *wirebb.Packer) {
 	p.Uint16(uint16(r.typeCovered))
 	p.Uint8(uint8(r.algorithm))
@@ -491,14 +491,14 @@ type NSEC3 struct {
 	types      []rrtype.Type
 }
 
-func (NSEC3) Type() rrtype.Type                 { return rrtype.NSEC3 }
-func (NSEC3) typedRData()                       {}
+func (NSEC3) Type() rrtype.Type                   { return rrtype.NSEC3 }
+func (NSEC3) typedRData()                         {}
 func (n NSEC3) HashAlgorithm() NSEC3HashAlgorithm { return n.hashAlg }
-func (n NSEC3) Flags() uint8            { return n.flags }
-func (n NSEC3) Iterations() uint16      { return n.iterations }
-func (n NSEC3) Salt() []byte            { return n.salt }
-func (n NSEC3) NextHashedOwner() []byte { return n.nextOwner }
-func (n NSEC3) Types() []rrtype.Type    { return n.types }
+func (n NSEC3) Flags() uint8                      { return n.flags }
+func (n NSEC3) Iterations() uint16                { return n.iterations }
+func (n NSEC3) Salt() []byte                      { return n.salt }
+func (n NSEC3) NextHashedOwner() []byte           { return n.nextOwner }
+func (n NSEC3) Types() []rrtype.Type              { return n.types }
 func (n NSEC3) Pack(p *wirebb.Packer) {
 	p.Uint8(uint8(n.hashAlg))
 	p.Uint8(n.flags)

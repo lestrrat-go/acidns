@@ -28,10 +28,7 @@ func Write(w io.Writer, z Zone) error {
 		}
 	}
 	for _, rec := range z.Records() {
-		line, err := formatRecord(rec, z.Origin())
-		if err != nil {
-			return err
-		}
+		line := formatRecord(rec, z.Origin())
 		if _, err := bw.WriteString(line); err != nil {
 			return err
 		}
@@ -61,15 +58,12 @@ func (b *bufWriter) Flush() error {
 	return err
 }
 
-func formatRecord(rec wire.Record, origin wire.Name) (string, error) {
+func formatRecord(rec wire.Record, origin wire.Name) string {
 	owner := relativise(rec.Name(), origin)
 	ttl := int64(rec.TTL().Seconds())
-	rdataStr, err := formatRDataPresentation(rec.RData(), origin)
-	if err != nil {
-		return "", err
-	}
+	rdataStr := formatRDataPresentation(rec.RData())
 	return fmt.Sprintf("%s\t%d\t%s\t%s\t%s\n",
-		owner, ttl, rec.Class(), rec.Type(), rdataStr), nil
+		owner, ttl, rec.Class(), rec.Type(), rdataStr)
 }
 
 func relativise(n, origin wire.Name) string {
@@ -84,56 +78,56 @@ func relativise(n, origin wire.Name) string {
 	return full
 }
 
-func formatRDataPresentation(rd rdata.RData, _ wire.Name) (string, error) {
+func formatRDataPresentation(rd rdata.RData) string {
 	switch v := rd.(type) {
 	case rdata.A:
-		return v.Addr().String(), nil
+		return v.Addr().String()
 	case rdata.AAAA:
-		return v.Addr().String(), nil
+		return v.Addr().String()
 	case rdata.CNAME:
-		return v.Target().String(), nil
+		return v.Target().String()
 	case rdata.NS:
-		return v.Target().String(), nil
+		return v.Target().String()
 	case rdata.PTR:
-		return v.Target().String(), nil
+		return v.Target().String()
 	case rdata.MX:
-		return fmt.Sprintf("%d %s", v.Preference(), v.Exchange()), nil
+		return fmt.Sprintf("%d %s", v.Preference(), v.Exchange())
 	case rdata.TXT:
 		var parts []string
 		for _, s := range v.Strings() {
 			parts = append(parts, quoteCharString(s))
 		}
-		return strings.Join(parts, " "), nil
+		return strings.Join(parts, " ")
 	case rdata.SOA:
 		return fmt.Sprintf("%s %s (\n\t\t%d\t; serial\n\t\t%d\t; refresh\n\t\t%d\t; retry\n\t\t%d\t; expire\n\t\t%d )\t; minimum",
 			v.MName(), v.RName(), v.Serial(),
 			int(v.Refresh().Seconds()), int(v.Retry().Seconds()),
-			int(v.Expire().Seconds()), int(v.Minimum().Seconds())), nil
+			int(v.Expire().Seconds()), int(v.Minimum().Seconds()))
 	case rdata.CAA:
-		return fmt.Sprintf("%d %s %s", v.Flags(), v.Tag(), quoteCharString(string(v.Value()))), nil
+		return fmt.Sprintf("%d %s %s", v.Flags(), v.Tag(), quoteCharString(string(v.Value())))
 	case rdata.SRV:
 		// RFC 2782: priority weight port target
-		return fmt.Sprintf("%d %d %d %s", v.Priority(), v.Weight(), v.Port(), v.Target()), nil
+		return fmt.Sprintf("%d %d %d %s", v.Priority(), v.Weight(), v.Port(), v.Target())
 	case rdata.DNAME:
 		// RFC 6672 §2.1: single target name
-		return v.Target().String(), nil
+		return v.Target().String()
 	case rdata.DS:
 		// RFC 4034 §5.3: keytag alg digest-type <hex digest>
-		return fmt.Sprintf("%d %d %d %s", v.KeyTag(), uint8(v.Algorithm()), uint8(v.DigestType()), hex.EncodeToString(v.Digest())), nil
+		return fmt.Sprintf("%d %d %d %s", v.KeyTag(), uint8(v.Algorithm()), uint8(v.DigestType()), hex.EncodeToString(v.Digest()))
 	case rdata.DNSKEY:
 		// RFC 4034 §2.2: flags protocol algorithm <base64 key>
-		return fmt.Sprintf("%d %d %d %s", v.Flags(), v.Protocol(), uint8(v.Algorithm()), base64.StdEncoding.EncodeToString(v.PublicKey())), nil
+		return fmt.Sprintf("%d %d %d %s", v.Flags(), v.Protocol(), uint8(v.Algorithm()), base64.StdEncoding.EncodeToString(v.PublicKey()))
 	case rdata.Unknown:
 		// RFC 3597 generic form: \# <length> <hex>
 		b := v.Bytes()
-		return fmt.Sprintf("\\# %d %s", len(b), hex.EncodeToString(b)), nil
+		return fmt.Sprintf("\\# %d %s", len(b), hex.EncodeToString(b))
 	default:
 		// Fall back to RFC 3597 §5 generic form for any typed rdata we
 		// don't have an explicit presentation form for. The writer must
 		// never fail on a valid record — round-tripping via the generic
 		// form preserves the wire payload exactly.
 		b := rdata.Pack(rd)
-		return fmt.Sprintf("\\# %d %s", len(b), hex.EncodeToString(b)), nil
+		return fmt.Sprintf("\\# %d %s", len(b), hex.EncodeToString(b))
 	}
 }
 

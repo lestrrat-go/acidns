@@ -12,7 +12,7 @@ import (
 // shared interface would either require the walker options to
 // implement an unused validator marker, or vice versa. The names
 // below mirror the walker option-set with a Validator prefix.
-type ValidatorOption interface {
+type ValidatorOption interface { //nolint:revive // intentionally mirrors WalkerOption in this same package; see godoc above.
 	option.Interface
 	validatorOption()
 }

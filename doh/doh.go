@@ -300,13 +300,13 @@ func (e *Client) buildRequest(ctx context.Context, msg []byte) (*http.Request, e
 func expandDNSTemplate(endpoint, dnsParam string) string {
 	const formExpr = "{?dns}"
 	const pathExpr = "{dns}"
-	if i := strings.Index(endpoint, formExpr); i >= 0 {
-		base := endpoint[:i] + endpoint[i+len(formExpr):]
+	if before, after, ok := strings.Cut(endpoint, formExpr); ok {
+		base := before + after
 		return appendDNSParam(base, dnsParam)
 	}
-	if i := strings.Index(endpoint, pathExpr); i >= 0 {
+	if before, after, ok := strings.Cut(endpoint, pathExpr); ok {
 		// base64url already uses URL-safe alphabet; no further encoding.
-		return endpoint[:i] + dnsParam + endpoint[i+len(pathExpr):]
+		return before + dnsParam + after
 	}
 	return appendDNSParam(endpoint, dnsParam)
 }

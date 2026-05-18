@@ -202,7 +202,7 @@ func TestReplayCacheReplayerDoesNotPinEntry(t *testing.T) {
 	//    as a replay; with the buggy refresh-on-hit behaviour the
 	//    replayer's stored timestamp would advance past every
 	//    legitimate entry's.
-	for i := 0; i < 20; i++ {
+	for i := range 20 {
 		clock = clock.Add(time.Second)
 		require.True(t, c.Seen(keyName, replayerSignedAt, replayerMAC),
 			"replay #%d must be flagged", i)

@@ -31,8 +31,6 @@ func (f *fakeResolver) Resolve(_ context.Context, _ wire.Name, _ rrtype.Type) (*
 	return acidns.NewAnswer(wire.Question{}, f.records, raw), nil
 }
 
-
-
 func TestDiscoveryName(t *testing.T) {
 	t.Parallel()
 	t.Run("happy path", func(t *testing.T) {

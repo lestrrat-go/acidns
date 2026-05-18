@@ -64,7 +64,7 @@ func NewZONEMD(serial uint32, scheme ZONEMDScheme, hash ZONEMDHashAlgorithm, dig
 // records with unfamiliar Hash values survive the parse step and can
 // be inspected by callers.
 func validateZONEMDDigestLength(hash ZONEMDHashAlgorithm, n int) error {
-	want := 0
+	var want int
 	switch hash {
 	case ZONEMDHashSHA384:
 		want = 48

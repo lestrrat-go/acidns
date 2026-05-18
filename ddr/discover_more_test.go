@@ -24,8 +24,6 @@ func (e *errResolver) Resolve(_ context.Context, _ wire.Name, _ rrtype.Type) (*a
 	return nil, e.err
 }
 
-
-
 func TestDiscover_ResolverError(t *testing.T) {
 	t.Parallel()
 	sentinel := errors.New("upstream boom")

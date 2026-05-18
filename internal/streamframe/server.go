@@ -180,7 +180,7 @@ func (w *ResponseWriter) WriteMsg(m wire.Message) error {
 // cancelled or the listener errors fatally. The listener is closed
 // before Run returns. On clean shutdown via ctx cancellation Run
 // returns [ErrServerClosed]; transient Accept errors are backed off
-// per [netutil.AcceptBackoffMin]/[netutil.AcceptBackoffMax]; permanent
+// per [netutil.AcceptBackoffInitial]/[netutil.AcceptBackoffCap]; permanent
 // errors are wrapped with cfg.AcceptErrorWrap and returned.
 //
 // Run blocks until every per-connection goroutine has drained.
@@ -241,11 +241,11 @@ func Run(ctx context.Context, cfg LoopConfig) error {
 			}
 			if netutil.IsAcceptTransient(err) {
 				if tempBackoff == 0 {
-					tempBackoff = netutil.AcceptBackoffMin
+					tempBackoff = netutil.AcceptBackoffInitial
 				} else {
 					tempBackoff *= 2
-					if tempBackoff > netutil.AcceptBackoffMax {
-						tempBackoff = netutil.AcceptBackoffMax
+					if tempBackoff > netutil.AcceptBackoffCap {
+						tempBackoff = netutil.AcceptBackoffCap
 					}
 				}
 				timer := time.NewTimer(tempBackoff)

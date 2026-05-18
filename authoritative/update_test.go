@@ -185,9 +185,7 @@ func TestUpdateConcurrentWithQuery(t *testing.T) {
 	}
 
 	for range readers {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
+		wg.Go(func() {
 			ex, err := acidns.NewUDPClient(addr)
 			if err != nil {
 				return
@@ -202,7 +200,7 @@ func TestUpdateConcurrentWithQuery(t *testing.T) {
 				}
 				queryOps.Add(1)
 			}
-		}()
+		})
 	}
 
 	wg.Wait()

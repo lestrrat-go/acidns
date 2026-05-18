@@ -76,7 +76,7 @@ func NewServer(addr netip.AddrPort, h acidns.Handler, opts ...ServerOption) (*Se
 		maxConnections:     1024,
 		maxConnsPerSource:  32,
 		maxMessageSize:     16 * 1024,
-		maxInflightPerConn:     32,
+		maxInflightPerConn: 32,
 		// Match TCP defaults — DoT amortises TLS state across many
 		// queries on a long-lived connection, so an unbounded
 		// per-connection budget is at least as risky here as on TCP.

@@ -27,14 +27,14 @@ import (
 func TestSigningAlgorithmsFromChain(t *testing.T) {
 	t.Parallel()
 	chain := []ChainStep{
-		ChainStep{zone: wire.MustParseName("."), dss: []rdata.DS{
+		{zone: wire.MustParseName("."), dss: []rdata.DS{
 			fakeDS(rdata.AlgRSASHA256),
 		}, res: Secure},
-		ChainStep{zone: wire.MustParseName("example."), dss: []rdata.DS{
+		{zone: wire.MustParseName("example."), dss: []rdata.DS{
 			fakeDS(rdata.AlgECDSAP256SHA256),
 			fakeDS(rdata.AlgED25519),
 		}, res: Secure},
-		ChainStep{zone: wire.MustParseName("sub.example."), res: Insecure},
+		{zone: wire.MustParseName("sub.example."), res: Insecure},
 	}
 	algs := signingAlgorithms(chain)
 	require.Len(t, algs, 2)
@@ -295,15 +295,15 @@ func TestNSEC3CoverSucceeds(t *testing.T) {
 	copy(lo, hash)
 	copy(hi, hash)
 	// Decrement lo, increment hi (clamped within byte range).
-	for i := len(lo) - 1; i >= 0; i-- {
-		if lo[i] > 0 {
+	for i, v := range slices.Backward(lo) {
+		if v > 0 {
 			lo[i]--
 			break
 		}
 		lo[i] = 0xff
 	}
-	for i := len(hi) - 1; i >= 0; i-- {
-		if hi[i] < 0xff {
+	for i, v := range slices.Backward(hi) {
+		if v < 0xff {
 			hi[i]++
 			break
 		}
@@ -402,15 +402,15 @@ func TestNSEC3ProveDenialDSOptOutCover(t *testing.T) {
 	hi := make([]byte, len(hash))
 	copy(lo, hash)
 	copy(hi, hash)
-	for i := len(lo) - 1; i >= 0; i-- {
-		if lo[i] > 0 {
+	for i, v := range slices.Backward(lo) {
+		if v > 0 {
 			lo[i]--
 			break
 		}
 		lo[i] = 0xff
 	}
-	for i := len(hi) - 1; i >= 0; i-- {
-		if hi[i] < 0xff {
+	for i, v := range slices.Backward(hi) {
+		if v < 0xff {
 			hi[i]++
 			break
 		}
@@ -518,15 +518,15 @@ func TestNSEC3ProveDenialNXDomainProof(t *testing.T) {
 	ncHash := nsec3Hash(qname, params.salt, params.iterations)
 	lo := append([]byte(nil), ncHash...)
 	hi := append([]byte(nil), ncHash...)
-	for i := len(lo) - 1; i >= 0; i-- {
-		if lo[i] > 0 {
+	for i, v := range slices.Backward(lo) {
+		if v > 0 {
 			lo[i]--
 			break
 		}
 		lo[i] = 0xff
 	}
-	for i := len(hi) - 1; i >= 0; i-- {
-		if hi[i] < 0xff {
+	for i, v := range slices.Backward(hi) {
+		if v < 0xff {
 			hi[i]++
 			break
 		}
@@ -540,15 +540,15 @@ func TestNSEC3ProveDenialNXDomainProof(t *testing.T) {
 	wcHash := nsec3Hash(wc, params.salt, params.iterations)
 	wlo := append([]byte(nil), wcHash...)
 	whi := append([]byte(nil), wcHash...)
-	for i := len(wlo) - 1; i >= 0; i-- {
-		if wlo[i] > 0 {
+	for i, v := range slices.Backward(wlo) {
+		if v > 0 {
 			wlo[i]--
 			break
 		}
 		wlo[i] = 0xff
 	}
-	for i := len(whi) - 1; i >= 0; i-- {
-		if whi[i] < 0xff {
+	for i, v := range slices.Backward(whi) {
+		if v < 0xff {
 			whi[i]++
 			break
 		}

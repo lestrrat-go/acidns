@@ -17,13 +17,20 @@ import (
 // slowUpstream returns Exchange responses only after release is closed,
 // so a test can saturate the forwarder's inflight slots deterministically.
 type slowUpstream struct {
-	release chan struct{}
-	entered chan struct{}
-	once    sync.Once
+	release     chan struct{}
+	entered     chan struct{}
+	enteredOnce sync.Once
+	releaseOnce sync.Once
+}
+
+// Release unblocks any goroutines currently waiting on this upstream.
+// Safe to call multiple times.
+func (s *slowUpstream) Release() {
+	s.releaseOnce.Do(func() { close(s.release) })
 }
 
 func (s *slowUpstream) Exchange(ctx context.Context, q wire.Message) (wire.Message, error) {
-	s.once.Do(func() { close(s.entered) })
+	s.enteredOnce.Do(func() { close(s.entered) })
 	select {
 	case <-s.release:
 	case <-ctx.Done():
@@ -44,10 +51,10 @@ type capturingWriter struct {
 	written wire.Message
 }
 
-func (c *capturingWriter) WriteMsg(m wire.Message) error  { c.written = m; return nil }
-func (capturingWriter) Network() string                   { return "udp" }
-func (capturingWriter) LocalAddr() netip.AddrPort         { return netip.AddrPort{} }
-func (c capturingWriter) RemoteAddr() netip.AddrPort      { return c.src }
+func (c *capturingWriter) WriteMsg(m wire.Message) error { c.written = m; return nil }
+func (capturingWriter) Network() string                  { return "udp" }
+func (capturingWriter) LocalAddr() netip.AddrPort        { return netip.AddrPort{} }
+func (c capturingWriter) RemoteAddr() netip.AddrPort     { return c.src }
 
 // TestForwardMaxInflightSaturatesReturnsErrInflightFull pins the
 // fail-fast contract: with maxInflight=1 and a single in-flight slow
@@ -57,7 +64,7 @@ func (c capturingWriter) RemoteAddr() netip.AddrPort      { return c.src }
 func TestForwardMaxInflightSaturatesReturnsErrInflightFull(t *testing.T) {
 	t.Parallel()
 	up := &slowUpstream{release: make(chan struct{}), entered: make(chan struct{})}
-	t.Cleanup(func() { close(up.release) })
+	t.Cleanup(up.Release)
 
 	h, err := forward.New(up,
 		forward.WithMaxInflight(1),
@@ -98,8 +105,7 @@ func TestForwardMaxInflightSaturatesReturnsErrInflightFull(t *testing.T) {
 		"saturated forward.WithMaxInflight cap must surface as SERVFAIL on the inbound writer")
 
 	// Release the slow upstream so the first goroutine exits.
-	close(up.release)
-	up.release = make(chan struct{}) // re-arm so Cleanup's close doesn't panic
+	up.Release()
 	<-firstDone
 }
 
@@ -130,7 +136,7 @@ func TestForwardAllowNoRDDefaultsToRefused(t *testing.T) {
 func TestForwardAllowNoRDTrueAllowsRDClearQueries(t *testing.T) {
 	t.Parallel()
 	up := &slowUpstream{release: make(chan struct{}), entered: make(chan struct{})}
-	close(up.release) // never block — let queries through
+	up.Release() // never block — let queries through
 
 	h, err := forward.New(up,
 		forward.WithAllowNoRD(true),

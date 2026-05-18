@@ -369,7 +369,7 @@ func NewSecretPool(opts ...PoolOption) (*MemorySecretPool, error) {
 			rotateEvery = option.MustGet[time.Duration](o)
 		case identPoolContext{}:
 			if v := option.MustGet[context.Context](o); v != nil {
-				ctx = v
+				ctx = v //nolint:fatcontext // option-parsing loop assigns at most once
 			}
 		case identPoolLogger{}:
 			if v := option.MustGet[*slog.Logger](o); v != nil {

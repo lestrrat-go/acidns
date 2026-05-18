@@ -118,6 +118,7 @@ func (a Algorithm) IsKnown() bool {
 	}
 	return false
 }
+
 // Name returns the key name (the DNS name used as the TSIG owner).
 func (k Key) Name() wire.Name { return k.name }
 

@@ -122,6 +122,7 @@ func TestNotifyUnsignedResponseRejectedWhenSigned(t *testing.T) {
 // query bytes round-trip.
 type captureSigningExchanger struct {
 	signingExchanger
+
 	got []byte
 }
 

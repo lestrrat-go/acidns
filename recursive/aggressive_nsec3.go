@@ -434,7 +434,7 @@ func nsec3OwnerHashFromName(owner wire.Name) ([]byte, error) {
 		// Uppercase as base32hex is case-insensitive but the
 		// validatorbb decoder expects upper.
 		up := make([]byte, len(s))
-		for i := 0; i < len(s); i++ {
+		for i := range len(s) {
 			c := s[i]
 			if c >= 'a' && c <= 'z' {
 				c -= 32

@@ -153,12 +153,12 @@ func TestGenerateMXRDataMultiToken(t *testing.T) {
 func TestGenerateRejectsBadRange(t *testing.T) {
 	t.Parallel()
 	cases := []string{
-		"$GENERATE 5-1 host-$ A 10.0.0.$\n",  // stop < start
-		"$GENERATE 1 host-$ A 10.0.0.$\n",    // missing stop
-		"$GENERATE -1-3 host-$ A 10.0.0.$\n", // negative start
-		"$GENERATE 1-5/0 host-$ A 10.0.0.$\n", // zero step
+		"$GENERATE 5-1 host-$ A 10.0.0.$\n",    // stop < start
+		"$GENERATE 1 host-$ A 10.0.0.$\n",      // missing stop
+		"$GENERATE -1-3 host-$ A 10.0.0.$\n",   // negative start
+		"$GENERATE 1-5/0 host-$ A 10.0.0.$\n",  // zero step
 		"$GENERATE 1-5/-1 host-$ A 10.0.0.$\n", // negative step
-		"$GENERATE x-5 host-$ A 10.0.0.$\n",   // non-integer start
+		"$GENERATE x-5 host-$ A 10.0.0.$\n",    // non-integer start
 	}
 	for _, c := range cases {
 		_, err := zonefile.Parse(strings.NewReader(generateHeader + c))

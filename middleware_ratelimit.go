@@ -246,17 +246,16 @@ func (l *limiter) key(src netip.Addr) string {
 	return pfx.String()
 }
 
-// clampPrefix bounds maskBits into [0, max]. Negative values become 0
-// (disabled); values above max are clamped to max so an operator who
+// clampPrefix bounds maskBits into [0, upper]. Negative values become 0
+// (disabled); values above upper are clamped to upper so an operator who
 // requests /128 on an IPv4-only deployment gets per-address keying
 // instead of silent fall-through to no grouping at all.
-func clampPrefix(maskBits, max int) int {
+func clampPrefix(maskBits, upper int) int {
 	if maskBits < 0 {
 		return 0
 	}
-	if maskBits > max {
-		return max
+	if maskBits > upper {
+		return upper
 	}
 	return maskBits
 }
-

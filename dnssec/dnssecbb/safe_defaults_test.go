@@ -18,8 +18,8 @@ func TestParseRSAPublicRejectsShortModulus(t *testing.T) {
 	// 3-byte exponent (0x010001 = 65537) followed by an undersized
 	// modulus of 64 bytes (= 512 bits).
 	buf := make([]byte, 0, 1+3+64)
-	buf = append(buf, 3)                  // explen
-	buf = append(buf, 0x01, 0x00, 0x01)   // e = 65537
+	buf = append(buf, 3)                // explen
+	buf = append(buf, 0x01, 0x00, 0x01) // e = 65537
 	buf = append(buf, make([]byte, 64)...)
 	buf[1+3] = 0xC0 // ensure modulus high bit set so length is exact
 

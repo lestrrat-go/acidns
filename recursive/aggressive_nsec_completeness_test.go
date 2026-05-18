@@ -198,8 +198,8 @@ func TestAggressiveNSEC3NoData(t *testing.T) {
 
 	// A NoData NSEC3 at the queried name's hash — bitmap excludes A.
 	nsec3, err := rdata.NewNSEC3(1 /*sha1*/, 0 /*flags*/, 0 /*iterations*/, salt,
-			apexHash, // any plausible next-hash, doesn't matter for NoData
-			[]rrtype.Type{rrtype.AAAA, rrtype.TXT})
+		apexHash, // any plausible next-hash, doesn't matter for NoData
+		[]rrtype.Type{rrtype.AAAA, rrtype.TXT})
 	require.NoError(t, err)
 	nsec3Match := wire.NewRecord(
 		nsec3OwnerName(matchHash, zoneApex),

@@ -24,7 +24,7 @@ func newFakeClock(t time.Time) *fakeClock {
 	return c
 }
 
-func (c *fakeClock) Now() time.Time         { return time.Unix(0, c.nanos.Load()) }
+func (c *fakeClock) Now() time.Time          { return time.Unix(0, c.nanos.Load()) }
 func (c *fakeClock) Advance(d time.Duration) { c.nanos.Add(int64(d)) }
 
 func TestCacheGetDecrementsTTL(t *testing.T) {

@@ -69,7 +69,7 @@ func (s *extraSigPrepender) Lookup(ctx context.Context, qname wire.Name, qtype r
 	// Prepend `extras` bogus RRSIGs that share the legit sig's algorithm
 	// and KeyTag — they will match a key but Verify will fail. The only
 	// valid sig sits at position `extras` (i.e. last among the RRSIGs).
-	for i := 0; i < s.extras; i++ {
+	for range s.extras {
 		bogus := rdata.NewRRSIG(
 			legitRRSIG.TypeCovered(), legitRRSIG.Algorithm(),
 			legitRRSIG.Labels(), legitRRSIG.OriginalTTL(),
@@ -115,6 +115,7 @@ func TestWalkerFix2BogusWrapsErrBogus(t *testing.T) {
 	t.Parallel()
 	now := time.Now().UTC().Truncate(time.Second)
 	t.Run("expired RRSIG", func(t *testing.T) {
+		t.Parallel()
 		src, _, anchor := buildChain(t, rdata.AlgECDSAP256SHA256, now)
 		w, err := validator.NewWalker(src,
 			validator.WithWalkerAnchors(anchor),
@@ -128,6 +129,7 @@ func TestWalkerFix2BogusWrapsErrBogus(t *testing.T) {
 		require.ErrorIs(t, ans.Reason(), validator.ErrBogus)
 	})
 	t.Run("unsigned answer", func(t *testing.T) {
+		t.Parallel()
 		src, _, anchor := buildChain(t, rdata.AlgECDSAP256SHA256, now)
 		wrapped := &sigStripper{
 			inner:  src,
@@ -215,6 +217,7 @@ func TestValidatorFix4SkewTolerance(t *testing.T) {
 		expiration, inception, dnssec.KeyTag(key), set[0].Name(), sigBytes)
 
 	t.Run("skew=0 rejects future inception", func(t *testing.T) {
+		t.Parallel()
 		v, err := validator.New(
 			validator.WithValidatorClock(func() time.Time { return now }),
 			validator.WithValidatorBogusPolicy(validator.BogusReturnAnswer),
@@ -225,6 +228,7 @@ func TestValidatorFix4SkewTolerance(t *testing.T) {
 		require.Equal(t, validator.Bogus, res)
 	})
 	t.Run("skew=1m accepts future inception", func(t *testing.T) {
+		t.Parallel()
 		v, err := validator.New(
 			validator.WithValidatorClock(func() time.Time { return now }),
 			validator.WithValidatorClockSkew(time.Minute),

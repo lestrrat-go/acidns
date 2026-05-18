@@ -66,7 +66,7 @@ type Forwarder struct {
 	// one so they unwind on Forwarder shutdown instead of running to
 	// queryTimeout. wg counts those goroutines so the shutdown
 	// goroutine can wait for them before closing the upstream.
-	closeCtx context.Context
+	closeCtx context.Context //nolint:containedctx // lifecycle ctx is the cancellation signal for in-flight upstream goroutines; see WithContext.
 	wg       sync.WaitGroup
 }
 
@@ -143,7 +143,7 @@ func newForwarder(upstream acidns.Exchanger, upstreamName string, opts []Option)
 		case identAllowNoRD{}:
 			c.allowNoRD = option.MustGet[bool](o)
 		case identContext{}:
-			c.lifecycleCtx = option.MustGet[context.Context](o)
+			c.lifecycleCtx = option.MustGet[context.Context](o) //nolint:fatcontext // option-parsing loop assigns at most once
 		}
 	}
 	if c.now == nil {
@@ -349,9 +349,7 @@ func (h *Forwarder) exchangeSingleflight(ctx context.Context, in wire.Message, q
 // trace spans, etc. — for observers down the upstream stack. The
 // exchange is bounded by queryTimeout when configured.
 func (h *Forwarder) startExchange(callerCtx context.Context, call *inflightCall, key string, in wire.Message) {
-	h.wg.Add(1)
-	go func() {
-		defer h.wg.Done()
+	h.wg.Go(func() {
 		defer func() {
 			h.inflightMu.Lock()
 			delete(h.inflight, key)
@@ -382,7 +380,7 @@ func (h *Forwarder) startExchange(callerCtx context.Context, call *inflightCall,
 		}
 		fwd := buildForwardQuery(in)
 		call.resp, call.err = h.cfg.upstream.Exchange(exchangeCtx, fwd)
-	}()
+	})
 }
 
 // singleflightKey identifies a coalescable upstream call. Includes
