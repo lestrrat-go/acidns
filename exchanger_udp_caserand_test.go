@@ -25,12 +25,19 @@ import (
 func TestUDP0x20RandomizesAndVerifies(t *testing.T) {
 	t.Parallel()
 
+	// Use a qname with many letter bytes so the probability the
+	// random case-flip happens to leave every letter lowercase
+	// — which would make the "mangled" peer's all-lowercase
+	// response indistinguishable from a faithful echo — is
+	// vanishingly small (2^-N per attempt for N letter bytes).
+	const qname = "abcdefghijklmnop.qrstuvwxyz.test."
+
 	t.Run("preserved", func(t *testing.T) {
 		t.Parallel()
 		addr := startCaseEchoServer(t, true /* preserve case */)
 		ex, err := acidns.NewUDPClient(addr, acidns.WithUDPClientCaseRandomization(true))
 		require.NoError(t, err)
-		q := mkUDPQuery(t, "case.test.")
+		q := mkUDPQuery(t, qname)
 		ctx, cancel := context.WithTimeout(t.Context(), 2*time.Second)
 		defer cancel()
 		_, err = ex.Exchange(ctx, q)
@@ -45,7 +52,7 @@ func TestUDP0x20RandomizesAndVerifies(t *testing.T) {
 			acidns.WithUDPClientTimeout(500*time.Millisecond),
 		)
 		require.NoError(t, err)
-		q := mkUDPQuery(t, "case.test.")
+		q := mkUDPQuery(t, qname)
 		ctx, cancel := context.WithTimeout(t.Context(), 1*time.Second)
 		defer cancel()
 		_, err = ex.Exchange(ctx, q)
