@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"slices"
 	"time"
 
 	"github.com/lestrrat-go/acidns/dnssec"
@@ -319,7 +320,7 @@ func (w *walker) walkChain(ctx context.Context, anchor Anchor, qname wire.Name) 
 	if err != nil {
 		return nil, nil, wire.Name{}, fmt.Errorf("anchor %s: %w", anchor.Name(), err)
 	}
-	chain := []ChainStep{ChainStep{zone: anchor.Name(), keys: keys, dss: anchor.DSs(), res: Secure}}
+	chain := []ChainStep{{zone: anchor.Name(), keys: keys, dss: anchor.DSs(), res: Secure}}
 
 	parentKeys := keys
 	zone := anchor.Name()
@@ -1031,9 +1032,9 @@ func (w *walker) validateNegative(qname wire.Name, qtype rrtype.Type, parentKeys
 // deepestSecureZone returns the zone of the deepest Secure step in chain.
 // Returns the zero Name if no Secure step is present.
 func deepestSecureZone(chain []ChainStep) wire.Name {
-	for i := len(chain) - 1; i >= 0; i-- {
-		if chain[i].Result() == Secure {
-			return chain[i].Zone()
+	for _, v := range slices.Backward(chain) {
+		if v.Result() == Secure {
+			return v.Zone()
 		}
 	}
 	return wire.Name{}
@@ -1047,11 +1048,11 @@ func deepestSecureZone(chain []ChainStep) wire.Name {
 // weakest algorithm the zone advertises.
 func signingAlgorithms(chain []ChainStep) map[rdata.DNSSECAlgorithm]struct{} {
 	algs := map[rdata.DNSSECAlgorithm]struct{}{}
-	for i := len(chain) - 1; i >= 0; i-- {
-		if chain[i].Result() != Secure {
+	for _, v := range slices.Backward(chain) {
+		if v.Result() != Secure {
 			continue
 		}
-		dss := chain[i].DSs()
+		dss := v.DSs()
 		if len(dss) == 0 {
 			continue
 		}

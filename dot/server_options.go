@@ -30,7 +30,7 @@ type serverConfig struct {
 	maxMessageSize     int
 	maxQueriesPerConn  int
 	maxConnLifetime    time.Duration
-	maxInflightPerConn     int
+	maxInflightPerConn int
 }
 
 type identServerTLSConfig struct{}

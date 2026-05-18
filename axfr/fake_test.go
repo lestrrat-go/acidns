@@ -84,10 +84,10 @@ func mustBuild(t *testing.T, b *wire.MessageBuilder) wire.Message {
 func soaRec(t *testing.T, serial uint32) wire.Record {
 	t.Helper()
 	soa2, err := rdata.NewSOA(
-			wire.MustParseName("ns.example.com"),
-			wire.MustParseName("hostmaster.example.com"),
-			serial, 7200*time.Second, 3600*time.Second, 1209600*time.Second, 60*time.Second,
-		)
+		wire.MustParseName("ns.example.com"),
+		wire.MustParseName("hostmaster.example.com"),
+		serial, 7200*time.Second, 3600*time.Second, 1209600*time.Second, 60*time.Second,
+	)
 	require.NoError(t, err)
 	return wire.NewRecord(
 		wire.MustParseName("example.com"),
@@ -163,7 +163,7 @@ func TestStartFirstMessageStreamError(t *testing.T) {
 	t.Parallel()
 	want := errors.New("read failed")
 	stream := &fakeStream{
-		msgs: []wire.Message{wire.Message{}},
+		msgs: []wire.Message{{}},
 		errs: []error{want},
 	}
 	ex := &fakeStreamEx{stream: stream}
@@ -181,7 +181,7 @@ func TestNextStreamErrorMidTransfer(t *testing.T) {
 	first := answerMsg(t, soa, aRec(t, "a.example.com", "192.0.2.1"))
 	want := errors.New("read failed")
 	stream := &fakeStream{
-		msgs: []wire.Message{first, wire.Message{}},
+		msgs: []wire.Message{first, {}},
 		errs: []error{nil, want},
 	}
 	ex := &fakeStreamEx{stream: stream}
@@ -331,4 +331,3 @@ func TestNextMismatchedClosingSOA(t *testing.T) {
 	// Leading SOA, mismatched mid SOA, A, closing SOA.
 	require.Equal(t, []rrtype.Type{rrtype.SOA, rrtype.SOA, rrtype.A, rrtype.SOA}, types)
 }
-

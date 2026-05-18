@@ -37,6 +37,8 @@ var ErrAllServersLame = errors.New("recursive: all candidate servers lame")
 // LameServer describes one server's contribution to an
 // [AllServersLameError]: the address that was queried and the RCODE
 // that classified the server as lame.
+//
+//nolint:errname // "LameServer" is a domain noun describing a participant in AllServersLameError; renaming to LameServerError would be an unhelpful tautology.
 type LameServer struct {
 	addr  netip.AddrPort
 	rcode wire.RCODE

@@ -128,10 +128,10 @@ func TestKeepAliveOptionsRoundTrip(t *testing.T) {
 func TestServerWithMaxConnsPerSourceCloses(t *testing.T) {
 	t.Parallel()
 	cert, _ := dotTestCerts(t)
-	const cap = 2
+	const maxConns = 2
 	srv, err := dot.NewServer(netip.MustParseAddrPort("127.0.0.1:0"), &echoHandler{},
 		dot.WithServerTLSConfig(&tls.Config{Certificates: []tls.Certificate{cert}}),
-		dot.WithServerMaxConnsPerSource(cap),
+		dot.WithServerMaxConnsPerSource(maxConns),
 	)
 	require.NoError(t, err)
 	ctx, cancel := context.WithCancel(t.Context())
@@ -143,13 +143,13 @@ func TestServerWithMaxConnsPerSourceCloses(t *testing.T) {
 	pool := x509.NewCertPool()
 	_ = pool // tlsCfg below uses InsecureSkipVerify so the pool is unused here
 	tlsCfg := &tls.Config{InsecureSkipVerify: true, NextProtos: []string{"dot"}, MinVersion: tls.VersionTLS13}
-	conns := make([]*tls.Conn, 0, cap)
+	conns := make([]*tls.Conn, 0, maxConns)
 	t.Cleanup(func() {
 		for _, c := range conns {
 			_ = c.Close()
 		}
 	})
-	for range cap {
+	for range maxConns {
 		c, err := tls.Dial("tcp", ctrl.Addr().String(), tlsCfg)
 		require.NoError(t, err)
 		conns = append(conns, c)
@@ -167,7 +167,7 @@ func TestServerWithMaxConnsPerSourceCloses(t *testing.T) {
 	buf := make([]byte, 1)
 	_, err = extra.Read(buf)
 	require.Error(t, err,
-		"with WithServerMaxConnsPerSource(%d) the (cap+1)-th connection must be closed by the server", cap)
+		"with WithServerMaxConnsPerSource(%d) the (cap+1)-th connection must be closed by the server", maxConns)
 }
 
 // TestServerOptionsRoundTrip drives a single exchange through a server
@@ -208,4 +208,3 @@ func TestServerOptionsRoundTrip(t *testing.T) {
 	require.NoError(t, err)
 	require.True(t, resp.Flags().Response())
 }
-

@@ -5,6 +5,7 @@ import (
 	"io"
 	"io/fs"
 	pathpkg "path"
+	"slices"
 	"strings"
 
 	"github.com/lestrrat-go/acidns/wire"
@@ -74,10 +75,8 @@ func (r *fsIncludeResolver) ResolveInclude(includer, name string) (io.ReadCloser
 	if !fs.ValidPath(name) {
 		return nil, "", fmt.Errorf("invalid include path %q", name)
 	}
-	for _, seg := range strings.Split(name, "/") {
-		if seg == ".." {
-			return nil, "", fmt.Errorf("invalid include path %q: .. segment not allowed", name)
-		}
+	if slices.Contains(strings.Split(name, "/"), "..") {
+		return nil, "", fmt.Errorf("invalid include path %q: .. segment not allowed", name)
 	}
 	resolved := name
 	if includer != "" {

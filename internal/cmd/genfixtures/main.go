@@ -16,10 +16,10 @@ import (
 	"path/filepath"
 	"time"
 
+	"github.com/lestrrat-go/acidns/internal/wiretest"
 	"github.com/lestrrat-go/acidns/wire"
 	"github.com/lestrrat-go/acidns/wire/rdata"
 	"github.com/lestrrat-go/acidns/wire/rrtype"
-	"github.com/lestrrat-go/acidns/internal/wiretest"
 )
 
 type fixture struct {
@@ -224,35 +224,35 @@ func main() {
 	fixtures := []fixture{
 		{
 			name: "a", desc: "A query for example.com -> 192.0.2.1",
-			msg:  mkResp(exampleCom, rrtype.A, aR),
+			msg: mkResp(exampleCom, rrtype.A, aR),
 		},
 		{
 			name: "aaaa", desc: "AAAA query for example.com -> 2001:db8::1",
-			msg:  mkResp(exampleCom, rrtype.AAAA, aaaaR),
+			msg: mkResp(exampleCom, rrtype.AAAA, aaaaR),
 		},
 		{
 			name: "mx", desc: "MX query for example.com -> 10 mx1.example.com",
-			msg:  mkResp(exampleCom, rrtype.MX, mxR),
+			msg: mkResp(exampleCom, rrtype.MX, mxR),
 		},
 		{
 			name: "txt", desc: "TXT query for example.com -> v=spf1 -all",
-			msg:  mkResp(exampleCom, rrtype.TXT, txtR),
+			msg: mkResp(exampleCom, rrtype.TXT, txtR),
 		},
 		{
 			name: "cname", desc: "CNAME www.example.com -> example.com",
-			msg:  mkResp(wwwExample, rrtype.CNAME, cnameR),
+			msg: mkResp(wwwExample, rrtype.CNAME, cnameR),
 		},
 		{
 			name: "soa", desc: "SOA for example.com",
-			msg:  mkResp(exampleCom, rrtype.SOA, soaR),
+			msg: mkResp(exampleCom, rrtype.SOA, soaR),
 		},
 		{
 			name: "ns", desc: "NS for example.com -> ns1, ns2",
-			msg:  mkResp(exampleCom, rrtype.NS, nsR1, nsR2),
+			msg: mkResp(exampleCom, rrtype.NS, nsR1, nsR2),
 		},
 		{
 			name: "ptr", desc: "PTR 1.0.0.127.in-addr.arpa -> www.example.com",
-			msg:  mkResp(revIPv4, rrtype.PTR, ptrR),
+			msg: mkResp(revIPv4, rrtype.PTR, ptrR),
 		},
 		{
 			name: "srv", desc: "SRV _sip._udp.example.com -> sipserver",
@@ -306,7 +306,7 @@ func main() {
 		},
 		{
 			name: "opt", desc: "OPT (EDNS) response with EDE option",
-			msg:  mustEDNSResponse(optQ, ede),
+			msg: mustEDNSResponse(optQ, ede),
 		},
 		{
 			name: "svcb", desc: "SVCB _dns.example.com",

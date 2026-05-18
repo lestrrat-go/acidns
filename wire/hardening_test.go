@@ -202,11 +202,11 @@ func TestEDNSDuplicateOptionRejected(t *testing.T) {
 	}
 	// OPT with two padding options, each empty (0 bytes data).
 	opt := []byte{
-		0x00,                   // root
-		0x00, 0x29,             // OPT
-		0x02, 0x00,             // udpsize 512
+		0x00,       // root
+		0x00, 0x29, // OPT
+		0x02, 0x00, // udpsize 512
 		0x00, 0x00, 0x00, 0x00, // ttl
-		0x00, 0x08,             // rdlen = 8 (two 4-byte option headers)
+		0x00, 0x08, // rdlen = 8 (two 4-byte option headers)
 		0x00, 0x0c, 0x00, 0x00, // padding, len 0
 		0x00, 0x0c, 0x00, 0x00, // padding, len 0 (duplicate)
 	}

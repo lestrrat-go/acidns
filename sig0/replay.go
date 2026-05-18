@@ -149,7 +149,7 @@ func replayKey(signer wire.Name, inception time.Time, signature []byte) string {
 func hexInt64(v int64) string {
 	const hexDigits = "0123456789abcdef"
 	var buf [16]byte
-	for i := 0; i < 16; i++ {
+	for i := range 16 {
 		buf[15-i] = hexDigits[v&0xf]
 		v >>= 4
 	}

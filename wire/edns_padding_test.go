@@ -3,9 +3,9 @@ package wire_test
 import (
 	"testing"
 
+	"github.com/lestrrat-go/acidns/internal/wiretest"
 	"github.com/lestrrat-go/acidns/wire"
 	"github.com/lestrrat-go/acidns/wire/rrtype"
-	"github.com/lestrrat-go/acidns/internal/wiretest"
 	"github.com/stretchr/testify/require"
 )
 

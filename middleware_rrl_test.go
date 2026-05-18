@@ -267,8 +267,8 @@ func TestRRLPassesThroughOnTCP(t *testing.T) {
 	t.Parallel()
 	h := acidns.NewRRL(rrlPositiveAnswer(),
 		acidns.WithRRLQPS(0.0001),
-		acidns.WithRRLBurst(0),         // every UDP request would slip
-		acidns.WithRRLSlipRate(1.0),    // ...as TC=1
+		acidns.WithRRLBurst(0),      // every UDP request would slip
+		acidns.WithRRLSlipRate(1.0), // ...as TC=1
 	)
 
 	src := netip.MustParseAddrPort("203.0.113.50:1")

@@ -17,8 +17,8 @@ func TestDNSKEYUnpackRejectsBadProtocol(t *testing.T) {
 	// flags=257, protocol=0 (invalid), alg=13 (ECDSAP256SHA256), pubkey=4 bytes
 	buf := []byte{
 		0x01, 0x01, // flags
-		0x00, // protocol — RFC mandates 3
-		0x0d, // algorithm
+		0x00,                   // protocol — RFC mandates 3
+		0x0d,                   // algorithm
 		0xaa, 0xbb, 0xcc, 0xdd, // pubkey
 	}
 	unpackErr(t, rrtype.DNSKEY, buf, len(buf))
@@ -30,8 +30,8 @@ func TestDNSKEYUnpackRejectsBadProtocol(t *testing.T) {
 func TestLOCConstructorRejectsBadNibbles(t *testing.T) {
 	t.Parallel()
 	cases := []struct {
-		name                       string
-		size, horizPre, vertPre    uint8
+		name                    string
+		size, horizPre, vertPre uint8
 	}{
 		{"size high nibble > 9", 0xa0, 0x12, 0x12},
 		{"size low nibble > 9", 0x1a, 0x12, 0x12},
@@ -55,9 +55,9 @@ func TestLOCUnpackRejectsBadNibbles(t *testing.T) {
 	// version=0, size=0xfa (both nibbles out of range), then valid
 	// horizPre/vertPre and dummy lat/lon/alt.
 	buf := []byte{
-		0x00,                                           // version
-		0xfa,                                           // size — invalid (15/10)
-		0x12, 0x13,                                     // horizPre, vertPre
+		0x00,       // version
+		0xfa,       // size — invalid (15/10)
+		0x12, 0x13, // horizPre, vertPre
 		0x00, 0x00, 0x00, 0x00, // lat
 		0x00, 0x00, 0x00, 0x00, // lon
 		0x00, 0x00, 0x00, 0x00, // alt
@@ -99,8 +99,8 @@ func TestZONEMDUnpackRejectsWrongDigestLength(t *testing.T) {
 	// serial(4) + scheme=1 + hash=1 (SHA-384) + 5-byte digest (should be 48).
 	buf := []byte{
 		0x00, 0x00, 0x00, 0x01, // serial
-		0x01, // scheme = Simple
-		0x01, // hash = SHA-384
+		0x01,                         // scheme = Simple
+		0x01,                         // hash = SHA-384
 		0xaa, 0xbb, 0xcc, 0xdd, 0xee, // 5-byte digest — should be 48
 	}
 	unpackErr(t, rrtype.ZONEMD, buf, len(buf))

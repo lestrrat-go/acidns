@@ -234,9 +234,9 @@ func canonicalKey(n wire.Name) []byte {
 		return []byte{0x00}
 	}
 	var key []byte
-	for i := len(labels) - 1; i >= 0; i-- {
-		key = append(key, byte(len(labels[i])))
-		key = append(key, labels[i]...)
+	for _, v := range slices.Backward(labels) {
+		key = append(key, byte(len(v)))
+		key = append(key, v...)
 	}
 	key = append(key, 0x00)
 	return key
@@ -320,12 +320,7 @@ func (i *nsecIndex) hasWildcardDenial(q wire.Name, now time.Time) bool {
 // is also present (which would normally produce an aliased answer
 // rather than NoData).
 func typeInBitmap(bitmap []rrtype.Type, t rrtype.Type) bool {
-	for _, b := range bitmap {
-		if b == t {
-			return true
-		}
-	}
-	return false
+	return slices.Contains(bitmap, t)
 }
 
 // synthesiseFromNSEC consults the aggressive NSEC index and, if a

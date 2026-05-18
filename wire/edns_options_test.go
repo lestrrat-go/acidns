@@ -71,9 +71,9 @@ func TestClientSubnet_TrailingBitsMaskedOnEncode(t *testing.T) {
 	require.NoError(t, err)
 	d := o.Data()
 	require.Len(t, d, 4+3)
-	require.Equal(t, byte(0xc0), d[4])   // 192 — full byte
-	require.Equal(t, byte(0x00), d[5])   // 0 — full byte
-	require.Equal(t, byte(0x00), d[6])   // 2 → masked to 0 (top 4 bits of 0x02 are zero)
+	require.Equal(t, byte(0xc0), d[4]) // 192 — full byte
+	require.Equal(t, byte(0x00), d[5]) // 0 — full byte
+	require.Equal(t, byte(0x00), d[6]) // 2 → masked to 0 (top 4 bits of 0x02 are zero)
 
 	// Decoder accepts what encoder emits (round-trip).
 	prefix, _, ok := wire.ClientSubnet(o)

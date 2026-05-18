@@ -25,7 +25,7 @@ import (
 // failure doubles the wait, capped at AcceptBackoffMax. The window is
 // reset to zero on the first success.
 const (
-	AcceptBackoffMin = 5 * time.Millisecond
+	AcceptBackoffMin = 5 * time.Millisecond //nolint:revive // "Min"/"Max" are bound names, not the minutes/maximum-time unit time-naming flags.
 	AcceptBackoffMax = time.Second
 )
 
@@ -81,12 +81,12 @@ type SourceLimiter struct {
 	counts map[netip.Addr]int
 }
 
-// NewSourceLimiter returns a SourceLimiter that admits at most max
-// concurrent reservations per source address. A non-positive max
+// NewSourceLimiter returns a SourceLimiter that admits at most maxPerSource
+// concurrent reservations per source address. A non-positive maxPerSource
 // disables the cap entirely: Reserve always succeeds and Release is a
 // no-op.
-func NewSourceLimiter(max int) *SourceLimiter {
-	return &SourceLimiter{max: max}
+func NewSourceLimiter(maxPerSource int) *SourceLimiter {
+	return &SourceLimiter{max: maxPerSource}
 }
 
 // Reserve increments the per-source counter for addr if the cap

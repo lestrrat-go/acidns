@@ -31,7 +31,7 @@ type config struct {
 	now          func() time.Time
 	logger       *slog.Logger
 	allowNoRD    bool
-	lifecycleCtx context.Context
+	lifecycleCtx context.Context //nolint:containedctx // lifecycle ctx is the cancellation signal carried via WithContext; see Forwarder.closeCtx.
 }
 
 type identContext struct{}

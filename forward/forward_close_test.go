@@ -7,8 +7,8 @@ import (
 	"time"
 
 	"github.com/lestrrat-go/acidns/forward"
-	"github.com/lestrrat-go/acidns/wire"
 	"github.com/lestrrat-go/acidns/internal/wiretest"
+	"github.com/lestrrat-go/acidns/wire"
 	"github.com/stretchr/testify/require"
 )
 

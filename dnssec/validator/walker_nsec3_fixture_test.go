@@ -263,7 +263,7 @@ func wireWildcardOf(encloser wire.Name) (wire.Name, error) {
 func bumpHash(h []byte) []byte {
 	cp := make([]byte, len(h))
 	copy(cp, h)
-	for i := len(cp) - 1; i >= 0; i-- {
+	for i := range slices.Backward(cp) {
 		cp[i]++
 		if cp[i] != 0 {
 			return cp
@@ -277,8 +277,8 @@ func bumpHash(h []byte) []byte {
 func bumpHashDown(h []byte) []byte {
 	cp := make([]byte, len(h))
 	copy(cp, h)
-	for i := len(cp) - 1; i >= 0; i-- {
-		if cp[i] > 0 {
+	for i, v := range slices.Backward(cp) {
+		if v > 0 {
 			cp[i]--
 			return cp
 		}
