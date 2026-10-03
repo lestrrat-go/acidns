@@ -61,8 +61,6 @@ import (
 	"slices"
 	"time"
 
-	"golang.org/x/net/http2"
-
 	"github.com/lestrrat-go/acidns"
 	"github.com/lestrrat-go/acidns/internal/serverctl"
 	"github.com/lestrrat-go/acidns/wire"
@@ -368,11 +366,8 @@ func (s *Server) Run(ctx context.Context) (*Controller, error) {
 		BaseContext:       func(net.Listener) context.Context { return ctx },
 	}
 	if s.cfg.maxConcurrentStreams > 0 {
-		if err := http2.ConfigureServer(hs, &http2.Server{
-			MaxConcurrentStreams: s.cfg.maxConcurrentStreams,
-		}); err != nil {
-			_ = ln.Close()
-			return nil, fmt.Errorf("doh: configure http2: %w", err)
+		hs.HTTP2 = &http.HTTP2Config{
+			MaxConcurrentStreams: int(s.cfg.maxConcurrentStreams),
 		}
 	}
 
