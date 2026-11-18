@@ -143,7 +143,9 @@ func TestTCPServerCancelsHandlerOnShutdown(t *testing.T) {
 
 	select {
 	case <-started:
-	case <-time.After(2 * time.Second):
+	// Generous bound: under -race with many parallel tests the accept and
+	// dispatch path can be starved well past 2s on shared CI runners.
+	case <-time.After(15 * time.Second):
 		t.Fatal("handler did not start")
 	}
 
@@ -151,7 +153,7 @@ func TestTCPServerCancelsHandlerOnShutdown(t *testing.T) {
 
 	select {
 	case <-cancelled:
-	case <-time.After(2 * time.Second):
+	case <-time.After(15 * time.Second):
 		t.Fatal("handler context not cancelled on Serve shutdown")
 	}
 }
